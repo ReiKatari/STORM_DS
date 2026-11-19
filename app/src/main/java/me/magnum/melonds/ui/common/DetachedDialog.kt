@@ -80,6 +80,7 @@ private class DetachedDialogLayout(
     private val windowManager = composeView.context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     private val params = createLayoutParams()
     private var onDismissListener: (() -> Unit)? = null
+    private var isDestroyed = false
 
     override var shouldCreateCompositionOnAttachedToWindow: Boolean = false
         private set
@@ -214,10 +215,14 @@ private class DetachedDialogLayout(
     }
 
     private fun destroy() {
+        if (isDestroyed) return
+        isDestroyed = true
         disposeComposition()
         setViewTreeLifecycleOwner(null)
         setViewTreeViewModelStoreOwner(null)
         setViewTreeSavedStateRegistryOwner(null)
-        windowManager.removeView(this)
+        if (isAttachedToWindow) {
+            windowManager.removeView(this)
+        }
     }
 }

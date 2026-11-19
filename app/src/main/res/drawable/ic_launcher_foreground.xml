@@ -53,7 +53,7 @@
         android:fillColor="#33FFFFFF"
         android:pathData="M36,62 L72,62 A3,3 0 0 1 75,65 L75,79 A3,3 0 0 1 72,82 L36,82 A3,3 0 0 1 33,79 L33,65 A3,3 0 0 1 36,62 Z" />
 
-    <!-- STORM Lightning Bolt Emblem (Pure White & Neon Cyan Glow) -->
+    <!-- STORM Lightning Bolt Emblem (Pure White  and  Neon Cyan Glow) -->
     <path
         android:fillColor="#FFFFFF"
         android:pathData="M57,28 L43,53 L53,53 L47,82 L65,51 L55,51 Z" />

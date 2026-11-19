@@ -4,12 +4,11 @@ import android.content.Context
 import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import me.magnum.melonds.common.network.HttpRedirectHelper
 import me.magnum.melonds.domain.repositories.SettingsRepository
 import java.io.File
-import java.io.InputStream
+import java.io.IOException
 import java.io.RandomAccessFile
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.zip.ZipInputStream
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -40,100 +39,135 @@ class BiosDownloadManager @Inject constructor(
     suspend fun downloadAndSetupDsBios(
         onProgress: (Int) -> Unit = {}
     ): Result<File> = withContext(Dispatchers.IO) {
-        val rootDsDir = File(File(android.os.Environment.getExternalStorageDirectory(), "STORM DS"), "bios/ds").apply {
-            if (exists()) {
-                listFiles()?.forEach { it.deleteRecursively() }
-            }
-            mkdirs()
-        }
+        val rootDsDir = File(File(android.os.Environment.getExternalStorageDirectory(), "STORM DS"), "bios/ds")
+        val stagingDir = File(context.cacheDir, "staging_ds_bios_${System.currentTimeMillis()}").apply { mkdirs() }
         val tempZip = File(context.cacheDir, "temp_ds_bios_${System.currentTimeMillis()}.zip")
         var downloadSuccess = false
         var lastException: Throwable? = null
 
-        for (mirrorUrl in DS_BIOS_MIRRORS) {
-            try {
-                downloadFile(mirrorUrl, tempZip, onProgress)
-                extractZipDirectly(tempZip, rootDsDir)
-                if (hasValidDsFiles(rootDsDir)) {
-                    downloadSuccess = true
-                    break
+        try {
+            for (mirrorUrl in DS_BIOS_MIRRORS) {
+                try {
+                    clearDirectoryContents(stagingDir)
+                    downloadFile(mirrorUrl, tempZip, onProgress)
+                    extractZipDirectly(tempZip, stagingDir)
+                    if (hasValidDsFiles(stagingDir)) {
+                        downloadSuccess = true
+                        break
+                    }
+                } catch (e: Throwable) {
+                    lastException = e
+                } finally {
+                    runCatching { tempZip.delete() }
                 }
-            } catch (e: Throwable) {
-                lastException = e
-            } finally {
-                runCatching { tempZip.delete() }
             }
-        }
 
-        if (!downloadSuccess) {
-            // Fallback to assets only if network download failed
-            val extractedFromAssets = copyDsBiosFromAssets(rootDsDir)
-            if (extractedFromAssets && hasValidDsFiles(rootDsDir)) {
-                downloadSuccess = true
+            if (!downloadSuccess) {
+                clearDirectoryContents(stagingDir)
+                val extractedFromAssets = copyDsBiosFromAssets(stagingDir)
+                if (extractedFromAssets && hasValidDsFiles(stagingDir)) {
+                    downloadSuccess = true
+                }
             }
-        }
 
-        if (downloadSuccess && hasValidDsFiles(rootDsDir)) {
-            onProgress(100)
-            val dirUri = Uri.fromFile(rootDsDir)
-            settingsRepository.setDsBiosDirectory(dirUri)
-            settingsRepository.setUseCustomBios(true)
-            Result.success(rootDsDir)
-        } else {
-            Result.failure(lastException ?: Exception("Не удалось скачать файлы BIOS DS."))
+            if (downloadSuccess && hasValidDsFiles(stagingDir)) {
+                rootDsDir.mkdirs()
+                copyStagedFiles(stagingDir, rootDsDir, preserveExistingNand = false)
+                if (hasValidDsFiles(rootDsDir)) {
+                    onProgress(100)
+                    val dirUri = Uri.fromFile(rootDsDir)
+                    settingsRepository.setDsBiosDirectory(dirUri)
+                    settingsRepository.setUseCustomBios(true)
+                    Result.success(rootDsDir)
+                } else {
+                    Result.failure(lastException ?: Exception("Не удалось проверить файлы BIOS DS после копирования."))
+                }
+            } else {
+                Result.failure(lastException ?: Exception("Не удалось скачать файлы BIOS DS."))
+            }
+        } finally {
+            runCatching { tempZip.delete() }
+            runCatching { stagingDir.deleteRecursively() }
         }
     }
 
     suspend fun downloadAndSetupDsiBios(
         onProgress: (Int) -> Unit = {}
     ): Result<File> = withContext(Dispatchers.IO) {
-        val rootDsiDir = File(File(android.os.Environment.getExternalStorageDirectory(), "STORM DS"), "bios/dsi").apply {
-            if (exists()) {
-                listFiles()?.forEach { it.deleteRecursively() }
-            }
-            mkdirs()
-        }
+        val rootDsiDir = File(File(android.os.Environment.getExternalStorageDirectory(), "STORM DS"), "bios/dsi")
+        val existingValidNand = File(rootDsiDir, "nand.bin").takeIf { isValidNandFile(it) }
+        val stagingDir = File(context.cacheDir, "staging_dsi_bios_${System.currentTimeMillis()}").apply { mkdirs() }
         val tempZip = File(context.cacheDir, "temp_dsi_bios_${System.currentTimeMillis()}.zip")
         var downloadSuccess = false
         var lastException: Throwable? = null
 
-        for (mirrorUrl in DSI_BIOS_MIRRORS) {
-            try {
-                downloadFile(mirrorUrl, tempZip, onProgress)
-                extractZipDirectly(tempZip, rootDsiDir)
-                if (hasValidDsiFiles(rootDsiDir)) {
+        try {
+            for (mirrorUrl in DSI_BIOS_MIRRORS) {
+                try {
+                    clearDirectoryContents(stagingDir)
+                    downloadFile(mirrorUrl, tempZip, onProgress)
+                    extractZipDirectly(tempZip, stagingDir)
+                    val hasCoreBios = hasValidDsiCoreFiles(stagingDir)
+                    val hasNand = isValidNandFile(File(stagingDir, "nand.bin")) || existingValidNand != null
+                    if (hasCoreBios && hasNand) {
+                        ensureFontTablePresent(stagingDir)
+                        downloadSuccess = true
+                        break
+                    }
+                } catch (e: Throwable) {
+                    lastException = e
+                } finally {
+                    runCatching { tempZip.delete() }
+                }
+            }
+
+            if (!downloadSuccess) {
+                clearDirectoryContents(stagingDir)
+                copyDsiBiosFromAssets(stagingDir)
+                if (existingValidNand == null && !isValidNandFile(File(stagingDir, "nand.bin"))) {
+                    createCleanDsiNand(File(stagingDir, "nand.bin"))
+                }
+                if (hasValidDsiCoreFiles(stagingDir) && (isValidNandFile(File(stagingDir, "nand.bin")) || existingValidNand != null)) {
+                    ensureFontTablePresent(stagingDir)
                     downloadSuccess = true
-                    break
-                }
-            } catch (e: Throwable) {
-                lastException = e
-            } finally {
-                runCatching { tempZip.delete() }
-            }
-        }
-
-        if (!downloadSuccess) {
-            // Fallback to assets only if network download failed
-            copyDsiBiosFromAssets(rootDsiDir)
-            if (!hasValidDsiFiles(rootDsiDir)) {
-                val nandFile = File(rootDsiDir, "nand.bin")
-                if (!nandFile.exists() || !hasValidDsiFiles(rootDsiDir)) {
-                    createCleanDsiNand(nandFile)
                 }
             }
-            if (hasValidDsiFiles(rootDsiDir)) {
-                downloadSuccess = true
-            }
-        }
 
-        if (downloadSuccess && hasValidDsiFiles(rootDsiDir)) {
-            onProgress(100)
-            val dirUri = Uri.fromFile(rootDsiDir)
-            settingsRepository.setDsiBiosDirectory(dirUri)
-            settingsRepository.setUseCustomBios(true)
-            Result.success(rootDsiDir)
-        } else {
-            Result.failure(lastException ?: Exception("Не удалось скачать файлы BIOS DSi и образ NAND."))
+            if (downloadSuccess) {
+                rootDsiDir.mkdirs()
+                copyStagedFiles(stagingDir, rootDsiDir, preserveExistingNand = existingValidNand != null)
+                if (hasValidDsiFiles(rootDsiDir)) {
+                    onProgress(100)
+                    val dirUri = Uri.fromFile(rootDsiDir)
+                    settingsRepository.setDsiBiosDirectory(dirUri)
+                    settingsRepository.setUseCustomBios(true)
+                    Result.success(rootDsiDir)
+                } else {
+                    Result.failure(lastException ?: Exception("Не удалось проверить файлы BIOS DSi после копирования."))
+                }
+            } else {
+                Result.failure(lastException ?: Exception("Не удалось скачать файлы BIOS DSi и образ NAND."))
+            }
+        } finally {
+            runCatching { tempZip.delete() }
+            runCatching { stagingDir.deleteRecursively() }
+        }
+    }
+
+    private fun clearDirectoryContents(dir: File) {
+        dir.listFiles()?.forEach { it.deleteRecursively() }
+    }
+
+    private fun copyStagedFiles(stagingDir: File, targetDir: File, preserveExistingNand: Boolean) {
+        stagingDir.listFiles()?.forEach { srcFile ->
+            if (!srcFile.isFile) return@forEach
+            if (preserveExistingNand && srcFile.name.equals("nand.bin", ignoreCase = true)) {
+                val existingNand = File(targetDir, "nand.bin")
+                if (isValidNandFile(existingNand)) {
+                    return@forEach
+                }
+            }
+            srcFile.copyTo(File(targetDir, srcFile.name), overwrite = true)
         }
     }
 
@@ -264,17 +298,14 @@ class BiosDownloadManager @Inject constructor(
         return b7.exists() && b7.length() >= 0x4000L && b9.exists() && b9.length() >= 0x1000L && fw.exists() && fw.length() >= 0x20000L
     }
 
-    private fun hasValidDsiFiles(dir: File): Boolean {
+    private fun hasValidDsiCoreFiles(dir: File): Boolean {
         val b7 = if (File(dir, "dsi_bios7.bin").exists()) File(dir, "dsi_bios7.bin") else File(dir, "bios7.bin")
         val b9 = if (File(dir, "dsi_bios9.bin").exists()) File(dir, "dsi_bios9.bin") else File(dir, "bios9.bin")
         val fw = if (File(dir, "dsi_firmware.bin").exists()) File(dir, "dsi_firmware.bin") else File(dir, "firmware.bin")
-        val nand = File(dir, "nand.bin")
-        if (!b7.exists() || b7.length() < 0x10000L || !b9.exists() || b9.length() < 0x10000L || !fw.exists() || fw.length() < 0x20000L) {
-            return false
-        }
-        if (!nand.exists() || nand.length() < 1024 * 1024L) {
-            return false
-        }
+        return b7.exists() && b7.length() >= 0x10000L && b9.exists() && b9.length() >= 0x10000L && fw.exists() && fw.length() >= 0x20000L
+    }
+
+    private fun ensureFontTablePresent(dir: File) {
         val font = File(dir, "TWLFontTable.dat")
         if (!font.exists() || font.length() < 100000L) {
             runCatching {
@@ -282,6 +313,12 @@ class BiosDownloadManager @Inject constructor(
                     font.outputStream().use { output -> input.copyTo(output) }
                 }
             }
+        }
+    }
+
+    private fun isValidNandFile(nand: File): Boolean {
+        if (!nand.exists() || nand.length() < 1024 * 1024L) {
+            return false
         }
         return try {
             RandomAccessFile(nand, "r").use { raf ->
@@ -314,64 +351,45 @@ class BiosDownloadManager @Inject constructor(
         }
     }
 
-    private fun downloadFile(urlStr: String, destination: File, onProgress: (Int) -> Unit) {
-        val connection = openConnectionWithRedirects(urlStr)
-        val totalLength = connection.contentLength
-        var downloaded = 0
+    private fun hasValidDsiFiles(dir: File): Boolean {
+        if (!hasValidDsiCoreFiles(dir)) {
+            return false
+        }
+        val nand = File(dir, "nand.bin")
+        if (!isValidNandFile(nand)) {
+            return false
+        }
+        ensureFontTablePresent(dir)
+        return true
+    }
 
-        connection.inputStream.use { input ->
-            destination.outputStream().use { output ->
-                val buffer = ByteArray(8192)
-                var bytesRead: Int
-                while (input.read(buffer).also { bytesRead = it } != -1) {
-                    output.write(buffer, 0, bytesRead)
-                    downloaded += bytesRead
-                    if (totalLength > 0) {
-                        onProgress(((downloaded.toDouble() / totalLength.toDouble()) * 100).toInt().coerceIn(0, 100))
+    private fun downloadFile(urlStr: String, destination: File, onProgress: (Int) -> Unit) {
+        val connection = HttpRedirectHelper.openConnectionWithRedirects(urlStr)
+        try {
+            val totalLength = connection.contentLength
+            var downloaded = 0
+
+            connection.inputStream.use { input ->
+                destination.outputStream().use { output ->
+                    val buffer = ByteArray(8192)
+                    var bytesRead: Int
+                    while (input.read(buffer).also { bytesRead = it } != -1) {
+                        output.write(buffer, 0, bytesRead)
+                        downloaded += bytesRead
+                        if (totalLength > 0) {
+                            onProgress(((downloaded.toDouble() / totalLength.toDouble()) * 100).toInt().coerceIn(0, 100))
+                        }
                     }
                 }
             }
+        } finally {
+            connection.disconnect()
         }
-    }
-
-    private fun openConnectionWithRedirects(initialUrl: String, maxRedirects: Int = 10): HttpURLConnection {
-        var currentUrl = initialUrl
-        var redirects = 0
-        while (redirects < maxRedirects) {
-            val url = URL(currentUrl)
-            val connection = url.openConnection() as HttpURLConnection
-            connection.connectTimeout = 20000
-            connection.readTimeout = 45000
-            connection.instanceFollowRedirects = false
-            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36")
-            connection.setRequestProperty("Accept", "*/*")
-            connection.connect()
-
-            val responseCode = connection.responseCode
-            if (responseCode in listOf(HttpURLConnection.HTTP_MOVED_PERM, HttpURLConnection.HTTP_MOVED_TEMP, HttpURLConnection.HTTP_SEE_OTHER, 307, 308)) {
-                val location = connection.getHeaderField("Location")
-                connection.disconnect()
-                if (location.isNullOrBlank()) {
-                    throw java.io.IOException("HTTP redirect $responseCode with missing Location header")
-                }
-                currentUrl = if (location.startsWith("http://") || location.startsWith("https://")) {
-                    location
-                } else {
-                    URL(url, location).toString()
-                }
-                redirects++
-            } else if (responseCode in 200..299) {
-                return connection
-            } else {
-                connection.disconnect()
-                throw java.io.IOException("HTTP error $responseCode")
-            }
-        }
-        throw java.io.IOException("Too many redirects ($redirects)")
     }
 
     private fun extractZipDirectly(zipFile: File, outputDir: File) {
-        outputDir.mkdirs()
+        val outCanonical = outputDir.canonicalFile
+        outCanonical.mkdirs()
         zipFile.inputStream().use { fileInput ->
             ZipInputStream(fileInput.buffered()).use { zip ->
                 while (true) {
@@ -380,9 +398,12 @@ class BiosDownloadManager @Inject constructor(
                         zip.closeEntry()
                         continue
                     }
-                    val fileName = entry.name.substringAfterLast('/')
-                    if (fileName.isNotBlank()) {
-                        val outFile = File(outputDir, fileName)
+                    val fileName = entry.name.substringAfterLast('/').substringAfterLast('\\')
+                    if (fileName.isNotBlank() && fileName != "." && fileName != "..") {
+                        val outFile = File(outCanonical, fileName).canonicalFile
+                        if (!outFile.path.startsWith(outCanonical.path + File.separator)) {
+                            throw IOException("Blocked unsafe zip entry: ${entry.name}")
+                        }
                         outFile.outputStream().use { out ->
                             zip.copyTo(out)
                         }

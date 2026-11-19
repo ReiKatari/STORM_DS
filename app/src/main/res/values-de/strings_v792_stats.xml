@@ -41,10 +41,10 @@
     <string name="v792_stats_avg_time_val">Durchschn.: %1$s</string>
     <string name="v792_stats_no_games_match">Keine Spiele gefunden</string>
     <string name="v792_stats_biorhythm_title">Spiel-Biorhythmus</string>
-    <string name="v792_stats_biorhythm_morning">Morgen (06:00–12:00)</string>
-    <string name="v792_stats_biorhythm_afternoon">Nachmittag (12:00–18:00)</string>
-    <string name="v792_stats_biorhythm_evening">Abend (18:00–00:00)</string>
-    <string name="v792_stats_biorhythm_night">Nacht (00:00–06:00)</string>
+    <string name="v792_stats_biorhythm_morning">Morgen (06:00-12:00)</string>
+    <string name="v792_stats_biorhythm_afternoon">Nachmittag (12:00-18:00)</string>
+    <string name="v792_stats_biorhythm_evening">Abend (18:00-00:00)</string>
+    <string name="v792_stats_biorhythm_night">Nacht (00:00-06:00)</string>
     <string name="v792_stats_biorhythm_peak">Spitzenzeit: %1$s</string>
     <string name="v792_stats_platform_title">Plattform-Verteilung</string>
     <string name="v792_stats_platform_nds_label">Nintendo DS</string>

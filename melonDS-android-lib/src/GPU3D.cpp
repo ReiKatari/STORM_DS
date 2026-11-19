@@ -162,8 +162,11 @@ void Vertex::DoSavestate(Savestate* file) noexcept
 
 void GPU3D::SetCurrentRenderer(std::unique_ptr<Renderer3D>&& renderer) noexcept
 {
+    if (CurrentRenderer)
+        CurrentRenderer->Stop(NDS.GPU);
     CurrentRenderer = std::move(renderer);
-    CurrentRenderer->Reset(NDS.GPU);
+    if (CurrentRenderer)
+        CurrentRenderer->Reset(NDS.GPU);
 }
 
 void GPU3D::ResetRenderingState() noexcept
@@ -410,7 +413,7 @@ void GPU3D::DoSavestate(Savestate* file) noexcept
     {
         u32 index = UINT32_MAX;
         file->Var32(&index);
-        LastStripPolygon = (index == UINT32_MAX) ? nullptr : &PolygonRAM[index];
+        LastStripPolygon = (index < 4096) ? &PolygonRAM[index] : nullptr;
     }
 
     file->Var32(&CurRAMBank);
@@ -447,7 +450,7 @@ void GPU3D::DoSavestate(Savestate* file) noexcept
             {
                 u32 index = UINT32_MAX;
                 file->Var32(&index);
-                poly->Vertices[j] = index == UINT32_MAX ? nullptr : &VertexRAM[index];
+                poly->Vertices[j] = (index < 12288) ? &VertexRAM[index] : nullptr;
             }
         }
 
@@ -485,9 +488,15 @@ void GPU3D::DoSavestate(Savestate* file) noexcept
         {
             poly->Degenerate = false;
 
+            if (poly->NumVertices > 10)
+            {
+                poly->NumVertices = 10;
+                poly->Degenerate = true;
+            }
+
             for (u32 j = 0; j < poly->NumVertices; j++)
             {
-                if (poly->Vertices[j]->Position[3] == 0)
+                if (poly->Vertices[j] == nullptr || poly->Vertices[j]->Position[3] == 0)
                     poly->Degenerate = true;
             }
 
@@ -529,7 +538,7 @@ void GPU3D::DoSavestate(Savestate* file) noexcept
             u32 index = UINT32_MAX;
             file->Var32(&index);
 
-            RenderPolygonRAM[i] = index == UINT32_MAX ? nullptr : &PolygonRAM[index];
+            RenderPolygonRAM[i] = (index < 4096) ? &PolygonRAM[index] : nullptr;
         }
     }
 
@@ -558,6 +567,8 @@ void GPU3D::DoSavestate(Savestate* file) noexcept
     file->Var32(&TexParam);
     file->Var32(&TexPalette);
     RenderFrameIdentical = false;
+    if (!file->Saving)
+        RenderScreenSwapAt3D = ((NDS.PowerControl9 & (1u << 15)) != 0);
     if (softRenderer && softRenderer->IsThreaded())
     {
         softRenderer->EnableRenderThread();

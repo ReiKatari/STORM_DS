@@ -674,7 +674,7 @@ void Compiler::CreateMethod(const char* namefmt, void* start, ...)
         va_list args;
         va_start(args, start);
         char name[64];
-        vsprintf(name, namefmt, args);
+        vsnprintf(name, sizeof(name), namefmt, args);
         va_end(args);
 
         iJIT_Method_Load method = {0};

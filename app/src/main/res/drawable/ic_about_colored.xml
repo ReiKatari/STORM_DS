@@ -12,7 +12,7 @@
         android:strokeColor="#94A3B8"
         android:strokeWidth="1.2"
         android:pathData="M12,3.5h20c4.7,0 8.5,3.8 8.5,8.5v20c0,4.7 -3.8,8.5 -8.5,8.5H12c-4.7,0 -8.5,-3.8 -8.5,-8.5V12C3.5,7.3 7.3,3.5 12,3.5z" />
-    <!-- STORM Lightning & Info icon -->
+    <!-- STORM Lightning  and  Info icon -->
     <path
         android:fillColor="#38BDF8"
         android:pathData="M23,10L14,23h7l-3,11 12,-14h-7z" />

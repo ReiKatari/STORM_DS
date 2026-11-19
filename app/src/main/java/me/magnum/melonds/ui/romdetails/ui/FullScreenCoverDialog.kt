@@ -36,8 +36,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import coil.ImageLoader
 import coil.compose.AsyncImage
+import coil.imageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
 import kotlinx.coroutines.Dispatchers
@@ -73,9 +73,10 @@ fun FullScreenCoverDialog(
     fun saveImage(format: Bitmap.CompressFormat, extension: String, mimeType: String) {
         coroutineScope.launch(Dispatchers.IO) {
             try {
-                val loader = ImageLoader(context)
+                val loader = context.imageLoader
+                val dataModel: Any = boxArtUrl ?: rom
                 val request = ImageRequest.Builder(context)
-                    .data(boxArtUrl ?: romIconRequest(context, rom))
+                    .data(dataModel)
                     .allowHardware(false)
                     .build()
                 val result = (loader.execute(request) as? SuccessResult)?.drawable

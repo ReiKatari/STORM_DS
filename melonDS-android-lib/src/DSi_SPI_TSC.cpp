@@ -59,6 +59,7 @@ void DSi_TSC::Reset()
     Bank3Regs[0x11] = 0x81;
 
     TSCMode = 0x01; // DSi mode
+    LegacyPenBitTracking = false;
 }
 
 void DSi_TSC::DoSavestate(Savestate* file)

@@ -794,6 +794,14 @@ void VulkanRenderer3D::Reset(GPU& gpu)
 void VulkanRenderer3D::ResetActiveBackend(GPU& gpu)
 {
     (void)gpu;
+    if (Device != VK_NULL_HANDLE)
+        (void)waitForAllRenderContexts();
+    for (RenderContext& renderContext : activeRenderContexts())
+    {
+        renderContext.SubmittedMetadataValid = false;
+        renderContext.SubmittedPolygonCount = 0;
+        renderContext.SubmitSequence = 0;
+    }
     Texcache.Reset();
     invalidateAllDescriptorSetCaches();
     GraphicsResolvedTextureCache.clear();
@@ -818,6 +826,8 @@ void VulkanRenderer3D::ResetActiveBackend(GPU& gpu)
     CurrentEarlySubmitContextWaitNs = 0;
     CaptureReadbackPending = false;
     PendingCaptureReadbackContext = nullptr;
+    PendingCaptureLineRequiresPrimaryFence = false;
+    ExactCaptureFallbackValid = false;
     resetCaptureLineState();
     clearLineCache();
     LastValidExactCaptureLineCache.fill(0);
@@ -2509,6 +2519,12 @@ void VulkanRenderer3D::BlitActiveBackend(const GPU& gpu)
     // consume a stale/empty replacement on the next capture pass.
     if (CaptureLinePending || CaptureLineReady)
         return;
+
+    resetCaptureLineState();
+    ExactCaptureLineCachePrepared = false;
+    ExactCaptureLineCacheFresh = false;
+    HasCpuFrame = false;
+    (void)submitGraphicsCaptureExportForCurrentFrame();
 }
 
 void VulkanRenderer3D::BlitCompatibilityBackend(const GPU& gpu)
@@ -2848,7 +2864,7 @@ u64 VulkanRenderer3D::RetainPublishedColorTargetForPresentation() noexcept
         if (fenceStatus != VK_SUCCESS && fenceStatus != VK_NOT_READY)
             return 0;
 
-        context.PresentationRetainCount++;
+        context.PresentationRetainCount.fetch_add(1u, std::memory_order_acq_rel);
         return static_cast<u64>(i + 1u);
     }
 
@@ -3065,8 +3081,11 @@ void VulkanRenderer3D::ReleasePresentationColorTarget(u64 token) noexcept
         return;
 
     RenderContext& context = RenderContexts[static_cast<size_t>(index)];
-    if (context.PresentationRetainCount > 0u)
-        context.PresentationRetainCount--;
+    u32 prev = context.PresentationRetainCount.load(std::memory_order_acquire);
+    while (prev > 0u && !context.PresentationRetainCount.compare_exchange_weak(
+        prev, prev - 1u, std::memory_order_acq_rel, std::memory_order_acquire))
+    {
+    }
 }
 
 std::vector<u32> VulkanRenderer3D::CaptureColorTargetForDebug()
@@ -4006,7 +4025,7 @@ bool VulkanRenderer3D::waitForRenderContext(RenderContext& context)
 {
     if (Device == VK_NULL_HANDLE || context.FrameFence == VK_NULL_HANDLE)
         return false;
-    if (context.PresentationRetainCount != 0u)
+    if (context.PresentationRetainCount.load(std::memory_order_acquire) != 0u)
         return false;
 
     const VkResult fenceStatus = vkGetFenceStatus(Device, context.FrameFence);
@@ -4034,7 +4053,7 @@ bool VulkanRenderer3D::tryAcquireRenderContext(RenderContext& context, bool coun
 {
     if (Device == VK_NULL_HANDLE || context.FrameFence == VK_NULL_HANDLE)
         return false;
-    if (context.PresentationRetainCount != 0u)
+    if (context.PresentationRetainCount.load(std::memory_order_acquire) != 0u)
         return false;
 
     const VkResult fenceStatus = vkGetFenceStatus(Device, context.FrameFence);
@@ -4550,9 +4569,20 @@ VulkanRenderer3D::RenderContext& VulkanRenderer3D::acquireNextRenderContext() no
     {
         const size_t contextIndex = (NextRenderContextIndex + i) % contextCount;
         RenderContext& renderContext = RenderContexts[contextIndex];
-        if (renderContext.PresentationRetainCount != 0u)
+        if (renderContext.PresentationRetainCount.load(std::memory_order_acquire) != 0u)
             continue;
         if (isNewestOfItsParity(renderContext))
+            continue;
+
+        NextRenderContextIndex = (contextIndex + 1) % contextCount;
+        return renderContext;
+    }
+
+    for (size_t i = 0; i < contextCount; i++)
+    {
+        const size_t contextIndex = (NextRenderContextIndex + i) % contextCount;
+        RenderContext& renderContext = RenderContexts[contextIndex];
+        if (renderContext.PresentationRetainCount.load(std::memory_order_acquire) != 0u)
             continue;
 
         NextRenderContextIndex = (contextIndex + 1) % contextCount;
@@ -16180,8 +16210,6 @@ bool VulkanRenderer3D::submitGraphicsCaptureExportForCurrentFrame()
     if (!useFastPathCaptureSource || sourceContext == nullptr)
         consumeGpuTiming(nullptr);
 
-    if (vkResetFences(Device, 1, &FrameFence) != VK_SUCCESS)
-        return false;
     if (vkResetCommandBuffer(CommandBuffer, 0) != VK_SUCCESS)
         return false;
 
@@ -16381,6 +16409,9 @@ bool VulkanRenderer3D::submitGraphicsCaptureExportForCurrentFrame()
     );
 
     if (vkEndCommandBuffer(CommandBuffer) != VK_SUCCESS)
+        return false;
+
+    if (vkResetFences(Device, 1, &FrameFence) != VK_SUCCESS)
         return false;
 
     VkSubmitInfo submitInfo{};

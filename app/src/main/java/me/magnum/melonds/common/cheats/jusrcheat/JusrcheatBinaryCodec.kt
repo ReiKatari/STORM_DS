@@ -16,8 +16,44 @@ object JusrcheatBinaryCodec {
     const val HEADER_SIZE = 0x100
     const val DEFAULT_CODE_OFFSET = 0x100
 
+    private const val MAX_STRING_SCAN_BYTES = 16384
+
     private val CHARSET_LATIN1: Charset = Charsets.ISO_8859_1
     private val CHARSET_UTF8: Charset = Charsets.UTF_8
+
+    fun resolveCharset(encoding: Int): Charset {
+        return when (encoding) {
+            0 -> runCatching { Charset.forName("GBK") }.getOrDefault(CHARSET_UTF8)
+            1 -> runCatching { Charset.forName("Big5") }.getOrDefault(CHARSET_UTF8)
+            2 -> runCatching { Charset.forName("Shift_JIS") }.getOrDefault(CHARSET_UTF8)
+            3 -> CHARSET_UTF8
+            else -> CHARSET_LATIN1
+        }
+    }
+
+    private fun readNullTerminatedString(
+        b: ByteBuffer,
+        startOffset: Int,
+        cap: Int,
+        charset: Charset,
+    ): Triple<String, Int, Int> {
+        if (startOffset < 0 || startOffset >= cap) {
+            return Triple("", startOffset.coerceAtMost(cap), 0)
+        }
+        val scanLimit = minOf(cap, startOffset + MAX_STRING_SCAN_BYTES)
+        var end = startOffset
+        while (end < scanLimit && b.get(end) != 0.toByte()) {
+            end++
+        }
+        val len = end - startOffset
+        val bytes = ByteArray(len)
+        b.position(startOffset)
+        b.get(bytes, 0, len)
+        val decoded = String(bytes, charset).trim()
+        val hasNull = end < cap && b.get(end) == 0.toByte()
+        val nextOffset = if (hasNull) end + 1 else end
+        return Triple(decoded, nextOffset, len)
+    }
 
     fun alignTo4(pos: Int): Int = (4 - (pos and 3)) and 3
 
@@ -44,16 +80,6 @@ object JusrcheatBinaryCodec {
         val b = buffer.duplicate().order(ByteOrder.LITTLE_ENDIAN)
         val codeOffset = b.getInt(0x0C)
 
-        // Title at 0x10..0x4B
-        val titleBytes = ByteArray(59)
-        b.position(0x10)
-        b.get(titleBytes, 0, 59)
-        var titleLen = 0
-        while (titleLen < 59 && titleBytes[titleLen] != 0.toByte()) {
-            titleLen++
-        }
-        val title = String(titleBytes, 0, titleLen, CHARSET_LATIN1).trim()
-
         val encodingByte = if (b.capacity() > 0x4C) b.get(0x4C) else 0
         val encoding = when (encodingByte.toInt() and 0xFF) {
             0xD5 -> 0 // GBK
@@ -62,6 +88,17 @@ object JusrcheatBinaryCodec {
             0x55 -> 3 // UTF8
             else -> 3
         }
+        val charset = resolveCharset(encoding)
+
+        // Title at 0x10..0x4B
+        val titleBytes = ByteArray(59)
+        b.position(0x10)
+        b.get(titleBytes, 0, 59)
+        var titleLen = 0
+        while (titleLen < 59 && titleBytes[titleLen] != 0.toByte()) {
+            titleLen++
+        }
+        val title = String(titleBytes, 0, titleLen, charset).trim()
         val enabledByte = if (b.capacity() > 0x50) b.get(0x50) else 0
         val enabled = ((enabledByte.toInt()) and 0x01) != 0
 
@@ -103,7 +140,11 @@ object JusrcheatBinaryCodec {
     fun parsePointers(data: ByteArray, codeOffset: Int): List<JusrcheatGamePointer> =
         parsePointers(ByteBuffer.wrap(data), codeOffset)
 
-    fun parseGameMetaList(buffer: ByteBuffer, pointers: List<JusrcheatGamePointer>): List<JusrcheatGameMeta> {
+    fun parseGameMetaList(
+        buffer: ByteBuffer,
+        pointers: List<JusrcheatGamePointer>,
+        charset: Charset = CHARSET_UTF8,
+    ): List<JusrcheatGameMeta> {
         val result = ArrayList<JusrcheatGameMeta>(pointers.size)
         val b = buffer.duplicate().order(ByteOrder.LITTLE_ENDIAN)
         val cap = b.capacity()
@@ -115,15 +156,16 @@ object JusrcheatBinaryCodec {
             if (gameOffset < 0 || gameOffset >= cap) continue
 
             // Null-terminated game title
+            val scanLimit = minOf(cap, gameOffset + MAX_STRING_SCAN_BYTES)
             var endTitle = gameOffset
-            while (endTitle < cap && b.get(endTitle) != 0.toByte()) {
+            while (endTitle < scanLimit && b.get(endTitle) != 0.toByte()) {
                 endTitle++
             }
             val titleLen = endTitle - gameOffset
             val titleBytes = if (titleLen <= titleBuf.size) titleBuf else ByteArray(titleLen)
             b.position(gameOffset)
             b.get(titleBytes, 0, titleLen)
-            val title = String(titleBytes, 0, titleLen, CHARSET_LATIN1).trim()
+            val title = String(titleBytes, 0, titleLen, charset).trim()
 
             result.add(
                 JusrcheatGameMeta(
@@ -138,17 +180,27 @@ object JusrcheatBinaryCodec {
         return result
     }
 
-    fun parseGameMetaList(data: ByteArray, pointers: List<JusrcheatGamePointer>): List<JusrcheatGameMeta> =
-        parseGameMetaList(ByteBuffer.wrap(data), pointers)
+    fun parseGameMetaList(
+        data: ByteArray,
+        pointers: List<JusrcheatGamePointer>,
+        charset: Charset = CHARSET_UTF8,
+    ): List<JusrcheatGameMeta> =
+        parseGameMetaList(ByteBuffer.wrap(data), pointers, charset)
 
     fun parseHeaderAndIndex(buffer: ByteBuffer): Pair<JusrcheatHeader, List<JusrcheatGameMeta>> {
         val h = parseHeader(buffer)
         val pointers = parsePointers(buffer, h.codeOffset)
-        val metas = parseGameMetaList(buffer, pointers)
+        val metas = parseGameMetaList(buffer, pointers, resolveCharset(h.encoding))
         return Pair(h, metas)
     }
 
-    fun parseGame(buffer: ByteBuffer, offset: Long, gameId: String, crc32: Long): JusrcheatGame {
+    fun parseGame(
+        buffer: ByteBuffer,
+        offset: Long,
+        gameId: String,
+        crc32: Long,
+        charset: Charset = CHARSET_UTF8,
+    ): JusrcheatGame {
         var cur = offset.toInt()
         val cap = buffer.capacity()
         if (cur < 0 || cur >= cap) {
@@ -158,17 +210,8 @@ object JusrcheatBinaryCodec {
         val b = buffer.duplicate().order(ByteOrder.LITTLE_ENDIAN)
 
         // Title
-        var endTitle = cur
-        while (endTitle < cap && b.get(endTitle) != 0.toByte()) {
-            endTitle++
-        }
-        val titleLen = endTitle - cur
-        val titleBytes = ByteArray(titleLen)
-        b.position(cur)
-        b.get(titleBytes, 0, titleLen)
-        val gameTitle = String(titleBytes, CHARSET_LATIN1).trim()
-        cur = endTitle + 1
-        cur += alignTo4(titleLen + 1)
+        val (gameTitle, afterTitle, titleLen) = readNullTerminatedString(b, cur, cap, charset)
+        cur = afterTitle + alignTo4(titleLen + 1)
 
         if (cur + 4 > cap) {
             return JusrcheatGame(gameId, crc32, gameTitle)
@@ -193,38 +236,19 @@ object JusrcheatBinaryCodec {
         val directCheats = mutableListOf<JusrcheatCode>()
 
         var processedItems = 0
-        while (processedItems < numItems && cur + 4 <= cap) {
+        val safeMaxItems = minOf(numItems, ((cap - cur).coerceAtLeast(0)) / 4)
+        while (processedItems < safeMaxItems && cur + 4 <= cap) {
             val numberThings = b.getShort(cur).toInt() and 0xFFFF
             val itemFlags = b.getShort(cur + 2).toInt() and 0xFFFF
             cur += 4
 
             val isFolder = (itemFlags and 0x1000) != 0
 
-            // Read item name
-            var endName = cur
-            while (endName < cap && b.get(endName) != 0.toByte()) {
-                endName++
-            }
-            val nameLen = endName - cur
-            val nameBytes = ByteArray(nameLen)
-            b.position(cur)
-            b.get(nameBytes, 0, nameLen)
-            val itemName = String(nameBytes, CHARSET_LATIN1).trim()
-            cur = endName + 1
+            val (itemName, afterName, nameLen) = readNullTerminatedString(b, cur, cap, charset)
+            cur = afterName
 
-            // Read item desc
-            var endDesc = cur
-            while (endDesc < cap && b.get(endDesc) != 0.toByte()) {
-                endDesc++
-            }
-            val descLen = endDesc - cur
-            val descBytes = ByteArray(descLen)
-            b.position(cur)
-            b.get(descBytes, 0, descLen)
-            val itemDesc = String(descBytes, CHARSET_LATIN1).trim()
-            cur = endDesc + 1
-
-            cur += alignTo4(nameLen + 1 + descLen + 1)
+            val (itemDesc, afterDesc, descLen) = readNullTerminatedString(b, cur, cap, charset)
+            cur = afterDesc + alignTo4(nameLen + 1 + descLen + 1)
 
             if (isFolder) {
                 processedItems += 1
@@ -235,48 +259,30 @@ object JusrcheatBinaryCodec {
                     oneHot = oneHot
                 )
 
-                for (c in 0 until numberThings) {
+                val safeFolderCount = minOf(numberThings, ((cap - cur).coerceAtLeast(0)) / 4)
+                for (c in 0 until safeFolderCount) {
                     if (cur + 4 > cap) break
-                    val codeNumberThings = b.getShort(cur).toInt() and 0xFFFF
-                    val codeFlags = b.getShort(cur + 2).toInt() and 0xFFFF
-                    cur += 4
+                    cur += 4 // skip codeNumberThings & codeFlags header? Wait: codeFlags needed!
+                    val codeFlags = b.getShort(cur - 2).toInt() and 0xFFFF
 
                     val codeEnabled = (codeFlags and 0x0100) != 0
 
-                    var cEndName = cur
-                    while (cEndName < cap && b.get(cEndName) != 0.toByte()) {
-                        cEndName++
-                    }
-                    val cNameLen = cEndName - cur
-                    val cNameBytes = ByteArray(cNameLen)
-                    b.position(cur)
-                    b.get(cNameBytes, 0, cNameLen)
-                    val cName = String(cNameBytes, CHARSET_LATIN1).trim()
-                    cur = cEndName + 1
+                    val (cName, afterCName, cNameLen) = readNullTerminatedString(b, cur, cap, charset)
+                    cur = afterCName
 
-                    var cEndDesc = cur
-                    while (cEndDesc < cap && b.get(cEndDesc) != 0.toByte()) {
-                        cEndDesc++
-                    }
-                    val cDescLen = cEndDesc - cur
-                    val cDescBytes = ByteArray(cDescLen)
-                    b.position(cur)
-                    b.get(cDescBytes, 0, cDescLen)
-                    val cDesc = String(cDescBytes, CHARSET_LATIN1).trim()
-                    cur = cEndDesc + 1
-
-                    cur += alignTo4(cNameLen + 1 + cDescLen + 1)
+                    val (cDesc, afterCDesc, cDescLen) = readNullTerminatedString(b, cur, cap, charset)
+                    cur = afterCDesc + alignTo4(cNameLen + 1 + cDescLen + 1)
 
                     if (cur + 4 <= cap) {
                         val codeChunks = b.getInt(cur)
                         cur += 4
+                        val maxRemainingWords = ((cap - cur).coerceAtLeast(0)) / 4
+                        if (codeChunks !in 0..maxRemainingWords) break
 
                         val words = ArrayList<Int>(codeChunks)
                         for (w in 0 until codeChunks) {
-                            if (cur + 4 <= cap) {
-                                words.add(b.getInt(cur))
-                                cur += 4
-                            }
+                            words.add(b.getInt(cur))
+                            cur += 4
                         }
 
                         val parsedCode = JusrcheatCode(
@@ -299,11 +305,12 @@ object JusrcheatBinaryCodec {
                 if (cur + 4 <= cap) {
                     val codeChunks = b.getInt(cur)
                     cur += 4
+                    val maxRemainingWords = ((cap - cur).coerceAtLeast(0)) / 4
+                    if (codeChunks !in 0..maxRemainingWords) break
+                    words.ensureCapacity(codeChunks)
                     for (w in 0 until codeChunks) {
-                        if (cur + 4 <= cap) {
-                            words.add(b.getInt(cur))
-                            cur += 4
-                        }
+                        words.add(b.getInt(cur))
+                        cur += 4
                     }
                 }
 
@@ -329,11 +336,21 @@ object JusrcheatBinaryCodec {
         )
     }
 
-    fun parseGame(data: ByteArray, offset: Long, gameId: String, crc32: Long): JusrcheatGame =
-        parseGame(ByteBuffer.wrap(data), offset, gameId, crc32)
+    fun parseGame(
+        data: ByteArray,
+        offset: Long,
+        gameId: String,
+        crc32: Long,
+        charset: Charset = CHARSET_UTF8,
+    ): JusrcheatGame =
+        parseGame(ByteBuffer.wrap(data), offset, gameId, crc32, charset)
 
-    fun parseGameCheats(buffer: ByteBuffer, entry: JusrcheatGameMeta): JusrcheatGame =
-        parseGame(buffer, entry.offset, entry.gameId, entry.crc32)
+    fun parseGameCheats(
+        buffer: ByteBuffer,
+        entry: JusrcheatGameMeta,
+        charset: Charset = CHARSET_UTF8,
+    ): JusrcheatGame =
+        parseGame(buffer, entry.offset, entry.gameId, entry.crc32, charset)
 
     fun parseCodeHexLinesToWords(codeHexLines: String): List<Int> {
         val cleaned = codeHexLines.replace("\n", " ").replace("\r", " ").trim()

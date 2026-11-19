@@ -50,11 +50,12 @@ class QuickResumeActivity : Activity() {
         val targetUri = targetUriString.toUri()
         QuickResumeRequest.request(targetUri)
         QuickResumeShortcuts.reportUsed(this)
+        val matchingEntry = lastEntry?.takeIf { it.uriString == targetUriString }
         PlayStatsStore.recordLaunchByUri(
             context = this,
             uriString = targetUriString,
-            displayName = lastEntry?.displayName,
-            gameCode = lastEntry?.gameCode,
+            displayName = matchingEntry?.displayName,
+            gameCode = matchingEntry?.gameCode,
         )
 
         val emulatorIntent = Intent(this, EmulatorActivity::class.java).apply {

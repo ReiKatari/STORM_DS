@@ -19,6 +19,7 @@ import me.magnum.melonds.translator.model.TranslatorOverlayStyle
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.launch
 import kotlin.math.max
 import kotlin.math.min
@@ -1226,5 +1227,11 @@ class GameTranslationOverlayView @JvmOverloads constructor(
         }
 
         return false
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        longPressHandler.removeCallbacksAndMessages(null)
+        viewScope.coroutineContext.cancelChildren()
     }
 }

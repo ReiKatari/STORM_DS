@@ -1,3 +1,4 @@
+#include <vector>
 #include "OpenGLContext.h"
 #include "MelonLog.h"
 #include "Platform.h"
@@ -70,6 +71,7 @@ bool OpenGLContext::InitContext(long sharedGlContext)
     if (!eglInitialize(display, &majorVersion, &minorVersion))
     {
         melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "Failed to initialize display");
+        display = EGL_NO_DISPLAY;
         return false;
     }
     else
@@ -94,12 +96,14 @@ bool OpenGLContext::InitContext(long sharedGlContext)
     {
         melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "Failed to determine the number of configs");
         logEglError();
+        DeInit();
         return false;
     }
 
     if (numConfigs <= 0)
     {
         melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "No configs found");
+        DeInit();
         return false;
     }
     else
@@ -107,11 +111,16 @@ bool OpenGLContext::InitContext(long sharedGlContext)
         melonDS::Platform::Log(melonDS::Platform::LogLevel::Debug, "Found %d configs", numConfigs);
     }
 
-    EGLConfig configs[numConfigs];
+    std::vector<EGLConfig> configs(numConfigs);
     EGLint selectedConfigNumber = -1;
 
-    //eglChooseConfig(display, attributes, &selectedConfig, 1, &selectedConfigNumber);
-    eglChooseConfig(display, attributes, configs, numConfigs, &numConfigs);
+    if (!eglChooseConfig(display, attributes, configs.data(), numConfigs, &numConfigs))
+    {
+        melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "Failed to choose config");
+        logEglError();
+        DeInit();
+        return false;
+    }
 
     for (int i = 0; i < numConfigs; i++)
     {
@@ -136,6 +145,7 @@ bool OpenGLContext::InitContext(long sharedGlContext)
     if (selectedConfigNumber < 0)
     {
         melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "Couldn't find matching configuration");
+        DeInit();
         return false;
     }
     else
@@ -168,6 +178,7 @@ bool OpenGLContext::InitContext(long sharedGlContext)
     {
         melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "Failed to create buffer surface");
         logEglError();
+        DeInit();
         return false;
     }
 
@@ -187,6 +198,7 @@ bool OpenGLContext::InitContext(long sharedGlContext)
     {
         melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "Failed to create context");
         logEglError();
+        DeInit();
         return false;
     }
 

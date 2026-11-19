@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <string-array name="theme_options" tools:ignore="InconsistentArrays">
+        <item>STORM NIGHT (OLED Dunkel)</item>
+        <item>STORM DAY (Hell)</item>
+        <item>STORM MIDNIGHT (Tiefes Violett)</item>
+        <item>STORM CYBERPUNK (Cyberpunk 2077)</item>
+        <item>STORM GOTHIC (Schwarz und Rot)</item>
+        <item>STORM MATRIX (Smaragd Cyber-Code)</item>
+        <item>STORM SOLAR (Strahlendes Plasmagold)</item>
+        <item>STORM SAKURA (Kirschblüte Hell)</item>
+    </string-array>
+</resources>

@@ -159,28 +159,9 @@ class PlayerStatsActivity : AppCompatActivity() {
     private val viewModel by viewModels<PlayerStatsViewModel>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        setTheme(AppThemeManager.currentTheme.getThemeResId())
+        AppThemeManager.applyEdgeToEdgeTheme(this)
         window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
         WindowCompat.setDecorFitsSystemWindows(window, false)
-
-        val isDark = when (AppThemeManager.currentTheme) {
-            Theme.LIGHT, Theme.SAKURA -> false
-            Theme.SYSTEM -> (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-            else -> true
-        }
-
-        enableEdgeToEdge(
-            statusBarStyle = if (isDark) {
-                SystemBarStyle.dark(AndroidColor.TRANSPARENT)
-            } else {
-                SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT)
-            },
-            navigationBarStyle = if (isDark) {
-                SystemBarStyle.dark(AndroidColor.TRANSPARENT)
-            } else {
-                SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT)
-            },
-        )
         super.onCreate(savedInstanceState)
 
         setContent {
@@ -237,9 +218,7 @@ class PlayerStatsViewModel @Inject constructor(
     private val boxArtRepository: BoxArtRepository,
 ) : AndroidViewModel(application) {
 
-    private val _summary = MutableStateFlow(
-        PlayStatsStore.buildSummary(application, emptyList())
-    )
+    private val _summary = MutableStateFlow(PlayStatsStore.emptySummary())
     val summary: StateFlow<PlayStatsStore.PlayerStatsSummary> = _summary.asStateFlow()
 
     private val _boxArtByUri = MutableStateFlow<Map<String, String>>(emptyMap())

@@ -40,6 +40,14 @@ class MlKitOnDeviceTranslateEngine(
         private val translatorsCache = ConcurrentHashMap<String, Translator>()
         private val downloads = ConcurrentHashMap<String, Deferred<Boolean>>()
         private val downloadScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+        fun closeAll() {
+            val cached = translatorsCache.values.toList()
+            translatorsCache.clear()
+            cached.forEach { translator ->
+                runCatching { translator.close() }
+            }
+        }
     }
 
     override suspend fun prepare(sourceLang: String, targetLang: String) = withContext(Dispatchers.IO) {

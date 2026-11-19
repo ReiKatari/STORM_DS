@@ -90,9 +90,14 @@ object ManualUpdateChecker {
                     return@launch
                 }
 
+                val activity = context as? android.app.Activity
+                if (activity == null || activity.isFinishing || activity.isDestroyed) {
+                    return@launch
+                }
+
                 val remoteVersion = result.tagName.removePrefix("v").removePrefix("V")
                 if (isNewer(remoteVersion, currentVersion)) {
-                    MaterialAlertDialogBuilder(context)
+                    MaterialAlertDialogBuilder(activity)
                         .setTitle(context.getString(R.string.v800_update_available_title, remoteVersion))
                         .setMessage(result.body.ifBlank { result.name })
                         .setPositiveButton(R.string.v800_update_download) { _, _ ->
@@ -104,7 +109,7 @@ object ManualUpdateChecker {
                         .setNegativeButton(R.string.v800_update_later, null)
                         .show()
                 } else {
-                    MaterialAlertDialogBuilder(context)
+                    MaterialAlertDialogBuilder(activity)
                         .setTitle(R.string.v800_update_up_to_date_title)
                         .setMessage(context.getString(R.string.v800_update_up_to_date_msg, currentVersion))
                         .setPositiveButton(android.R.string.ok, null)

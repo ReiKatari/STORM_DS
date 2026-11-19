@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <string-array name="theme_options" tools:ignore="InconsistentArrays">
+        <item>STORM NIGHT (OLED 深黑)</item>
+        <item>STORM DAY (浅色)</item>
+        <item>STORM MIDNIGHT (深邃紫罗兰)</item>
+        <item>STORM CYBERPUNK (赛博朋克 2077)</item>
+        <item>STORM GOTHIC (黑红哥特)</item>
+        <item>STORM MATRIX (翡翠代码矩阵)</item>
+        <item>STORM SOLAR (耀眼等离子金)</item>
+        <item>STORM SAKURA (樱花浅粉)</item>
+    </string-array>
+</resources>

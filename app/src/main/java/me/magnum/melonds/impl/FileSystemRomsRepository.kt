@@ -13,9 +13,12 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.flow.Flow
@@ -73,7 +76,7 @@ class FileSystemRomsRepository(
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val coroutineScope = CoroutineScope(Dispatchers.IO)
+    private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val romListType: Type = object : TypeToken<List<RomDto>>(){}.type
     private val romMetadataMirrorListType: Type = object : TypeToken<List<RomMetadataMirrorDto>>(){}.type
     private val directoryStateListType: Type = object : TypeToken<List<RomDirectoryStateDto>>(){}.type
@@ -89,7 +92,8 @@ class FileSystemRomsRepository(
     @Volatile private var currentDirectoryUris: Map<String, Uri> = emptyMap()
     @Volatile private var hasUnavailableSearchDirectories = false
     private val skipNextRomDataSave = AtomicBoolean(false)
-    private val scanMutex = kotlinx.coroutines.sync.Mutex()
+    private val scanMutex = Mutex()
+    private val romDataMutex = Mutex()
 
     private fun getStorageSettingsFile(fileName: String): File {
         val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
@@ -363,26 +367,30 @@ class FileSystemRomsRepository(
     }
 
     override fun invalidateRoms() {
-        if (areRomsLoaded.compareAndSet(true, false)) {
-            roms.clear()
-        }
+        runBlocking {
+            romDataMutex.withLock {
+                if (areRomsLoaded.compareAndSet(true, false)) {
+                    roms.clear()
+                }
 
-        val cacheFile = getStorageSettingsFile(ROM_DATA_FILE)
-        if (cacheFile.isFile) {
-            cacheFile.delete()
-        }
+                val cacheFile = getStorageSettingsFile(ROM_DATA_FILE)
+                if (cacheFile.isFile) {
+                    cacheFile.delete()
+                }
 
-        val directoryCacheFile = getStorageSettingsFile(ROM_DIRECTORY_STATE_FILE)
-        if (directoryCacheFile.isFile) {
-            directoryCacheFile.delete()
-        }
+                val directoryCacheFile = getStorageSettingsFile(ROM_DIRECTORY_STATE_FILE)
+                if (directoryCacheFile.isFile) {
+                    directoryCacheFile.delete()
+                }
 
-        synchronized(directoryStatesLock) {
-            directoryStates.clear()
-            directoryScanStatuses.clear()
-        }
+                synchronized(directoryStatesLock) {
+                    directoryStates.clear()
+                    directoryScanStatuses.clear()
+                }
 
-        directoryScanStatusFlow.value = emptyList()
+                directoryScanStatusFlow.value = emptyList()
+            }
+        }
     }
 
     private fun addRom(rom: Rom) {
@@ -477,7 +485,9 @@ class FileSystemRomsRepository(
         }
 
         return runCatching {
-            gson.fromJson<List<RomMetadataMirrorDto>>(FileReader(metadataFile), romMetadataMirrorListType).orEmpty()
+            FileReader(metadataFile).use { reader ->
+                gson.fromJson<List<RomMetadataMirrorDto>>(reader, romMetadataMirrorListType).orEmpty()
+            }
         }.onFailure {
             Log.w(TAG, "Failed to parse restored ROM metadata", it)
         }.getOrElse { emptyList() }
@@ -696,7 +706,12 @@ class FileSystemRomsRepository(
                     gc0 == 'K' || gc0 == 'H' ||
                     (!rom.isDsiEnhanced && gc0 == '4')
                 if (isDsiFile && (!rom.isDsiWareTitle || rom.config.runtimeConsoleType == me.magnum.melonds.domain.model.rom.config.RuntimeConsoleType.DEFAULT)) {
-                    rom.copy(isDsiWareTitle = true, isDsiEnhanced = false, config = RomConfig.forDsiWareTitle())
+                    val updatedConfig = if (rom.config.runtimeConsoleType == me.magnum.melonds.domain.model.rom.config.RuntimeConsoleType.DEFAULT) {
+                        rom.config.copy(runtimeConsoleType = me.magnum.melonds.domain.model.rom.config.RuntimeConsoleType.DSi)
+                    } else {
+                        rom.config
+                    }
+                    rom.copy(isDsiWareTitle = true, isDsiEnhanced = false, config = updatedConfig)
                 } else {
                     rom
                 }
@@ -1055,7 +1070,7 @@ class FileSystemRomsRepository(
                     val processor = romFileProcessorFactory.getFileRomProcessorForFileName(effectiveFileName)
 
                     if (processor != null) {
-                        val docFile = DocumentFile.fromTreeUri(context, fileUri)
+                        val docFile = DocumentFile.fromSingleUri(context, fileUri)
                             ?: DocumentFile.fromFile(java.io.File(effectiveFileName))
                         accumulator.add(
                             DirectoryFileState(
@@ -1364,7 +1379,8 @@ class FileSystemRomsRepository(
         }.getOrElse { RomCacheReadResult(emptyList(), false) }
     }
 
-    private fun saveRomData(romData: List<Rom>) {
+    private suspend fun saveRomData(romData: List<Rom>) = romDataMutex.withLock {
+        if (!areRomsLoaded.get()) return@withLock
         val cacheFile = getStorageSettingsFile(ROM_DATA_FILE)
 
         try {

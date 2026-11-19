@@ -740,11 +740,17 @@ void CompatibilitySoftRenderer::StoreStructuredVulkan2DPixel(
         }
         else if (slotInPlane0 || captureBackedSlotInPlane0)
         {
-            belowPlane = legacyVal2;
+            belowPlane =
+                (legacyVal2 != 0u && !StructuredVulkan2DHas3DSlot(legacyVal2))
+                    ? legacyVal2
+                    : (!StructuredVulkan2DHas3DSlot(originalVal2) ? originalVal2 : 0u);
         }
         else if (slotInPlane1 || captureBackedSlotInPlane1)
         {
-            belowPlane = legacyVal2;
+            belowPlane =
+                (legacyVal2 != 0u && !StructuredVulkan2DHas3DSlot(legacyVal2))
+                    ? legacyVal2
+                    : (!StructuredVulkan2DHas3DSlot(originalVal3) ? originalVal3 : 0u);
             if (StructuredVulkan2DSourceIsReal2D(sourceClass0))
             {
                 abovePlane = originalVal1;
@@ -756,7 +762,7 @@ void CompatibilitySoftRenderer::StoreStructuredVulkan2DPixel(
         }
         else
         {
-            belowPlane = legacyVal1;
+            belowPlane = 0u;
             if (StructuredVulkan2DSourceIsReal2D(sourceClass0) || StructuredVulkan2DSourceIsReal2D(sourceClass1))
             {
                 abovePlane = legacyVal1;
@@ -915,23 +921,24 @@ void CompatibilitySoftRenderer::StoreStructuredVulkan2DCapturePixel(
         }
         else if (external3DSlot && slotInPlane0)
         {
-            belowPlane = legacyVal2;
-            if (StructuredVulkan2DSourceIsReal2D(sourceClass1))
-            {
-                abovePlane = legacyVal2;
-                hasAbovePlane = true;
-                protectedBlack2D =
-                    StructuredVulkan2DSourceIsReal2D(sourceClass1)
-                    && StructuredVulkan2DIsOpaqueBlack(abovePlane);
-            }
+            belowPlane =
+                (legacyVal2 != 0u && !StructuredVulkan2DHas3DSlot(legacyVal2))
+                    ? legacyVal2
+                    : (!StructuredVulkan2DHas3DSlot(originalVal2) ? originalVal2 : 0u);
         }
         else if (slotInPlane0 || captureBackedSlotInPlane0)
         {
-            belowPlane = legacyVal2;
+            belowPlane =
+                (legacyVal2 != 0u && !StructuredVulkan2DHas3DSlot(legacyVal2))
+                    ? legacyVal2
+                    : (!StructuredVulkan2DHas3DSlot(originalVal2) ? originalVal2 : 0u);
         }
         else if (slotInPlane1 || captureBackedSlotInPlane1)
         {
-            belowPlane = legacyVal2;
+            belowPlane =
+                (legacyVal2 != 0u && !StructuredVulkan2DHas3DSlot(legacyVal2))
+                    ? legacyVal2
+                    : (!StructuredVulkan2DHas3DSlot(originalVal3) ? originalVal3 : 0u);
             if (StructuredVulkan2DSourceIsReal2D(sourceClass0))
             {
                 abovePlane = originalVal1;
@@ -943,7 +950,7 @@ void CompatibilitySoftRenderer::StoreStructuredVulkan2DCapturePixel(
         }
         else
         {
-            belowPlane = legacyVal1;
+            belowPlane = 0u;
             if (StructuredVulkan2DSourceIsReal2D(sourceClass0) || StructuredVulkan2DSourceIsReal2D(sourceClass1))
             {
                 abovePlane = legacyVal1;

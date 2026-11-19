@@ -8,11 +8,11 @@
     <string name="frame_advance_resume_btn">Fortsetzen</string>
     <string name="slow_motion_title">Zeitlupengeschwindigkeit</string>
     <string name="slow_motion_subtitle">Voreinstellung wählen oder manuell anpassen</string>
-    <string name="slow_motion_preset_025">0.25× — Viertelgeschwindigkeit</string>
-    <string name="slow_motion_preset_050">0.50× — Halbe Geschwindigkeit</string>
-    <string name="slow_motion_preset_075">0.75× — Sanfte Verlangsamung</string>
-    <string name="slow_motion_preset_085">0.85× — Leichte Verlangsamung</string>
-    <string name="slow_motion_preset_100">1.00× — Normale Geschwindigkeit (aus)</string>
+    <string name="slow_motion_preset_025">0.25× - Viertelgeschwindigkeit</string>
+    <string name="slow_motion_preset_050">0.50× - Halbe Geschwindigkeit</string>
+    <string name="slow_motion_preset_075">0.75× - Sanfte Verlangsamung</string>
+    <string name="slow_motion_preset_085">0.85× - Leichte Verlangsamung</string>
+    <string name="slow_motion_preset_100">1.00× - Normale Geschwindigkeit (aus)</string>
     <string name="slow_motion_custom_slider">Benutzerdefinierte Geschwindigkeit: %1$.2f×</string>
     <string name="slow_motion_turn_off">Zeitlupe deaktivieren</string>
     <string name="slow_motion_apply">Anwenden</string>

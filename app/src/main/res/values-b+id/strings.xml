@@ -886,13 +886,13 @@
     <string name="conservative_coverage_enabled">Perbaikan cakupan konservatif (eksperimental)</string>
     <string name="conservative_coverage_enabled_summary">Memperluas cakupan poligon di ruang layar untuk mengurangi celah 1px-2px antar poligon.</string>
     <string name="conservative_coverage_px">Perluasan cakupan</string>
-    <string name="conservative_coverage_px_summary">Jumlah perluasan dalam piksel resolusi internal (0–200 = 0.00–2.00px).</string>
+    <string name="conservative_coverage_px_summary">Jumlah perluasan dalam piksel resolusi internal (0-200 = 0.00-2.00px).</string>
     <string name="conservative_coverage_apply_repeat">Terapkan ke tekstur berulang</string>
     <string name="conservative_coverage_apply_repeat_summary">Menerapkan perbaikan cakupan ke tekstur REPEAT. Direkomendasikan untuk lantai/air.</string>
     <string name="conservative_coverage_apply_clamp">Terapkan ke tekstur clamp</string>
     <string name="conservative_coverage_apply_clamp_summary">Juga menerapkan perbaikan cakupan ke tekstur CLAMP. Lebih agresif dan dapat memengaruhi sprite.</string>
     <string name="conservative_coverage_depth_bias">Bias kedalaman</string>
-    <string name="conservative_coverage_depth_bias_summary">Bias kedalaman yang diterapkan ke poligon yang diperluas (0–2000 = 0.000000–0.002000). Gunakan hanya jika terjadi z-fighting/kedipan.</string>
+    <string name="conservative_coverage_depth_bias_summary">Bias kedalaman yang diterapkan ke poligon yang diperluas (0-2000 = 0.000000-0.002000). Gunakan hanya jika terjadi z-fighting/kedipan.</string>
     <string name="debug_3d_clear_magenta">Debug: bersihkan 3D ke magenta</string>
     <string name="debug_3d_clear_magenta_summary">Jika celah berubah menjadi magenta, itu adalah celah cakupan. Khusus debug.</string>
     <string name="external_display_mode">Mode layar eksternal</string>
@@ -998,7 +998,7 @@
     <string name="dual_screen_vertical_alignment_option_bottom">Bawah</string>
     <string name="dual_screen_vertical_alignment_summary">Internal: %1$s • Eksternal: %2$s</string>
     <string name="dual_screen_vertical_alignment_preset_value">Preset (%1$s)</string>
-    <string name="dual_screen_vertical_alignment_default_hint">Default preset — Internal: %1$s • Eksternal: %2$s</string>
+    <string name="dual_screen_vertical_alignment_default_hint">Default preset - Internal: %1$s • Eksternal: %2$s</string>
     <string name="presets">Dual Screen Presets</string>
     <string name="layout_editing_disabled_by_presets">Tata letak tidak dapat diedit saat preset layar ganda sedang aktif.</string>
     <string name="label_button_scale">Ukuran tombol</string>
@@ -1199,13 +1199,13 @@ Impor ke STORM DS?</string>
     <string name="about_credits_jpeacekeeper_title">JPeacekeeper (4PDA)</string>
     <string name="about_credits_jpeacekeeper_summary">Kontribusi pengujian yang sangat berharga, laporan bug DSi yang mendetail, standardisasi frame rate, dan peningkatan proyek berkelanjutan</string>
     <string name="about_credits_watermelonds_title">WatermelonDS (Android Port)</string>
-    <string name="about_credits_watermelonds_summary">SapphireRhodonite, rafaelvcaetano dan kontributor — port Android, jalur cepat rendering Vulkan, integrasi librashader, UI modern dan kontrol sentuh</string>
+    <string name="about_credits_watermelonds_summary">SapphireRhodonite, rafaelvcaetano dan kontributor - port Android, jalur cepat rendering Vulkan, integrasi librashader, UI modern dan kontrol sentuh</string>
     <string name="about_credits_melonds_title">melonDS (Original Core)</string>
-    <string name="about_credits_melonds_summary">StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura dan tim melonDS — emulator inti Nintendo DS / DSi asli berakurasi tinggi</string>
+    <string name="about_credits_melonds_summary">StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura dan tim melonDS - emulator inti Nintendo DS / DSi asli berakurasi tinggi</string>
     <string name="about_credits_melonds_ds_title">melonDS DS (RetroArch Core)</string>
-    <string name="about_credits_melonds_ds_summary">JesseTG dan tim Libretro — mekanisme pemuatan otomatis DSiWare, arsitektur warmboot TLNC, serta inovasi inti Libretro</string>
+    <string name="about_credits_melonds_ds_summary">JesseTG dan tim Libretro - mekanisme pemuatan otomatis DSiWare, arsitektur warmboot TLNC, serta inovasi inti Libretro</string>
     <string name="about_credits_drastic_title">Inspirasi DraStic dan fastDS</string>
-    <string name="about_credits_drastic_summary">Exophase dan pembuat DraStic / fastDS — inspirasi preset layar, tata letak tampilan cepat, dan konsep ergonomi sentuh</string>
+    <string name="about_credits_drastic_summary">Exophase dan pembuat DraStic / fastDS - inspirasi preset layar, tata letak tampilan cepat, dan konsep ergonomi sentuh</string>
     <string name="about_credits_libraries_title">Pustaka dan alat sumber terbuka</string>
     <string name="about_credits_libraries_summary">Google Oboe (AAudio/OpenSL ES), librashader (shader RetroArch Slang), RetroAchievements (rcheevos), libslirp (Wi-Fi), libadrenotools (driver Adreno/Turnip)</string>
     <string name="about_github_title">STORM DS Repository</string>
@@ -1360,6 +1360,7 @@ Impor ke STORM DS?</string>
 • 📏 Area isi dan perataan: sesuaikan perataan vertikal dan cakupan tampilan.</string>
     <string name="theme_accent_color_title">Warna aksen</string>
     <string name="theme_accent_color_summary">Pilih warna aksen neon untuk tema STORM NIGHT</string>
+    <string name="accent_theme_default">Bawaan tema</string>
     <string name="accent_electric_cyan">💎 Sian elektrik</string>
     <string name="accent_matrix_emerald">🌿 Zamrud Matrix</string>
     <string name="accent_amber_gold">⚡ Emas siber</string>

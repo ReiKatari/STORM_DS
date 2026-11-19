@@ -6,7 +6,7 @@
     <string name="feature_quick_resume_from_save">Simpan cepat • %1$s</string>
     <string name="feature_quick_resume_from_save_ready">Lanjutkan dari simpan cepat</string>
     <string name="feature_quick_resume_last_played">Terakhir dimainkan • %1$s</string>
-    <string name="feature_quick_resume_no_save_hint">Mulai normal — belum ada simpan cepat</string>
+    <string name="feature_quick_resume_no_save_hint">Mulai normal - belum ada simpan cepat</string>
     <string name="feature_quick_resume_tile_label">Lanjutkan game</string>
     <string name="feature_quick_resume_no_recent_game">Tidak ada game terbaru</string>
     <string name="feature_quick_resume_not_found">Game yang terakhir dimainkan tidak ditemukan</string>
@@ -27,7 +27,7 @@
     <string name="feature_stats_empty_desc">Jalankan game apa pun untuk mulai mencatat waktu bermain dan aktivitas harian</string>
     <string name="feature_problem_report_menu_title">Laporkan masalah</string>
     <string name="feature_problem_report_dialog_title">Buat laporan masalah</string>
-    <string name="feature_problem_report_dialog_message">Membuat arsip ZIP diagnostik yang berisi versi aplikasi, info perangkat dan GPU, versi Android, pengaturan emulator dan perender (tanpa akun atau token), kode game terakhir, dan log terbaru. Tidak ada yang dikirim secara otomatis — Anda memilih ke mana file dibagikan.</string>
+    <string name="feature_problem_report_dialog_message">Membuat arsip ZIP diagnostik yang berisi versi aplikasi, info perangkat dan GPU, versi Android, pengaturan emulator dan perender (tanpa akun atau token), kode game terakhir, dan log terbaru. Tidak ada yang dikirim secara otomatis - Anda memilih ke mana file dibagikan.</string>
     <string name="feature_problem_report_create_action">Buat dan bagikan</string>
     <string name="feature_problem_report_generating">Mengumpulkan laporan diagnostik…</string>
     <string name="feature_problem_report_share_chooser">Bagikan laporan masalah</string>

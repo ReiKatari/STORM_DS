@@ -282,6 +282,12 @@ class EmulatorViewModel @Inject constructor(
 
     private var raBootstrapJob: Job? = null
     private var raSessionJob: Job? = null
+    @Volatile private var isHostActivityRunning = true
+    @Volatile private var isEmulationPausedForPlayTime = false
+
+    fun setHostActivityRunning(running: Boolean) {
+        isHostActivityRunning = running
+    }
 
     private enum class RetroAchievementsNetworkMode {
         ONLINE_LIVE,

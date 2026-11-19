@@ -347,7 +347,12 @@ void GPU::DoSavestate(Savestate* file) noexcept
     GPU3D.DoSavestate(file);
 
     if (!file->Saving)
+    {
         ResetVRAMCache();
+        const bool swap = (NDS.PowerControl9 & (1u << 15)) != 0;
+        FrontBufferScreenSwap[0] = swap;
+        FrontBufferScreenSwap[1] = swap;
+    }
 }
 
 void GPU::AssignFramebuffers() noexcept

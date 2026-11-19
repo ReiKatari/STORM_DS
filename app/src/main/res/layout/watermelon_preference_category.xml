@@ -13,4 +13,4 @@
     android:fontFamily="@font/space_grotesk"
     android:textAllCaps="true"
     android:letterSpacing="0.08"
-    android:textColor="@color/colorPrimary" />
+    android:textColor="?attr/colorAccent" />

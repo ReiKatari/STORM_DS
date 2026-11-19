@@ -1,12 +1,14 @@
 package me.magnum.melonds.ui.settings
 
-import android.graphics.Color
+import android.content.res.ColorStateList
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
-import androidx.activity.SystemBarStyle
-import androidx.activity.enableEdgeToEdge
+import android.widget.ImageView
+import android.widget.TextView
+import androidx.compose.ui.graphics.toArgb
 import androidx.appcompat.app.AppCompatActivity
 import me.magnum.melonds.extensions.applyImmersiveFullscreen
 import androidx.compose.material.icons.Icons
@@ -94,33 +96,60 @@ class SettingsActivity :
     }
 
     private lateinit var binding: ActivitySettingsBinding
+    private var accentChangeListener: ((String) -> Unit)? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        me.magnum.melonds.ui.theme.AppThemeManager.init(this)
-        setTheme(me.magnum.melonds.ui.theme.AppThemeManager.currentTheme.getThemeResId())
-        val isLight = !me.magnum.melonds.ui.theme.AppThemeManager.isDarkTheme(this)
-        if (isLight) {
-            enableEdgeToEdge(statusBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT))
-        } else {
-            enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT))
-        }
+        me.magnum.melonds.ui.theme.AppThemeManager.applyEdgeToEdgeTheme(this)
         super.onCreate(savedInstanceState)
         binding = ActivitySettingsBinding.inflate(layoutInflater)
         setContentView(binding.root)
         setSupportActionBar(binding.toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(false)
 
-        val updateBackButtonStyle = { _: String? ->
-            val color = me.magnum.melonds.ui.theme.AppThemeManager.getAccentColor()
-            val dynamicShape = android.graphics.drawable.GradientDrawable().apply {
-                shape = android.graphics.drawable.GradientDrawable.OVAL
-                setColor(getColor(R.color.watermelonSurface2))
-                setStroke((1.5f * resources.displayMetrics.density).toInt(), color)
+        val updateThemeStyles: (String) -> Unit = { _ ->
+            val colors = me.magnum.melonds.ui.theme.AppThemeManager.getCurrentWatermelonColors(this)
+            val bgInt = colors.bg.toArgb()
+            val surface2Int = colors.surface2.toArgb()
+            val accentInt = colors.green.toArgb()
+            val textInt = colors.text.toArgb()
+            val text2Int = colors.text2.toArgb()
+            val lineInt = colors.line.toArgb()
+            val density = resources.displayMetrics.density
+
+            binding.root.setBackgroundColor(bgInt)
+            binding.viewStatusBarBackground.setBackgroundColor(bgInt)
+            binding.toolbar.setBackgroundColor(bgInt)
+            binding.toolbarDivider.setBackgroundColor(lineInt)
+            binding.textSettingsTitle.setTextColor(textInt)
+            binding.textSettingsSubtitle.setTextColor(text2Int)
+            androidx.core.widget.ImageViewCompat.setImageTintList(
+                binding.imgSettingsIcon,
+                ColorStateList.valueOf(accentInt),
+            )
+
+            binding.btnReturnToGame.background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 8f * density
+                setColor(colors.greenDim.toArgb())
+                setStroke((1f * density).toInt().coerceAtLeast(1), accentInt)
             }
-            binding.settingsFooter.btnSettingsBack.background = dynamicShape
+            (binding.btnReturnToGame.getChildAt(0) as? ImageView)?.let {
+                androidx.core.widget.ImageViewCompat.setImageTintList(it, ColorStateList.valueOf(accentInt))
+            }
+            (binding.btnReturnToGame.getChildAt(1) as? TextView)?.setTextColor(accentInt)
+
+            binding.settingsFooter.btnSettingsBack.background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(surface2Int)
+                setStroke((1.5f * density).toInt().coerceAtLeast(1), accentInt)
+            }
+            (binding.settingsFooter.btnSettingsBack.getChildAt(0) as? ImageView)?.let {
+                androidx.core.widget.ImageViewCompat.setImageTintList(it, ColorStateList.valueOf(textInt))
+            }
         }
-        updateBackButtonStyle(null)
-        me.magnum.melonds.ui.theme.AppThemeManager.addAccentChangeListener(updateBackButtonStyle)
+        accentChangeListener = updateThemeStyles
+        updateThemeStyles("")
+        me.magnum.melonds.ui.theme.AppThemeManager.addAccentChangeListener(updateThemeStyles)
 
         binding.settingsFooter.btnSettingsBack.setOnClickListener {
             onBackPressedDispatcher.onBackPressed()
@@ -188,6 +217,14 @@ class SettingsActivity :
         if (hasFocus) {
             applyImmersiveMode()
         }
+    }
+
+    override fun onDestroy() {
+        accentChangeListener?.let {
+            me.magnum.melonds.ui.theme.AppThemeManager.removeAccentChangeListener(it)
+        }
+        accentChangeListener = null
+        super.onDestroy()
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
@@ -308,27 +345,42 @@ class SettingsActivity :
                 R.drawable.ic_info to getString(R.string.settings_sub_about)
             is me.magnum.melonds.ui.settings.fragments.MainPreferencesFragment ->
                 R.drawable.ic_settings to getString(R.string.settings_sub_main)
-            else -> when {
-                lower.contains("видео") || lower.contains("video") || lower.contains("график") ->
-                    R.drawable.ic_video to getString(R.string.settings_sub_video)
-                lower.contains("звук") || lower.contains("audio") || lower.contains("микрофон") ->
-                    R.drawable.ic_audio to getString(R.string.settings_sub_audio)
-                lower.contains("управлен") || lower.contains("input") || lower.contains("клавиш") || lower.contains("расклад") ->
-                    R.drawable.ic_input to getString(R.string.settings_sub_input)
-                lower.contains("папк") || lower.contains("rom") || lower.contains("игр") ->
-                    R.drawable.ic_folder to getString(R.string.settings_sub_roms)
-                lower.contains("достижен") || lower.contains("achievement") ->
-                    R.drawable.ic_trophy to getString(R.string.settings_sub_ra)
-                lower.contains("перемотк") || lower.contains("rewind") ->
-                    R.drawable.ic_clock to getString(R.string.settings_sub_rewind)
-                lower.contains("перевод") || lower.contains("translat") ->
-                    R.drawable.ic_translate to getString(R.string.settings_sub_translator)
-                lower.contains("bios") || lower.contains("firmware") || lower.contains("nand") || lower.contains("систем") ->
-                    R.drawable.ic_firmware to getString(R.string.settings_sub_firmware)
-                lower.contains("чит") || lower.contains("cheat") ->
-                    R.drawable.ic_cheat to getString(R.string.settings_sub_cheats)
-                else ->
-                    R.drawable.ic_settings to getString(R.string.settings_sub_default)
+            else -> {
+                val rootKey = fragment?.arguments?.getString(PreferenceFragmentCompat.ARG_PREFERENCE_ROOT)
+                when {
+                    rootKey == "video_retroarch_shader_settings" ||
+                        lower.contains("видео") || lower.contains("video") || lower.contains("график") ||
+                        lower.contains("vidéo") || lower.contains("graph") || lower.contains("shader") ||
+                        lower.contains("视频") || lower.contains("图形") || lower.contains("ビデオ") || lower.contains("映像") ->
+                        R.drawable.ic_video to getString(R.string.settings_sub_video)
+                    lower.contains("звук") || lower.contains("audio") || lower.contains("микрофон") ||
+                        lower.contains("ton") || lower.contains("son") || lower.contains("音频") || lower.contains("オーディオ") ->
+                        R.drawable.ic_audio to getString(R.string.settings_sub_audio)
+                    lower.contains("управлен") || lower.contains("input") || lower.contains("клавиш") || lower.contains("расклад") ||
+                        lower.contains("eingabe") || lower.contains("steuer") || lower.contains("contrôl") || lower.contains("entrée") ||
+                        lower.contains("输入") || lower.contains("控制") || lower.contains("入力") || lower.contains("操作") ->
+                        R.drawable.ic_input to getString(R.string.settings_sub_input)
+                    lower.contains("папк") || lower.contains("rom") || lower.contains("игр") ||
+                        lower.contains("spiel") || lower.contains("jeu") || lower.contains("游戏") || lower.contains("ゲーム") ->
+                        R.drawable.ic_folder to getString(R.string.settings_sub_roms)
+                    lower.contains("достижен") || lower.contains("achievement") ||
+                        lower.contains("erfolg") || lower.contains("succès") || lower.contains("成就") || lower.contains("実績") ->
+                        R.drawable.ic_trophy to getString(R.string.settings_sub_ra)
+                    lower.contains("перемотк") || lower.contains("rewind") ||
+                        lower.contains("rückspul") || lower.contains("rembobin") || lower.contains("倒带") || lower.contains("巻き戻し") ->
+                        R.drawable.ic_clock to getString(R.string.settings_sub_rewind)
+                    lower.contains("перевод") || lower.contains("translat") ||
+                        lower.contains("übersetz") || lower.contains("traduc") || lower.contains("翻译") || lower.contains("翻訳") ->
+                        R.drawable.ic_translate to getString(R.string.settings_sub_translator)
+                    lower.contains("bios") || lower.contains("firmware") || lower.contains("nand") || lower.contains("систем") ||
+                        lower.contains("system") || lower.contains("système") || lower.contains("系统") || lower.contains("システム") ->
+                        R.drawable.ic_firmware to getString(R.string.settings_sub_firmware)
+                    lower.contains("чит") || lower.contains("cheat") ||
+                        lower.contains("triche") || lower.contains("金手指") || lower.contains("チート") ->
+                        R.drawable.ic_cheat to getString(R.string.settings_sub_cheats)
+                    else ->
+                        R.drawable.ic_settings to getString(R.string.settings_sub_default)
+                }
             }
         }
     }

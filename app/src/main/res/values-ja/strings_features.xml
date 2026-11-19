@@ -6,7 +6,7 @@
     <string name="feature_quick_resume_from_save">クイックセーブ • %1$s</string>
     <string name="feature_quick_resume_from_save_ready">クイックセーブから再開</string>
     <string name="feature_quick_resume_last_played">最終プレイ • %1$s</string>
-    <string name="feature_quick_resume_no_save_hint">通常起動 — クイックセーブはまだありません</string>
+    <string name="feature_quick_resume_no_save_hint">通常起動 - クイックセーブはまだありません</string>
     <string name="feature_quick_resume_tile_label">ゲームを再開</string>
     <string name="feature_quick_resume_no_recent_game">最近のゲームはありません</string>
     <string name="feature_quick_resume_not_found">最後にプレイしたゲームが見つかりませんでした</string>

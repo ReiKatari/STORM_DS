@@ -30,6 +30,7 @@ import me.magnum.melonds.translator.ui.DialogueBacklogBottomSheet
 import okhttp3.OkHttpClient
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 class GameTranslatorManager(
     private val activity: Activity,
@@ -59,7 +60,7 @@ class GameTranslatorManager(
         const val PREF_TRANSLATOR_CUSTOM_AI_MODEL = "translator_custom_ai_model"
 
         private val sharedOkHttpClient: OkHttpClient by lazy {
-            OkHttpClient.Builder()
+            me.magnum.melonds.common.network.SharedOkHttpClient.instance.newBuilder()
                 .connectTimeout(10, TimeUnit.SECONDS)
                 .readTimeout(15, TimeUnit.SECONDS)
                 .build()
@@ -127,9 +128,15 @@ class GameTranslatorManager(
                 }
             }
             PREF_TRANSLATOR_ENGINE,
+            PREF_TRANSLATOR_DEEPL_KEY,
+            PREF_TRANSLATOR_CUSTOM_AI_KEY,
+            PREF_TRANSLATOR_CUSTOM_AI_ENDPOINT,
+            PREF_TRANSLATOR_CUSTOM_AI_MODEL,
             PREF_TRANSLATOR_SOURCE_LANG,
             PREF_TRANSLATOR_TARGET_LANG -> {
                 mainHandler.post {
+                    cachedEngine = null
+                    cachedEngineType = null
                     textRecognizer.clearCache()
                     ocrContextGraph.clearDialogueHistory()
                     lastTranslatedRawText = ""
@@ -300,10 +307,24 @@ class GameTranslatorManager(
                             openRegionEditor()
                         },
                         onPreviewTts = {
-                            ttsManager.speak(
-                                "Бэтмен: Город под защитой! Джокер: Ха-ха-ха, попробуй поймай меня! Майя: Феникс, у нас появилась новая улика!",
-                                "ru"
-                            )
+                            val targetLang = preferences.getString(PREF_TRANSLATOR_TARGET_LANG, "ru") ?: "ru"
+                            val previewText = when {
+                                targetLang.startsWith("ru", ignoreCase = true) ->
+                                    "Бэтмен: Город под защитой! Джокер: Ха-ха-ха, попробуй поймай меня! Майя: Феникс, у нас появилась новая улика!"
+                                targetLang.startsWith("ja", ignoreCase = true) ->
+                                    "バットマン：街は守られている！ ジョーカー：ハハハ、捕まえてみな！ 真宵：なるほどくん、新しい証拠が見つかったよ！"
+                                targetLang.startsWith("zh", ignoreCase = true) ->
+                                    "蝙蝠侠：这座城市受到保护！ 小丑：哈哈哈，有本事来抓我啊！ 真宵：成步堂，我们找到了新证据！"
+                                targetLang.startsWith("de", ignoreCase = true) ->
+                                    "Batman: Die Stadt ist geschützt! Joker: Hahaha, versuch mich zu fangen! Maya: Phoenix, wir haben einen neuen Beweis!"
+                                targetLang.startsWith("fr", ignoreCase = true) ->
+                                    "Batman : La ville est protégée ! Joker : Hahaha, essaie de m'attraper ! Maya : Phoenix, nous avons une nouvelle preuve !"
+                                targetLang.startsWith("es", ignoreCase = true) ->
+                                    "Batman: ¡La ciudad está protegida! Joker: ¡Jajaja, intenta atraparme! Maya: ¡Phoenix, tenemos una nueva prueba!"
+                                else ->
+                                    "Batman: The city is protected! Joker: Hahaha, try and catch me! Maya: Phoenix, we have new evidence!"
+                            }
+                            ttsManager.speak(previewText, targetLang)
                         },
                         onOpenBacklogAndGlossary = {
                             bottomSheetDialog.dismiss()
@@ -410,42 +431,7 @@ class GameTranslatorManager(
         translationJob?.cancel()
         translationJob = mainScope.launch {
             val pauseOnTranslate = preferences.getBoolean(PREF_TRANSLATOR_PAUSE_ON_TRANSLATE, true)
-            var capturedBitmap: Bitmap? = null
-
-            // Tier 1: Fast in-process PixelCopy from SurfaceView (0 permissions, <20ms)
-            val pixelCopyResult = captureViaPixelCopy()
-            if (pixelCopyResult != null && !isBitmapBlank(pixelCopyResult)) {
-                capturedBitmap = pixelCopyResult
-            } else {
-                pixelCopyResult?.recycle()
-            }
-
-            // Tier 2: Direct DS Framebuffer (native or scaled)
-            if (capturedBitmap == null && screenshotProvider != null) {
-                try {
-                    capturedBitmap = withTimeoutOrNull(500) {
-                        screenshotProvider.invoke()
-                    }
-                } catch (_: Throwable) {
-                    capturedBitmap = null
-                }
-            }
-
-            // Tier 3: MediaProjection Screen Capture (if permission already granted)
-            if (capturedBitmap == null && mediaProjectionCapturer.hasPermission) {
-                try {
-                    capturedBitmap = withTimeoutOrNull(1500) {
-                        mediaProjectionCapturer.captureScreen()
-                    }
-                    if (capturedBitmap != null && isBitmapBlank(capturedBitmap)) {
-                        capturedBitmap.recycle()
-                        capturedBitmap = null
-                    }
-                } catch (e: Throwable) {
-                    Log.e(TAG, "MediaProjection capture failed", e)
-                    capturedBitmap = null
-                }
-            }
+            val capturedBitmap = captureFrameBitmap()
 
             if (currentGen != activeTranslationGen || !isActive) {
                 capturedBitmap?.recycle()
@@ -471,14 +457,13 @@ class GameTranslatorManager(
             overlayView?.showFloatingButton = prevShowFloating
             overlayView?.invalidate()
 
-            if (pauseOnTranslate && !isAuto) {
-                isPausedByTranslator = true
-                try {
-                    onPauseEmulator()
-                } catch (_: Throwable) {}
-            }
-
             if (capturedBitmap != null) {
+                if (pauseOnTranslate && !isAuto) {
+                    isPausedByTranslator = true
+                    try {
+                        onPauseEmulator()
+                    } catch (_: Throwable) {}
+                }
                 val w = capturedBitmap.width.toFloat()
                 val h = capturedBitmap.height.toFloat()
                 val aspect = w / h
@@ -494,6 +479,47 @@ class GameTranslatorManager(
                 Toast.makeText(activity, R.string.translator_capture_failed, Toast.LENGTH_SHORT).show()
             }
         }
+    }
+
+    private suspend fun captureFrameBitmap(): Bitmap? {
+        var capturedBitmap: Bitmap? = null
+
+        // Tier 1: Fast in-process PixelCopy from SurfaceView (0 permissions, <20ms)
+        val pixelCopyResult = captureViaPixelCopy()
+        if (pixelCopyResult != null && !isBitmapBlank(pixelCopyResult)) {
+            capturedBitmap = pixelCopyResult
+        } else {
+            pixelCopyResult?.recycle()
+        }
+
+        // Tier 2: Direct DS Framebuffer (native or scaled)
+        if (capturedBitmap == null && screenshotProvider != null) {
+            try {
+                capturedBitmap = withTimeoutOrNull(500) {
+                    screenshotProvider.invoke()
+                }
+            } catch (_: Throwable) {
+                capturedBitmap = null
+            }
+        }
+
+        // Tier 3: MediaProjection Screen Capture (if permission already granted)
+        if (capturedBitmap == null && mediaProjectionCapturer.hasPermission) {
+            try {
+                capturedBitmap = withTimeoutOrNull(1500) {
+                    mediaProjectionCapturer.captureScreen()
+                }
+                if (capturedBitmap != null && isBitmapBlank(capturedBitmap)) {
+                    capturedBitmap.recycle()
+                    capturedBitmap = null
+                }
+            } catch (e: Throwable) {
+                Log.e(TAG, "MediaProjection capture failed", e)
+                capturedBitmap = null
+            }
+        }
+
+        return capturedBitmap
     }
 
     fun onMediaProjectionResult(resultCode: Int, data: android.content.Intent?) {
@@ -519,47 +545,59 @@ class GameTranslatorManager(
         val decorH = decorView.height.coerceAtLeast(1)
 
         if (surfaceView != null && surfaceView.holder.surface.isValid && surfaceView.width > 0 && surfaceView.height > 0) {
-            val surfaceBitmap = Bitmap.createBitmap(surfaceView.width, surfaceView.height, Bitmap.Config.ARGB_8888)
-            val result = withTimeoutOrNull(400) {
-                suspendCancellableCoroutine<Bitmap?> { continuation ->
-                    val onCopyFinished = PixelCopy.OnPixelCopyFinishedListener { copyResult ->
-                        if (copyResult == PixelCopy.SUCCESS) {
-                            if (continuation.isActive) continuation.resume(surfaceBitmap, onCancellation = null)
-                        } else {
-                            if (continuation.isActive) continuation.resume(null, onCancellation = null)
-                        }
-                    }
-                    try {
-                        PixelCopy.request(surfaceView, surfaceBitmap, onCopyFinished, mainHandler)
-                    } catch (t: Throwable) {
-                        if (continuation.isActive) continuation.resume(null, onCancellation = null)
-                    }
-                }
+            val result = captureBitmapViaPixelCopy(surfaceView.width, surfaceView.height) { bitmap, listener ->
+                PixelCopy.request(surfaceView, bitmap, listener, mainHandler)
             }
             if (result != null) return@withContext result
         }
 
-        val windowBitmap = Bitmap.createBitmap(decorW, decorH, Bitmap.Config.ARGB_8888)
-        val windowResult = withTimeoutOrNull(400) {
+        captureBitmapViaPixelCopy(decorW, decorH) { bitmap, listener ->
+            val rect = android.graphics.Rect(0, 0, decorW, decorH)
+            PixelCopy.request(activity.window, rect, bitmap, listener, mainHandler)
+        }
+    }
+
+    private suspend fun captureBitmapViaPixelCopy(
+        width: Int,
+        height: Int,
+        timeoutMs: Long = 400L,
+        requestBlock: (Bitmap, PixelCopy.OnPixelCopyFinishedListener) -> Unit,
+    ): Bitmap? {
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val completed = AtomicBoolean(false)
+        val cancelledOrTimedOut = AtomicBoolean(false)
+
+        val result = withTimeoutOrNull(timeoutMs) {
             suspendCancellableCoroutine<Bitmap?> { continuation ->
+                continuation.invokeOnCancellation {
+                    cancelledOrTimedOut.set(true)
+                }
                 val onCopyFinished = PixelCopy.OnPixelCopyFinishedListener { copyResult ->
-                    if (copyResult == PixelCopy.SUCCESS) {
-                        if (continuation.isActive) continuation.resume(windowBitmap, onCancellation = null)
-                    } else {
-                        if (continuation.isActive) continuation.resume(null, onCancellation = null)
+                    if (completed.compareAndSet(false, true)) {
+                        if (cancelledOrTimedOut.get() || !continuation.isActive) {
+                            bitmap.recycle()
+                        } else if (copyResult == PixelCopy.SUCCESS) {
+                            continuation.resume(bitmap, onCancellation = null)
+                        } else {
+                            bitmap.recycle()
+                            continuation.resume(null, onCancellation = null)
+                        }
                     }
                 }
                 try {
-                    val rect = android.graphics.Rect(0, 0, decorW, decorH)
-                    PixelCopy.request(activity.window, rect, windowBitmap, onCopyFinished, mainHandler)
-                } catch (t: Throwable) {
+                    requestBlock(bitmap, onCopyFinished)
+                } catch (_: Throwable) {
+                    if (completed.compareAndSet(false, true)) {
+                        bitmap.recycle()
+                    }
                     if (continuation.isActive) continuation.resume(null, onCancellation = null)
                 }
             }
         }
-        if (windowResult != null) return@withContext windowResult
-
-        null
+        if (result == null) {
+            cancelledOrTimedOut.set(true)
+        }
+        return result
     }
 
     private fun isBitmapBlank(bitmap: Bitmap?): Boolean {
@@ -632,44 +670,30 @@ class GameTranslatorManager(
     fun translateSpecificRegion(region: TranslationRegion) {
         if (!isEnabled) return
         overlayView?.isTranslating = true
-        mainScope.launch {
+        val currentGen = ++activeTranslationGen
+        translationJob?.cancel()
+        translationJob = mainScope.launch {
             val pauseOnTranslate = preferences.getBoolean(PREF_TRANSLATOR_PAUSE_ON_TRANSLATE, true)
-            var capturedBitmap: Bitmap? = null
+            val capturedBitmap = captureFrameBitmap()
 
-            // Tier 1: Fast in-process PixelCopy from SurfaceView
-            val pixelCopyResult = captureViaPixelCopy()
-            if (pixelCopyResult != null && !isBitmapBlank(pixelCopyResult)) {
-                capturedBitmap = pixelCopyResult
-            } else {
-                pixelCopyResult?.recycle()
-            }
-
-            // Tier 2: Direct DS Framebuffer
-            if (capturedBitmap == null && screenshotProvider != null) {
-                try {
-                    capturedBitmap = withTimeoutOrNull(500) { screenshotProvider.invoke() }
-                } catch (_: Throwable) {}
-            }
-
-            // Tier 3: MediaProjection Screen Capture
-            if (capturedBitmap == null && mediaProjectionCapturer.hasPermission) {
-                try {
-                    capturedBitmap = withTimeoutOrNull(1500) {
-                        mediaProjectionCapturer.captureScreen()
-                    }
-                } catch (_: Throwable) {}
-            }
-
-            if (pauseOnTranslate) {
-                isPausedByTranslator = true
-                try { onPauseEmulator() } catch (_: Throwable) {}
+            if (currentGen != activeTranslationGen || !isActive) {
+                capturedBitmap?.recycle()
+                return@launch
             }
 
             if (capturedBitmap != null) {
-                val gen = ++activeTranslationGen
-                processCapturedFrame(capturedBitmap, customOverrideRegions = listOf(region), expectedGen = gen)
+                if (pauseOnTranslate) {
+                    isPausedByTranslator = true
+                    try { onPauseEmulator() } catch (_: Throwable) {}
+                }
+                processCapturedFrame(capturedBitmap, customOverrideRegions = listOf(region), expectedGen = currentGen)
             } else {
                 overlayView?.isTranslating = false
+                if (isPausedByTranslator) {
+                    isPausedByTranslator = false
+                    try { onResumeEmulator() } catch (_: Throwable) {}
+                }
+                Toast.makeText(activity, R.string.translator_capture_failed, Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -802,24 +826,28 @@ class GameTranslatorManager(
                             val block = blocks[blockIdx]
                             val textToTranslate = uncachedTexts[k]
                             val rawTranslated = batchResults.getOrNull(k)
-                            val sanitized = rawTranslated?.let { raw ->
+                            val preGlossaryPolished = rawTranslated?.let { raw ->
                                 val polished = me.magnum.melonds.translator.util.GameTextCleaner.polishTranslation(raw, targetLang)
-                                val contextPolished = ocrContextGraph.sanitizeTranslation(polished, targetLang)
-                                val postGlossary = glossaryManager.applyPostTranslation(block.originalText, contextPolished, targetLang)
+                                ocrContextGraph.sanitizeTranslation(polished, targetLang)
+                            }?.takeIf { it.isNotBlank() }
+
+                            if (preGlossaryPolished != null &&
+                                !preGlossaryPolished.equals(textToTranslate, ignoreCase = true) &&
+                                !preGlossaryPolished.equals(block.originalText, ignoreCase = true)
+                            ) {
+                                translationCache.put(engineType, sourceLang, targetLang, textToTranslate, preGlossaryPolished)
+                            }
+
+                            val finalTranslation = preGlossaryPolished?.let { baseText ->
+                                val postGlossary = glossaryManager.applyPostTranslation(block.originalText, baseText, targetLang)
                                 me.magnum.melonds.translator.grammar.RussianGrammarAndDeclensionEngine.harmonizeGenderAndStyle(
                                     text = postGlossary,
                                     speakerGender = activeSpeakerGender,
                                     speakerName = activeSpeakerName,
                                     targetLang = targetLang
                                 )
-                            }
-                            val finalTranslation = sanitized?.takeIf { it.isNotBlank() } ?: block.originalText
-                            if (finalTranslation.isNotBlank() &&
-                                !finalTranslation.equals(textToTranslate, ignoreCase = true) &&
-                                !finalTranslation.equals(block.originalText, ignoreCase = true)
-                            ) {
-                                translationCache.put(engineType, sourceLang, targetLang, textToTranslate, finalTranslation)
-                            }
+                            }?.takeIf { it.isNotBlank() } ?: block.originalText
+
                             block.translatedText = finalTranslation
                             ocrContextGraph.recordDialogueTurn(textToTranslate, finalTranslation)
                         }
@@ -871,15 +899,25 @@ class GameTranslatorManager(
                 }
             } finally {
                 overlayView?.isTranslating = false
+                if (!bitmap.isRecycled) {
+                    bitmap.recycle()
+                }
             }
         }
     }
 
-    private fun getActiveTranslationEngine(): ITranslationEngine = resolveEngine()
+    @Volatile
+    private var cachedEngineType: TranslatorEngineType? = null
+    @Volatile
+    private var cachedEngine: ITranslationEngine? = null
 
     private fun resolveEngine(): ITranslationEngine {
         val type = TranslatorEngineType.fromPreference(preferences.getString(PREF_TRANSLATOR_ENGINE, "google"))
-        return when (type) {
+        val existing = cachedEngine
+        if (existing != null && cachedEngineType == type) {
+            return existing
+        }
+        val created = when (type) {
             TranslatorEngineType.GOOGLE -> GoogleTranslateEngine(
                 okHttpClient,
                 MlKitOnDeviceTranslateEngine(activity, downloadIfMissing = false),
@@ -897,6 +935,9 @@ class GameTranslatorManager(
                 modelProvider = { preferences.getString(PREF_TRANSLATOR_CUSTOM_AI_MODEL, "gpt-4o-mini").orEmpty() }
             )
         }
+        cachedEngineType = type
+        cachedEngine = created
+        return created
     }
 
     private var lastTranslatedRawText: String = ""
@@ -950,6 +991,10 @@ class GameTranslatorManager(
         stopAutoTranslate()
         ttsManager.destroy()
         translationCache.flush()
+        cachedEngine = null
+        cachedEngineType = null
+        textRecognizer.close()
+        MlKitOnDeviceTranslateEngine.closeAll()
         mainScope.cancel()
         mediaProjectionCapturer.onDestroy()
     }

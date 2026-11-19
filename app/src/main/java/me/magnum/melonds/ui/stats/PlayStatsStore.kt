@@ -1,12 +1,16 @@
 package me.magnum.melonds.ui.stats
 
+import android.content.ContentValues
 import android.content.Context
+import android.database.sqlite.SQLiteDatabase
 import android.os.SystemClock
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import me.magnum.melonds.database.daos.PlayStatsDao
 import me.magnum.melonds.database.entities.PlaySessionEntity
@@ -142,6 +146,28 @@ object PlayStatsStore {
         val topByPlayTime: List<GameStatItem>,
         val topByLaunches: List<GameStatItem>,
         val topRecent: List<GameStatItem> = emptyList(),
+    )
+
+    fun emptySummary(): PlayerStatsSummary = PlayerStatsSummary(
+        totalPlayTimeMs = 0L,
+        gamesPlayedCount = 0,
+        totalLaunches = 0,
+        last7Days = emptyList(),
+        last30Days = emptyList(),
+        dailyChart = emptyList(),
+        currentStreakDays = 0,
+        bestStreakDays = 0,
+        averageSessionMs = 0L,
+        longestSessionMs = 0L,
+        totalSessionsCount = 0,
+        levelInfo = PlayerLevelInfo(1, 0L, 0L, 500L, 0f, 0, me.magnum.melonds.R.string.v792_stats_rank_0),
+        timeOfDay = TimeOfDayDistribution(0L, 0L, 0L, 0L),
+        platformBreakdown = PlatformBreakdown(0L, 0L, 0, 0, 0f),
+        milestones = emptyList(),
+        allGames = emptyList(),
+        topByPlayTime = emptyList(),
+        topByLaunches = emptyList(),
+        topRecent = emptyList(),
     )
 
     private fun getDao(context: Context): PlayStatsDao {

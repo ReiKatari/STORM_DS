@@ -16,8 +16,10 @@
     with melonDS. If not, see http://www.gnu.org/licenses/.
 */
 
+#include <algorithm>
 #include <stdio.h>
 #include <codecvt>
+#include <vector>
 
 #include "DSi.h"
 #include "DSi_AES.h"
@@ -1131,19 +1133,23 @@ bool NANDMount::CreateSaveFile(const char* path, u32 len)
         FF_FIL ef;
         if (f_open(&ef, path, FA_READ) == FR_OK)
         {
-            u8 bootSec[512];
+            u8 bootSec[512] = {};
             u32 nr = 0;
-            f_read(&ef, bootSec, sizeof(bootSec), &nr);
-            u16 rootEntries = (u16)bootSec[0x011] | ((u16)bootSec[0x012] << 8);
-            u16 existingSectorsPerFat = (u16)bootSec[0x016] | ((u16)bootSec[0x017] << 8);
-            bool rootMatches = rootEntries > 0;
-            bool isValid = (nr >= 512 &&
-                            bootSec[0x1FE] == 0x55 && bootSec[0x1FF] == 0xAA &&
-                            (bootSec[0] == 0xEB || bootSec[0] == 0xE9) &&
-                            bootSec[0x010] >= 1 &&
-                            bootSec[0x00B] == 0x00 && bootSec[0x00C] == 0x02 &&
-                            existingSectorsPerFat >= sectorsPerFat &&
-                            rootMatches);
+            bool isValid = (f_read(&ef, bootSec, sizeof(bootSec), &nr) == FR_OK && nr == 512);
+            u16 rootEntries = 0;
+            u16 existingSectorsPerFat = 0;
+            if (isValid)
+            {
+                rootEntries = (u16)bootSec[0x011] | ((u16)bootSec[0x012] << 8);
+                existingSectorsPerFat = (u16)bootSec[0x016] | ((u16)bootSec[0x017] << 8);
+                bool rootMatches = rootEntries > 0;
+                isValid = (bootSec[0x1FE] == 0x55 && bootSec[0x1FF] == 0xAA &&
+                           (bootSec[0] == 0xEB || bootSec[0] == 0xE9) &&
+                           bootSec[0x010] >= 1 &&
+                           bootSec[0x00B] == 0x00 && bootSec[0x00C] == 0x02 &&
+                           existingSectorsPerFat >= sectorsPerFat &&
+                           rootMatches);
+            }
 
             // If existing file is marked FAT16 but should be FAT12, check if root dir is empty
             if (isValid && !isFat16 && memcmp(&bootSec[0x36], "FAT16", 5) == 0)
@@ -1199,66 +1205,88 @@ bool NANDMount::CreateSaveFile(const char* path, u32 len)
         return false;
     }
 
-    u8* data = new u8[len];
-    memset(data, 0, len);
+    constexpr u32 kChunkSize = 64 * 1024;
+    std::vector<u8> chunk(std::min<u32>(len, kChunkSize), 0);
 
-    // Standard TWL-SDK FAT boot sector
-    data[0x000] = 0xEB;
-    data[0x001] = 0x3C;
-    data[0x002] = 0x90;
-    memcpy(&data[0x003], "MSDOS5.0", 8);
-    *(u16*)&data[0x00B] = sectorsize;     // 512
-    data[0x00D] = clustersize;            // sectors per cluster
-    *(u16*)&data[0x00E] = 1;              // 1 reserved sector (boot sector)
-    data[0x010] = 2;                      // 2 FAT tables
-    *(u16*)&data[0x011] = rootDirEntries; // entries for TWL-SDK
-    *(u16*)&data[0x013] = totsec16;       // Total sectors (16-bit)
-    if (totsec >= 0x10000)
+    const u32 fat1Offset = sectorsize;
+    const u32 fat2Offset = sectorsize * (1 + sectorsPerFat);
+
+    FRESULT wres = FR_OK;
+    u32 totalWritten = 0;
+    for (u32 offset = 0; offset < len; )
     {
-        *(u32*)&data[0x020] = totsec;     // Total sectors (32-bit)
-    }
-    data[0x015] = 0xF8;                   // Media descriptor (Fixed/Flash disk)
-    *(u16*)&data[0x016] = sectorsPerFat;  // Sectors per FAT
-    *(u16*)&data[0x018] = 32;             // Sectors per track
-    *(u16*)&data[0x01A] = 2;              // Heads
-    data[0x024] = isFat16 ? 0x80 : 0x00;  // Drive number
-    data[0x026] = 0x29;                   // Extended boot signature
-    *(u32*)&data[0x027] = 0x12345678;     // Volume ID
-    memcpy(&data[0x02B], "NO NAME    ", 11);
-    memcpy(&data[0x036], isFat16 ? "FAT16   " : "FAT12   ", 8);
-    data[0x1FE] = 0x55;
-    data[0x1FF] = 0xAA;
+        const u32 chunkLen = std::min<u32>(kChunkSize, len - offset);
+        bool dirty = false;
 
-    // FAT1 begins at sector 1 (offset 0x200 = 512)
-    u32 fat1Offset = sectorsize;
-    if (fat1Offset + 3 <= len)
-    {
-        data[fat1Offset + 0] = 0xF8;
-        data[fat1Offset + 1] = 0xFF;
-        data[fat1Offset + 2] = 0xFF;
-        if (isFat16 && fat1Offset + 4 <= len)
-            data[fat1Offset + 3] = 0xFF;
+        if (offset == 0)
+        {
+            // Standard TWL-SDK FAT boot sector
+            chunk[0x000] = 0xEB;
+            chunk[0x001] = 0x3C;
+            chunk[0x002] = 0x90;
+            memcpy(&chunk[0x003], "MSDOS5.0", 8);
+            *(u16*)&chunk[0x00B] = sectorsize;     // 512
+            chunk[0x00D] = clustersize;            // sectors per cluster
+            *(u16*)&chunk[0x00E] = 1;              // 1 reserved sector (boot sector)
+            chunk[0x010] = 2;                      // 2 FAT tables
+            *(u16*)&chunk[0x011] = rootDirEntries; // entries for TWL-SDK
+            *(u16*)&chunk[0x013] = totsec16;       // Total sectors (16-bit)
+            if (totsec >= 0x10000)
+            {
+                *(u32*)&chunk[0x020] = totsec;     // Total sectors (32-bit)
+            }
+            chunk[0x015] = 0xF8;                   // Media descriptor (Fixed/Flash disk)
+            *(u16*)&chunk[0x016] = sectorsPerFat;  // Sectors per FAT
+            *(u16*)&chunk[0x018] = 32;             // Sectors per track
+            *(u16*)&chunk[0x01A] = 2;              // Heads
+            chunk[0x024] = isFat16 ? 0x80 : 0x00;  // Drive number
+            chunk[0x026] = 0x29;                   // Extended boot signature
+            *(u32*)&chunk[0x027] = 0x12345678;     // Volume ID
+            memcpy(&chunk[0x02B], "NO NAME    ", 11);
+            memcpy(&chunk[0x036], isFat16 ? "FAT16   " : "FAT12   ", 8);
+            chunk[0x1FE] = 0x55;
+            chunk[0x1FF] = 0xAA;
+            dirty = true;
+        }
+
+        auto writeFatHeader = [&](u32 fatOffset)
+        {
+            const u8 sig[4] = {0xF8, 0xFF, 0xFF, 0xFF};
+            const u32 sigLen = isFat16 ? 4u : 3u;
+            if (fatOffset + sigLen > len)
+                return;
+            for (u32 k = 0; k < sigLen; ++k)
+            {
+                const u32 pos = fatOffset + k;
+                if (pos >= offset && pos < offset + chunkLen)
+                {
+                    chunk[pos - offset] = sig[k];
+                    dirty = true;
+                }
+            }
+        };
+
+        writeFatHeader(fat1Offset);
+        writeFatHeader(fat2Offset);
+
+        nwrite = 0;
+        wres = f_write(&file, chunk.data(), chunkLen, &nwrite);
+        if (wres != FR_OK || nwrite != chunkLen)
+            break;
+
+        totalWritten += nwrite;
+        offset += chunkLen;
+
+        if (dirty)
+            std::fill(chunk.begin(), chunk.begin() + chunkLen, 0);
     }
 
-    // FAT2 begins at sector 1 + sectorsPerFat
-    u32 fat2Offset = sectorsize * (1 + sectorsPerFat);
-    if (fat2Offset + 3 <= len)
-    {
-        data[fat2Offset + 0] = 0xF8;
-        data[fat2Offset + 1] = 0xFF;
-        data[fat2Offset + 2] = 0xFF;
-        if (isFat16 && fat2Offset + 4 <= len)
-            data[fat2Offset + 3] = 0xFF;
-    }
-
-    FRESULT wres = f_write(&file, data, len, &nwrite);
     f_close(&file);
-    delete[] data;
 
-    if (wres != FR_OK || nwrite != len)
+    if (wres != FR_OK || totalWritten != len)
     {
         f_unlink(path);
-        Log(LogLevel::Error, "CreateSaveFile: failed to write full save file %s (%d, wrote %u of %u)\n", path, wres, nwrite, len);
+        Log(LogLevel::Error, "CreateSaveFile: failed to write full save file %s (%d, wrote %u of %u)\n", path, wres, totalWritten, len);
         return false;
     }
 

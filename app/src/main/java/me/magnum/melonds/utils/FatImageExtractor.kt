@@ -2,6 +2,7 @@ package me.magnum.melonds.utils
 
 import android.util.Log
 import java.io.File
+import java.io.FileOutputStream
 import java.io.RandomAccessFile
 import java.nio.charset.StandardCharsets
 
@@ -11,7 +12,9 @@ object FatImageExtractor {
     fun extractFatImage(imageFile: File, destDir: File): Boolean {
         if (!imageFile.isFile || imageFile.length() < 512) return false
         return runCatching {
+            val destCanonical = destDir.canonicalPath
             RandomAccessFile(imageFile, "r").use { raf ->
+                val rafLength = raf.length()
                 val bootSector = ByteArray(512)
                 raf.seek(0)
                 raf.readFully(bootSector)
@@ -27,12 +30,15 @@ object FatImageExtractor {
                     val partType = bootSector[partOffset + 4].toInt() and 0xFF
                     val startSector = readLE32(bootSector, partOffset + 8)
                     if (startSector > 0 && partType in listOf(0x01, 0x04, 0x06, 0x0B, 0x0C, 0x0E)) {
-                        vbrOffset = startSector * 512L
-                        raf.seek(vbrOffset)
-                        raf.readFully(bootSector)
-                        bytesPerSector = readLE16(bootSector, 11)
-                        sectorsPerCluster = bootSector[13].toInt() and 0xFF
-                        reservedSectors = readLE16(bootSector, 14)
+                        val candidateOffset = startSector * 512L
+                        if (candidateOffset + 512L <= rafLength) {
+                            vbrOffset = candidateOffset
+                            raf.seek(vbrOffset)
+                            raf.readFully(bootSector)
+                            bytesPerSector = readLE16(bootSector, 11)
+                            sectorsPerCluster = bootSector[13].toInt() and 0xFF
+                            reservedSectors = readLE16(bootSector, 14)
+                        }
                     }
                 }
 
@@ -54,22 +60,27 @@ object FatImageExtractor {
                 val dataStartOffset = rootDirStartOffset + (rootDirSectors * bytesPerSector)
                 val rootCluster = if (isFat32) readLE32(bootSector, 44) else 2L
                 val bytesPerCluster = bytesPerSector * sectorsPerCluster
+                if (bytesPerCluster <= 0) return false
 
                 fun getClusterOffset(cluster: Long): Long {
-                    return dataStartOffset + ((cluster - 2) * bytesPerCluster)
+                    return dataStartOffset + ((cluster - 2L) * bytesPerCluster)
                 }
 
                 fun getNextCluster(cluster: Long): Long {
                     val fatOffset = if (isFat32) {
-                        fatStartOffset + (cluster * 4)
+                        fatStartOffset + (cluster * 4L)
                     } else {
-                        fatStartOffset + (cluster * 2)
+                        fatStartOffset + (cluster * 2L)
+                    }
+                    val entrySize = if (isFat32) 4L else 2L
+                    if (fatOffset < 0L || fatOffset + entrySize > rafLength) {
+                        return if (isFat32) 0x0FFFFFFFL else 0xFFFFL
                     }
                     raf.seek(fatOffset)
                     return if (isFat32) {
                         val b = ByteArray(4)
                         raf.readFully(b)
-                        readLE32(b, 0) and 0x0FFFFFFF
+                        readLE32(b, 0) and 0x0FFFFFFFL
                     } else {
                         val b = ByteArray(2)
                         raf.readFully(b)
@@ -79,38 +90,55 @@ object FatImageExtractor {
 
                 fun isValidCluster(cluster: Long): Boolean {
                     return if (isFat32) {
-                        cluster in 2 until 0x0FFFFFF7L
+                        cluster in 2L until 0x0FFFFFF7L
                     } else {
-                        cluster in 2 until 0xFFF7L
+                        cluster in 2L until 0xFFF7L
                     }
                 }
 
-                fun readClusterChain(startCluster: Long, length: Long): ByteArray {
-                    val result = ByteArray(length.toInt().coerceAtLeast(0))
+                fun streamClusterChainToFile(startCluster: Long, length: Long, targetFile: File) {
+                    val safeLength = length.coerceIn(0L, rafLength)
+                    val buffer = ByteArray(bytesPerCluster.coerceIn(512, 65536))
+                    val visited = HashSet<Long>()
                     var currCluster = startCluster
-                    var bytesRemaining = length
-                    var destPos = 0
+                    var bytesRemaining = safeLength
 
-                    while (isValidCluster(currCluster) && bytesRemaining > 0) {
-                        val clusterOff = getClusterOffset(currCluster)
-                        if (clusterOff + minOf(bytesRemaining, bytesPerCluster.toLong()) > raf.length()) break
-                        raf.seek(clusterOff)
-                        val toRead = minOf(bytesRemaining, bytesPerCluster.toLong()).toInt()
-                        raf.readFully(result, destPos, toRead)
-                        destPos += toRead
-                        bytesRemaining -= toRead
-                        currCluster = getNextCluster(currCluster)
+                    FileOutputStream(targetFile).use { fos ->
+                        while (isValidCluster(currCluster) && bytesRemaining > 0L && visited.add(currCluster)) {
+                            val clusterOff = getClusterOffset(currCluster)
+                            if (clusterOff < dataStartOffset || clusterOff >= rafLength) break
+                            val availableInImage = rafLength - clusterOff
+                            var clusterToRead = minOf(bytesRemaining, bytesPerCluster.toLong(), availableInImage).toInt()
+                            if (clusterToRead <= 0) break
+
+                            raf.seek(clusterOff)
+                            while (clusterToRead > 0) {
+                                val chunk = minOf(clusterToRead, buffer.size)
+                                raf.readFully(buffer, 0, chunk)
+                                fos.write(buffer, 0, chunk)
+                                clusterToRead -= chunk
+                                bytesRemaining -= chunk
+                            }
+                            currCluster = getNextCluster(currCluster)
+                        }
                     }
-                    return result
                 }
+
+                val visitedDirClusters = HashSet<Long>()
 
                 fun extractDirectory(dirOffset: Long, isCluster: Boolean, currentCluster: Long, currentDestDir: File) {
+                    val dirCanonical = currentDestDir.canonicalPath
+                    if (dirCanonical != destCanonical && !dirCanonical.startsWith(destCanonical + File.separator)) {
+                        Log.w(TAG, "Blocked unsafe FAT directory traversal: $dirCanonical")
+                        return
+                    }
                     currentDestDir.mkdirs()
                     val entries = mutableListOf<ByteArray>()
 
                     if (!isCluster) {
-                        val rootDirBytes = ByteArray(rootDirSectors * bytesPerSector)
-                        if (dirOffset + rootDirBytes.size <= raf.length()) {
+                        val rootDirByteCount = rootDirSectors.toLong() * bytesPerSector.toLong()
+                        if (dirOffset >= 0L && rootDirByteCount in 1L..minOf(rafLength - dirOffset, 16L * 1024L * 1024L)) {
+                            val rootDirBytes = ByteArray(rootDirByteCount.toInt())
                             raf.seek(dirOffset)
                             raf.readFully(rootDirBytes)
                             for (i in 0 until rootDirBytes.size step 32) {
@@ -121,11 +149,11 @@ object FatImageExtractor {
                         }
                     } else {
                         var c = currentCluster
-                        var visited = mutableSetOf<Long>()
+                        val visited = HashSet<Long>()
                         while (isValidCluster(c) && visited.add(c)) {
                             val cBytes = ByteArray(bytesPerCluster)
                             val cOff = getClusterOffset(c)
-                            if (cOff + bytesPerCluster > raf.length()) break
+                            if (cOff < dataStartOffset || cOff + bytesPerCluster > rafLength) break
                             raf.seek(cOff)
                             raf.readFully(cBytes)
                             for (i in 0 until cBytes.size step 32) {
@@ -172,22 +200,27 @@ object FatImageExtractor {
                         }
                         lfnParts.clear()
 
-                        if (fileName == "." || fileName == "..") continue
+                        if (fileName.isBlank() || fileName == "." || fileName == "..") continue
+
+                        val targetFile = File(currentDestDir, fileName)
+                        val targetCanonical = targetFile.canonicalPath
+                        if (!targetCanonical.startsWith(destCanonical + File.separator)) {
+                            Log.w(TAG, "Blocked unsafe FAT entry path traversal: $fileName")
+                            continue
+                        }
 
                         val highCluster = readLE16(entry, 20).toLong()
                         val lowCluster = readLE16(entry, 26).toLong()
                         val fileCluster = (highCluster shl 16) or lowCluster
                         val fileSize = readLE32(entry, 28)
 
-                        val targetFile = File(currentDestDir, fileName)
                         if (isDir) {
-                            if (fileCluster >= 2) {
+                            if (fileCluster >= 2L && visitedDirClusters.add(fileCluster)) {
                                 extractDirectory(0, true, fileCluster, targetFile)
                             }
                         } else {
-                            if (fileSize > 0 && fileCluster >= 2) {
-                                val fileData = readClusterChain(fileCluster, fileSize)
-                                targetFile.writeBytes(fileData)
+                            if (fileSize > 0L && fileCluster >= 2L) {
+                                streamClusterChainToFile(fileCluster, fileSize, targetFile)
                             } else {
                                 targetFile.createNewFile()
                             }
@@ -196,6 +229,7 @@ object FatImageExtractor {
                 }
 
                 if (isFat32) {
+                    visitedDirClusters.add(rootCluster)
                     extractDirectory(0, true, rootCluster, destDir)
                 } else {
                     extractDirectory(rootDirStartOffset, false, 0, destDir)

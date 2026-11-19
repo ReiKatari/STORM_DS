@@ -391,14 +391,18 @@ class LayoutEditorActivity : AppCompatActivity() {
 
     private fun saveLayoutAndExit() {
         forceStoreLayoutChanges()
-        viewModel.saveCurrentLayout()
-        finish()
+        lifecycleScope.launch {
+            viewModel.saveCurrentLayout()
+            finish()
+        }
     }
 
     private fun saveLayoutAsNewAndExit() {
         forceStoreLayoutChanges()
-        viewModel.saveCurrentLayoutAsNew()
-        finish()
+        lifecycleScope.launch {
+            viewModel.saveCurrentLayoutAsNew()
+            finish()
+        }
     }
 
     override fun onPause() {

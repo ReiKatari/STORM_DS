@@ -12,7 +12,7 @@
         android:strokeColor="#5EEAD4"
         android:strokeWidth="1.2"
         android:pathData="M12,3.5h20c4.7,0 8.5,3.8 8.5,8.5v20c0,4.7 -3.8,8.5 -8.5,8.5H12c-4.7,0 -8.5,-3.8 -8.5,-8.5V12C3.5,7.3 7.3,3.5 12,3.5z" />
-    <!-- Magic Wand & Sparks icon -->
+    <!-- Magic Wand  and  Sparks icon -->
     <path
         android:fillColor="#FFFFFF"
         android:pathData="M11.3,30.3l13.4,-13.4 2.4,2.4 -13.4,13.4zM26.8,14.8l1.4,-1.4c0.8,-0.8 2,-0.8 2.8,0l1.4,1.4c0.8,0.8 0.8,2 0,2.8l-1.4,1.4 -4.2,-4.2z" />

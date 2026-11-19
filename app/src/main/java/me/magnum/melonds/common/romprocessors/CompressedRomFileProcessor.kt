@@ -3,7 +3,10 @@ package me.magnum.melonds.common.romprocessors
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 import me.magnum.melonds.common.uridelegates.UriHandler
 import me.magnum.melonds.domain.model.RomInfo
 import me.magnum.melonds.domain.model.RomMetadata
@@ -21,9 +24,6 @@ import java.io.FileOutputStream
 import java.io.FilterInputStream
 import java.io.IOException
 import java.io.InputStream
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
-import kotlin.coroutines.suspendCoroutine
 
 abstract class CompressedRomFileProcessor(private val context: Context, private val uriHandler: UriHandler, private val ndsRomCache: NdsRomCache) : RomFileProcessor {
 
@@ -36,7 +36,7 @@ abstract class CompressedRomFileProcessor(private val context: Context, private 
         val SUPPORTED_ROM_EXTENSIONS = listOf("nds", "dsi", "ids", "ndz")
     }
 
-    private fun openRomUriInputStream(uri: Uri): InputStream? {
+    protected open fun openRomUriInputStream(uri: Uri): InputStream? {
         val directFile = FileUtils.resolveDirectFileFromExternalStorageUri(uri)
         if (directFile != null && directFile.exists() && directFile.canRead()) {
             runCatching { return BufferedInputStream(FileInputStream(directFile), 131072) }
@@ -128,9 +128,17 @@ abstract class CompressedRomFileProcessor(private val context: Context, private 
         return if (cachedRomUri != null) {
             openRomUriInputStream(cachedRomUri)
         } else {
-            openRomUriInputStream(rom.uri)?.let {
-                getNdsEntryStreamInFileStream(it)
+            val baseStream = openRomUriInputStream(rom.uri) ?: return null
+            val entryStream = try {
+                getNdsEntryStreamInFileStream(baseStream)
+            } catch (t: Throwable) {
+                runCatching { baseStream.close() }
+                throw t
             }
+            if (entryStream == null) {
+                runCatching { baseStream.close() }
+            }
+            entryStream
         }
     }
 
@@ -138,44 +146,48 @@ abstract class CompressedRomFileProcessor(private val context: Context, private 
         return RomProcessor.getRomMetadata(inputStream)
     }
 
-    private suspend fun extractRomFile(rom: Rom): Uri? = suspendCoroutine { continuation ->
-        openRomUriInputStream(rom.uri)?.use {
-            getNdsEntryStreamInFileStream(it)?.use { romFileStream ->
-                ndsRomCache.cacheRom(rom, object : NdsRomCache.RomExtractor {
-                    override fun getExtractedRomFileSize(): SizeUnit {
-                        return romFileStream.romFileSize
-                    }
-
-                    override fun saveRomFile(fileStream: FileOutputStream): Boolean {
-                        val buffer = ByteArray(8192)
-
-                        try {
-                            do {
-                                val read = romFileStream.read(buffer)
-                                if (read <= 0) {
-                                    break
-                                }
-
-                                fileStream.write(buffer, 0, read)
-                            } while (continuation.context.isActive)
-                        } catch (_: IOException) {
-                            return false
+    private suspend fun extractRomFile(rom: Rom): Uri? = withContext(Dispatchers.IO) {
+        val baseStream = openRomUriInputStream(rom.uri)
+            ?: throw CouldNotOpenCompressedFileException()
+        baseStream.use { stream ->
+            val romFileStream = getNdsEntryStreamInFileStream(stream)
+                ?: throw CouldNotFindNdsRomException()
+            romFileStream.use { entryStream ->
+                try {
+                    ndsRomCache.cacheRom(rom, object : NdsRomCache.RomExtractor {
+                        override fun getExtractedRomFileSize(): SizeUnit {
+                            return entryStream.romFileSize
                         }
 
-                        return continuation.context.isActive
-                    }
-                })
-
-                if (continuation.context.isActive) {
-                    val cachedRomUri = ndsRomCache.getCachedRomFile(rom)
-                    if (cachedRomUri == null) {
-                        continuation.resumeWithException(CouldNotFindExtractedFileException())
-                    } else {
-                        continuation.resume(cachedRomUri)
-                    }
+                        override fun saveRomFile(fileStream: FileOutputStream): Boolean {
+                            val buffer = ByteArray(8192)
+                            return try {
+                                while (coroutineContext.isActive) {
+                                    val read = entryStream.read(buffer)
+                                    if (read <= 0) {
+                                        break
+                                    }
+                                    fileStream.write(buffer, 0, read)
+                                }
+                                coroutineContext.isActive
+                            } catch (_: IOException) {
+                                false
+                            }
+                        }
+                    })
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    throw CouldNotFindExtractedFileException()
                 }
-            } ?: continuation.resumeWithException(CouldNotFindNdsRomException())
-        } ?: continuation.resumeWithException(CouldNotOpenCompressedFileException())
+
+                if (!coroutineContext.isActive) {
+                    throw CancellationException("ROM extraction cancelled")
+                }
+
+                ndsRomCache.getCachedRomFile(rom) ?: throw CouldNotFindExtractedFileException()
+            }
+        }
     }
 
     /**

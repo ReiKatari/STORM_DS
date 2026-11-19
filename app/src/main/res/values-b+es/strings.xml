@@ -861,13 +861,13 @@
     <string name="conservative_coverage_enabled">Corrección de cobertura conservadora (experimental)</string>
     <string name="conservative_coverage_enabled_summary">Amplía la cobertura de polígonos en pantalla para reducir grietas de 1-2 px (corrige líneas negras en Pokémon).</string>
     <string name="conservative_coverage_px">Expansión de cobertura</string>
-    <string name="conservative_coverage_px_summary">Cantidad de expansión en píxeles de resolución interna (0–200 = 0,00–2,00 px).</string>
+    <string name="conservative_coverage_px_summary">Cantidad de expansión en píxeles de resolución interna (0-200 = 0,00-2,00 px).</string>
     <string name="conservative_coverage_apply_repeat">Aplicar a texturas repetidas</string>
     <string name="conservative_coverage_apply_repeat_summary">Aplica la corrección a las texturas REPEAT. Recomendado para suelos y agua.</string>
     <string name="conservative_coverage_apply_clamp">Aplicar a texturas fijadas (Clamp)</string>
     <string name="conservative_coverage_apply_clamp_summary">También aplica la corrección a las texturas CLAMP. Más agresivo y puede afectar a los sprites.</string>
     <string name="conservative_coverage_depth_bias">Sesgo de profundidad</string>
-    <string name="conservative_coverage_depth_bias_summary">Sesgo de profundidad aplicado a polígonos expandidos (0–2000 = 0,000000–0,002000). Úsalo solo si hay parpadeo.</string>
+    <string name="conservative_coverage_depth_bias_summary">Sesgo de profundidad aplicado a polígonos expandidos (0-2000 = 0,000000-0,002000). Úsalo solo si hay parpadeo.</string>
     <string name="debug_3d_clear_magenta">Depuración: limpiar 3D en magenta</string>
     <string name="debug_3d_clear_magenta_summary">Si las grietas se vuelven magenta, son huecos de cobertura. Solo para depuración.</string>
     <string name="internal_resolution">Resolución interna</string>
@@ -1014,7 +1014,7 @@
     <string name="dual_screen_vertical_alignment_option_bottom">Abajo</string>
     <string name="dual_screen_vertical_alignment_summary">Interna: %1$s • Externa: %2$s</string>
     <string name="dual_screen_vertical_alignment_preset_value">Preajuste (%1$s)</string>
-    <string name="dual_screen_vertical_alignment_default_hint">Valores predeterminados — Interna: %1$s • Externa: %2$s</string>
+    <string name="dual_screen_vertical_alignment_default_hint">Valores predeterminados - Interna: %1$s • Externa: %2$s</string>
     <string name="presets">Dual Screen Presets</string>
     <string name="layout_editing_disabled_by_presets">Los diseños no se pueden editar mientras haya un preajuste de doble pantalla activo.</string>
     <string name="above_other_screen">Encima de la otra pantalla</string>
@@ -1168,13 +1168,13 @@ Rechazos permanentes del servidor: %7$d.</string>
     <string name="about_credits_jpeacekeeper_title">JPeacekeeper (4PDA)</string>
     <string name="about_credits_jpeacekeeper_summary">Valiosas contribuciones de pruebas, informes detallados de errores de DSi, estandarización de fotogramas y mejoras continuas del proyecto</string>
     <string name="about_credits_watermelonds_title">WatermelonDS (Android Port)</string>
-    <string name="about_credits_watermelonds_summary">SapphireRhodonite, rafaelvcaetano y colaboradores — port para Android, renderizado rápido Vulkan, integración de librashader, interfaz moderna y controles táctiles</string>
+    <string name="about_credits_watermelonds_summary">SapphireRhodonite, rafaelvcaetano y colaboradores - port para Android, renderizado rápido Vulkan, integración de librashader, interfaz moderna y controles táctiles</string>
     <string name="about_credits_melonds_title">melonDS (Original Core)</string>
-    <string name="about_credits_melonds_summary">StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura y el equipo de melonDS — emulador original de alta precisión de Nintendo DS / DSi</string>
+    <string name="about_credits_melonds_summary">StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura y el equipo de melonDS - emulador original de alta precisión de Nintendo DS / DSi</string>
     <string name="about_credits_melonds_ds_title">melonDS DS (RetroArch Core)</string>
-    <string name="about_credits_melonds_ds_summary">JesseTG y el equipo de Libretro — mecánicas de carga automática de DSiWare, arquitectura de arranque rápido TLNC e innovaciones del núcleo Libretro</string>
+    <string name="about_credits_melonds_ds_summary">JesseTG y el equipo de Libretro - mecánicas de carga automática de DSiWare, arquitectura de arranque rápido TLNC e innovaciones del núcleo Libretro</string>
     <string name="about_credits_drastic_title">Inspiraciones de DraStic y fastDS</string>
-    <string name="about_credits_drastic_summary">Exophase y creadores de DraStic / fastDS — inspiración para ajustes de pantalla, diseños rápidos y ergonomía táctil</string>
+    <string name="about_credits_drastic_summary">Exophase y creadores de DraStic / fastDS - inspiración para ajustes de pantalla, diseños rápidos y ergonomía táctil</string>
     <string name="about_credits_libraries_title">Bibliotecas y herramientas de código abierto</string>
     <string name="about_credits_libraries_summary">Google Oboe (AAudio/OpenSL ES), librashader (shaders Slang de RetroArch), RetroAchievements (rcheevos), libslirp (Wi-Fi), libadrenotools (controladores Adreno/Turnip)</string>
     <string name="about_github_title">STORM DS Repository</string>
@@ -1329,6 +1329,7 @@ Rechazos permanentes del servidor: %7$d.</string>
 • 📏 Área de relleno y alineación: personaliza la alineación vertical y la cobertura de pantalla.</string>
     <string name="theme_accent_color_title">Color de acento</string>
     <string name="theme_accent_color_summary">Seleccionar el color de acento neón para el tema STORM NIGHT</string>
+    <string name="accent_theme_default">Predeterminado del tema</string>
     <string name="accent_electric_cyan">💎 Cian eléctrico</string>
     <string name="accent_matrix_emerald">🌿 Esmeralda Matrix</string>
     <string name="accent_amber_gold">⚡ Oro ciber</string>

@@ -12,9 +12,8 @@
 #   public *;
 #}
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# Preserve the line number information for debugging stack traces.
+-keepattributes SourceFile,LineNumberTable
 
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
@@ -43,7 +42,8 @@
 -keep class me.magnum.melonds.domain.model.retroachievements.RASimpleRuntimeAchievementBucketEntry { *; }
 -keep class me.magnum.melonds.domain.model.retroachievements.RARuntimeBridgeConfig { *; }
 -keep class me.magnum.melonds.domain.model.retroachievements.RARuntimeBridgeMode { *; }
--keep class me.magnum.melonds.ui.emulator.render.FrameRenderCallback { *; }
+-keep interface me.magnum.melonds.ui.emulator.render.FrameRenderCallback { *; }
+-keep interface me.magnum.melonds.MelonRomDecryptor$DecryptProgressCallback { *; }
 -keep class me.magnum.melonds.ui.emulator.model.VulkanPresentationConfig { *; }
 -keep class me.magnum.melonds.domain.model.layout.BackgroundMode { *; }
 -keep class me.magnum.melonds.ui.emulator.rewind.model.RewindSaveState { *; }
@@ -101,9 +101,11 @@
     native <methods>;
 }
 
-# Junrar, Apache Commons Compress & SLF4J
+# Junrar, Apache Commons Compress, Tink & SLF4J
 -dontwarn org.slf4j.**
 -dontwarn com.github.junrar.**
 -keep class com.github.junrar.** { *; }
 -dontwarn org.apache.commons.compress.**
 -keep class org.apache.commons.compress.** { *; }
+-dontwarn com.google.crypto.tink.**
+-keep class com.google.crypto.tink.** { *; }

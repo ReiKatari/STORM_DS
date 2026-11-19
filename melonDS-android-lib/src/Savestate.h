@@ -104,6 +104,8 @@ public:
 
     [[nodiscard]] u16 MajorVersion() const
     {
+        if (buffer == nullptr || buffer_length < 8)
+            return 0;
         // major version is stored at offset 0x04
         u16 major = 0;
         memcpy(&major, buffer + 0x04, sizeof(major));
@@ -112,6 +114,8 @@ public:
 
     [[nodiscard]] u16 MinorVersion() const
     {
+        if (buffer == nullptr || buffer_length < 8)
+            return 0;
         // minor version is stored at offset 0x06
         u16 minor = 0;
         memcpy(&minor, buffer + 0x06, sizeof(minor));

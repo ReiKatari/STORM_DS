@@ -3,6 +3,7 @@
 
 #include <oboe/Oboe.h>
 #include <fstream>
+#include <mutex>
 #include "MelonInstance.h"
 
 class OboeCallback : public oboe::AudioStreamCallback {
@@ -13,7 +14,17 @@ private:
     float audioSampleFrac;
 
 public:
+    void setActiveInstance(std::weak_ptr<MelonDSAndroid::MelonInstance> instance)
+    {
+        std::lock_guard<std::mutex> lock(activeInstanceMutex);
+        activeInstance = std::move(instance);
+    }
+
+private:
+    std::mutex activeInstanceMutex;
     std::weak_ptr<MelonDSAndroid::MelonInstance> activeInstance;
+
+public:
 
     bool softLimiterEnabled = true;
     bool bassBoostEnabled = false;

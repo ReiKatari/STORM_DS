@@ -201,7 +201,7 @@ void Savestate::Bool32(bool* var)
     }
     else
     {
-        u32 val;
+        u32 val = 0;
         Var32(&val);
         *var = val != 0;
     }
@@ -344,12 +344,12 @@ void Savestate::WriteStateLength()
 
 u32 Savestate::FindSection(const char* magic) const
 {
-    if (!magic) return NO_SECTION;
+    if (!magic || !buffer) return NO_SECTION;
 
     // Start looking at the savestate's beginning, right after its global header
     // (we can't start from the current offset because then we'd lose the ability to rearrange sections)
 
-    for (u32 offset = 0x10; offset < buffer_length;)
+    for (u32 offset = 0x10; offset <= buffer_length && buffer_length - offset >= 16;)
     { // Until we've found the desired section...
 
         // Get this section's magic number
@@ -363,15 +363,14 @@ u32 Savestate::FindSection(const char* magic) const
 
         // Haven't found our section yet. Let's move on to the next one.
 
-        u32 section_length_offset = offset + sizeof(read_magic);
-        if (section_length_offset >= buffer_length)
-        { // If trying to read the section length would take us past the file's end...
-            break;
-        }
-
         // First we need to find out how big this section is...
         u32 section_length = 0;
-        memcpy(&section_length, buffer + section_length_offset, sizeof(section_length));
+        memcpy(&section_length, buffer + offset + sizeof(read_magic), sizeof(section_length));
+
+        if (section_length < 16 || section_length > buffer_length - offset)
+        {
+            break;
+        }
 
         // ...then skip it. (The section length includes the 16-byte header.)
         offset += section_length;

@@ -1292,6 +1292,7 @@ VulkanOutputTemporalStats VulkanOutput::takeTemporalStatsSnapshotAndReset()
 
 void VulkanOutput::releaseCompatibilityTemporalFrameReferences()
 {
+    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     std::lock_guard<std::mutex> lock(temporalReferenceLock);
     lastPreparedFrame = nullptr;
     lastTopRendererSourceFrame = nullptr;
@@ -1323,6 +1324,7 @@ void VulkanOutput::releaseCompatibilityTemporalFrameReferences()
 
 void VulkanOutput::releaseTemporalFrameReferences()
 {
+    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     std::lock_guard<std::mutex> lock(temporalReferenceLock);
     if (areRendererDebugBgObjLogsEnabled())
     {
@@ -1379,6 +1381,7 @@ bool VulkanOutput::releaseTemporalFrameReferencesFor(Frame* frame)
     if (frame == nullptr)
         return false;
 
+    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     std::lock_guard<std::mutex> lock(temporalReferenceLock);
     for (const auto& [resourceFrame, resource] : resources)
     {
@@ -1444,6 +1447,7 @@ void VulkanOutput::markFramePreviousSourcesSubmitted(Frame* frame)
     if (frame == nullptr)
         return;
 
+    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     std::lock_guard<std::mutex> lock(temporalReferenceLock);
     auto iterator = resources.find(frame);
     if (iterator == resources.end())
@@ -2901,6 +2905,7 @@ u32 VulkanOutput::findMemoryType(u32 typeBits, VkMemoryPropertyFlags properties)
 
 bool VulkanOutput::createFrameResource(Frame* frame, u32 width, u32 height)
 {
+    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     std::scoped_lock commandLock(commandPoolLock);
 
     VkImageCreateInfo imageCreateInfo{};
@@ -3295,6 +3300,8 @@ bool VulkanOutput::createFrameResource(Frame* frame, u32 width, u32 height)
 
 void VulkanOutput::destroyFrameResource(Frame* frame)
 {
+    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
+    std::lock_guard<std::mutex> tempLock(temporalReferenceLock);
     std::scoped_lock commandLock(commandPoolLock);
 
     auto iterator = resources.find(frame);
@@ -3302,6 +3309,8 @@ void VulkanOutput::destroyFrameResource(Frame* frame)
         return;
 
     FrameResource& resource = iterator->second;
+    const VkImageView destroyedSnapshotView = resource.renderer3dSnapshotView;
+    const VkImageView destroyedRetainedView = resource.retainedRenderer3dSourceImageView;
 
     if (resource.submitFence != VK_NULL_HANDLE)
         vkWaitForFences(device, 1, &resource.submitFence, VK_TRUE, UINT64_MAX);
@@ -3381,10 +3390,43 @@ void VulkanOutput::destroyFrameResource(Frame* frame)
         lastBottomComposedFrame = nullptr;
 
     resources.erase(iterator);
+
+    for (auto& [otherFrame, other] : resources)
+    {
+        (void)otherFrame;
+        const bool topViewMatches =
+            (destroyedSnapshotView != VK_NULL_HANDLE && other.previousTopRendererSourceImageView == destroyedSnapshotView)
+            || (destroyedRetainedView != VK_NULL_HANDLE && other.previousTopRendererSourceImageView == destroyedRetainedView);
+        if (other.previousTopSourceFrame == frame || topViewMatches)
+        {
+            other.previousTopRendererSourceImage = VK_NULL_HANDLE;
+            other.previousTopRendererSourceImageView = VK_NULL_HANDLE;
+            other.previousTopRendererSourceValid = false;
+            other.previousTopSourceFrame = nullptr;
+            other.previousTopSourcePending = false;
+        }
+        const bool bottomViewMatches =
+            (destroyedSnapshotView != VK_NULL_HANDLE && other.previousBottomRendererSourceImageView == destroyedSnapshotView)
+            || (destroyedRetainedView != VK_NULL_HANDLE && other.previousBottomRendererSourceImageView == destroyedRetainedView);
+        if (other.previousBottomSourceFrame == frame || bottomViewMatches)
+        {
+            other.previousBottomRendererSourceImage = VK_NULL_HANDLE;
+            other.previousBottomRendererSourceImageView = VK_NULL_HANDLE;
+            other.previousBottomRendererSourceValid = false;
+            other.previousBottomSourceFrame = nullptr;
+            other.previousBottomSourcePending = false;
+            other.class4Full2dOnlyBottomFrameOwnedHistory = false;
+        }
+        if (other.previousTopComposedFrame == frame)
+            other.previousTopComposedFrame = nullptr;
+        if (other.previousBottomComposedFrame == frame)
+            other.previousBottomComposedFrame = nullptr;
+    }
 }
 
 void VulkanOutput::destroyFrameResources()
 {
+    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     while (!resources.empty())
     {
         auto iterator = resources.begin();
@@ -3397,6 +3439,7 @@ bool VulkanOutput::ensureFrameResources(Frame* frame, u32 width, u32 height)
     if (!initialized || frame == nullptr || width == 0 || height == 0)
         return false;
 
+    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     auto iterator = resources.find(frame);
     if (iterator != resources.end())
     {
@@ -4781,6 +4824,7 @@ bool VulkanOutput::prepareFrameForPresentation(
         return failPrepare("invalid-soft-packed");
     }
 
+    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     auto iterator = resources.find(frame);
     if (iterator == resources.end())
         return failPrepare("missing-frame-resource");
@@ -8615,6 +8659,7 @@ bool VulkanOutput::updatePreparedCapture3dSourceFastPath(
 
 bool VulkanOutput::captureRenderer3dSnapshot(Frame* frame, const melonDS::VulkanRenderer3D& renderer3D, bool snapshotScreenSwap)
 {
+    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     std::scoped_lock commandLock(commandPoolLock);
 
     if (frame != nullptr)
@@ -8676,6 +8721,7 @@ bool VulkanOutput::composeAndSubmitFrame(
     if (!initialized || frame == nullptr || inputs.scale < 1 || inputs.sourceImage == VK_NULL_HANDLE || inputs.sourceImageView == VK_NULL_HANDLE)
         return false;
 
+    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     auto iterator = resources.find(frame);
     if (iterator == resources.end())
         return false;
@@ -8718,6 +8764,7 @@ bool VulkanOutput::composeAndSubmitVisibleFrame(
         return false;
     }
 
+    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     auto iterator = resources.find(frame);
     if (iterator == resources.end())
         return false;
@@ -8757,6 +8804,7 @@ bool VulkanOutput::buildCompositionInputsCompatibility(
     if (!initialized || frame == nullptr || scale < 1)
         return false;
 
+    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     std::lock_guard<std::mutex> lock(temporalReferenceLock);
     auto iterator = resources.find(const_cast<Frame*>(frame));
     if (iterator == resources.end())
@@ -8941,6 +8989,7 @@ bool VulkanOutput::buildCompositionInputs(
             outInputs);
     }
 
+    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     std::lock_guard<std::mutex> lock(temporalReferenceLock);
     auto iterator = resources.find(const_cast<Frame*>(frame));
     if (iterator == resources.end())
@@ -13791,6 +13840,7 @@ bool VulkanOutput::validateCompositorSubmission(Frame* frame, const melonDS::Vul
     if (!initialized || frame == nullptr || scale < 1 || !renderer3D.HasColorTarget())
         return false;
 
+    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     auto iterator = resources.find(frame);
     if (iterator == resources.end())
         return false;
@@ -13839,6 +13889,7 @@ bool VulkanOutput::validateCompositorSubmission(Frame* frame, const melonDS::Vul
 
 bool VulkanOutput::validateFrameSubmission(Frame* frame, u64 waitTimeoutNs)
 {
+    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     std::scoped_lock commandLock(commandPoolLock);
 
     if (!initialized || frame == nullptr)
@@ -13991,13 +14042,18 @@ bool VulkanOutput::waitForFrame(const Frame* frame, u64 timeoutNs)
     }
     else
     {
-        auto iterator = resources.find(const_cast<Frame*>(frame));
-        if (iterator == resources.end())
+        VkFence fenceToWait = VK_NULL_HANDLE;
         {
-            waitFailureResourceMissing++;
-            return false;
+            std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
+            auto iterator = resources.find(const_cast<Frame*>(frame));
+            if (iterator == resources.end())
+            {
+                waitFailureResourceMissing++;
+                return false;
+            }
+            fenceToWait = iterator->second.submitFence;
         }
-        waitSucceeded = vkWaitForFences(device, 1, &iterator->second.submitFence, VK_TRUE, timeoutNs) == VK_SUCCESS;
+        waitSucceeded = vkWaitForFences(device, 1, &fenceToWait, VK_TRUE, timeoutNs) == VK_SUCCESS;
     }
 
     if (!waitSucceeded)
@@ -14011,9 +14067,12 @@ bool VulkanOutput::waitForFrame(const Frame* frame, u64 timeoutNs)
 
     waitCpuWindow.Add(PerfNowNs() - waitStartNs);
 
-    auto iterator = resources.find(const_cast<Frame*>(frame));
-    if (iterator != resources.end())
-        consumeFrameGpuTiming(iterator->second);
+    {
+        std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
+        auto iterator = resources.find(const_cast<Frame*>(frame));
+        if (iterator != resources.end())
+            consumeFrameGpuTiming(iterator->second);
+    }
 
     logPerformanceIfNeeded();
     return true;
@@ -14027,6 +14086,7 @@ bool VulkanOutput::getPreparedRenderer3dDimensions(const Frame* frame, u32& outW
     if (!initialized || frame == nullptr)
         return false;
 
+    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     auto iterator = resources.find(const_cast<Frame*>(frame));
     if (iterator == resources.end())
         return false;
@@ -14063,6 +14123,7 @@ bool VulkanOutput::getPreparedRenderer3dCaptureFrame(
     if (!initialized || frame == nullptr)
         return false;
 
+    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     auto iterator = resources.find(const_cast<Frame*>(frame));
     if (iterator == resources.end())
         return false;
@@ -14106,6 +14167,7 @@ bool VulkanOutput::getPreparedPackedBuffers(
     if (!initialized || frame == nullptr)
         return false;
 
+    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     auto iterator = resources.find(const_cast<Frame*>(frame));
     if (iterator == resources.end())
         return false;
@@ -14131,6 +14193,7 @@ bool VulkanOutput::getPreparedSoftPackedFrameDebugView(
     if (!initialized || frame == nullptr)
         return false;
 
+    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     auto iterator = resources.find(const_cast<Frame*>(frame));
     if (iterator == resources.end())
         return false;
@@ -14171,6 +14234,7 @@ bool VulkanOutput::isFrameReady(const Frame* frame) const
             return completedValue >= frame->renderTimelineValue;
     }
 
+    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     auto iterator = resources.find(const_cast<Frame*>(frame));
     if (iterator == resources.end())
         return false;
@@ -14186,6 +14250,7 @@ bool VulkanOutput::isFrameReferencedAsPendingPreviousSource(const Frame* frame) 
     if (!initialized || frame == nullptr)
         return false;
 
+    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     std::lock_guard<std::mutex> lock(temporalReferenceLock);
     if (frame == lastTopRendererSourceFrame
         || frame == lastBottomRendererSourceFrame
@@ -14521,6 +14586,7 @@ bool VulkanOutput::readPreparedRenderer3dPixels(
     if (!initialized || frame == nullptr)
         return false;
 
+    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     auto iterator = resources.find(const_cast<Frame*>(frame));
     if (iterator == resources.end())
         return false;
@@ -14585,6 +14651,7 @@ bool VulkanOutput::readFramePixels(const Frame* frame, u32* destinationPixels, s
     if (!initialized || frame == nullptr || destinationPixels == nullptr)
         return false;
 
+    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     auto iterator = resources.find(const_cast<Frame*>(frame));
     if (iterator == resources.end())
         return false;
@@ -14606,6 +14673,7 @@ VkImage VulkanOutput::getFrameImage(const Frame* frame) const
     if (frame == nullptr)
         return VK_NULL_HANDLE;
 
+    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     auto iterator = resources.find(const_cast<Frame*>(frame));
     if (iterator == resources.end())
         return VK_NULL_HANDLE;
@@ -14618,6 +14686,7 @@ VkImageView VulkanOutput::getFrameImageView(const Frame* frame) const
     if (frame == nullptr)
         return VK_NULL_HANDLE;
 
+    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     auto iterator = resources.find(const_cast<Frame*>(frame));
     if (iterator == resources.end())
         return VK_NULL_HANDLE;

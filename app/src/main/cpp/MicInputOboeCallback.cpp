@@ -13,6 +13,9 @@ MicInputOboeCallback::MicInputOboeCallback(int bufferSize, std::mutex& micBuffer
 
 oboe::DataCallbackResult
 MicInputOboeCallback::onAudioReady(oboe::AudioStream *stream, void *audioData, int32_t numFrames) {
+    if (numFrames <= 0 || audioData == nullptr)
+        return oboe::DataCallbackResult::Continue;
+
     s16* input = (s16*) audioData;
 
     float f_len_out = (numFrames * 47743.4659091 * (60.0/60.0)) / (float)stream->getSampleRate();
@@ -30,6 +33,9 @@ MicInputOboeCallback::onAudioReady(oboe::AudioStream *stream, void *audioData, i
     else if (bufferCount > (3 * (maxlen >> 2)))
         outlen -= 6;
 
+    if (outlen <= 0)
+        return oboe::DataCallbackResult::Continue;
+
     float res_incr = numFrames / (float)outlen;
     float res_timer = -0.5;
     int res_pos = 0;
@@ -40,8 +46,10 @@ MicInputOboeCallback::onAudioReady(oboe::AudioStream *stream, void *audioData, i
         if (bufferCount >= maxlen)
             break;
 
-        s16 s1 = input[res_pos];
-        s16 s2 = input[res_pos + 1];
+        int idx1 = std::clamp(res_pos, 0, numFrames - 1);
+        int idx2 = std::min(idx1 + 1, numFrames - 1);
+        s16 s1 = input[idx1];
+        s16 s2 = input[idx2];
 
         float s = (float)s1 + ((s2 - s1) * res_timer);
 

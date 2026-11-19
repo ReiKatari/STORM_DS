@@ -37,15 +37,9 @@ class BackgroundsActivity : AppCompatActivity() {
     private val viewModel: BackgroundsViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        me.magnum.melonds.ui.theme.AppThemeManager.init(this)
-        setTheme(me.magnum.melonds.ui.theme.AppThemeManager.currentTheme.getThemeResId())
+        me.magnum.melonds.ui.theme.AppThemeManager.applyEdgeToEdgeTheme(this)
         window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
         androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
-        if (!me.magnum.melonds.ui.theme.AppThemeManager.isDarkTheme(this)) {
-            enableEdgeToEdge(statusBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT))
-        } else {
-            enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT))
-        }
         super.onCreate(savedInstanceState)
 
         setContent {

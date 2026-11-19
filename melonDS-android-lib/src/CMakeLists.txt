@@ -191,15 +191,21 @@ if (NOT MSVC)
     # (which is fundamentally non-portable, so this is fine)
     if (NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
         target_compile_options(core PRIVATE
-            -O3
             -fomit-frame-pointer
-            -fvectorize
-            -fslp-vectorize
             -funroll-loops
             -fno-semantic-interposition
             -fno-math-errno
             -fno-trapping-math
         )
+        if (CMAKE_BUILD_TYPE STREQUAL "Release")
+            target_compile_options(core PRIVATE -O3)
+        endif()
+        if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+            target_compile_options(core PRIVATE
+                -fvectorize
+                -fslp-vectorize
+            )
+        endif()
     endif()
 endif()
 

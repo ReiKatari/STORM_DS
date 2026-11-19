@@ -6,7 +6,7 @@
     <string name="feature_quick_resume_from_save">Schnellspeicherstand • %1$s</string>
     <string name="feature_quick_resume_from_save_ready">Vom Schnellspeicherstand fortsetzen</string>
     <string name="feature_quick_resume_last_played">Zuletzt gespielt • %1$s</string>
-    <string name="feature_quick_resume_no_save_hint">Normaler Start — noch kein Schnellspeicherstand</string>
+    <string name="feature_quick_resume_no_save_hint">Normaler Start - noch kein Schnellspeicherstand</string>
     <string name="feature_quick_resume_tile_label">Spiel fortsetzen</string>
     <string name="feature_quick_resume_no_recent_game">Kein kürzlich gespieltes Spiel</string>
     <string name="feature_quick_resume_not_found">Das zuletzt gespielte Spiel wurde nicht gefunden</string>
@@ -27,7 +27,7 @@
     <string name="feature_stats_empty_desc">Starte ein beliebiges Spiel, um Spielzeit und tägliche Aktivität aufzuzeichnen</string>
     <string name="feature_problem_report_menu_title">Problem melden</string>
     <string name="feature_problem_report_dialog_title">Problembericht erstellen</string>
-    <string name="feature_problem_report_dialog_message">Erstellt ein Diagnose-ZIP-Archiv mit App-Version, Geräte- und GPU-Infos, Android-Version, Emulator- und Renderer-Einstellungen (ohne Konten oder Token), dem letzten Spielcode und aktuellen Protokollen. Es wird nichts automatisch gesendet — du wählst selbst, wo du die Datei teilst.</string>
+    <string name="feature_problem_report_dialog_message">Erstellt ein Diagnose-ZIP-Archiv mit App-Version, Geräte- und GPU-Infos, Android-Version, Emulator- und Renderer-Einstellungen (ohne Konten oder Token), dem letzten Spielcode und aktuellen Protokollen. Es wird nichts automatisch gesendet - du wählst selbst, wo du die Datei teilst.</string>
     <string name="feature_problem_report_create_action">Erstellen und teilen</string>
     <string name="feature_problem_report_generating">Diagnosebericht wird erstellt…</string>
     <string name="feature_problem_report_share_chooser">Problembericht teilen</string>

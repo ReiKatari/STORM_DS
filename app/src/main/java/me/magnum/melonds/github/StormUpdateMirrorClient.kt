@@ -2,12 +2,11 @@ package me.magnum.melonds.github
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import me.magnum.melonds.common.network.HttpRedirectHelper
 import me.magnum.melonds.github.dtos.AssetDto
 import me.magnum.melonds.github.dtos.ReleaseDto
 import org.json.JSONArray
 import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
 
 object StormUpdateMirrorClient {
     private const val USER_AGENT = "STORM-DS-Updater"
@@ -178,25 +177,13 @@ object StormUpdateMirrorClient {
 
     private fun fetchGitHubLatestRedirectRelease(): ReleaseDto? {
         return runCatching {
-            var currentUrl = GITHUB_LATEST_REDIRECT_URL
-            var redirects = 0
-            while (redirects < 6) {
-                val conn = (URL(currentUrl).openConnection() as HttpURLConnection).apply {
-                    instanceFollowRedirects = false
-                    connectTimeout = 10_000
-                    readTimeout = 10_000
-                    setRequestProperty("User-Agent", USER_AGENT)
-                }
-                val code = conn.responseCode
-                val location = conn.getHeaderField("Location")
-                conn.disconnect()
-                if (code in 300..399 && !location.isNullOrBlank()) {
-                    currentUrl = URL(URL(currentUrl), location).toString()
-                    redirects++
-                } else {
-                    break
-                }
-            }
+            val currentUrl = HttpRedirectHelper.resolveFinalRedirectUrl(
+                initialUrl = GITHUB_LATEST_REDIRECT_URL,
+                maxRedirects = 6,
+                connectTimeoutMs = 10_000,
+                readTimeoutMs = 10_000,
+                userAgent = USER_AGENT,
+            )
             val match = Regex("/releases/tag/(v?[0-9]+\\.[0-9]+(?:\\.[0-9]+)*)").find(currentUrl)
                 ?: return@runCatching null
             val rawTag = match.groupValues[1]
@@ -233,35 +220,20 @@ object StormUpdateMirrorClient {
     }
 
     private fun httpGetText(url: String): String? {
-        var currentUrl = url
-        var redirects = 0
-        while (redirects < 6) {
-            val conn = (URL(currentUrl).openConnection() as HttpURLConnection).apply {
-                instanceFollowRedirects = false
-                connectTimeout = 12_000
-                readTimeout = 15_000
-                setRequestProperty("User-Agent", USER_AGENT)
-                setRequestProperty("Accept", "application/json")
-            }
-            val code = conn.responseCode
-            if (code in 300..399) {
-                val location = conn.getHeaderField("Location")
-                conn.disconnect()
-                if (location.isNullOrBlank()) return null
-                currentUrl = URL(URL(currentUrl), location).toString()
-                redirects++
-                continue
-            }
-            return try {
-                if (code in 200..299) {
-                    conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                } else {
-                    null
-                }
-            } finally {
-                conn.disconnect()
-            }
+        val conn = runCatching {
+            HttpRedirectHelper.openConnectionWithRedirects(
+                initialUrl = url,
+                maxRedirects = 6,
+                connectTimeoutMs = 12_000,
+                readTimeoutMs = 15_000,
+                userAgent = USER_AGENT,
+                accept = "application/json",
+            )
+        }.getOrNull() ?: return null
+        return try {
+            conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+        } finally {
+            conn.disconnect()
         }
-        return null
     }
 }

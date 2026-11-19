@@ -168,7 +168,7 @@ class RomDetailsRetroAchievementsViewModel @Inject constructor(
         return OfflineAchievementsUiState(
             availability = availability,
             pendingSoftcoreUnlockCount = if (ledgerOk) ledgerStatus.pendingSoftcoreUnlockCount else 0,
-            pendingLedgerUnlockCount = if (ledgerOk) ledgerStatus.pendingSoftcoreUnlockCount else 0,
+            pendingLedgerUnlockCount = if (ledgerOk) ledgerStatus.pendingUnlocks.size else 0,
             ledgerIntegrity = ledgerStatus.integrity,
             ledgerExpiresInMs = if (ledgerOk) ledgerStatus.ledgerExpiresInMs else null,
             isOnline = isOnline,

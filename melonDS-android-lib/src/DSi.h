@@ -190,6 +190,7 @@ public:
     bool IsNtrIpcMirrorHack() const noexcept { return NtrIpcMirrorHack; }
     void SyncNtrIpcMirror() noexcept;
 private:
+    void ReloadNtrIpcShadow() noexcept;
     bool FullBIOSBoot;
     // WHY: AlphaBounce (KAL*) reads the NTR touch/user-settings IPC block at the 8 MB mirror.
     // Mirroring must stay title-scoped: a global mirror corrupts TWL heap at 0x027FFxxx and

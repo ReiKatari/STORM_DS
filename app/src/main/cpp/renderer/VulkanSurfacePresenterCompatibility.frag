@@ -747,8 +747,6 @@ vec4 composeScreenColor(bool SCREEN_IS_TOP) \
                 && structuredFullRegularCapture3d \
                 && !structured2DAbove \
                 && !structured2DProtectedBlack \
-                && (screenOwnsLive3D || forceLive3dCompMode7) \
-                && !screenHasPrevious3D \
                 && screenMatchesCapture3DSource \
                 && capture3DHasVisibleColor \
                 && !pixel3DHasVisibleColor) \
@@ -821,7 +819,7 @@ vec4 composeScreenColor(bool SCREEN_IS_TOP) \
                 && (pixel3D.a & 0x1F) > 0 \
                 && (!regularCaptureUses3d || pixel3DHasVisibleColor)) \
             { \
-                if (compMode <= 4 || belowIs3DSlot) \
+                if (compMode <= 4 || compMode == 7 || belowIs3DSlot) \
                 { \
                     composed = pixel3D; \
                     if (compMode == 4) \
@@ -983,29 +981,6 @@ vec4 composeScreenColor(bool SCREEN_IS_TOP) \
             bool plane2HasBlendControl = ((val3.r | val3.g | val3.b) != 0); \
             bool overlayOver3d = plane1Is3dLayer || plane2HadOverlayMarker || plane2HasBlendControl; \
             bool regularCaptureBackdropPixel = regularCaptureUses3d && isPacked3dPlaceholder(nearestPixel); \
-            bool regularCaptureVisibleBlackPixel = false; \
-            bool regularCaptureVisibleBlackHasLocalSupport = false; \
-            if (regularCaptureVisibleBlackPixel) \
-            { \
-                for (int supportDy = -1; supportDy <= 1; supportDy++) \
-                { \
-                    int supportY = sourceY + supportDy; \
-                    if (supportY < 0 || supportY >= 192) \
-                        continue; \
-                    for (int supportDx = -1; supportDx <= 1; supportDx++) \
-                    { \
-                        if (supportDx == 0 && supportDy == 0) \
-                            continue; \
-                        int supportX = sourceX + supportDx; \
-                        if (supportX < 0 || supportX >= 256) \
-                            continue; \
-                        Rgba6 support0 = unpackColor6(READ_PACKED_FUNC(supportY, supportX)); \
-                        Rgba6 support1 = unpackColor6(READ_PACKED_FUNC(supportY, 256 + supportX)); \
-                        if (hasPackedVisibleColor(support0) || hasPackedVisibleColor(support1)) \
-                            regularCaptureVisibleBlackHasLocalSupport = true; \
-                    } \
-                } \
-            } \
             bool regularCaptureProtectedBlackAbove = regularCaptureUses3d \
                 && structured2DSlot \
                 && structured2DAbove \
@@ -1014,20 +989,6 @@ vec4 composeScreenColor(bool SCREEN_IS_TOP) \
                 && !screenHasPartialRegularCapture3d; \
             bool regularCapture3DMatchesThisScreen = !fullScreenRegularCapture3d \
                 || ((screenOwnsLive3D || forceLive3dCompMode7) && screenMatchesCapture3DSource); \
-            bool regularCaptureWideBlackPixel = regularCaptureVisibleBlackPixel \
-                && fullScreenRegularCapture3d \
-                && !regularCaptureVisibleBlackHasLocalSupport \
-                && !regularCaptureProtectedBlackAbove; \
-            bool regularCaptureBlackResolvedByCapture = regularCaptureVisibleBlackPixel \
-                && fullScreenRegularCapture3d \
-                && regularCapture3DMatchesThisScreen \
-                && structured2DSlot \
-                && capture3DHasVisibleColor \
-                && !regularCaptureProtectedBlackAbove; \
-            if (regularCaptureBlackResolvedByCapture) \
-                val1 = regularCaptureVisibleBlackHasLocalSupport || !pixel3DHasVisibleColor ? capture3D : pixel3D; \
-            else if (regularCaptureVisibleBlackPixel && !regularCaptureWideBlackPixel) \
-                val1 = nearestPixel; \
             bool regularCaptureProtectedBlackBand = regularCaptureUses3d \
                 && screenHasPartialRegularCapture3d \
                 && ((SCREEN_IS_TOP && sourceY <= 20) \
@@ -1052,12 +1013,9 @@ vec4 composeScreenColor(bool SCREEN_IS_TOP) \
             } \
             bool regularCaptureExplicit3dPixel = regularCaptureUses3d \
                 && (regularCaptureBackdropPixel || isPacked3dLayerSlot(nearestPixel)); \
-            bool regularCaptureProtectedBlackPixel = regularCaptureVisibleBlackPixel \
-                && screenHasPartialRegularCapture3d \
-                && !regularCaptureExplicit3dPixel; \
             bool regularCaptureBlank3dPixel = regularCaptureUses3d \
                 && !overlayOver3d \
-                && (regularCaptureBackdropPixel || regularCaptureProtectedBlackPixel || regularCaptureWideBlackPixel); \
+                && regularCaptureBackdropPixel; \
             bool compMode7LineHas3D = forceLive3dCompMode7 \
                 || (capture3DHasVisibleColor && regularCapture3DMatchesThisScreen) \
                 || (regularCaptureUses3d \
@@ -1072,21 +1030,16 @@ vec4 composeScreenColor(bool SCREEN_IS_TOP) \
                 && screenHasPrevious3D \
                 && pixel3DHasVisibleColor \
                 && (regularCaptureBackdropPixel \
-                    || regularCaptureVisibleBlackPixel \
                     || regularCaptureProtectedBlackAbove); \
-            if (regularCaptureBlackResolvedByCapture) \
-                val1 = regularCaptureVisibleBlackHasLocalSupport || !pixel3DHasVisibleColor ? capture3D : pixel3D; \
-            else if (nonLiveFullRegularHistoryPixel) \
+            if (nonLiveFullRegularHistoryPixel) \
                 val1 = pixel3D; \
             else if (temporalCompMode7Uses3D && capture3DHasVisibleColor && regularCapture3DMatchesThisScreen && regularCaptureBackdropPixel && !overlayOver3d) \
                 val1 = capture3D; \
             else if (temporalCompMode7Uses3D && partialRegularCaptureOppositeFringeLine && pixel3DHasCoverage) \
                 val1 = pixel3D; \
-            else if (temporalCompMode7Uses3D && compMode7LineHas3D && regularCaptureWideBlackPixel && pixel3DHasVisibleColor) \
-                val1 = pixel3D; \
             else if (temporalCompMode7Uses3D && compMode7LineHas3D && regularCaptureBlank3dPixel && screenWideRegularCaptureBlank && pixel3DHasVisibleColor) \
                 val1 = pixel3D; \
-            else if (temporalCompMode7Uses3D && compMode7LineHas3D && pixel3DHasCoverage && !overlayOver3d && regularCaptureExplicit3dPixel && !regularCaptureProtectedBlackPixel) \
+            else if (temporalCompMode7Uses3D && compMode7LineHas3D && pixel3DHasCoverage && !overlayOver3d && regularCaptureExplicit3dPixel) \
                 val1 = pixel3D; \
         } \
         pixel = val1; \
@@ -1195,7 +1148,7 @@ vec4 composeScreenColor(bool SCREEN_IS_TOP) \
             applyBrightnessDown(pixel, brightnessFactor, 0xF); \
     } \
  \
-    if (displayMode == 1) \
+    if (displayMode == 1 || (displayMode == 2 && vramCaptureUses3d)) \
         return vec4(color6ToRgb01(pixel), fragAlpha); \
  \
 	    if ((pushConstants.filtering & 0xFFu) == kFilterLinear) \

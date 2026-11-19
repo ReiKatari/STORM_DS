@@ -7,7 +7,9 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.ListPreference
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.magnum.melonds.R
 import me.magnum.melonds.common.DirectoryAccessValidator
 import me.magnum.melonds.common.UriPermissionManager
@@ -174,31 +176,50 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
     }
 
     private fun updateBiosSummaries() {
+        val appContext = context?.applicationContext ?: return
         val dsPref = findPreference<BiosDirectoryPickerPreference>("bios_dir")
         val dsiPref = findPreference<BiosDirectoryPickerPreference>("dsi_bios_dir")
-        if (dsPref != null) {
-            val uriStr = preferenceManager.sharedPreferences?.getStringSet("bios_dir", emptySet())?.firstOrNull()
-            val uri = uriStr?.let { Uri.parse(it) }
-            val summary = formatBiosDirSummary(ConsoleType.DS, uri)
-            if (summary.isNotEmpty()) dsPref.summary = summary
-        }
-        if (dsiPref != null) {
-            val uriStr = preferenceManager.sharedPreferences?.getStringSet("dsi_bios_dir", emptySet())?.firstOrNull()
-            val uri = uriStr?.let { Uri.parse(it) }
-            val summary = formatBiosDirSummary(ConsoleType.DSi, uri)
-            if (summary.isNotEmpty()) dsiPref.summary = summary
+        val prefs = preferenceManager.sharedPreferences
+        val dsUri = prefs?.getStringSet("bios_dir", emptySet())?.firstOrNull()?.let { Uri.parse(it) }
+        val dsiUri = prefs?.getStringSet("dsi_bios_dir", emptySet())?.firstOrNull()?.let { Uri.parse(it) }
+        val unitKb = getString(R.string.v793_bios_unit_kb)
+        val expectedWord = getString(R.string.v793_bios_expected)
+        val missingWord = getString(R.string.v793_bios_missing)
+        val notSetWord = getString(R.string.not_set)
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            val (dsSummary, dsiSummary) = withContext(Dispatchers.IO) {
+                val ds = if (dsPref != null) {
+                    formatBiosDirSummary(appContext, ConsoleType.DS, dsUri, unitKb, expectedWord, missingWord, notSetWord)
+                } else ""
+                val dsi = if (dsiPref != null) {
+                    formatBiosDirSummary(appContext, ConsoleType.DSi, dsiUri, unitKb, expectedWord, missingWord, notSetWord)
+                } else ""
+                ds to dsi
+            }
+            if (!isAdded) return@launch
+            if (dsPref != null && dsSummary.isNotEmpty()) dsPref.summary = dsSummary
+            if (dsiPref != null && dsiSummary.isNotEmpty()) dsiPref.summary = dsiSummary
         }
     }
 
-    private fun formatBiosDirSummary(consoleType: ConsoleType, directoryUri: Uri?): String {
+    private fun formatBiosDirSummary(
+        appContext: android.content.Context,
+        consoleType: ConsoleType,
+        directoryUri: Uri?,
+        unitKb: String,
+        expectedWord: String,
+        missingWord: String,
+        notSetWord: String,
+    ): String {
         val targetUri = directoryUri ?: run {
             val subFolder = if (consoleType == ConsoleType.DSi) "bios/dsi" else "bios/ds"
             val baseDir = android.os.Environment.getExternalStorageDirectory().resolve("STORM DS")
             val defaultDir = java.io.File(baseDir, subFolder)
             if (defaultDir.exists()) Uri.fromFile(defaultDir) else null
-        } ?: return getString(R.string.not_set)
+        } ?: return notSetWord
 
-        val rawPath = me.magnum.melonds.utils.FileUtils.getAbsolutePathFromSAFUri(requireContext(), targetUri) ?: targetUri.path ?: targetUri.toString()
+        val rawPath = me.magnum.melonds.utils.FileUtils.getAbsolutePathFromSAFUri(appContext, targetUri) ?: targetUri.path ?: targetUri.toString()
         val decodedPath = Uri.decode(rawPath)
 
         val dirDoc = runCatching {
@@ -206,7 +227,7 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
                 val f = java.io.File(decodedPath)
                 if (f.exists() && f.isDirectory) androidx.documentfile.provider.DocumentFile.fromFile(f) else null
             } else {
-                androidx.documentfile.provider.DocumentFile.fromTreeUri(requireContext(), targetUri)
+                androidx.documentfile.provider.DocumentFile.fromTreeUri(appContext, targetUri)
             }
         }.getOrNull() ?: return decodedPath
 
@@ -223,14 +244,11 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
                 if (doc.uri.scheme == "file") {
                     java.io.File(Uri.decode(doc.uri.path ?: "")).length()
                 } else {
-                    requireContext().contentResolver.openAssetFileDescriptor(doc.uri, "r")?.use { it.length } ?: -1L
+                    appContext.contentResolver.openAssetFileDescriptor(doc.uri, "r")?.use { it.length } ?: -1L
                 }
             }.getOrDefault(-1L)
         }
 
-        val unitKb = getString(R.string.v793_bios_unit_kb)
-        val expectedWord = getString(R.string.v793_bios_expected)
-        val missingWord = getString(R.string.v793_bios_missing)
         val sb = StringBuilder(decodedPath).append("\n")
         if (consoleType == ConsoleType.DS) {
             val f7 = findDoc("bios7.bin", "ds_bios7.bin", "arm7.bin")

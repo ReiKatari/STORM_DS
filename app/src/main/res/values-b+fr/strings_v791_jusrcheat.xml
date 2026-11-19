@@ -14,7 +14,7 @@
     <string name="v791_jusrcheat_btn_attach_folder">Attacher le dossier</string>
     <string name="v791_jusrcheat_attached_success">Code activé avec succès pour ce jeu</string>
     <string name="v791_jusrcheat_no_games_found">Aucun jeu trouvé</string>
-    <string name="v791_jusrcheat_browser_title">Jusrcheat — Tous les jeux et régions (usrcheat.dat)</string>
+    <string name="v791_jusrcheat_browser_title">Jusrcheat - Tous les jeux et régions (usrcheat.dat)</string>
     <string name="v791_jusrcheat_edit_cheat_title">Modifier le code</string>
     <string name="v791_jusrcheat_add_cheat_title">Ajouter un nouveau code</string>
     <string name="v791_jusrcheat_cheat_name">Nom du code</string>

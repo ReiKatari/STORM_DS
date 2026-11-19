@@ -11,6 +11,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import me.magnum.melonds.common.cheats.jusrcheat.JusrcheatRepository
 import me.magnum.melonds.common.workers.CheatImportWorker
 import me.magnum.melonds.database.MelonDatabase
@@ -37,6 +39,8 @@ class RoomCheatsRepository(
         private const val IMPORT_WORKER_NAME = "cheat_import_worker"
     }
 
+    private val findGameMutex = Mutex()
+
     @get:JvmName("jusrcheatRepositoryProp")
     val jusrcheatRepository: JusrcheatRepository by lazy {
         JusrcheatRepository.getInstance(context, database)
@@ -58,7 +62,7 @@ class RoomCheatsRepository(
         }
     }
 
-    override suspend fun findGameForRom(romInfo: RomInfo): Game? {
+    override suspend fun findGameForRom(romInfo: RomInfo): Game? = findGameMutex.withLock {
         val lookupCode = romInfo.cheatGameCode
         val cleanGameCode = romInfo.gameCode.take(4).uppercase()
         val checksumStr = romInfo.headerChecksumString()
@@ -102,7 +106,7 @@ class RoomCheatsRepository(
             }
         }
 
-        return gameEntity?.let {
+        gameEntity?.let {
             Game(
                 it.id,
                 it.name,
@@ -158,14 +162,24 @@ class RoomCheatsRepository(
 
         // 1. Exact checksum + null checksum query
         val primaryCheats = database.cheatDao().getEnabledRomCheats(lookupCode, checksumStr)
-        val codeCheats = if (primaryCheats.isNotEmpty()) primaryCheats else database.cheatDao().getEnabledRomCheats(cleanGameCode, checksumStr)
+        val exactCheats = if (primaryCheats.isNotEmpty()) {
+            primaryCheats
+        } else {
+            database.cheatDao().getEnabledRomCheats(cleanGameCode, checksumStr)
+        }
 
-        // 2. Fallback CRC-agnostic query for patched ROMs ([T+Rus]) and attached cross-region/custom cheats
-        val crcAgnosticLookup = database.cheatDao().getEnabledRomCheatsIgnoreCrc(lookupCode)
-        val crcAgnosticCode = if (cleanGameCode != lookupCode) database.cheatDao().getEnabledRomCheatsIgnoreCrc(cleanGameCode) else emptyList()
-
-        val allCandidates = (primaryCheats + codeCheats + crcAgnosticLookup + crcAgnosticCode)
-            .distinctBy { it.id ?: (it.code.hashCode().toLong() xor it.name.hashCode().toLong()) }
+        // 2. Fallback CRC-agnostic query ONLY when exact-CRC cheats are empty
+        val allCandidates = if (exactCheats.isNotEmpty()) {
+            exactCheats
+        } else {
+            val crcAgnosticLookup = database.cheatDao().getEnabledRomCheatsIgnoreCrc(lookupCode)
+            val crcAgnosticCode = if (cleanGameCode != lookupCode) {
+                database.cheatDao().getEnabledRomCheatsIgnoreCrc(cleanGameCode)
+            } else {
+                emptyList()
+            }
+            (crcAgnosticLookup + crcAgnosticCode)
+        }.distinctBy { it.id ?: (it.code.hashCode().toLong() xor it.name.hashCode().toLong()) }
 
         return allCandidates.map { cheat ->
             Cheat(
@@ -180,9 +194,10 @@ class RoomCheatsRepository(
     }
 
     override suspend fun updateCheatsStatus(cheats: List<Cheat>) {
-        val cheatEntities = cheats.map {
-            CheatStatusUpdate(it.id!!, it.enabled)
+        val cheatEntities = cheats.mapNotNull { cheat ->
+            cheat.id?.let { id -> CheatStatusUpdate(id, cheat.enabled) }
         }
+        if (cheatEntities.isEmpty()) return
 
         database.cheatDao().updateCheatsStatus(cheatEntities)
         settingsBackupManager.requestMirrorWrite()

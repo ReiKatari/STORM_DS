@@ -50,6 +50,7 @@ import coil.request.ImageRequest
 import kotlinx.coroutines.launch
 import me.magnum.melonds.R
 import me.magnum.melonds.domain.model.SaveStateSlot
+import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.impl.saves.RomDataBundleExporter
 import me.magnum.melonds.ui.common.GamepadHint
 import me.magnum.melonds.ui.common.GamepadHintsFooter
@@ -67,6 +68,7 @@ fun SaveStatesOverlay(
     slots: List<SaveStateSlot>,
     isSaving: Boolean,
     gameTitle: String?,
+    rom: Rom? = null,
     undoSlotNumber: Int? = null,
     onUndoOverwrite: (() -> Unit)? = null,
     onSlotPicked: (SaveStateSlot) -> Unit,
@@ -163,57 +165,7 @@ fun SaveStatesOverlay(
                                 )
                             }
                         }
-                        // ☁️ STORM SAVE SYNC — 1-Click Portal Cloud Slot Button
                         val context = androidx.compose.ui.platform.LocalContext.current
-                        Spacer(Modifier.width(8.dp))
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(colors.surface2)
-                                .border(1.2.dp, colors.green.copy(alpha = 0.7f), RoundedCornerShape(8.dp))
-                                .clickable {
-                                    android.widget.Toast.makeText(
-                                        context,
-                                        "☁️ Облачный слот портала: синхронизация с /api/emulator/save-sync...",
-                                        android.widget.Toast.LENGTH_SHORT
-                                    ).show()
-                                    Thread {
-                                        try {
-                                            val titleSafe = java.net.URLEncoder.encode(gameTitle ?: "NDS_Game", "UTF-8")
-                                            val url = java.net.URL("http://192.168.1.154:3000/api/emulator/save-sync?gameTitle=" + titleSafe)
-                                            val conn = (url.openConnection() as java.net.HttpURLConnection).apply {
-                                                requestMethod = "POST"
-                                                connectTimeout = 4000
-                                                readTimeout = 4000
-                                                doOutput = true
-                                                setRequestProperty("Content-Type", "application/json")
-                                            }
-                                            val payload = "{\"gameId\":\"" + (gameTitle ?: "nds_rom") + "\",\"gameTitle\":\"" + (gameTitle ?: "Nintendo DS") + "\",\"platform\":\"Nintendo DS\",\"slot\":1,\"kind\":\"state\",\"deviceLabel\":\"STORM DS Android\",\"clientApp\":\"STORM DS\",\"dataBase64\":\"U1RPUk1fRFNfU1RBVEVfU1lOQw==\"}"
-                                            conn.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
-                                            val code = conn.responseCode
-                                            android.os.Handler(android.os.Looper.getMainLooper()).post {
-                                                if (code in 200..299) {
-                                                    android.widget.Toast.makeText(
-                                                        context,
-                                                        "✅ Облачный слот портала синхронизирован (STORM SAVE SYNC)!",
-                                                        android.widget.Toast.LENGTH_SHORT
-                                                    ).show()
-                                                }
-                                            }
-                                        } catch (_: Exception) {}
-                                    }.start()
-                                }
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = "☁️ Облачный слот портала",
-                                color = colors.green,
-                                fontFamily = SpaceGrotesk,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                            )
-                        }
 
                         // 📦 ROM DATA BUNDLE EXPORTER (.zip)
                         var isExportingBundle by remember { mutableStateOf(false) }
@@ -230,7 +182,7 @@ fun SaveStatesOverlay(
                                     coroutineScope.launch {
                                         val result = RomDataBundleExporter.exportBundle(
                                             context = context,
-                                            rom = null,
+                                            rom = rom,
                                             slots = slots,
                                         )
                                         isExportingBundle = false

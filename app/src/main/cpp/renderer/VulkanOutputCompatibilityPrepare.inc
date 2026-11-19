@@ -441,12 +441,15 @@ bool VulkanOutput::prepareFrameForPresentationCompatibility(
     else if (asymmetricFullRegularComp7
         && !preservePackedOwnerForPlainRegularComp7Pair)
     {
-        liveSourceScreenSwap = topUsesFullRegularComp7;
+        liveSourceScreenSwap = !topUsesFullRegularComp7;
     }
     else if (topUsesCurrentCapture3d != bottomUsesCurrentCapture3d
         && !preservePackedOwnerForPlainRegularComp7Pair)
     {
-        liveSourceScreenSwap = topUsesCurrentCapture3d;
+        liveSourceScreenSwap =
+            (topUsesVramCapture3d != bottomUsesVramCapture3d)
+                ? topUsesVramCapture3d
+                : !topUsesRegularCapture3d;
     }
     else if (topUsesVramCapture3d
         && !topUsesRegularCapture3d

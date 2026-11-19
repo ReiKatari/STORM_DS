@@ -77,7 +77,7 @@ class MainPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
         // 1. General (active theme, language, ROM folders, autosave and submenu customizer status)
         findPreference<Preference>("settings_home_general")?.let { pref ->
             val theme = prefs.getString("theme", "dark") ?: "dark"
-            val accent = prefs.getString("theme_accent_color", "electric_cyan") ?: "electric_cyan"
+            val accent = prefs.getString("theme_accent_color", "theme_default") ?: "theme_default"
             val formattedTheme = getLocalizedEntry(theme, R.array.theme_values, R.array.theme_options)
             val formattedAccent = getLocalizedEntry(accent, R.array.theme_accent_color_values, R.array.theme_accent_color_options)
 
@@ -127,7 +127,7 @@ class MainPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
         findPreference<Preference>("settings_home_system")?.let { pref ->
             val compilerEnabled = prefs.getBoolean("enable_storm_compiler", true)
             val overclock = prefs.getString("arm9_overclock", "1") ?: "1"
-            val customBios = prefs.getBoolean("enable_custom_bios_firmware", false)
+            val customBios = prefs.getBoolean("use_custom_bios", false)
             val jitStr = "JIT: ${getString(if (compilerEnabled) R.string.on else R.string.off)}"
             val biosStr = getString(if (customBios) R.string.v793_summary_custom_bios else R.string.v793_summary_builtin_drastic_bios)
             pref.summary = "NDS/DSi • $jitStr • ${overclock}x • $biosStr"

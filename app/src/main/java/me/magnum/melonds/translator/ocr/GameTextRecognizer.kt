@@ -42,21 +42,35 @@ class GameTextRecognizer {
     var lastOcrError: String? = null
         private set
 
+    @Volatile private var latinInitialized = false
+    @Volatile private var japaneseInitialized = false
+    @Volatile private var chineseInitialized = false
+
     private val latinRecognizer: TextRecognizer by lazy {
+        latinInitialized = true
         TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
     }
 
     private val japaneseRecognizer: TextRecognizer by lazy {
+        japaneseInitialized = true
         TextRecognition.getClient(JapaneseTextRecognizerOptions.Builder().build())
     }
 
     private val chineseRecognizer: TextRecognizer by lazy {
+        chineseInitialized = true
         TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build())
     }
 
-    private val ocrLruCache = object : android.util.LruCache<Long, List<TranslatedTextBlock>>(32) {}
+    private val ocrLruCache = object : android.util.LruCache<String, List<TranslatedTextBlock>>(32) {}
 
     fun clearCache() {
+        ocrLruCache.evictAll()
+    }
+
+    fun close() {
+        if (latinInitialized) runCatching { latinRecognizer.close() }
+        if (japaneseInitialized) runCatching { japaneseRecognizer.close() }
+        if (chineseInitialized) runCatching { chineseRecognizer.close() }
         ocrLruCache.evictAll()
     }
 
@@ -82,9 +96,11 @@ class GameTextRecognizer {
         lastOcrError = null
         val safeBitmap = ensureSoftwareBitmap(bitmap)
 
+        val normalizedLang = sourceLang.lowercase()
         if (regions.isEmpty()) {
             val bmpHash = computeBitmapHash(safeBitmap)
-            ocrLruCache.get(bmpHash)?.let { cached ->
+            val cacheKey = "$normalizedLang:$bmpHash"
+            ocrLruCache.get(cacheKey)?.let { cached ->
                 Log.i(TAG, "OCR Cache hit: returning ${cached.size} cached blocks instantly")
                 if (safeBitmap !== bitmap) safeBitmap.recycle()
                 return@withContext cached.map { it.copy(translatedText = "") }
@@ -146,9 +162,10 @@ class GameTextRecognizer {
 
         // Full Screen OCR: Multi-pass pixel preprocessing pipeline
         val bmpHash = computeBitmapHash(safeBitmap)
+        val cacheKey = "$normalizedLang:$bmpHash"
         val blocks = recognizeWithMultiPass(safeBitmap, sourceLang)
         if (safeBitmap !== bitmap) safeBitmap.recycle()
-        ocrLruCache.put(bmpHash, blocks)
+        ocrLruCache.put(cacheKey, blocks)
         Log.i(TAG, "OCR finished fullscreen with ${blocks.size} total blocks (cached)")
         blocks
     }

@@ -8,6 +8,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -245,7 +246,7 @@ fun Modifier.bouncingClickable(
 ): Modifier = composed {
     val haptic = LocalHapticFeedback.current
     val currentInteractionSource = interactionSource ?: remember { MutableInteractionSource() }
-    var isPressed by remember { mutableStateOf(false) }
+    val isPressed by currentInteractionSource.collectIsPressedAsState()
     val isFocused by currentInteractionSource.collectIsFocusedAsState()
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.93f else if (isFocused) 1.02f else 1f,

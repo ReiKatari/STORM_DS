@@ -347,7 +347,12 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
                     .build()
             }
             .okHttpClient {
-                okhttp3.OkHttpClient.Builder()
+                val baseClient = if (::okHttpClient.isInitialized) {
+                    okHttpClient
+                } else {
+                    me.magnum.melonds.common.network.SharedOkHttpClient.instance
+                }
+                baseClient.newBuilder()
                     .connectTimeout(6, java.util.concurrent.TimeUnit.SECONDS)
                     .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
                     .callTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
@@ -361,6 +366,7 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
     }
 
     @Inject lateinit var workerFactory: HiltWorkerFactory
+    @Inject lateinit var okHttpClient: okhttp3.OkHttpClient
     @Inject lateinit var settingsRepository: SettingsRepository
     @Inject lateinit var migrator: Migrator
     @Inject lateinit var uriHandler: UriHandler

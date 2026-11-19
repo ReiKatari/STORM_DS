@@ -67,6 +67,7 @@ class RomListActivity : AppCompatActivity() {
 
     private var downloadProgressDialog: AlertDialog? = null
     private var romBrowserDpadDownGate: (() -> Boolean)? = null
+    private var hasPromptedStoragePermissionThisSession = false
     private val externalInfoController by lazy { me.magnum.melonds.ui.common.ExternalInfoDisplayController(this) }
     private val highlightedRom = kotlinx.coroutines.flow.MutableStateFlow<Rom?>(null)
 
@@ -100,15 +101,8 @@ class RomListActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        me.magnum.melonds.ui.theme.AppThemeManager.init(this)
-        setTheme(me.magnum.melonds.ui.theme.AppThemeManager.currentTheme.getThemeResId())
         installSplashScreen()
-        val isLight = !me.magnum.melonds.ui.theme.AppThemeManager.isDarkTheme(this)
-        if (isLight) {
-            enableEdgeToEdge(statusBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT))
-        } else {
-            enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT))
-        }
+        me.magnum.melonds.ui.theme.AppThemeManager.applyEdgeToEdgeTheme(this)
         super.onCreate(savedInstanceState)
         binding = ActivityRomListBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -640,15 +634,26 @@ class RomListActivity : AppCompatActivity() {
     }
 
     private fun checkAndRequestStoragePermission() {
+        if (hasPromptedStoragePermissionThisSession) {
+            return
+        }
+        hasPromptedStoragePermissionThisSession = true
+
+        val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             if (!android.os.Environment.isExternalStorageManager()) {
-                val intent = Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
-                    data = android.net.Uri.parse("package:$packageName")
-                }
-                if (runCatching { startActivity(intent) }.isFailure) {
-                    runCatching {
-                        startActivity(Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+                val alreadyPromptedAllFiles = prefs.getBoolean("storage_all_files_prompted", false)
+                if (!alreadyPromptedAllFiles) {
+                    prefs.edit().putBoolean("storage_all_files_prompted", true).apply()
+                    val intent = Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                        data = android.net.Uri.parse("package:$packageName")
                     }
+                    if (runCatching { startActivity(intent) }.isFailure) {
+                        runCatching {
+                            startActivity(Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+                        }
+                    }
+                    return
                 }
             }
         } else {
@@ -657,14 +662,19 @@ class RomListActivity : AppCompatActivity() {
                 android.Manifest.permission.WRITE_EXTERNAL_STORAGE
             ) == android.content.pm.PackageManager.PERMISSION_GRANTED
             if (!writeGranted) {
-                androidx.core.app.ActivityCompat.requestPermissions(
-                    this,
-                    arrayOf(
-                        android.Manifest.permission.READ_EXTERNAL_STORAGE,
-                        android.Manifest.permission.WRITE_EXTERNAL_STORAGE
-                    ),
-                    1001
-                )
+                val alreadyPromptedLegacy = prefs.getBoolean("storage_legacy_prompted", false)
+                if (!alreadyPromptedLegacy) {
+                    prefs.edit().putBoolean("storage_legacy_prompted", true).apply()
+                    androidx.core.app.ActivityCompat.requestPermissions(
+                        this,
+                        arrayOf(
+                            android.Manifest.permission.READ_EXTERNAL_STORAGE,
+                            android.Manifest.permission.WRITE_EXTERNAL_STORAGE
+                        ),
+                        1001
+                    )
+                    return
+                }
             }
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -673,11 +683,29 @@ class RomListActivity : AppCompatActivity() {
                 android.Manifest.permission.POST_NOTIFICATIONS
             ) == android.content.pm.PackageManager.PERMISSION_GRANTED
             if (!notifGranted) {
-                androidx.core.app.ActivityCompat.requestPermissions(
-                    this,
-                    arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
-                    1002
-                )
+                val alreadyPromptedNotif = prefs.getBoolean("notifications_permission_prompted", false)
+                if (!alreadyPromptedNotif) {
+                    prefs.edit().putBoolean("notifications_permission_prompted", true).apply()
+                    androidx.core.app.ActivityCompat.requestPermissions(
+                        this,
+                        arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+                        1002
+                    )
+                }
+            }
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 1001) {
+            val granted = grantResults.isNotEmpty() && grantResults.all { it == android.content.pm.PackageManager.PERMISSION_GRANTED }
+            if (!granted) {
+                Toast.makeText(this, R.string.rom_search_dir_saf_fallback_hint, Toast.LENGTH_LONG).show()
             }
         }
     }

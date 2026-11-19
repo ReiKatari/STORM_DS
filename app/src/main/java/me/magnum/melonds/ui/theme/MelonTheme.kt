@@ -9,12 +9,13 @@ import androidx.compose.material.lightColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
-import me.magnum.melonds.ui.Theme
+import androidx.compose.ui.graphics.luminance
 
 val watermelon: WatermelonColors
     @Composable get() = LocalWatermelonColors.current
 
 private fun watermelonMaterialColors(colors: WatermelonColors): Colors {
+    val onAccent = if (colors.green.luminance() > 0.45f) Color(0xFF0A0A0F) else Color.White
     return if (colors.isDark) {
         darkColors(
             primary = colors.green,
@@ -24,8 +25,8 @@ private fun watermelonMaterialColors(colors: WatermelonColors): Colors {
             background = colors.bg,
             surface = colors.surface,
             error = colors.red,
-            onPrimary = Color.Black,
-            onSecondary = Color.Black,
+            onPrimary = onAccent,
+            onSecondary = onAccent,
             onBackground = colors.text,
             onSurface = colors.text,
             onError = Color.White,
@@ -39,8 +40,8 @@ private fun watermelonMaterialColors(colors: WatermelonColors): Colors {
             background = colors.bg,
             surface = colors.surface,
             error = colors.red,
-            onPrimary = Color.White,
-            onSecondary = Color.White,
+            onPrimary = onAccent,
+            onSecondary = onAccent,
             onBackground = colors.text,
             onSurface = colors.text,
             onError = Color.White,
@@ -54,17 +55,7 @@ fun MelonTheme(
     content: @Composable () -> Unit
 ) {
     val theme = AppThemeManager.themeState.value
-    val baseColors = when (theme) {
-        Theme.LIGHT -> LightWatermelonColors
-        Theme.MIDNIGHT -> MidnightWatermelonColors
-        Theme.CYBERPUNK -> CyberpunkWatermelonColors
-        Theme.GOTHIC -> GothicWatermelonColors
-        Theme.MATRIX -> MatrixWatermelonColors
-        Theme.SOLAR -> SolarWatermelonColors
-        Theme.SAKURA -> SakuraWatermelonColors
-        Theme.DARK -> DarkWatermelonColors
-        Theme.SYSTEM -> if (isDarkTheme) DarkWatermelonColors else LightWatermelonColors
-    }
+    val baseColors = baseWatermelonColorsFor(theme, isDarkTheme)
     val accentKey = AppThemeManager.accentColorState.value
     val watermelonColors = getCustomizedAccentColors(baseColors, accentKey)
 

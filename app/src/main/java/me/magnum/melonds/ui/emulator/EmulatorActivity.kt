@@ -313,12 +313,10 @@ class EmulatorActivity : AppCompatActivity() {
     private var isDebugCaptureReceiverRegistered = false
     private val debugCaptureReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action != ACTION_DEBUG_CAPTURE) {
+            if (!isDebuggableBuild() || intent?.action != ACTION_DEBUG_CAPTURE) {
                 return
             }
-            val outputDir = intent.getStringExtra("output_dir")
-                ?.takeIf { it.isNotBlank() }
-                ?: "$DEFAULT_VULKAN_DEBUG_DIR/regression"
+            val outputDir = resolveSafeDebugCaptureDir(intent.getStringExtra("output_dir"))
             if (intent.hasExtra("debug_view_mode")) {
                 val mode = intent.getIntExtra("debug_view_mode", 0).coerceIn(0, 3)
                 currentVulkanDebugViewMode = mode
@@ -334,6 +332,24 @@ class EmulatorActivity : AppCompatActivity() {
             }
             handleDebugCaptureIntent(outputDir)
         }
+    }
+
+    private fun resolveSafeDebugCaptureDir(rawDir: String?): String {
+        val defaultDir = "$DEFAULT_VULKAN_DEBUG_DIR/regression"
+        val trimmed = rawDir?.trim()?.takeIf { it.isNotEmpty() } ?: return defaultDir
+        return runCatching {
+            val candidate = File(trimmed).canonicalFile
+            val allowedRoots = listOfNotNull(
+                File(DEFAULT_VULKAN_DEBUG_DIR).canonicalFile,
+                filesDir.canonicalFile,
+                cacheDir.canonicalFile,
+                getExternalFilesDir(null)?.canonicalFile,
+            )
+            val isAllowed = allowedRoots.any { root ->
+                candidate == root || candidate.path.startsWith(root.path + File.separator)
+            }
+            if (isAllowed) candidate.absolutePath else defaultDir
+        }.getOrDefault(defaultDir)
     }
     private var isClosingEmulator = false
     private var isFrameRenderCoordinatorStopped = false
@@ -604,6 +620,7 @@ class EmulatorActivity : AppCompatActivity() {
     private val showQuickSlotCarousel = mutableStateOf(false)
     private val raHardcoreLoadConfirmTarget = mutableStateOf<SaveStateSlot?>(null)
     private val raHardcorePeriodicLoadConfirm = mutableStateOf(false)
+    private var raHardcoreConfirmOpenedFromPauseMenu = false
     private val isExtendedPauseMenuState = mutableStateOf(false)
     private val showSlowMotionSpeedDialog = mutableStateOf(false)
     private val isFrameAdvanceHudVisible = mutableStateOf(false)
@@ -668,9 +685,23 @@ class EmulatorActivity : AppCompatActivity() {
     private fun reopenPauseMenu() {
         val menu = lastPauseMenu
         if (menu != null) {
-            pauseMenuState.value = menu
+            showPauseMenu(menu)
         } else {
             viewModel.resumeEmulator()
+        }
+    }
+
+    private fun dismissRaHardcoreLoadConfirmDialog() {
+        val reopenMenu = raHardcoreConfirmOpenedFromPauseMenu
+        raHardcoreConfirmOpenedFromPauseMenu = false
+        raHardcoreLoadConfirmTarget.value = null
+        raHardcorePeriodicLoadConfirm.value = false
+        if (!hasComposeOverlayOpen()) {
+            if (reopenMenu) {
+                reopenPauseMenu()
+            } else {
+                viewModel.resumeEmulator()
+            }
         }
     }
 
@@ -691,14 +722,16 @@ class EmulatorActivity : AppCompatActivity() {
         handler = Handler(mainLooper)
         externalDisplayMode = settingsRepository.getExternalDisplayMode()
         lifecycleOwnerProvider.setCurrentLifecycleOwner(this)
-        runCatching {
-            ContextCompat.registerReceiver(
-                this,
-                debugCaptureReceiver,
-                IntentFilter(ACTION_DEBUG_CAPTURE),
-                ContextCompat.RECEIVER_EXPORTED,
-            )
-            isDebugCaptureReceiverRegistered = true
+        if (isDebuggableBuild()) {
+            runCatching {
+                ContextCompat.registerReceiver(
+                    this,
+                    debugCaptureReceiver,
+                    IntentFilter(ACTION_DEBUG_CAPTURE),
+                    ContextCompat.RECEIVER_NOT_EXPORTED,
+                )
+                isDebugCaptureReceiverRegistered = true
+            }
         }
         binding = ActivityEmulatorBinding.inflate(layoutInflater)
         supportRequestWindowFeature(Window.FEATURE_NO_TITLE)
@@ -1024,13 +1057,15 @@ class EmulatorActivity : AppCompatActivity() {
                             slots = saveStatesData.slots,
                             isSaving = saveStatesData.isSaving,
                             gameTitle = currentRom?.let { it.config.customName ?: it.name },
+                            rom = currentRom,
                             undoSlotNumber = viewModel.getUndoOverwriteSlot(),
                             onUndoOverwrite = {
+                                val undoSlot = viewModel.getUndoOverwriteSlot() ?: 0
                                 viewModel.restoreOverwrittenSaveStateSlot { newSlots ->
                                     saveStatesOverlayState.value = saveStatesData.copy(slots = newSlots)
                                     android.widget.Toast.makeText(
                                         this@EmulatorActivity,
-                                        getString(R.string.undo_overwrite_success, viewModel.getUndoOverwriteSlot() ?: 0),
+                                        getString(R.string.undo_overwrite_success, undoSlot),
                                         android.widget.Toast.LENGTH_SHORT
                                     ).show()
                                 }
@@ -1131,6 +1166,7 @@ class EmulatorActivity : AppCompatActivity() {
                                 }
                                 if (option == me.magnum.melonds.ui.emulator.rom.RomPauseMenuOption.LOAD_PERIODIC_AUTOSAVE) {
                                     dismissPauseMenu()
+                                    raHardcoreConfirmOpenedFromPauseMenu = true
                                     requestLoadPeriodicAutoSaveWithHardcoreCheck()
                                     return@PauseMenuOverlay
                                 }
@@ -1234,6 +1270,7 @@ class EmulatorActivity : AppCompatActivity() {
                         onConfirm = {
                             val target = raHardcoreLoadConfirmTarget.value
                             val isPeriodic = raHardcorePeriodicLoadConfirm.value
+                            raHardcoreConfirmOpenedFromPauseMenu = false
                             raHardcoreLoadConfirmTarget.value = null
                             raHardcorePeriodicLoadConfirm.value = false
                             viewModel.switchToSoftcore()
@@ -1246,8 +1283,7 @@ class EmulatorActivity : AppCompatActivity() {
                             }
                         },
                         onDismiss = {
-                            raHardcoreLoadConfirmTarget.value = null
-                            raHardcorePeriodicLoadConfirm.value = false
+                            dismissRaHardcoreLoadConfirmDialog()
                         }
                     )
                 }
@@ -1419,7 +1455,7 @@ class EmulatorActivity : AppCompatActivity() {
         }
         lifecycleScope.launch {
             lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.toastEvent.collectLatest {
+                viewModel.toastEvent.collect {
                     val (message, duration) = when (it) {
                         is ToastEvent.EnhancementActiveNotification -> {
                             val items = mutableListOf<String>()
@@ -1560,7 +1596,7 @@ class EmulatorActivity : AppCompatActivity() {
         }
         lifecycleScope.launch {
             lifecycle.repeatOnLifecycle(Lifecycle.State.CREATED) {
-                viewModel.uiEvent.collectLatest {
+                viewModel.uiEvent.collect {
                     when (it) {
                         EmulatorUiEvent.CloseEmulator -> {
                             closeEmulatorActivity()
@@ -2106,6 +2142,7 @@ class EmulatorActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
+        viewModel.setHostActivityRunning(true)
         if (isClosingEmulator) {
             return
         }
@@ -3541,7 +3578,7 @@ class EmulatorActivity : AppCompatActivity() {
     private fun createFrameRenderCoordinator(backend: PresentationBackend): FrameRenderCoordinator {
         return when (backend) {
             PresentationBackend.OPEN_GL -> OpenGlFrameRenderCoordinator()
-            PresentationBackend.VULKAN -> VulkanFrameRenderCoordinator(this)
+            PresentationBackend.VULKAN -> VulkanFrameRenderCoordinator(applicationContext)
         }
     }
 
@@ -3572,8 +3609,7 @@ class EmulatorActivity : AppCompatActivity() {
             return
         }
         if (raHardcoreLoadConfirmTarget.value != null || raHardcorePeriodicLoadConfirm.value) {
-            raHardcoreLoadConfirmTarget.value = null
-            raHardcorePeriodicLoadConfirm.value = false
+            dismissRaHardcoreLoadConfirmDialog()
             return
         }
         if (isRewindWindowOpen()) {
@@ -5807,6 +5843,8 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
     private fun hasComposeOverlayOpen(): Boolean {
         return pauseMenuState.value != null || saveStatesOverlayState.value != null ||
             consoleOverlayStack.isNotEmpty() || showDualScreenPresets.value ||
+            showScreenLayoutDialog.value || showAchievementList.value ||
+            cheatsOverlayRomInfo.value != null || showQuickSlotCarousel.value ||
             showSlowMotionSpeedDialog.value ||
             rewindOverlayState.value != null || activeOverlays.hasActiveOverlays()
     }
@@ -6100,6 +6138,7 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
 
     override fun onStop() {
         super.onStop()
+        viewModel.setHostActivityRunning(false)
         cancelStartupPresentationRefreshes()
         getSystemService<DisplayManager>()?.unregisterDisplayListener(displayListener)
         getSystemService<InputManager>()?.unregisterInputDeviceListener(connectedControllerManager)

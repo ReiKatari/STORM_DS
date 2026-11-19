@@ -3,6 +3,7 @@ package me.magnum.melonds.common.cheats
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import me.magnum.melonds.common.network.SharedOkHttpClient
 import me.magnum.melonds.database.MelonDatabase
 import me.magnum.melonds.database.entities.CheatDatabaseEntity
 import me.magnum.melonds.database.entities.CheatEntity
@@ -26,6 +27,13 @@ data class RawCheatCategory(
 
 object EmbeddedActionReplayCheats {
     private const val TAG = "EmbeddedActionReplay"
+
+    private val httpClient: OkHttpClient by lazy {
+        SharedOkHttpClient.instance.newBuilder()
+            .connectTimeout(5, TimeUnit.SECONDS)
+            .readTimeout(8, TimeUnit.SECONDS)
+            .build()
+    }
 
     suspend fun populateIfEmpty(database: MelonDatabase, gameCode: String, gameTitle: String, gameChecksum: String = ""): Boolean = withContext(Dispatchers.IO) {
         val cleanCode = gameCode.trim().uppercase()
@@ -199,18 +207,16 @@ object EmbeddedActionReplayCheats {
             "https://raw.githubusercontent.com/DeadSkullzJr/NDS-i-Cheat-Databases/main/Cheats/$cleanCode.txt",
             "https://raw.githubusercontent.com/DeadSkullzJr/NDS-i-Cheat-Databases/master/Cheats/$cleanCode.txt"
         )
-        val client = OkHttpClient.Builder()
-            .connectTimeout(5, TimeUnit.SECONDS)
-            .readTimeout(8, TimeUnit.SECONDS)
-            .build()
 
         for (url in urls) {
             try {
                 val req = Request.Builder().url(url).header("User-Agent", "STORM_DS_Cheats").build()
-                val resp = client.newCall(req).execute()
-                if (resp.isSuccessful && resp.body != null) {
-                    val parsed = parseCheatText(resp.body!!.string())
-                    if (parsed.isNotEmpty()) return parsed
+                httpClient.newCall(req).execute().use { resp ->
+                    val body = resp.body
+                    if (resp.isSuccessful && body != null) {
+                        val parsed = parseCheatText(body.string())
+                        if (parsed.isNotEmpty()) return parsed
+                    }
                 }
             } catch (_: Throwable) {}
         }

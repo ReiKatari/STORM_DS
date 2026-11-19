@@ -12,7 +12,7 @@
     <color name="colorBackground">#000000</color>
 
     <color name="textColorPrimary">#FFFFFF</color>
-    <color name="textColorSecondary">#FFFFFF</color>
+    <color name="textColorSecondary">#A8B2C8</color>
 
     <color name="toolbarBackground">@color/colorBackground</color>
     <color name="switchThumbUnselected">#757585</color>
@@ -36,4 +36,5 @@
     <color name="watermelonGreenDim">#3300E5FF</color>
     <color name="watermelonSurface2">#16161C</color>
     <color name="watermelonSurface3">#252530</color>
+    <color name="melonMain">#00E5FF</color>
 </resources>

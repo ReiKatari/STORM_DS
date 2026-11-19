@@ -731,13 +731,13 @@
     <string name="conservative_coverage_enabled">Correction de couverture conservatrice (expérimental)</string>
     <string name="conservative_coverage_enabled_summary">Élargit la couverture des polygones pour réduire les fissures de 1 à 2 px (corrige les lignes noires dans Pokémon).</string>
     <string name="conservative_coverage_px">Extension de couverture</string>
-    <string name="conservative_coverage_px_summary">Quantité d\'extension en pixels de résolution interne (0–200 = 0,00–2,00 px).</string>
+    <string name="conservative_coverage_px_summary">Quantité d\'extension en pixels de résolution interne (0-200 = 0,00-2,00 px).</string>
     <string name="conservative_coverage_apply_repeat">Appliquer aux textures répétées</string>
     <string name="conservative_coverage_apply_repeat_summary">Applique le correctif aux textures REPEAT. Recommandé pour les sols et l\'eau.</string>
     <string name="conservative_coverage_apply_clamp">Appliquer aux textures limitées (Clamp)</string>
     <string name="conservative_coverage_apply_clamp_summary">Applique également le correctif aux textures CLAMP. Plus agressif et peut affecter les sprites.</string>
     <string name="conservative_coverage_depth_bias">Décalage de profondeur</string>
-    <string name="conservative_coverage_depth_bias_summary">Décalage de profondeur appliqué aux polygones étendus (0–2000 = 0,000000–0,002000). Utiliser uniquement en cas de scintillement.</string>
+    <string name="conservative_coverage_depth_bias_summary">Décalage de profondeur appliqué aux polygones étendus (0-2000 = 0,000000-0,002000). Utiliser uniquement en cas de scintillement.</string>
     <string name="debug_3d_clear_magenta">Débogage : effacer la 3D en magenta</string>
     <string name="debug_3d_clear_magenta_summary">Si les fissures deviennent magenta, ce sont des écarts de couverture. Pour le débogage uniquement.</string>
     <string name="internal_resolution">Résolution interne</string>
@@ -890,7 +890,7 @@
     <string name="dual_screen_vertical_alignment_option_bottom">Bas</string>
     <string name="dual_screen_vertical_alignment_summary">Interne : %1$s • Externe : %2$s</string>
     <string name="dual_screen_vertical_alignment_preset_value">Préréglage (%1$s)</string>
-    <string name="dual_screen_vertical_alignment_default_hint">Valeurs par défaut — Interne : %1$s • Externe : %2$s</string>
+    <string name="dual_screen_vertical_alignment_default_hint">Valeurs par défaut - Interne : %1$s • Externe : %2$s</string>
     <string name="presets">Dual Screen Presets</string>
     <string name="layout_editing_disabled_by_presets">Les dispositions ne peuvent pas être modifiées lorsqu\'un préréglage double écran est actif.</string>
     <string name="above_other_screen">Au-dessus de l\'autre écran</string>
@@ -1128,13 +1128,13 @@ Les importer dans STORM DS ?</string>
     <string name="about_credits_jpeacekeeper_title">JPeacekeeper (4PDA)</string>
     <string name="about_credits_jpeacekeeper_summary">Contributions précieuses aux tests, rapports détaillés de bugs DSi, standardisation de la fréquence d\'images et améliorations continues du projet</string>
     <string name="about_credits_watermelonds_title">WatermelonDS (Android Port)</string>
-    <string name="about_credits_watermelonds_summary">SapphireRhodonite, rafaelvcaetano et contributors — Android port, Vulkan rendering fastpaths, librashader integration, modern UI et touch controls</string>
+    <string name="about_credits_watermelonds_summary">SapphireRhodonite, rafaelvcaetano et contributors - Android port, Vulkan rendering fastpaths, librashader integration, modern UI et touch controls</string>
     <string name="about_credits_melonds_title">melonDS (Original Core)</string>
-    <string name="about_credits_melonds_summary">StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura et melonDS team — original high-accuracy Nintendo DS / DSi core emulator</string>
+    <string name="about_credits_melonds_summary">StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura et melonDS team - original high-accuracy Nintendo DS / DSi core emulator</string>
     <string name="about_credits_melonds_ds_title">melonDS DS (RetroArch Core)</string>
-    <string name="about_credits_melonds_ds_summary">JesseTG et Libretro team — DSiWare autoloading mechanics, TLNC warmboot architecture, and Libretro core innovations</string>
+    <string name="about_credits_melonds_ds_summary">JesseTG et Libretro team - DSiWare autoloading mechanics, TLNC warmboot architecture, and Libretro core innovations</string>
     <string name="about_credits_drastic_title">DraStic et fastDS Inspirations</string>
-    <string name="about_credits_drastic_summary">Exophase et DraStic / fastDS creators — screen preset inspirations, quick display layouts, and touch ergonomic concepts</string>
+    <string name="about_credits_drastic_summary">Exophase et DraStic / fastDS creators - screen preset inspirations, quick display layouts, and touch ergonomic concepts</string>
     <string name="about_credits_libraries_title">Open Source Libraries et Tools</string>
     <string name="about_credits_libraries_summary">Google Oboe (AAudio/OpenSL ES), librashader (shaders RetroArch Slang), RetroAchievements (rcheevos), libslirp (Wi-Fi), libadrenotools (pilotes Adreno/Turnip)</string>
     <string name="about_github_title">STORM DS Repository</string>
@@ -1264,6 +1264,7 @@ Les importer dans STORM DS ?</string>
     <string name="dual_screen_info_desc">Allows distributing the top and bottom Nintendo DS screens between your device screen and an external monitor/TV (via USB-C, HDMI, or wireless cast).\n\n• 📱 Keep DS Aspect Ratio: maintains authentic 4:3 aspect ratio without image stretching.\n• 🔲 Integer Scale: scales pixels in exact integer multipliers (1x, 2x, 3x) for crisp pixel-perfect visuals without blur.\n• 📏 Fill Area et Alignment: customize vertical alignment and display coverage.</string>
     <string name="theme_accent_color_title">Couleur d\'accentuation</string>
     <string name="theme_accent_color_summary">Choisir la couleur néon d\'accentuation pour le thème STORM NIGHT</string>
+    <string name="accent_theme_default">Couleur du thème</string>
     <string name="accent_electric_cyan">💎 Cyan électrique</string>
     <string name="accent_matrix_emerald">🌿 Émeraude Matrix</string>
     <string name="accent_amber_gold">⚡ Or cyber</string>

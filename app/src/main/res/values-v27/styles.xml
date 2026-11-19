@@ -3,4 +3,36 @@
     <style name="AppTheme" parent="@style/AppThemeBase">
         <item name="android:windowLightNavigationBar">@bool/lightNavigationBar</item>
     </style>
+
+    <style name="AppTheme.Dark" parent="@style/AppTheme.DarkBase">
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+
+    <style name="AppTheme.Light" parent="@style/AppTheme.LightBase">
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+
+    <style name="AppTheme.Midnight" parent="@style/AppTheme.MidnightBase">
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+
+    <style name="AppTheme.Cyberpunk" parent="@style/AppTheme.CyberpunkBase">
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+
+    <style name="AppTheme.Gothic" parent="@style/AppTheme.GothicBase">
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+
+    <style name="AppTheme.Matrix" parent="@style/AppTheme.MatrixBase">
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+
+    <style name="AppTheme.Solar" parent="@style/AppTheme.SolarBase">
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+
+    <style name="AppTheme.Sakura" parent="@style/AppTheme.SakuraBase">
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
 </resources>

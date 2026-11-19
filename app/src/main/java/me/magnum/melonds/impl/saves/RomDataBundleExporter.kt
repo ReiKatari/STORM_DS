@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.magnum.melonds.domain.model.SaveStateSlot
 import me.magnum.melonds.domain.model.rom.Rom
+import me.magnum.melonds.domain.repositories.SaveStatesRepository
 import me.magnum.melonds.impl.emulator.SramProvider
 import me.magnum.melonds.ui.emulator.savestate.SaveStateUndoManager
 import org.json.JSONArray
@@ -31,6 +32,7 @@ object RomDataBundleExporter {
         rom: Rom? = null,
         slots: List<SaveStateSlot> = emptyList(),
         destinationUri: Uri? = null,
+        saveStatesRepository: SaveStatesRepository? = null,
     ): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
             val effectiveRom = rom ?: SramProvider.lastRom ?: SaveStateUndoManager.lastActiveRom
@@ -123,10 +125,19 @@ object RomDataBundleExporter {
                 }
 
                 // 3. Export Save State Slots and Screenshots
+                val romFileBaseName = effectiveRom?.fileName?.substringBeforeLast('.')?.lowercase(Locale.ROOT)
+                val romNameLower = effectiveRom?.name?.lowercase(Locale.ROOT)
+                val sanitizedNameLower = sanitizedRomName.lowercase(Locale.ROOT)
                 val candidateStatesDirs = listOfNotNull(
+                    stormDsRoot?.let { File(it, "quicksaves") },
                     stormDsRoot?.let { File(it, "savestates") },
-                    File(context.getExternalFilesDir(null) ?: context.filesDir, "savestates")
-                )
+                    stormDsRoot?.let { File(it, "saves") },
+                    context.getExternalFilesDir(null)?.let { File(it, "quicksaves") },
+                    context.getExternalFilesDir(null)?.let { File(it, "savestates") },
+                    File(context.filesDir, "quicksaves"),
+                    File(context.filesDir, "savestates"),
+                    File(context.filesDir, "saves"),
+                ).distinctBy { it.absolutePath }
                 slots.forEach { slot ->
                     if (slot.exists) {
                         // Slot screenshot
@@ -144,23 +155,40 @@ object RomDataBundleExporter {
 
                         // State binary file (.ml0..8)
                         var stateWritten = false
-                        for (sDir in candidateStatesDirs) {
-                            if (!sDir.exists()) continue
-                            val stateFile = sDir.listFiles()?.firstOrNull { file ->
-                                val n = file.name.lowercase(Locale.ROOT)
-                                (n.contains(sanitizedRomName.lowercase(Locale.ROOT)) || (effectiveRom != null && n.contains(effectiveRom.name.lowercase(Locale.ROOT)))) &&
-                                    (n.endsWith(".ml${slot.slot}"))
-                            }
-                            if (stateFile != null && stateFile.exists() && stateFile.length() > 0L) {
-                                stateFile.inputStream().use { input ->
+                        if (saveStatesRepository != null && effectiveRom != null) {
+                            runCatching {
+                                val slotUri = saveStatesRepository.getRomSaveStateUri(effectiveRom, slot)
+                                context.contentResolver.openInputStream(slotUri)?.use { input ->
                                     val entryName = "states/slot_${slot.slot}.ml${slot.slot}"
                                     zipOut.putNextEntry(ZipEntry(entryName))
                                     input.copyTo(zipOut)
                                     zipOut.closeEntry()
                                     stateWritten = true
-                                    Log.i(TAG, "Added state file to bundle: $entryName")
+                                    Log.i(TAG, "Added state file from repository to bundle: $entryName")
                                 }
-                                break
+                            }
+                        }
+                        if (!stateWritten) {
+                            for (sDir in candidateStatesDirs) {
+                                if (!sDir.exists()) continue
+                                val stateFile = sDir.listFiles()?.firstOrNull { file ->
+                                    val n = file.name.lowercase(Locale.ROOT)
+                                    val matchesName = n.contains(sanitizedNameLower) ||
+                                        (romNameLower != null && n.contains(romNameLower)) ||
+                                        (romFileBaseName != null && n.contains(romFileBaseName))
+                                    matchesName && n.endsWith(".ml${slot.slot}")
+                                }
+                                if (stateFile != null && stateFile.exists() && stateFile.length() > 0L) {
+                                    stateFile.inputStream().use { input ->
+                                        val entryName = "states/slot_${slot.slot}.ml${slot.slot}"
+                                        zipOut.putNextEntry(ZipEntry(entryName))
+                                        input.copyTo(zipOut)
+                                        zipOut.closeEntry()
+                                        stateWritten = true
+                                        Log.i(TAG, "Added state file to bundle: $entryName")
+                                    }
+                                    break
+                                }
                             }
                         }
                     }

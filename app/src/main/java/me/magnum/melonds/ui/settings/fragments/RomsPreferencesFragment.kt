@@ -12,7 +12,9 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.preference.Preference
 import androidx.preference.SeekBarPreference
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.magnum.melonds.R
 import me.magnum.melonds.common.DirectoryAccessValidator
 import me.magnum.melonds.common.UriPermissionManager
@@ -63,10 +65,14 @@ class RomsPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
                 .setTitle(R.string.v780_clear_rom_cache_confirm_title)
                 .setMessage(R.string.v780_clear_rom_cache_confirm_message)
                 .setPositiveButton(R.string.v780_clear_rom_cache_confirm_title) { _, _ ->
-                    if (!viewModel.clearRomCache()) {
-                        Toast.makeText(requireContext(), R.string.error_clear_rom_cache, Toast.LENGTH_LONG).show()
-                    } else {
-                        Toast.makeText(requireContext(), R.string.v780_clear_rom_cache_success, Toast.LENGTH_SHORT).show()
+                    viewLifecycleOwner.lifecycleScope.launch {
+                        val cleared = viewModel.clearRomCache()
+                        val ctx = context ?: return@launch
+                        if (!cleared) {
+                            Toast.makeText(ctx, R.string.error_clear_rom_cache, Toast.LENGTH_LONG).show()
+                        } else {
+                            Toast.makeText(ctx, R.string.v780_clear_rom_cache_success, Toast.LENGTH_SHORT).show()
+                        }
                     }
                 }
                 .setNegativeButton(android.R.string.cancel, null)
@@ -100,28 +106,42 @@ class RomsPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
             return
         }
 
-        if (!settingsBackupManager.hasMirrorAt(uri)) {
-            settingsBackupManager.rememberMirrorFallback(uri)
-            persistDirectory()
-            settingsBackupManager.requestMirrorWrite()
-            return
-        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            val hasMirror = withContext(Dispatchers.IO) {
+                settingsBackupManager.hasMirrorAt(uri)
+            }
+            if (!hasMirror) {
+                settingsBackupManager.rememberMirrorFallback(uri)
+                persistDirectory()
+                settingsBackupManager.requestMirrorWrite()
+                return@launch
+            }
 
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.settings_mirror_detected_title)
-            .setMessage(R.string.settings_mirror_detected_message)
-            .setPositiveButton(R.string.settings_mirror_restore) { _, _ ->
-                settingsBackupManager.rememberMirrorFallback(uri)
-                settingsBackupManager.restoreMirrorFrom(uri)
-                persistDirectory()
-                settingsBackupManager.requestMirrorWrite()
-            }
-            .setNegativeButton(R.string.settings_mirror_ignore) { _, _ ->
-                settingsBackupManager.rememberMirrorFallback(uri)
-                persistDirectory()
-                settingsBackupManager.overwriteMirrorAt(uri)
-                settingsBackupManager.requestMirrorWrite()
-            }
-            .show()
+            if (!isAdded) return@launch
+            AlertDialog.Builder(requireContext())
+                .setTitle(R.string.settings_mirror_detected_title)
+                .setMessage(R.string.settings_mirror_detected_message)
+                .setPositiveButton(R.string.settings_mirror_restore) { _, _ ->
+                    viewLifecycleOwner.lifecycleScope.launch {
+                        settingsBackupManager.rememberMirrorFallback(uri)
+                        withContext(Dispatchers.IO) {
+                            settingsBackupManager.restoreMirrorFrom(uri)
+                        }
+                        persistDirectory()
+                        settingsBackupManager.requestMirrorWrite()
+                    }
+                }
+                .setNegativeButton(R.string.settings_mirror_ignore) { _, _ ->
+                    viewLifecycleOwner.lifecycleScope.launch {
+                        settingsBackupManager.rememberMirrorFallback(uri)
+                        persistDirectory()
+                        withContext(Dispatchers.IO) {
+                            settingsBackupManager.overwriteMirrorAt(uri)
+                        }
+                        settingsBackupManager.requestMirrorWrite()
+                    }
+                }
+                .show()
+        }
     }
 }

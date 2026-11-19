@@ -68,7 +68,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textSize="11sp"
-                    android:textColor="@color/textColorSecondary"
+                    android:textColor="?android:attr/textColorSecondary"
                     android:maxLines="1"
                     android:ellipsize="end"
                     tools:text="Параметры и конфигурация эмулятора" />
@@ -101,7 +101,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginStart="4dp"
                     android:fontFamily="@font/space_grotesk"
-                    android:text="В игру"
+                    android:text="@string/pause_resume_button"
                     android:textColor="?attr/colorAccent"
                     android:textSize="12sp"
                     android:textStyle="bold" />

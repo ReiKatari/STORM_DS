@@ -16,6 +16,7 @@
     with melonDS. If not, see http://www.gnu.org/licenses/.
 */
 
+#include <algorithm>
 #include <stdio.h>
 #include <string.h>
 #include "NDS.h"
@@ -41,7 +42,11 @@ AREngine::AREngine(melonDS::NDS& nds) : NDS(nds)
 
 void AREngine::RunCheat(const ARCode& arcode)
 {
+    if (arcode.Code.size() < 2)
+        return;
+
     const u32* code = &arcode.Code[0];
+    const u32* const codeEnd = code + (arcode.Code.size() & ~size_t(1));
 
     u32 offset = 0;
     u32 datareg = 0;
@@ -58,7 +63,7 @@ void AREngine::RunCheat(const ARCode& arcode)
 
     for (;;)
     {
-        if (code > &arcode.Code[arcode.Code.size() - 1])
+        if (code >= codeEnd)
             // If the instruction pointer is past the end of the cheat code...
             break;
 
@@ -73,8 +78,10 @@ void AREngine::RunCheat(const ARCode& arcode)
             {
                 if ((op & 0xF0) == 0xE0)
                 {
-                    for (u32 i = 0; i < b; i += 8)
-                        code += 2;
+                    const size_t availBytes = static_cast<size_t>(codeEnd - code) * sizeof(u32);
+                    const size_t skipBytes = std::min<size_t>(b, availBytes);
+                    const size_t skipWords = ((skipBytes + 7u) / 8u) * 2u;
+                    code += std::min<size_t>(skipWords, static_cast<size_t>(codeEnd - code));
                 }
 
                 continue;
@@ -359,21 +366,24 @@ void AREngine::RunCheat(const ARCode& arcode)
             {
                 // TODO: check for bad alignment of dstaddr
 
+                const size_t availBytes = static_cast<size_t>(codeEnd - code) * sizeof(u32);
+                u32 bytesleft = static_cast<u32>(std::min<size_t>(b, availBytes));
                 u32 dstaddr = (a & 0x0FFFFFFF) + offset;
-                u32 bytesleft = b;
-                while (bytesleft >= 8)
+                while (bytesleft >= 8 && (codeEnd - code) >= 2)
                 {
                     NDS.ARM7Write32(dstaddr, *code++); dstaddr += 4;
                     NDS.ARM7Write32(dstaddr, *code++); dstaddr += 4;
                     bytesleft -= 8;
                 }
-                if (bytesleft > 0)
+                if (bytesleft > 0 && (codeEnd - code) >= 2)
                 {
-                    u8* leftover = (u8*)code;
+                    const u8* leftover = reinterpret_cast<const u8*>(code);
                     code += 2;
                     if (bytesleft >= 4)
                     {
-                        NDS.ARM7Write32(dstaddr, *(u32*)leftover); dstaddr += 4;
+                        u32 val;
+                        memcpy(&val, leftover, sizeof(val));
+                        NDS.ARM7Write32(dstaddr, val); dstaddr += 4;
                         leftover += 4;
                         bytesleft -= 4;
                     }

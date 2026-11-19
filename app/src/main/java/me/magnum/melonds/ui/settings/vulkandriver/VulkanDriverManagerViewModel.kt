@@ -5,11 +5,13 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.magnum.melonds.domain.model.VulkanDriverInfo
 import me.magnum.melonds.domain.model.VulkanDriverMode
 import me.magnum.melonds.domain.repositories.SettingsRepository
@@ -35,6 +37,7 @@ class VulkanDriverManagerViewModel @Inject constructor(
         val driverMode: VulkanDriverMode = VulkanDriverMode.SYSTEM,
         val selectedDriverId: String? = null,
         val installedDrivers: List<VulkanDriverInfo> = emptyList(),
+        val installedDriverSizes: Map<String, String> = emptyMap(),
         val onlineDrivers: List<OnlineVulkanDriver> = emptyList(),
         val recommendedDriver: OnlineVulkanDriver? = null,
         val downloadProgress: Map<String, Int> = emptyMap(),
@@ -50,42 +53,75 @@ class VulkanDriverManagerViewModel @Inject constructor(
     }
 
     fun refresh() {
-        val supported = driverManager.isSupported
-        val series = AdrenoVulkanDriverSupport.getGpuSeries()
-        val gpuDesc = AdrenoVulkanDriverSupport.getDeviceGpuDescription()
-        val mode = settingsRepository.getVulkanDriverMode()
-        val selectedId = settingsRepository.getSelectedVulkanDriverId()
-        val installed = settingsRepository.getInstalledVulkanDrivers()
-        val online = onlineDriverRepository.getDriversForGpu(series)
-        val recommended = onlineDriverRepository.getRecommendedDriver(series)
+        viewModelScope.launch {
+            val snapshot = withContext(Dispatchers.IO) {
+                val supported = driverManager.isSupported
+                val series = AdrenoVulkanDriverSupport.getGpuSeries()
+                val gpuDesc = AdrenoVulkanDriverSupport.getDeviceGpuDescription()
+                val mode = settingsRepository.getVulkanDriverMode()
+                val selectedId = settingsRepository.getSelectedVulkanDriverId()
+                val installed = settingsRepository.getInstalledVulkanDrivers()
+                val sizes = installed.mapNotNull { driver ->
+                    computeInstalledDriverSize(driver)?.let { driver.id to it }
+                }.toMap()
+                val online = onlineDriverRepository.getDriversForGpu(series)
+                val recommended = onlineDriverRepository.getRecommendedDriver(series)
+                Triple(
+                    Triple(supported, series, gpuDesc),
+                    Triple(mode, selectedId, installed),
+                    Triple(sizes, online, recommended),
+                )
+            }
 
-        _uiState.update {
-            it.copy(
-                isSupported = supported,
-                gpuDescription = gpuDesc,
-                gpuSeries = series,
-                driverMode = mode,
-                selectedDriverId = selectedId,
-                installedDrivers = installed,
-                onlineDrivers = online,
-                recommendedDriver = recommended
-            )
+            _uiState.update {
+                it.copy(
+                    isSupported = snapshot.first.first,
+                    gpuSeries = snapshot.first.second,
+                    gpuDescription = snapshot.first.third,
+                    driverMode = snapshot.second.first,
+                    selectedDriverId = snapshot.second.second,
+                    installedDrivers = snapshot.second.third,
+                    installedDriverSizes = snapshot.third.first,
+                    onlineDrivers = snapshot.third.second,
+                    recommendedDriver = snapshot.third.third,
+                )
+            }
         }
     }
 
+    private fun computeInstalledDriverSize(driver: VulkanDriverInfo): String? {
+        return runCatching {
+            val dir = java.io.File(driver.driverDir)
+            if (!dir.exists()) return null
+            val totalBytes = dir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+            if (totalBytes <= 0L) return null
+            if (totalBytes >= 1024 * 1024) {
+                String.format(java.util.Locale.US, "%.1f MB", totalBytes / (1024.0 * 1024.0))
+            } else {
+                String.format(java.util.Locale.US, "%d KB", totalBytes / 1024)
+            }
+        }.getOrNull()
+    }
+
     fun setSystemDriver() {
-        driverManager.setSystemDriver()
-        refresh()
+        viewModelScope.launch(Dispatchers.IO) {
+            driverManager.setSystemDriver()
+            refresh()
+        }
     }
 
     fun selectDriver(id: String) {
-        driverManager.selectDriver(id)
-        refresh()
+        viewModelScope.launch(Dispatchers.IO) {
+            driverManager.selectDriver(id)
+            refresh()
+        }
     }
 
     fun deleteDriver(id: String) {
-        driverManager.removeDriver(id)
-        refresh()
+        viewModelScope.launch(Dispatchers.IO) {
+            driverManager.removeDriver(id)
+            refresh()
+        }
     }
 
     fun downloadAndInstall(driver: OnlineVulkanDriver) {
@@ -125,16 +161,19 @@ class VulkanDriverManagerViewModel @Inject constructor(
     }
 
     fun importFromUri(uri: Uri) {
-        runCatching {
-            driverManager.importDriver(uri)
-        }.onSuccess {
-            _uiState.update { state ->
-                state.copy(message = "Драйвер ${it.displayName} успешно импортирован!")
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching { driverManager.importDriver(uri) }
             }
-            refresh()
-        }.onFailure {
-            _uiState.update { state ->
-                state.copy(message = "Не удалось импортировать драйвер из ZIP")
+            result.onSuccess {
+                _uiState.update { state ->
+                    state.copy(message = "Драйвер ${it.displayName} успешно импортирован!")
+                }
+                refresh()
+            }.onFailure {
+                _uiState.update { state ->
+                    state.copy(message = "Не удалось импортировать драйвер из ZIP")
+                }
             }
         }
     }

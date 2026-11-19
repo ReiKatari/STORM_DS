@@ -8,11 +8,11 @@
     <string name="frame_advance_resume_btn">Riprendi</string>
     <string name="slow_motion_title">Velocità del rallentatore</string>
     <string name="slow_motion_subtitle">Scegli un profilo o regola manualmente</string>
-    <string name="slow_motion_preset_025">0.25× — Un quarto della velocità</string>
-    <string name="slow_motion_preset_050">0.50× — Metà velocità</string>
-    <string name="slow_motion_preset_075">0.75× — Rallentamento fluido</string>
-    <string name="slow_motion_preset_085">0.85× — Rallentamento leggero</string>
-    <string name="slow_motion_preset_100">1.00× — Velocità normale (disattivato)</string>
+    <string name="slow_motion_preset_025">0.25× - Un quarto della velocità</string>
+    <string name="slow_motion_preset_050">0.50× - Metà velocità</string>
+    <string name="slow_motion_preset_075">0.75× - Rallentamento fluido</string>
+    <string name="slow_motion_preset_085">0.85× - Rallentamento leggero</string>
+    <string name="slow_motion_preset_100">1.00× - Velocità normale (disattivato)</string>
     <string name="slow_motion_custom_slider">Velocità personalizzata: %1$.2f×</string>
     <string name="slow_motion_turn_off">Disattiva rallentatore</string>
     <string name="slow_motion_apply">Applica</string>

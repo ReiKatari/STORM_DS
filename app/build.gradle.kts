@@ -89,8 +89,8 @@ android {
         }
         externalNativeBuild {
             cmake {
-                cppFlags("-std=c++17 -O3 -fvectorize -fslp-vectorize -funroll-loops -fomit-frame-pointer -fno-semantic-interposition -fno-math-errno -fno-trapping-math -Wno-write-strings")
-                cFlags("-O3 -fvectorize -fslp-vectorize -funroll-loops -fomit-frame-pointer -fno-semantic-interposition -fno-math-errno -fno-trapping-math")
+                cppFlags("-std=c++17 -fvectorize -fslp-vectorize -fno-semantic-interposition -fno-math-errno -fno-trapping-math -Wno-write-strings")
+                cFlags("-fvectorize -fslp-vectorize -fno-semantic-interposition -fno-math-errno -fno-trapping-math")
                 arguments("-DENABLE_LTO_RELEASE=OFF", "-DENABLE_LTO=OFF", "-DANDROID_ARM_NEON=TRUE")
             }
         }
@@ -108,6 +108,8 @@ android {
             signingConfig = signingConfigs.findByName("release")?.takeIf { it.storeFile != null } ?: signingConfigs.getByName("debug")
             externalNativeBuild {
                 cmake {
+                    cppFlags("-O3 -fomit-frame-pointer -funroll-loops")
+                    cFlags("-O3 -fomit-frame-pointer -funroll-loops")
                     arguments("-DMELONDS_ANDROID_DEBUG_BUILD=0")
                 }
             }
@@ -163,7 +165,7 @@ android {
     sourceSets {
         // Adds exported schema location as test app assets.
         getByName("androidTest").assets.directories += "$projectDir/schemas"
-        getByName("main").jniLibs.srcDir("$buildDir/generated/librashader/jniLibs")
+        getByName("main").jniLibs.srcDir(layout.buildDirectory.dir("generated/librashader/jniLibs"))
     }
     packaging {
         jniLibs {
@@ -207,10 +209,18 @@ val vulkanShaderSources = listOf(
     rootProject.file("melonDS-android-lib/src/GPU3D_Vulkan_GraphicsEdgeShader.frag"),
     rootProject.file("melonDS-android-lib/src/GPU3D_Vulkan_GraphicsEdgeFogShader.frag"),
     rootProject.file("melonDS-android-lib/src/GPU3D_Vulkan_GraphicsFogShader.frag"),
+    rootProject.file("melonDS-android-lib/src/compatibility/GPU3D_Vulkan_TriRasterBaseShader.comp"),
+    rootProject.file("melonDS-android-lib/src/compatibility/GPU3D_Vulkan_CaptureLineExportShader.comp"),
+    rootProject.file("melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsRasterShader.frag"),
+    rootProject.file("melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsNoColorShader.frag"),
+    rootProject.file("melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsEdgeShader.frag"),
+    rootProject.file("melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsEdgeFogShader.frag"),
+    rootProject.file("melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsFogShader.frag"),
     rootProject.file("app/src/main/cpp/renderer/VulkanCompositorShader.comp"),
     rootProject.file("app/src/main/cpp/renderer/VulkanCompositorCompatibilityShader.comp"),
     rootProject.file("app/src/main/cpp/renderer/VulkanAccumulate3dShader.comp"),
     rootProject.file("app/src/main/cpp/renderer/VulkanAccumulate3dCompatibilityShader.comp"),
+    rootProject.file("app/src/main/cpp/renderer/VulkanAccumulate3dScale8Shader.comp"),
     rootProject.file("app/src/main/cpp/renderer/VulkanSurfacePresenter.vert"),
     rootProject.file("app/src/main/cpp/renderer/VulkanSurfacePresenter.frag"),
     rootProject.file("app/src/main/cpp/renderer/VulkanSurfacePresenterCompatibility.frag"),
@@ -236,16 +246,33 @@ val vulkanShaderHeaders = listOf(
     rootProject.file("melonDS-android-lib/src/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulatePlainShaderFragmentData.h"),
     rootProject.file("melonDS-android-lib/src/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulateOpaqueAlphaToonShaderFragmentData.h"),
     rootProject.file("melonDS-android-lib/src/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulateOpaqueAlphaPlainShaderFragmentData.h"),
+    rootProject.file("melonDS-android-lib/src/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulateOpaqueAlphaPlainNoAttrShaderFragmentData.h"),
+    rootProject.file("melonDS-android-lib/src/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulateOpaqueAlphaPlainColorOnlyShaderFragmentData.h"),
     rootProject.file("melonDS-android-lib/src/GPU3D_Vulkan_GraphicsNoColorShaderData.h"),
     rootProject.file("melonDS-android-lib/src/GPU3D_Vulkan_GraphicsClearShaderData.h"),
     rootProject.file("melonDS-android-lib/src/GPU3D_Vulkan_GraphicsFinalShaderVertexData.h"),
     rootProject.file("melonDS-android-lib/src/GPU3D_Vulkan_GraphicsEdgeShaderData.h"),
     rootProject.file("melonDS-android-lib/src/GPU3D_Vulkan_GraphicsEdgeFogShaderData.h"),
     rootProject.file("melonDS-android-lib/src/GPU3D_Vulkan_GraphicsFogShaderData.h"),
+    rootProject.file("melonDS-android-lib/src/compatibility/GPU3D_Vulkan_TriRasterBaseShaderData.h"),
+    rootProject.file("melonDS-android-lib/src/compatibility/GPU3D_Vulkan_CaptureLineExportShaderData.h"),
+    rootProject.file("melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsRasterShaderFragmentData.h"),
+    rootProject.file("melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsRasterNoFragDepthShaderFragmentData.h"),
+    rootProject.file("melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectShaderFragmentData.h"),
+    rootProject.file("melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulateShaderFragmentData.h"),
+    rootProject.file("melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulateToonShaderFragmentData.h"),
+    rootProject.file("melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulatePlainShaderFragmentData.h"),
+    rootProject.file("melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulateOpaqueAlphaToonShaderFragmentData.h"),
+    rootProject.file("melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulateOpaqueAlphaPlainShaderFragmentData.h"),
+    rootProject.file("melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsNoColorShaderData.h"),
+    rootProject.file("melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsEdgeShaderData.h"),
+    rootProject.file("melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsEdgeFogShaderData.h"),
+    rootProject.file("melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsFogShaderData.h"),
     rootProject.file("app/src/main/cpp/renderer/VulkanCompositorShaderData.h"),
     rootProject.file("app/src/main/cpp/renderer/VulkanCompositorCompatibilityShaderData.h"),
     rootProject.file("app/src/main/cpp/renderer/VulkanAccumulate3dShaderData.h"),
     rootProject.file("app/src/main/cpp/renderer/VulkanAccumulate3dCompatibilityShaderData.h"),
+    rootProject.file("app/src/main/cpp/renderer/VulkanAccumulate3dScale8ShaderData.h"),
     rootProject.file("app/src/main/cpp/renderer/VulkanSurfacePresenterVertexShaderData.h"),
     rootProject.file("app/src/main/cpp/renderer/VulkanSurfacePresenterFragmentShaderData.h"),
     rootProject.file("app/src/main/cpp/renderer/VulkanSurfacePresenterCompatibilityFragmentShaderData.h"),
@@ -707,4 +734,22 @@ tasks.register("renameReleaseApk") {
 
 tasks.matching { it.name == "assembleGitHubProdRelease" }.configureEach {
     finalizedBy("renameReleaseApk")
+}
+
+tasks.register("renamePlayStoreReleaseApk") {
+    doLast {
+        val releaseDir = layout.buildDirectory.dir("outputs/apk/playStoreProd/release").get().asFile
+        val defaultApk = File(releaseDir, "app-playStore-prod-release.apk")
+        val targetApk = File(releaseDir, "STORM_DS_${AppConfig.versionName}_LEGACY.apk")
+        val filesDir = rootDir.resolve("Files").apply { mkdirs() }
+        val persistentApk = File(filesDir, "STORM_DS_${AppConfig.versionName}_LEGACY.apk")
+        if (defaultApk.exists()) {
+            defaultApk.copyTo(targetApk, overwrite = true)
+            defaultApk.copyTo(persistentApk, overwrite = true)
+        }
+    }
+}
+
+tasks.matching { it.name == "assemblePlayStoreProdRelease" }.configureEach {
+    finalizedBy("renamePlayStoreReleaseApk")
 }

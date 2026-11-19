@@ -30,13 +30,7 @@ class CheatsActivity : AppCompatActivity() {
     private val viewModel: CheatsViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        me.magnum.melonds.ui.theme.AppThemeManager.init(this)
-        setTheme(me.magnum.melonds.ui.theme.AppThemeManager.currentTheme.getThemeResId())
-        if (!me.magnum.melonds.ui.theme.AppThemeManager.isDarkTheme(this)) {
-            enableEdgeToEdge(statusBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT))
-        } else {
-            enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT))
-        }
+        me.magnum.melonds.ui.theme.AppThemeManager.applyEdgeToEdgeTheme(this)
         super.onCreate(savedInstanceState)
 
         val romInfo = intent.parcelable<RomInfoParcelable>(KEY_ROM_INFO)

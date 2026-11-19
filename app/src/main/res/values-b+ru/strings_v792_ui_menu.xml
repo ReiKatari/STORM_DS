@@ -81,6 +81,6 @@
     <string name="v800_update_download">Скачать обновление</string>
     <string name="v800_update_later">Позже</string>
     <string name="v800_update_up_to_date_title">Установлена актуальная версия</string>
-    <string name="v800_update_up_to_date_msg">STORM DS %s — самая свежая версия.</string>
+    <string name="v800_update_up_to_date_msg">STORM DS %s - самая свежая версия.</string>
     <string name="v800_update_error">Не удалось проверить обновления. Проверьте подключение к сети.</string>
 </resources>

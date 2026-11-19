@@ -240,6 +240,7 @@ fun VulkanDriverManagerScreen(
                     driverMode = state.driverMode,
                     selectedDriverId = state.selectedDriverId,
                     installedDrivers = state.installedDrivers,
+                    installedDriverSizes = state.installedDriverSizes,
                     onSelectSystem = { viewModel.setSystemDriver() },
                     onSelectCustom = { viewModel.selectDriver(it) },
                     onDeleteCustom = { viewModel.deleteDriver(it) },
@@ -640,6 +641,7 @@ fun InstalledDriversList(
     driverMode: VulkanDriverMode,
     selectedDriverId: String?,
     installedDrivers: List<VulkanDriverInfo>,
+    installedDriverSizes: Map<String, String>,
     onSelectSystem: () -> Unit,
     onSelectCustom: (String) -> Unit,
     onDeleteCustom: (String) -> Unit,
@@ -732,7 +734,7 @@ fun InstalledDriversList(
                             fontSize = 14.sp,
                             color = MaterialTheme.colors.onSurface
                         )
-                        val sizeStr = getInstalledDriverSize(driver)
+                        val sizeStr = installedDriverSizes[driver.id]
                         val details = if (sizeStr != null) {
                             "Файл: ${driver.driverName} • Размер: $sizeStr"
                         } else {

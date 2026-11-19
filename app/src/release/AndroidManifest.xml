@@ -8,7 +8,7 @@
         <receiver
             android:name=".debug.ReleaseStateCommandReceiver"
             android:enabled="true"
-            android:exported="true">
+            android:exported="false">
             <intent-filter>
                 <action android:name="${applicationId}.SET_RENDERER" />
                 <action android:name="${applicationId}.SET_RENDERER_DEBUG_TOOLS" />

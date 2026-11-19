@@ -1,7 +1,6 @@
 package me.magnum.rcheevosapi
 
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.InternalSerializationApi
@@ -376,7 +375,7 @@ class RAApi(
         val request = buildGetRequest(parameters)
         val requestAuthentication = getRequestAuthentication(parameters)
         suspendRunCatching {
-            executeRequest(request, requestAuthentication, clearTokenOnUnauthorized)
+            executeAuthorizedRequest(request, requestAuthentication, clearTokenOnUnauthorized)
         }.suspendMapCatching { response ->
             response.use {
                 parseResponse(responseClass, response, errorHandler)
@@ -400,11 +399,26 @@ class RAApi(
         val request = buildPostRequest(parameters)
         val requestAuthentication = getRequestAuthentication(parameters)
         suspendRunCatching {
-            executeRequest(request, requestAuthentication)
+            executeAuthorizedRequest(request, requestAuthentication)
         }.suspendMapCatching { response ->
             response.use {
                 parseResponse(responseClass, response, errorHandler)
             }
+        }
+    }
+
+    private suspend fun executeAuthorizedRequest(
+        request: Request,
+        requestAuthentication: RAUserAuth.Authenticated?,
+        clearTokenOnUnauthorized: Boolean = true,
+    ): Response {
+        return try {
+            executeRequest(request, clearTokenOnUnauthorized)
+        } catch (e: UserTokenExpiredException) {
+            requestAuthentication?.let {
+                userAuthStore.clearUserTokenIfMatches(it.username, it.token)
+            }
+            throw e
         }
     }
 
@@ -467,7 +481,6 @@ class RAApi(
 
     private suspend fun executeRequest(
         request: Request,
-        requestAuthentication: RAUserAuth.Authenticated?,
         clearTokenOnUnauthorized: Boolean = true,
     ): Response = suspendCancellableCoroutine { continuation ->
         val call = okHttpClient.newCall(request)
@@ -479,11 +492,6 @@ class RAApi(
             override fun onResponse(call: Call, response: Response) {
                 if (response.code == 401 && clearTokenOnUnauthorized) {
                     response.close()
-                    runBlocking {
-                        requestAuthentication?.let {
-                            userAuthStore.clearUserTokenIfMatches(it.username, it.token)
-                        }
-                    }
                     continuation.resumeWithException(UserTokenExpiredException())
                 } else {
                     continuation.resume(response)
@@ -502,7 +510,7 @@ class RAApi(
         }
 
         return try {
-            Json.parseToJsonElement(body).jsonObject
+            this.json.parseToJsonElement(body).jsonObject
         } catch (exception: SerializationException) {
             throw UnsuccessfulRequestException(
                 "RA response is not valid JSON; body_bytes=${body.toByteArray().size}",

@@ -19,8 +19,7 @@ class LayoutListActivity : AppCompatActivity() {
     private val viewModel: LayoutsViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        setTheme(me.magnum.melonds.ui.theme.AppThemeManager.currentTheme.getThemeResId())
-        enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT))
+        me.magnum.melonds.ui.theme.AppThemeManager.applyEdgeToEdgeTheme(this)
         super.onCreate(savedInstanceState)
         window.applyImmersiveFullscreen()
 

@@ -419,7 +419,6 @@ TexcacheVulkanLoader::TextureHandle TexcacheVulkanLoader::GenerateTexture(u32 wi
     }
 
     if (vkWaitForFences(State->Device, 1, &State->UploadFence, VK_TRUE, kFenceWaitTimeoutNs) != VK_SUCCESS
-        || vkResetFences(State->Device, 1, &State->UploadFence) != VK_SUCCESS
         || vkResetCommandBuffer(State->CommandBuffer, 0) != VK_SUCCESS)
     {
         Platform::Log(Platform::LogLevel::Error, "TexcacheVulkan: failed to prepare upload sync objects");
@@ -467,6 +466,12 @@ TexcacheVulkanLoader::TextureHandle TexcacheVulkanLoader::GenerateTexture(u32 wi
     );
 
     if (vkEndCommandBuffer(State->CommandBuffer) != VK_SUCCESS)
+    {
+        DestroyTextureArray(textureArray);
+        return 0;
+    }
+
+    if (vkResetFences(State->Device, 1, &State->UploadFence) != VK_SUCCESS)
     {
         DestroyTextureArray(textureArray);
         return 0;
@@ -646,8 +651,7 @@ void TexcacheVulkanLoader::UploadTexture(TextureHandle handle, u32 width, u32 he
     std::memcpy(mappedMemory, data, requiredStagingSize);
     vkUnmapMemory(State->Device, uploadSlot->StagingMemory);
 
-    if (vkResetFences(State->Device, 1, &uploadSlot->Fence) != VK_SUCCESS
-        || vkResetCommandBuffer(uploadSlot->CommandBuffer, 0) != VK_SUCCESS)
+    if (vkResetCommandBuffer(uploadSlot->CommandBuffer, 0) != VK_SUCCESS)
     {
         return;
     }
@@ -736,6 +740,9 @@ void TexcacheVulkanLoader::UploadTexture(TextureHandle handle, u32 width, u32 he
     );
 
     if (vkEndCommandBuffer(uploadSlot->CommandBuffer) != VK_SUCCESS)
+        return;
+
+    if (vkResetFences(State->Device, 1, &uploadSlot->Fence) != VK_SUCCESS)
         return;
 
     VkSubmitInfo submitInfo{};

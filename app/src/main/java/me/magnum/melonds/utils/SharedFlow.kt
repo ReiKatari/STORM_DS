@@ -13,4 +13,4 @@ fun <T> SubjectSharedFlow() = MutableSharedFlow<T>(replay = 1, onBufferOverflow 
  * Creates a [MutableSharedFlow] that doesn't hold any value. Suitable to create flows used to fire events.
  */
 @Suppress("FunctionName")
-fun <T> EventSharedFlow() = MutableSharedFlow<T>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+fun <T> EventSharedFlow() = MutableSharedFlow<T>(extraBufferCapacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST)

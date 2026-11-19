@@ -18,6 +18,7 @@ import java.net.URLEncoder
 import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Studio-Grade Microsoft Edge Neural & Multilingual HD 24kHz TTS Engine.
@@ -41,7 +42,7 @@ object EdgeNeuralTtsClient {
         override fun sizeOf(key: String, value: ByteArray): Int = value.size
     }
 
-    private val client = OkHttpClient.Builder()
+    private val client = me.magnum.melonds.common.network.SharedOkHttpClient.instance.newBuilder()
         .connectTimeout(5, TimeUnit.SECONDS)
         .readTimeout(8, TimeUnit.SECONDS)
         .writeTimeout(8, TimeUnit.SECONDS)
@@ -184,6 +185,7 @@ object EdgeNeuralTtsClient {
         targetLangHint: String
     ): ByteArray? {
         var webSocketRef: WebSocket? = null
+        val turnCompleted = AtomicBoolean(false)
         return try {
             withTimeoutOrNull(6500) {
                 val deferred = CompletableDeferred<ByteArray?>()
@@ -253,23 +255,32 @@ object EdgeNeuralTtsClient {
 
                     override fun onMessage(webSocket: WebSocket, text: String) {
                         if (text.contains("Path:turn.end")) {
+                            turnCompleted.set(true)
                             val result = audioBuffer.toByteArray()
                             deferred.complete(if (result.isNotEmpty()) result else null)
                         }
                     }
 
                     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                        val result = audioBuffer.toByteArray()
-                        deferred.complete(if (result.isNotEmpty()) result else null)
+                        if (turnCompleted.get()) {
+                            val result = audioBuffer.toByteArray()
+                            deferred.complete(if (result.isNotEmpty()) result else null)
+                        } else {
+                            deferred.complete(null)
+                        }
                     }
 
                     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                        val result = audioBuffer.toByteArray()
-                        deferred.complete(if (result.isNotEmpty()) result else null)
+                        if (turnCompleted.get()) {
+                            val result = audioBuffer.toByteArray()
+                            deferred.complete(if (result.isNotEmpty()) result else null)
+                        } else {
+                            deferred.complete(null)
+                        }
                     }
                 }
 
-                client.newWebSocket(request, listener)
+                webSocketRef = client.newWebSocket(request, listener)
                 deferred.await()
             }
         } catch (e: Throwable) {
@@ -316,11 +327,13 @@ object EdgeNeuralTtsClient {
                 .post(body)
                 .build()
 
-            val response = client.newCall(request).execute()
-            if (response.isSuccessful && response.body != null) {
-                response.body!!.bytes()
-            } else {
-                null
+            client.newCall(request).execute().use { response ->
+                val respBody = response.body
+                if (response.isSuccessful && respBody != null) {
+                    respBody.bytes()
+                } else {
+                    null
+                }
             }
         } catch (_: Throwable) {
             null
@@ -350,9 +363,11 @@ object EdgeNeuralTtsClient {
                     .url(url)
                     .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile; rv:130.0) Gecko/130.0 Firefox/130.0")
                     .build()
-                val response = client.newCall(request).execute()
-                if (response.isSuccessful && response.body != null) {
-                    return response.body!!.bytes()
+                client.newCall(request).execute().use { response ->
+                    val respBody = response.body
+                    if (response.isSuccessful && respBody != null) {
+                        return respBody.bytes()
+                    }
                 }
             } else {
                 val chunks = clean.chunked(150)
@@ -364,9 +379,11 @@ object EdgeNeuralTtsClient {
                         .url(url)
                         .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile; rv:130.0) Gecko/130.0 Firefox/130.0")
                         .build()
-                    val response = client.newCall(request).execute()
-                    if (response.isSuccessful && response.body != null) {
-                        out.write(response.body!!.bytes())
+                    client.newCall(request).execute().use { response ->
+                        val respBody = response.body
+                        if (response.isSuccessful && respBody != null) {
+                            out.write(respBody.bytes())
+                        }
                     }
                 }
                 if (out.size() > 0) return out.toByteArray()

@@ -23,7 +23,7 @@
                 app:iconSpaceReserved="false"
                 android:entries="@array/theme_accent_color_options"
                 android:entryValues="@array/theme_accent_color_values"
-                android:defaultValue="electric_cyan" />
+                android:defaultValue="theme_default" />
 
         <ListPreference
                 android:key="rom_card_style"

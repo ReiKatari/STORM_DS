@@ -97,7 +97,8 @@ class UsrCheatDatParser : CheatDatabaseParser {
                 // headerCount (count = raw & 0x0FFFFFFF)
                 val rawHeaderCount = readInt32LE(bytes, cursor)
                 cursor += 4
-                val itemCount = rawHeaderCount and 0x0FFFFFFF
+                val maxItemsRemaining = ((bytes.size - cursor).coerceAtLeast(0)) / 4
+                val itemCount = (rawHeaderCount and 0x0FFFFFFF).coerceIn(0, maxItemsRemaining)
 
                 val folders = mutableListOf<CheatFolder>()
                 val rootCheats = mutableListOf<Cheat>()
@@ -115,7 +116,8 @@ class UsrCheatDatParser : CheatDatabaseParser {
                     val isFolder = (itemHeader and 0x10000000) != 0
                     if (isFolder) {
                         // Folder: subCount = itemHeader & 0x00FFFFFF
-                        val subCount = itemHeader and 0x00FFFFFF
+                        val maxSubRemaining = ((bytes.size - cursor).coerceAtLeast(0)) / 4
+                        val subCount = (itemHeader and 0x00FFFFFF).coerceIn(0, maxSubRemaining)
                         val (folderName, c1) = readNullTerminatedString(bytes, cursor, dbCharset)
                         cursor = c1
                         val (_, c2) = readNullTerminatedString(bytes, cursor, dbCharset)
@@ -132,6 +134,9 @@ class UsrCheatDatParser : CheatDatabaseParser {
                             if (cursor + 4 > bytes.size) break
                             val codeWordsCount = readInt32LE(bytes, cursor)
                             cursor += 4
+                            if (codeWordsCount < 0 || cursor.toLong() + codeWordsCount.toLong() * 4L > bytes.size.toLong()) {
+                                break
+                            }
 
                             val codeStr = parseActionReplayWords(bytes, cursor, codeWordsCount)
                             cursor += codeWordsCount * 4
@@ -162,6 +167,9 @@ class UsrCheatDatParser : CheatDatabaseParser {
                         if (cursor + 4 > bytes.size) break
                         val codeWordsCount = readInt32LE(bytes, cursor)
                         cursor += 4
+                        if (codeWordsCount < 0 || cursor.toLong() + codeWordsCount.toLong() * 4L > bytes.size.toLong()) {
+                            break
+                        }
 
                         val codeStr = parseActionReplayWords(bytes, cursor, codeWordsCount)
                         cursor += codeWordsCount * 4

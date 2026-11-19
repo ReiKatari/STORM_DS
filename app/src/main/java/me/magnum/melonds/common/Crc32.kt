@@ -75,12 +75,10 @@ object Crc32 {
 
     fun compute(bytes: ByteArray): UInt {
         var crc32: UInt = 0.toUInt().inv()
-        var length = 0
         var remaining = bytes.size
         var index = 0
 
         while (remaining-- > 0) {
-            length += remaining
             val byte = bytes[index]
             crc32 = updateCrc32(crc32, byte)
             index++

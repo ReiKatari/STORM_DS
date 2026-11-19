@@ -502,13 +502,13 @@
     <string name="conservative_coverage_enabled">保守的カバレッジ修正 (実験的)</string>
     <string name="conservative_coverage_enabled_summary">画面空間でポリゴンのカバレッジを拡張し、ポリゴン間の1〜2pxの隙間を軽減します（ポケモンの黒線修正）。わずかなオーバードローが発生する場合があります。</string>
     <string name="conservative_coverage_px">カバレッジ拡張量</string>
-    <string name="conservative_coverage_px_summary">内部解像度ピクセルでの拡張量（0–200 = 0.00–2.00px）。</string>
+    <string name="conservative_coverage_px_summary">内部解像度ピクセルでの拡張量（0-200 = 0.00-2.00px）。</string>
     <string name="conservative_coverage_apply_repeat">リピートテクスチャに適用</string>
     <string name="conservative_coverage_apply_repeat_summary">REPEATテクスチャ（ラップ）にカバレッジ修正を適用します。タイリングを使用する床や水面に推奨されます。</string>
     <string name="conservative_coverage_apply_clamp">クランプテクスチャに適用</string>
     <string name="conservative_coverage_apply_clamp_summary">CLAMPテクスチャにもカバレッジ修正を適用します。より強力ですが、スプライトやビルボードに影響を与える場合があります。</string>
     <string name="conservative_coverage_depth_bias">深度バイアス</string>
-    <string name="conservative_coverage_depth_bias_summary">拡張ポリゴンに適用する深度バイアス（0–2000 = 0.000000–0.002000）。Zファイティングやチラつきが発生する場合のみ使用してください。</string>
+    <string name="conservative_coverage_depth_bias_summary">拡張ポリゴンに適用する深度バイアス（0-2000 = 0.000000-0.002000）。Zファイティングやチラつきが発生する場合のみ使用してください。</string>
     <string name="debug_3d_clear_magenta">デバッグ: 3Dをマゼンタでクリア</string>
     <string name="debug_3d_clear_magenta_summary">隙間がマゼンタ色になった場合、それらはカバレッジの隙間です。デバッグ専用。</string>
     <string name="category_video">画面</string>
@@ -763,7 +763,7 @@
     <string name="dual_screen_vertical_alignment_option_bottom">下寄せ</string>
     <string name="dual_screen_vertical_alignment_summary">内蔵: %1$s • 外部: %2$s</string>
     <string name="dual_screen_vertical_alignment_preset_value">プリセット (%1$s)</string>
-    <string name="dual_screen_vertical_alignment_default_hint">プリセットデフォルト — 内蔵: %1$s • 外部: %2$s</string>
+    <string name="dual_screen_vertical_alignment_default_hint">プリセットデフォルト - 内蔵: %1$s • 外部: %2$s</string>
     <string name="presets">デュアルスクリーンプリセット</string>
     <string name="layout_editing_disabled_by_presets">デュアルスクリーンプリセットが有効な間はレイアウトを編集できません。</string>
     <string name="above_other_screen">他の画面の上に配置</string>
@@ -1031,13 +1031,13 @@
     <string name="about_credits_jpeacekeeper_title">JPeacekeeper (4PDA)</string>
     <string name="about_credits_jpeacekeeper_summary">貴重なテスト貢献、詳細なDSiバグ報告、フレームレート標準化、継続的なプロジェクト改善に感謝します</string>
     <string name="about_credits_watermelonds_title">WatermelonDS (Android移植版)</string>
-    <string name="about_credits_watermelonds_summary">SapphireRhodonite、rafaelvcaetanoおよびコントリビューター — Android移植、VulkanレンダリングFastpath、librashader統合、最新UIとタッチ操作</string>
+    <string name="about_credits_watermelonds_summary">SapphireRhodonite、rafaelvcaetanoおよびコントリビューター - Android移植、VulkanレンダリングFastpath、librashader統合、最新UIとタッチ操作</string>
     <string name="about_credits_melonds_title">melonDS (オリジナルコア)</string>
-    <string name="about_credits_melonds_summary">StapleButter、Nadia、RSDuck、genericretrogeek、ArisoturaおよびmelonDSチーム — オリジナルの高精度Nintendo DS / DSiコアエミュレータ</string>
+    <string name="about_credits_melonds_summary">StapleButter、Nadia、RSDuck、genericretrogeek、ArisoturaおよびmelonDSチーム - オリジナルの高精度Nintendo DS / DSiコアエミュレータ</string>
     <string name="about_credits_melonds_ds_title">melonDS DS (RetroArchコア)</string>
-    <string name="about_credits_melonds_ds_summary">JesseTGおよびLibretroチーム — DSiWare自動ロード機構、TLNCウォームブート構造、Libretroコアの革新</string>
+    <string name="about_credits_melonds_ds_summary">JesseTGおよびLibretroチーム - DSiWare自動ロード機構、TLNCウォームブート構造、Libretroコアの革新</string>
     <string name="about_credits_drastic_title">DraSticとfastDSの着想</string>
-    <string name="about_credits_drastic_summary">ExophaseおよびDraStic / fastDS開発者 — 画面プリセットの着想、クイックディスプレイレイアウト、エルゴノミクスタッチコンセプト</string>
+    <string name="about_credits_drastic_summary">ExophaseおよびDraStic / fastDS開発者 - 画面プリセットの着想、クイックディスプレイレイアウト、エルゴノミクスタッチコンセプト</string>
     <string name="about_credits_libraries_title">オープンソースライブラリとツール</string>
     <string name="about_credits_libraries_summary">Google Oboe (AAudio/OpenSL ES)、librashader (RetroArch Slangシェーダー)、RetroAchievements (rcheevos)、libslirp (Wi-Fi)、libadrenotools (Adreno/Turnipドライバー)</string>
     <string name="about_github_title">STORM DS リポジトリ</string>
@@ -1188,6 +1188,7 @@
     <string name="dual_screen_info_desc">端末画面と外部モニター/テレビ (USB-C、HDMI、ワイヤレスキャスト) の間でNintendo DSの上下画面を振り分けて表示できます。\n\n• 📱 DSアスペクト比を維持: 画像を引き伸ばさずに本来の4:3比率を維持します。\n• 🔲 整数スケーリング: ぼやけのないクッキリとしたピクセル表示のため、整数倍 (1x, 2x, 3x) で拡大します。\n• 📏 充填領域と配置: 垂直配置や画面カバー範囲をカスタマイズできます。</string>
     <string name="theme_accent_color_title">アクセントカラー</string>
     <string name="theme_accent_color_summary">STORM NIGHTテーマ用のネオンアクセントカラーを選択</string>
+    <string name="accent_theme_default">テーマのデフォルト</string>
     <string name="accent_electric_cyan">💎 エレクトリックシアン</string>
     <string name="accent_matrix_emerald">🌿 マトリックスエメラルド</string>
     <string name="accent_amber_gold">⚡ サイバーゴールド</string>

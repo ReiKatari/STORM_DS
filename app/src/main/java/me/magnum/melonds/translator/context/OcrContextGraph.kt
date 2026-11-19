@@ -3,6 +3,7 @@ package me.magnum.melonds.translator.context
 import android.content.Context
 import android.os.Environment
 import android.util.Log
+import me.magnum.melonds.translator.grammar.Gender
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -32,10 +33,6 @@ object OcrContextGraph {
         val customTimbreMultiplier: Float? = null,
         val customEqPreset: Int? = null
     )
-
-    enum class Gender {
-        MALE, FEMALE, NEUTRAL
-    }
 
     /**
      * Studio Acoustic EQ & Resonance Presets applied to MediaPlayer's audio session.
@@ -98,6 +95,7 @@ object OcrContextGraph {
 
     private val entities = mutableMapOf<String, CharacterEntity>()
     private val glossary = mutableMapOf<String, String>()
+    private val compiledGlossary = mutableListOf<Pair<Regex, String>>()
 
     // Persistent & in-memory speaker voice profiles (keyed by normalized speaker name)
     private val speakerProfileCache = mutableMapOf<String, SpeakerVoiceProfile>()
@@ -108,29 +106,24 @@ object OcrContextGraph {
     private var lastActiveProfile: SpeakerVoiceProfile? = null
     private var previousSpeakerWasMale = true
     var activeSpeakerName: String = ""
-    var activeSpeakerGender: me.magnum.melonds.translator.grammar.Gender = me.magnum.melonds.translator.grammar.Gender.NEUTRAL
+    var activeSpeakerGender: Gender = Gender.NEUTRAL
 
-    fun setExplicitActiveSpeaker(name: String, gender: me.magnum.melonds.translator.grammar.Gender) {
+    fun setExplicitActiveSpeaker(name: String, gender: Gender) {
         activeSpeakerName = name
         activeSpeakerGender = gender
-        val ocrGender = when (gender) {
-            me.magnum.melonds.translator.grammar.Gender.MALE -> Gender.MALE
-            me.magnum.melonds.translator.grammar.Gender.FEMALE -> Gender.FEMALE
-            me.magnum.melonds.translator.grammar.Gender.NEUTRAL -> Gender.NEUTRAL
-        }
         val existing = entities[name.trim().lowercase()]
             ?: entities.values.firstOrNull { e ->
                 e.name.equals(name, ignoreCase = true) || e.aliases.any { it.equals(name, ignoreCase = true) }
             }
         if (existing != null) {
-            lastActiveSpeaker = existing.copy(gender = ocrGender)
+            lastActiveSpeaker = existing.copy(gender = gender)
         } else if (name.isNotBlank()) {
             val entity = CharacterEntity(
                 name = name,
                 aliases = listOf(name),
-                gender = ocrGender,
+                gender = gender,
                 role = "character",
-                defaultPersona = if (ocrGender == Gender.FEMALE) "HEROINE" else "HERO"
+                defaultPersona = if (gender == Gender.FEMALE) "HEROINE" else "HERO"
             )
             lastActiveSpeaker = entity
         }
@@ -365,25 +358,30 @@ object OcrContextGraph {
         registerEntity("LingShan", listOf("Линг", "Линг Шань", "Ling", "Ling Shan"), Gender.FEMALE, "Enforcer", "PROTAGONIST_FEMALE", 1, 2, 6, 0.99f, TimbreEqPreset.STUDIO_CONDENSER)
     }
 
+    private fun addGlossaryTerm(en: String, ru: String) {
+        glossary[en] = ru
+        compiledGlossary.add(Regex("(?i)\\b${Regex.escape(en)}\\b") to ru)
+    }
+
     private fun preloadUniversalGlossary() {
-        glossary["batarang"] = "бэтаранг"
-        glossary["batcave"] = "бэтпещера"
-        glossary["batmobile"] = "бэтмобиль"
-        glossary["pokeball"] = "покебол"
-        glossary["pokédex"] = "покедекс"
-        glossary["potion"] = "зелье"
-        glossary["badge"] = "значок"
-        glossary["gym leader"] = "лидер гима"
-        glossary["court record"] = "материалы дела"
-        glossary["attorney's badge"] = "значок адвоката"
-        glossary["cross-examination"] = "перекрёстный допрос"
-        glossary["evidence"] = "улика"
-        glossary["autopsy report"] = "отчёт о вскрытии"
-        glossary["objection"] = "протестую"
-        glossary["hold it"] = "постойте"
-        glossary["take that"] = "получайте"
-        glossary["picarats"] = "пикараты"
-        glossary["hint coin"] = "монета-подсказка"
+        addGlossaryTerm("batarang", "бэтаранг")
+        addGlossaryTerm("batcave", "бэтпещера")
+        addGlossaryTerm("batmobile", "бэтмобиль")
+        addGlossaryTerm("pokeball", "покебол")
+        addGlossaryTerm("pokédex", "покедекс")
+        addGlossaryTerm("potion", "зелье")
+        addGlossaryTerm("badge", "значок")
+        addGlossaryTerm("gym leader", "лидер гима")
+        addGlossaryTerm("court record", "материалы дела")
+        addGlossaryTerm("attorney's badge", "значок адвоката")
+        addGlossaryTerm("cross-examination", "перекрёстный допрос")
+        addGlossaryTerm("evidence", "улика")
+        addGlossaryTerm("autopsy report", "отчёт о вскрытии")
+        addGlossaryTerm("objection", "протестую")
+        addGlossaryTerm("hold it", "постойте")
+        addGlossaryTerm("take that", "получайте")
+        addGlossaryTerm("picarats", "пикараты")
+        addGlossaryTerm("hint coin", "монета-подсказка")
     }
 
     fun registerEntity(
@@ -856,7 +854,7 @@ object OcrContextGraph {
         val list = mutableListOf<String>()
         val spk = lastActiveSpeaker
         val speakerName = spk?.name?.ifBlank { null } ?: activeSpeakerName
-        val gender = if (activeSpeakerGender != me.magnum.melonds.translator.grammar.Gender.NEUTRAL) {
+        val gender = if (activeSpeakerGender != Gender.NEUTRAL) {
             activeSpeakerGender.name
         } else {
             spk?.gender?.name ?: "NEUTRAL"
@@ -887,8 +885,8 @@ object OcrContextGraph {
     fun sanitizeTranslation(translatedText: String, targetLang: String = "ru"): String {
         var result = translatedText
         if (targetLang.lowercase().startsWith("ru")) {
-            glossary.forEach { (en, ru) ->
-                result = result.replace(Regex("(?i)\\b${Regex.escape(en)}\\b"), ru)
+            for ((regex, ru) in compiledGlossary) {
+                result = result.replace(regex, ru)
             }
         }
         return result

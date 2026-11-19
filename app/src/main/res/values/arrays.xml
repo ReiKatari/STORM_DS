@@ -458,6 +458,7 @@
     </string-array>
 
     <string-array name="theme_accent_color_options">
+        <item>@string/accent_theme_default</item>
         <item>@string/accent_electric_cyan</item>
         <item>@string/accent_matrix_emerald</item>
         <item>@string/accent_amber_gold</item>
@@ -472,6 +473,7 @@
         <item>@string/accent_oled_white</item>
     </string-array>
     <string-array name="theme_accent_color_values">
+        <item>theme_default</item>
         <item>electric_cyan</item>
         <item>matrix_emerald</item>
         <item>amber_gold</item>

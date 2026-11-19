@@ -8,11 +8,11 @@
     <string name="frame_advance_resume_btn">Lanjutkan</string>
     <string name="slow_motion_title">Kecepatan gerakan lambat</string>
     <string name="slow_motion_subtitle">Pilih prasetel atau atur secara manual</string>
-    <string name="slow_motion_preset_025">0.25× — Seperempat kecepatan</string>
-    <string name="slow_motion_preset_050">0.50× — Setengah kecepatan</string>
-    <string name="slow_motion_preset_075">0.75× — Perlambatan halus</string>
-    <string name="slow_motion_preset_085">0.85× — Perlambatan ringan</string>
-    <string name="slow_motion_preset_100">1.00× — Kecepatan normal (mati)</string>
+    <string name="slow_motion_preset_025">0.25× - Seperempat kecepatan</string>
+    <string name="slow_motion_preset_050">0.50× - Setengah kecepatan</string>
+    <string name="slow_motion_preset_075">0.75× - Perlambatan halus</string>
+    <string name="slow_motion_preset_085">0.85× - Perlambatan ringan</string>
+    <string name="slow_motion_preset_100">1.00× - Kecepatan normal (mati)</string>
     <string name="slow_motion_custom_slider">Kecepatan khusus: %1$.2f×</string>
     <string name="slow_motion_turn_off">Nonaktifkan gerakan lambat</string>
     <string name="slow_motion_apply">Terapkan</string>

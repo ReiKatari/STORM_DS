@@ -17,6 +17,8 @@ import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.applyCanvas
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.drawable.IconCompat
+import androidx.core.graphics.drawable.toBitmap
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updateLayoutParams
@@ -43,8 +45,7 @@ class ShortcutSetupActivity : AppCompatActivity() {
     private val viewModel: RomListViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        setTheme(me.magnum.melonds.ui.theme.AppThemeManager.currentTheme.getThemeResId())
-        enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT))
+        me.magnum.melonds.ui.theme.AppThemeManager.applyEdgeToEdgeTheme(this)
         super.onCreate(savedInstanceState)
         val binding = ActivityShortcutSetupBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -93,8 +94,9 @@ class ShortcutSetupActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             val romIcon = viewModel.getRomIcon(rom)
+            val safeLabel = rom.name.ifBlank { rom.fileName.ifBlank { getString(R.string.app_name) } }
             val shortcutInfo = ShortcutInfoCompat.Builder(this@ShortcutSetupActivity, rom.uri.toString())
-                .setShortLabel(rom.name)
+                .setShortLabel(safeLabel)
                 .setIcon(IconCompat.createWithAdaptiveBitmap(buildShortcutBitmap(romIcon)))
                 .setIntent(intent)
                 .build()
@@ -107,7 +109,9 @@ class ShortcutSetupActivity : AppCompatActivity() {
     }
 
     private fun buildShortcutBitmap(romIcon: RomIcon): Bitmap {
-        val iconBitmap = romIcon.bitmap ?: BitmapFactory.decodeResource(resources, R.drawable.logo_splash)
+        val iconBitmap = romIcon.bitmap
+            ?: ContextCompat.getDrawable(this, R.drawable.logo_splash)?.toBitmap(102, 102)
+            ?: BitmapFactory.decodeResource(resources, R.drawable.logo_splash)
         val shortcutBitmap = createBitmap(256, 256)
 
         return shortcutBitmap.applyCanvas {

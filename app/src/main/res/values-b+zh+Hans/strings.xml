@@ -290,13 +290,13 @@
     <string name="conservative_coverage_enabled">保守覆盖修正（实验性）</string>
     <string name="conservative_coverage_enabled_summary">扩展屏幕空间中的多边形覆盖范围，以减少多边形之间 1px-2px 的裂缝。用于修复宝可梦黑线问题。可能会造成轻微过绘。</string>
     <string name="conservative_coverage_px">覆盖扩展</string>
-    <string name="conservative_coverage_px_summary">内部分辨率像素中的扩展量（0–200 = 0.00–2.00px）。</string>
+    <string name="conservative_coverage_px_summary">内部分辨率像素中的扩展量（0-200 = 0.00-2.00px）。</string>
     <string name="conservative_coverage_apply_repeat">应用于重复纹理</string>
     <string name="conservative_coverage_apply_repeat_summary">将覆盖修正应用于 REPEAT 纹理（环绕）。推荐用于使用平铺的地板/水面。</string>
     <string name="conservative_coverage_apply_clamp">应用于钳制纹理</string>
     <string name="conservative_coverage_apply_clamp_summary">同时将覆盖修正应用于 CLAMP 纹理。更激进，可能影响精灵/广告牌。</string>
     <string name="conservative_coverage_depth_bias">深度偏移</string>
-    <string name="conservative_coverage_depth_bias_summary">应用于扩展多边形的深度偏移（0–2000 = 0.000000–0.002000）。仅在看到 Z 冲突或闪烁时使用。</string>
+    <string name="conservative_coverage_depth_bias_summary">应用于扩展多边形的深度偏移（0-2000 = 0.000000-0.002000）。仅在看到 Z 冲突或闪烁时使用。</string>
     <string name="debug_3d_clear_magenta">调试：将 3D 清为洋红色</string>
     <string name="debug_3d_clear_magenta_summary">如果裂缝变成洋红色，说明它们是覆盖空隙。仅用于调试。</string>
     <string name="category_video">视频</string>
@@ -1191,13 +1191,13 @@
     <string name="about_credits_jpeacekeeper_title">JPeacekeeper (4PDA)</string>
     <string name="about_credits_jpeacekeeper_summary">宝贵的测试贡献、详尽的 DSi 错误报告、帧率标准化以及持续的项目改进建议</string>
     <string name="about_credits_watermelonds_title">WatermelonDS (Android Port)</string>
-    <string name="about_credits_watermelonds_summary">SapphireRhodonite, rafaelvcaetano 与 contributors — Android port, Vulkan rendering fastpaths, librashader integration, modern UI 和触控</string>
+    <string name="about_credits_watermelonds_summary">SapphireRhodonite, rafaelvcaetano 与 contributors - Android port, Vulkan rendering fastpaths, librashader integration, modern UI 和触控</string>
     <string name="about_credits_melonds_title">melonDS (Original Core)</string>
-    <string name="about_credits_melonds_summary">StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura 与 melonDS 团队 — original high-accuracy Nintendo DS / DSi core emulator</string>
+    <string name="about_credits_melonds_summary">StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura 与 melonDS 团队 - original high-accuracy Nintendo DS / DSi core emulator</string>
     <string name="about_credits_melonds_ds_title">melonDS DS (RetroArch Core)</string>
-    <string name="about_credits_melonds_ds_summary">JesseTG 与 Libretro 团队 — DSiWare autoloading mechanics, TLNC warmboot architecture, and Libretro core innovations</string>
+    <string name="about_credits_melonds_ds_summary">JesseTG 与 Libretro 团队 - DSiWare autoloading mechanics, TLNC warmboot architecture, and Libretro core innovations</string>
     <string name="about_credits_drastic_title">DraStic 与 fastDS Inspirations</string>
-    <string name="about_credits_drastic_summary">Exophase 与 DraStic / fastDS creators — screen preset inspirations, quick display layouts, and touch ergonomic concepts</string>
+    <string name="about_credits_drastic_summary">Exophase 与 DraStic / fastDS creators - screen preset inspirations, quick display layouts, and touch ergonomic concepts</string>
     <string name="about_credits_libraries_title">开源库与工具</string>
     <string name="about_credits_libraries_summary">Google Oboe（AAudio/OpenSL ES 音频）、librashader（RetroArch Slang 着色器）、RetroAchievements (rcheevos)、libslirp (Wi-Fi)、libadrenotools（Adreno/Turnip 驱动）</string>
     <string name="about_github_title">STORM DS Repository</string>
@@ -1327,6 +1327,7 @@
     <string name="dual_screen_info_desc">Allows distributing the top and bottom Nintendo DS screens between your device screen and an external monitor/TV (via USB-C, HDMI, or wireless cast).\n\n• 📱 Keep DS Aspect Ratio: maintains authentic 4:3 aspect ratio without image stretching.\n• 🔲 Integer Scale: scales pixels in exact integer multipliers (1x, 2x, 3x) for crisp pixel-perfect visuals without blur.\n• 📏 填充区域与对齐方式: customize vertical alignment and display coverage.</string>
     <string name="theme_accent_color_title">主题强调色</string>
     <string name="theme_accent_color_summary">为 STORM NIGHT 主题选择霓虹强调色</string>
+    <string name="accent_theme_default">主题默认</string>
     <string name="accent_electric_cyan">💎 电光青</string>
     <string name="accent_matrix_emerald">🌿 矩阵绿</string>
     <string name="accent_amber_gold">⚡ 赛博金</string>

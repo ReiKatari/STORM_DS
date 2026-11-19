@@ -17,6 +17,7 @@
 */
 
 #include <cstring>
+#include <vector>
 #include "ARDatabaseDAT.h"
 #include "Platform.h"
 
@@ -248,17 +249,8 @@ bool ARDatabaseDAT::LoadCheatCodes(EntryInfo& info, ARDatabaseEntry& entry)
             // this item is a code
 
             u32 codelen = 0;
-            FileRead(&codelen, 4, 1, f);
-
-            u32 chklen = itemname.length() + 1 + itemdesc.length() + 1;
-            chklen = ((chklen + 3) >> 2) + 1 + codelen;
-            if (chklen != totallen)
+            if (FileRead(&codelen, 4, 1, f) != 1)
             {
-                Log(LogLevel::Error, "AR: malformed code entry, codelen=%08X, totallen=%08X (expected %08X)\n",
-                    codelen, totallen, chklen);
-                Log(LogLevel::Error, "game=%s, offset=%08X, cheat=%s\n",
-                    entry.Name.c_str(), info.Offset, itemname.c_str());
-
                 CloseFile(f);
                 return false;
             }
@@ -267,6 +259,19 @@ bool ARDatabaseDAT::LoadCheatCodes(EntryInfo& info, ARDatabaseEntry& entry)
             {
                 Log(LogLevel::Error, "AR: unreasonable code length %08X\n",
                     codelen);
+                Log(LogLevel::Error, "game=%s, offset=%08X, cheat=%s\n",
+                    entry.Name.c_str(), info.Offset, itemname.c_str());
+
+                CloseFile(f);
+                return false;
+            }
+
+            u32 chklen = itemname.length() + 1 + itemdesc.length() + 1;
+            chklen = ((chklen + 3) >> 2) + 1 + codelen;
+            if (chklen != totallen)
+            {
+                Log(LogLevel::Error, "AR: malformed code entry, codelen=%08X, totallen=%08X (expected %08X)\n",
+                    codelen, totallen, chklen);
                 Log(LogLevel::Error, "game=%s, offset=%08X, cheat=%s\n",
                     entry.Name.c_str(), info.Offset, itemname.c_str());
 
@@ -284,16 +289,18 @@ bool ARDatabaseDAT::LoadCheatCodes(EntryInfo& info, ARDatabaseEntry& entry)
             code.Description = itemdesc;
             code.Enabled = !!(itemflags & (1<<24));
 
-            u32* rawcode = new u32[codelen];
-            FileRead(rawcode, codelen*4, 1, f);
+            std::vector<u32> rawcode(codelen);
+            if (codelen > 0 && FileRead(rawcode.data(), codelen * 4, 1, f) != 1)
+            {
+                CloseFile(f);
+                return false;
+            }
 
             for (u32 j = 0; j < codelen; j+=2)
             {
                 code.Code.push_back(rawcode[j]);
                 code.Code.push_back(rawcode[j+1]);
             }
-
-            delete[] rawcode;
 
             curcat->Children.emplace_back(code);
 

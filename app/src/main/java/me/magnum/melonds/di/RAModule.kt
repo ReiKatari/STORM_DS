@@ -31,9 +31,13 @@ object RAModule {
     }
 
     @Provides
+    @Singleton
     @Named("ra-api-client")
-    fun provideRAApiOkHttpClient(melonOkHttpInterceptor: MelonOkHttpInterceptor): OkHttpClient {
-        return OkHttpClient.Builder()
+    fun provideRAApiOkHttpClient(
+        baseOkHttpClient: OkHttpClient,
+        melonOkHttpInterceptor: MelonOkHttpInterceptor,
+    ): OkHttpClient {
+        return baseOkHttpClient.newBuilder()
             .addInterceptor(melonOkHttpInterceptor)
             .followRedirects(false)
             .followSslRedirects(false)

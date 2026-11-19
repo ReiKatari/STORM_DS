@@ -1338,7 +1338,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             return
         }
 
-        val date = DateFormat.getDateFormat(requireContext()).format(Date(manifest.installedAtMillis))
+        val date = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault()).format(Date(manifest.installedAtMillis))
         val size = Formatter.formatShortFileSize(requireContext(), shaderLibraryManager.installedSizeBytes())
         shaderManagePreference.setTitle(R.string.video_retroarch_shader_installed_title)
         shaderManagePreference.summary = getString(R.string.video_retroarch_shader_installed_summary, date, size)
@@ -1731,6 +1731,11 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         shaderInstallDetailText = null
     }
 
+    override fun onDestroyView() {
+        dismissShaderInstallProgressDialog()
+        super.onDestroyView()
+    }
+
     private fun showShaderInstallError(
         reason: RetroArchShaderLibraryManager.ShaderInstallException.Reason,
         requiredBytes: Long,
@@ -1848,6 +1853,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         )
 
         val composeView = androidx.compose.ui.platform.ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(androidx.compose.ui.platform.ViewCompositionStrategy.DisposeOnDetachedFromWindowOrReleasedFromPool)
             setContent {
                 me.magnum.melonds.ui.theme.MelonTheme {
                     var currentPreset by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(settingsRepository.getDualScreenPreset()) }

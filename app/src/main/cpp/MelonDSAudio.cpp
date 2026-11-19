@@ -6,8 +6,10 @@
 
 #define MIC_BUFFER_SIZE 2048
 
+std::mutex activeInstanceMutex;
 std::weak_ptr<MelonDSAndroid::MelonInstance> activeInstance;
 
+std::mutex audioStreamMutex;
 std::shared_ptr<oboe::AudioStream> audioStream;
 std::shared_ptr<OboeCallback> outputCallback;
 std::shared_ptr<oboe::StabilizedCallback> stabilizedOutputCallback;
@@ -68,7 +70,7 @@ namespace MelonDSAndroid
 
         stabilizedOutputCallback = std::make_shared<oboe::StabilizedCallback>(outputCallback.get());
 
-        outputCallback->activeInstance = activeInstance;
+        outputCallback->setActiveInstance(activeInstance);
 
         oboe::AudioStreamBuilder streamBuilder;
         streamBuilder.setChannelCount(2);
@@ -325,7 +327,7 @@ namespace MelonDSAndroid
     {
         activeInstance = instance;
         if (outputCallback)
-            outputCallback->activeInstance = activeInstance;
+            outputCallback->setActiveInstance(activeInstance);
     }
 
     void cleanupAudio()

@@ -22,6 +22,7 @@
     <string name="v790_ram_test_success">RAM written</string>
     <string name="v790_ram_test_fail">Write failed</string>
     <string name="v790_ram_cheat_created">Cheat created and copied to clipboard!</string>
+    <string name="v790_ram_value_required">Value required</string>
     <string name="v790_ram_enter_value">Enter value...</string>
     <string name="v790_ram_cheat_name">RAM 0x%1$08X</string>
     <string name="v790_ram_hex_input">HEX</string>

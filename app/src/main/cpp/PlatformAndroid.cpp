@@ -491,23 +491,30 @@ namespace Platform
             return true;
         }
 
-        if (!timeout_ms)
+        if (timeout_ms <= 0)
         {
             // No resources available. Can't acquire
             result = false;
         }
         else
         {
-            timespec timeout {
-                .tv_sec = 0,
-                .tv_nsec = timeout_ms * 1000000
-            };
+            timespec timeout{};
+            clock_gettime(CLOCK_REALTIME, &timeout);
+            const long addSec = timeout_ms / 1000;
+            const long addNs = static_cast<long>(timeout_ms % 1000) * 1000000L;
+            timeout.tv_sec += addSec;
+            timeout.tv_nsec += addNs;
+            if (timeout.tv_nsec >= 1000000000L)
+            {
+                timeout.tv_sec += 1;
+                timeout.tv_nsec -= 1000000000L;
+            }
 
             int waitResult = 0;
             while (semaphore->val == 0 && waitResult == 0)
                 waitResult = pthread_cond_timedwait(&semaphore->cond, &semaphore->mutex, &timeout);
 
-            if (waitResult == 0)
+            if (semaphore->val > 0)
             {
                 semaphore->val--;
                 result = true;
@@ -518,6 +525,7 @@ namespace Platform
             }
         }
 
+        pthread_mutex_unlock(&semaphore->mutex);
         return result;
     }
 

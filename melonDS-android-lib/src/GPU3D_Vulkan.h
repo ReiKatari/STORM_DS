@@ -19,6 +19,7 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -352,7 +353,7 @@ private:
         std::array<DescriptorSetCache, TextureDescriptorStorageCapacity> SingleTextureDescriptorCaches{};
         GraphicsDescriptorSetCache GraphicsDescriptorCache{};
         GraphicsRenderTarget GraphicsTarget{};
-        u32 PresentationRetainCount = 0;
+        std::atomic<u32> PresentationRetainCount{0};
         u32 SubmittedPolygonCount = 0;
         u32 SubmittedCaptureCnt = 0;
         u64 SubmitSequence = 0;

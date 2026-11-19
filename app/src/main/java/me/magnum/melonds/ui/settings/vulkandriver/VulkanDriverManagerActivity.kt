@@ -19,10 +19,9 @@ class VulkanDriverManagerActivity : AppCompatActivity() {
     private val viewModel by viewModels<VulkanDriverManagerViewModel>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        setTheme(AppThemeManager.currentTheme.getThemeResId())
+        AppThemeManager.applyEdgeToEdgeTheme(this)
         window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
         androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
-        enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT))
         super.onCreate(savedInstanceState)
 
         setContent {

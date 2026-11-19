@@ -324,9 +324,20 @@ private:
     std::unique_ptr<SaveManager> ndsSave;
     std::unique_ptr<SaveManager> gbaSave;
     std::unique_ptr<SaveManager> firmwareSave;
-    u32 inputMask;
+    std::atomic<u32> inputMask{0xFFF};
     std::atomic<float> slot2AnalogX = 0.0f;
     std::atomic<float> slot2AnalogY = 0.0f;
+    std::mutex inputStateMutex;
+    bool hasPendingKeyMask = false;
+    bool hasPendingLidClosed = false;
+    bool pendingLidClosed = false;
+    bool hasPendingTouch = false;
+    bool pendingTouchActive = false;
+    u16 pendingTouchX = 0;
+    u16 pendingTouchY = 0;
+    bool hasPendingCheats = false;
+    std::vector<melonDS::ARCode> pendingCheats;
+    void applyPendingThreadSafeUpdates();
 
     const VulkanSessionProfile vulkanSessionProfile;
     std::shared_ptr<EmulatorConfiguration> currentConfiguration;
@@ -353,6 +364,7 @@ private:
     int vulkanTemporal3dHistoryDebugLogsRemaining = 0;
     bool lastVulkanFastForwardPresentationState = false;
     int vulkanFastForwardPreviousFrameFallbackFrames = 0;
+    mutable std::recursive_mutex softPackedSnapshotMutex;
     std::array<SoftPackedFrameSnapshot, 2> softPackedFrameSnapshots{};
     SoftPackedFrameSnapshot* lastSoftPackedFrameSnapshotPtr = &softPackedFrameSnapshots[0];
     SoftPackedFrameSnapshot* previousSoftPackedFrameSnapshotPtr = &softPackedFrameSnapshots[1];

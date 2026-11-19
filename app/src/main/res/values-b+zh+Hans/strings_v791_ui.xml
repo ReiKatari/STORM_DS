@@ -8,11 +8,11 @@
     <string name="frame_advance_resume_btn">继续</string>
     <string name="slow_motion_title">慢动作速度</string>
     <string name="slow_motion_subtitle">选择预设或手动调整</string>
-    <string name="slow_motion_preset_025">0.25× — 四分之一速度</string>
-    <string name="slow_motion_preset_050">0.50× — 半速</string>
-    <string name="slow_motion_preset_075">0.75× — 平滑减速</string>
-    <string name="slow_motion_preset_085">0.85× — 轻微减速</string>
-    <string name="slow_motion_preset_100">1.00× — 正常速度（关闭）</string>
+    <string name="slow_motion_preset_025">0.25× - 四分之一速度</string>
+    <string name="slow_motion_preset_050">0.50× - 半速</string>
+    <string name="slow_motion_preset_075">0.75× - 平滑减速</string>
+    <string name="slow_motion_preset_085">0.85× - 轻微减速</string>
+    <string name="slow_motion_preset_100">1.00× - 正常速度（关闭）</string>
     <string name="slow_motion_custom_slider">自定义速度：%1$.2f×</string>
     <string name="slow_motion_turn_off">关闭慢动作</string>
     <string name="slow_motion_apply">应用</string>

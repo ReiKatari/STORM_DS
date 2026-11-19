@@ -8,11 +8,11 @@
     <string name="frame_advance_resume_btn">Resume</string>
     <string name="slow_motion_title">Slow motion speed</string>
     <string name="slow_motion_subtitle">Select preset or adjust manually</string>
-    <string name="slow_motion_preset_025">0.25× — Quarter speed</string>
-    <string name="slow_motion_preset_050">0.50× — Half speed</string>
-    <string name="slow_motion_preset_075">0.75× — Smooth slowdown</string>
-    <string name="slow_motion_preset_085">0.85× — Light slowdown</string>
-    <string name="slow_motion_preset_100">1.00× — Normal speed (off)</string>
+    <string name="slow_motion_preset_025">0.25× - Quarter speed</string>
+    <string name="slow_motion_preset_050">0.50× - Half speed</string>
+    <string name="slow_motion_preset_075">0.75× - Smooth slowdown</string>
+    <string name="slow_motion_preset_085">0.85× - Light slowdown</string>
+    <string name="slow_motion_preset_100">1.00× - Normal speed (off)</string>
     <string name="slow_motion_custom_slider">Custom speed: %1$.2f×</string>
     <string name="slow_motion_turn_off">Disable slow motion</string>
     <string name="slow_motion_apply">Apply</string>

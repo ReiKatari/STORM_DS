@@ -2,13 +2,17 @@ package me.magnum.melonds.common.romprocessors
 
 import android.app.ActivityManager
 import android.content.Context
+import android.net.Uri
+import android.os.ParcelFileDescriptor
 import android.util.Log
 import androidx.core.content.getSystemService
 import me.magnum.melonds.common.uridelegates.UriHandler
 import me.magnum.melonds.domain.model.SizeUnit
 import me.magnum.melonds.impl.NdsRomCache
+import me.magnum.melonds.utils.FileUtils
 import org.apache.commons.compress.archivers.sevenz.SevenZArchiveEntry
 import org.apache.commons.compress.archivers.sevenz.SevenZFile
+import java.io.File
 import java.io.FileInputStream
 import java.io.FilterInputStream
 import java.io.InputStream
@@ -28,6 +32,27 @@ class SevenZRomFileProcessor(private val context: Context, uriHandler: UriHandle
                 .coerceAtMost(Int.MAX_VALUE.toLong())
                 .toInt()
         }
+    }
+
+    override fun openRomUriInputStream(uri: Uri): InputStream? {
+        val directFile = FileUtils.resolveDirectFileFromExternalStorageUri(uri)
+        if (directFile != null && directFile.exists() && directFile.canRead()) {
+            runCatching { return FileInputStream(directFile) }
+        }
+        if (uri.scheme == "file" || uri.scheme == null) {
+            uri.path?.let { path ->
+                val file = File(path)
+                if (file.exists() && file.canRead()) {
+                    runCatching { return FileInputStream(file) }
+                }
+            }
+        }
+        runCatching {
+            context.contentResolver.openFileDescriptor(uri, "r")?.let { pfd ->
+                return ParcelFileDescriptor.AutoCloseInputStream(pfd)
+            }
+        }
+        return runCatching { context.contentResolver.openInputStream(uri) }.getOrNull()
     }
 
     override fun getNdsEntryStreamInFileStream(fileStream: InputStream): RomFileStream? {

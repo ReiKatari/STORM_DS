@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.4.1)
+cmake_minimum_required(VERSION 3.18)
 if (POLICY CMP0079)
     cmake_policy(SET CMP0079 NEW)
 endif()
@@ -80,6 +80,7 @@ set(VULKAN_SHADER_SOURCES
         "${ANDROID_CPP_DIR}/renderer/VulkanCompositorCompatibilityShader.comp"
         "${ANDROID_CPP_DIR}/renderer/VulkanAccumulate3dShader.comp"
         "${ANDROID_CPP_DIR}/renderer/VulkanAccumulate3dCompatibilityShader.comp"
+        "${ANDROID_CPP_DIR}/renderer/VulkanAccumulate3dScale8Shader.comp"
         "${ANDROID_CPP_DIR}/renderer/VulkanSurfacePresenter.vert"
         "${ANDROID_CPP_DIR}/renderer/VulkanSurfacePresenter.frag"
         "${ANDROID_CPP_DIR}/renderer/VulkanSurfacePresenterCompatibility.frag"
@@ -105,6 +106,8 @@ set(VULKAN_SHADER_HEADERS
         "${CORE_LIB_DIR}/src/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulatePlainShaderFragmentData.h"
         "${CORE_LIB_DIR}/src/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulateOpaqueAlphaToonShaderFragmentData.h"
         "${CORE_LIB_DIR}/src/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulateOpaqueAlphaPlainShaderFragmentData.h"
+        "${CORE_LIB_DIR}/src/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulateOpaqueAlphaPlainNoAttrShaderFragmentData.h"
+        "${CORE_LIB_DIR}/src/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulateOpaqueAlphaPlainColorOnlyShaderFragmentData.h"
         "${CORE_LIB_DIR}/src/GPU3D_Vulkan_GraphicsNoColorShaderData.h"
         "${CORE_LIB_DIR}/src/GPU3D_Vulkan_GraphicsClearShaderData.h"
         "${CORE_LIB_DIR}/src/GPU3D_Vulkan_GraphicsFinalShaderVertexData.h"
@@ -129,6 +132,7 @@ set(VULKAN_SHADER_HEADERS
         "${ANDROID_CPP_DIR}/renderer/VulkanCompositorCompatibilityShaderData.h"
         "${ANDROID_CPP_DIR}/renderer/VulkanAccumulate3dShaderData.h"
         "${ANDROID_CPP_DIR}/renderer/VulkanAccumulate3dCompatibilityShaderData.h"
+        "${ANDROID_CPP_DIR}/renderer/VulkanAccumulate3dScale8ShaderData.h"
         "${ANDROID_CPP_DIR}/renderer/VulkanSurfacePresenterVertexShaderData.h"
         "${ANDROID_CPP_DIR}/renderer/VulkanSurfacePresenterFragmentShaderData.h"
         "${ANDROID_CPP_DIR}/renderer/VulkanSurfacePresenterCompatibilityFragmentShaderData.h"
@@ -176,7 +180,6 @@ add_library(
         SHARED
 
         "${ANDROID_CPP_DIR}/AndroidMelonEventMessenger.cpp"
-        "${ANDROID_CPP_DIR}/CartLoader.cpp"
         "${ANDROID_CPP_DIR}/DSiSupport.cpp"
         "${ANDROID_CPP_DIR}/EmulatorArgsBuilder.cpp"
         "${ANDROID_CPP_DIR}/EmulatorMessageQueueJNI.cpp"

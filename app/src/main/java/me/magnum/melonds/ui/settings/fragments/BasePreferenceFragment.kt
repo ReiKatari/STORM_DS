@@ -1,10 +1,16 @@
 package me.magnum.melonds.ui.settings.fragments
 
+import android.content.res.ColorStateList
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.StateListDrawable
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
+import android.widget.LinearLayout
 import androidx.compose.material.icons.Icons
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.material.icons.filled.*
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.core.view.ViewCompat
@@ -60,15 +66,16 @@ abstract class BasePreferenceFragment : PreferenceFragmentCompat() {
             val recyclerView = this
             addOnChildAttachStateChangeListener(object : RecyclerView.OnChildAttachStateChangeListener {
                 override fun onChildViewAttachedToWindow(view: View) {
+                    val adapter = recyclerView.adapter as? PreferenceGroupAdapter
+                    val pos = recyclerView.getChildAdapterPosition(view)
+                    val pref = if (pos != RecyclerView.NO_POSITION) adapter?.getItem(pos) else null
+                    applyThemeToPreferenceView(view, pref is androidx.preference.PreferenceCategory)
                     view.post {
-                        val color = context?.let { me.magnum.melonds.ui.theme.AppThemeManager.getAccentColor(it) } ?: me.magnum.melonds.ui.theme.AppThemeManager.getAccentColor()
-                        val states = arrayOf(
-                            intArrayOf(-android.R.attr.state_checked),
-                            intArrayOf(android.R.attr.state_checked),
-                        )
-                        val thumbColors = intArrayOf(0xFF888888.toInt(), color)
-                        val trackColors = intArrayOf(0x44888888.toInt(), (color and 0x00FFFFFF) or 0x66000000.toInt())
-                        tintChildControls(view, android.content.res.ColorStateList(states, thumbColors), android.content.res.ColorStateList(states, trackColors), color)
+                        if (view.isAttachedToWindow) {
+                            val postPos = recyclerView.getChildAdapterPosition(view)
+                            val postPref = if (postPos != RecyclerView.NO_POSITION) adapter?.getItem(postPos) else pref
+                            applyThemeToPreferenceView(view, postPref is androidx.preference.PreferenceCategory)
+                        }
                     }
                     view.setOnFocusChangeListener { v, hasFocus ->
                         if (hasFocus) {
@@ -118,44 +125,94 @@ abstract class BasePreferenceFragment : PreferenceFragmentCompat() {
         me.magnum.melonds.ui.theme.AppThemeManager.removeAccentChangeListener(accentListener)
     }
 
-    protected fun applyAccentColorToViews() {
-        val color = context?.let { me.magnum.melonds.ui.theme.AppThemeManager.getAccentColor(it) } ?: me.magnum.melonds.ui.theme.AppThemeManager.getAccentColor()
+    private fun createPreferenceCardDrawable(
+        colors: me.magnum.melonds.ui.theme.WatermelonColors,
+        radiusDp: Float,
+    ): StateListDrawable {
+        val density = resources.displayMetrics.density
+        val radiusPx = radiusDp * density
+        val strokeNormal = (1f * density).toInt().coerceAtLeast(1)
+        val strokeFocused = (2f * density).toInt().coerceAtLeast(1)
+        val surface2Int = colors.surface2.toArgb()
+        val surface3Int = colors.surface3.toArgb()
+        val lineInt = colors.line.toArgb()
+        val accentInt = colors.green.toArgb()
+
+        fun makeShape(fill: Int, strokeWidth: Int, strokeColor: Int) = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = radiusPx
+            setColor(fill)
+            setStroke(strokeWidth, strokeColor)
+        }
+
+        return StateListDrawable().apply {
+            addState(intArrayOf(android.R.attr.state_focused), makeShape(surface3Int, strokeFocused, accentInt))
+            addState(intArrayOf(android.R.attr.state_selected), makeShape(surface3Int, strokeFocused, accentInt))
+            addState(intArrayOf(android.R.attr.state_pressed), makeShape(surface3Int, strokeNormal, lineInt))
+            addState(intArrayOf(), makeShape(surface2Int, strokeNormal, lineInt))
+        }
+    }
+
+    private fun applyThemeToPreferenceView(view: View, isCategory: Boolean) {
+        val ctx = context ?: view.context ?: return
+        val colors = me.magnum.melonds.ui.theme.AppThemeManager.getCurrentWatermelonColors(ctx)
+        val accent = colors.green.toArgb()
         val states = arrayOf(
             intArrayOf(-android.R.attr.state_checked),
             intArrayOf(android.R.attr.state_checked),
         )
-        val thumbColors = intArrayOf(
-            0xFF888888.toInt(),
-            color,
+        val thumbCsl = ColorStateList(states, intArrayOf(colors.text3.toArgb(), accent))
+        val trackCsl = ColorStateList(states, intArrayOf(colors.switchOff.toArgb(), colors.green.copy(alpha = 0.45f).toArgb()))
+        val enabledDisabledStates = arrayOf(intArrayOf(-android.R.attr.state_enabled), intArrayOf())
+        val titleCsl = ColorStateList(
+            enabledDisabledStates,
+            intArrayOf(colors.text.copy(alpha = 0.38f).toArgb(), colors.text.toArgb()),
         )
-        val trackColors = intArrayOf(
-            0x44888888.toInt(),
-            (color and 0x00FFFFFF) or 0x66000000.toInt(),
+        val summaryCsl = ColorStateList(
+            enabledDisabledStates,
+            intArrayOf(colors.text2.copy(alpha = 0.38f).toArgb(), colors.text2.toArgb()),
         )
-        val thumbColorStateList = android.content.res.ColorStateList(states, thumbColors)
-        val trackColorStateList = android.content.res.ColorStateList(states, trackColors)
+
+        if (isCategory) {
+            (view as? android.widget.TextView ?: view.findViewById(android.R.id.title))?.setTextColor(accent)
+        } else if (view is FrameLayout && view.childCount == 1) {
+            val card = view.getChildAt(0)
+            if (card is LinearLayout) {
+                val radiusDp = if (card.minimumHeight >= (80 * resources.displayMetrics.density).toInt()) 15f else 13f
+                card.background = createPreferenceCardDrawable(colors, radiusDp)
+            }
+        }
+        tintChildControls(view, colors, thumbCsl, trackCsl, titleCsl, summaryCsl)
+    }
+
+    protected fun applyAccentColorToViews() {
+        val ctx = context ?: return
+        val colors = me.magnum.melonds.ui.theme.AppThemeManager.getCurrentWatermelonColors(ctx)
+        val bgInt = colors.bg.toArgb()
+        view?.setBackgroundColor(bgInt)
 
         val rv = listView ?: return
+        rv.setBackgroundColor(bgInt)
         rv.post {
             val adapter = rv.adapter as? PreferenceGroupAdapter
             for (i in 0 until rv.childCount) {
                 val child = rv.getChildAt(i)
                 val pos = rv.getChildAdapterPosition(child)
                 val pref = if (pos != RecyclerView.NO_POSITION) adapter?.getItem(pos) else null
-                if (pref is androidx.preference.PreferenceCategory) {
-                    (child as? android.widget.TextView ?: child.findViewById(android.R.id.title))?.setTextColor(color)
-                }
-                tintChildControls(child, thumbColorStateList, trackColorStateList, color)
+                applyThemeToPreferenceView(child, pref is androidx.preference.PreferenceCategory)
             }
         }
     }
 
     private fun tintChildControls(
         view: View,
-        thumb: android.content.res.ColorStateList,
-        track: android.content.res.ColorStateList,
-        accent: Int,
+        colors: me.magnum.melonds.ui.theme.WatermelonColors,
+        thumb: ColorStateList,
+        track: ColorStateList,
+        titleCsl: ColorStateList,
+        summaryCsl: ColorStateList,
     ) {
+        val accent = colors.green.toArgb()
         if (view is androidx.appcompat.widget.SwitchCompat) {
             view.thumbTintList = thumb
             view.trackTintList = track
@@ -165,21 +222,30 @@ abstract class BasePreferenceFragment : PreferenceFragmentCompat() {
         } else if (view is android.widget.CompoundButton) {
             view.buttonTintList = thumb
         } else if (view is android.widget.SeekBar) {
-            view.thumbTintList = android.content.res.ColorStateList.valueOf(accent)
-            view.progressTintList = android.content.res.ColorStateList.valueOf(accent)
+            view.thumbTintList = ColorStateList.valueOf(accent)
+            view.progressTintList = ColorStateList.valueOf(accent)
+            view.progressBackgroundTintList = ColorStateList.valueOf(colors.switchOff.toArgb())
         } else if (view is android.widget.ImageView) {
             val id = view.id
             if (id == android.R.id.icon || id == me.magnum.melonds.R.id.buttonResetDefault || view.tag == "tint_accent") {
-                androidx.core.widget.ImageViewCompat.setImageTintList(view, android.content.res.ColorStateList.valueOf(accent))
+                androidx.core.widget.ImageViewCompat.setImageTintList(view, ColorStateList.valueOf(accent))
             }
         } else if (view is android.widget.TextView) {
-            if (view.tag == "category_title" || (view.id == android.R.id.title && view.parent is RecyclerView)) {
-                view.setTextColor(accent)
+            when {
+                view.tag == "category_title" || (view.id == android.R.id.title && view.parent is RecyclerView) -> {
+                    view.setTextColor(accent)
+                }
+                view.id == android.R.id.title -> {
+                    view.setTextColor(titleCsl)
+                }
+                view.id == android.R.id.summary || view.id == androidx.preference.R.id.seekbar_value -> {
+                    view.setTextColor(summaryCsl)
+                }
             }
         }
         if (view is ViewGroup) {
             for (i in 0 until view.childCount) {
-                tintChildControls(view.getChildAt(i), thumb, track, accent)
+                tintChildControls(view.getChildAt(i), colors, thumb, track, titleCsl, summaryCsl)
             }
         }
     }

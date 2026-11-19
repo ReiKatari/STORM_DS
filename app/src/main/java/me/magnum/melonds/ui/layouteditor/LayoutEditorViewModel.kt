@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChangedBy
@@ -11,6 +12,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.magnum.melonds.domain.model.RuntimeBackground
 import me.magnum.melonds.domain.model.layout.BackgroundMode
 import me.magnum.melonds.domain.model.layout.Insets
@@ -198,17 +200,17 @@ class LayoutEditorViewModel @Inject constructor(
         }
     }
 
-    fun saveCurrentLayout() {
+    suspend fun saveCurrentLayout() {
         _currentLayoutConfiguration.value?.let {
-            viewModelScope.launch {
+            withContext(NonCancellable) {
                 layoutsRepository.saveLayout(it)
             }
         }
     }
 
-    fun saveCurrentLayoutAsNew() {
+    suspend fun saveCurrentLayoutAsNew() {
         _currentLayoutConfiguration.value?.let { currentLayoutConfiguration ->
-            viewModelScope.launch {
+            withContext(NonCancellable) {
                 layoutsRepository.saveLayout(
                     currentLayoutConfiguration.copy(
                         id = null,

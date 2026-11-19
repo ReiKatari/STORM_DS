@@ -42,9 +42,16 @@ class BoxArtRepository @Inject constructor(
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val cacheDir = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS/covers/boxart").apply { mkdirs() }
-    private val indexFile = File(cacheDir, "named_boxarts_index_v3.txt")
-    private val matchesFile = File(cacheDir, "matches_v3.json")
+    private val cacheDir: File by lazy {
+        val primary = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS/covers/boxart")
+        if (runCatching { primary.mkdirs(); primary.exists() && primary.canWrite() }.getOrDefault(false)) {
+            primary
+        } else {
+            File(context.filesDir, "boxart").apply { mkdirs() }
+        }
+    }
+    private val indexFile: File by lazy { File(cacheDir, "named_boxarts_index_v3.txt") }
+    private val matchesFile: File by lazy { File(cacheDir, "matches_v3.json") }
 
     private val mutex = Mutex()
     private val memoryCache = ConcurrentHashMap<String, String>()
@@ -234,40 +241,49 @@ class BoxArtRepository @Inject constructor(
         if (matchValue == NO_MATCH) null else matchValue
     }
 
-    fun getAllCachedMatches(): Map<String, String> {
+    suspend fun getAllCachedMatches(): Map<String, String> = withContext(Dispatchers.IO) {
         if (!isMatchesLoaded) {
             loadMatches()
         }
-        return memoryCache.filterValues { it != NO_MATCH }
+        memoryCache.filterValues { it != NO_MATCH }
     }
 
-    @Synchronized
-    private fun loadMatches() {
+    private suspend fun loadMatches() {
         if (isMatchesLoaded) return
-        runCatching {
-            if (matchesFile.isFile) {
-                val json = JSONObject(matchesFile.readText())
-                val keys = json.keys()
-                while (keys.hasNext()) {
-                    val k = keys.next()
-                    memoryCache[k] = json.optString(k, NO_MATCH)
+        mutex.withLock {
+            if (isMatchesLoaded) return
+            runCatching {
+                if (matchesFile.isFile) {
+                    val json = JSONObject(matchesFile.readText())
+                    val keys = json.keys()
+                    while (keys.hasNext()) {
+                        val k = keys.next()
+                        memoryCache[k] = json.optString(k, NO_MATCH)
+                    }
                 }
             }
+            isMatchesLoaded = true
         }
-        isMatchesLoaded = true
     }
 
     private fun schedulePersistMatches() {
         isDirty = true
         scope.launch {
-            if (!isDirty) return@launch
-            isDirty = false
-            runCatching {
-                val json = JSONObject()
-                memoryCache.forEach { (k, v) ->
-                    json.put(k, v)
+            mutex.withLock {
+                if (!isDirty) return@withLock
+                isDirty = false
+                runCatching {
+                    val json = JSONObject()
+                    memoryCache.forEach { (k, v) ->
+                        json.put(k, v)
+                    }
+                    val tmpFile = File(matchesFile.parentFile, "${matchesFile.name}.tmp")
+                    tmpFile.writeText(json.toString())
+                    if (!tmpFile.renameTo(matchesFile)) {
+                        tmpFile.copyTo(matchesFile, overwrite = true)
+                        tmpFile.delete()
+                    }
                 }
-                matchesFile.writeText(json.toString())
             }
         }
     }
@@ -305,7 +321,12 @@ class BoxArtRepository @Inject constructor(
                 val content = downloadIndex()
                 if (content != null) {
                     runCatching {
-                        indexFile.writeText(content)
+                        val tmpIndex = File(indexFile.parentFile, "${indexFile.name}.tmp")
+                        tmpIndex.writeText(content)
+                        if (!tmpIndex.renameTo(indexFile)) {
+                            tmpIndex.copyTo(indexFile, overwrite = true)
+                            tmpIndex.delete()
+                        }
                         indexEntries = parseIndex(content)
                     }
                 } else {

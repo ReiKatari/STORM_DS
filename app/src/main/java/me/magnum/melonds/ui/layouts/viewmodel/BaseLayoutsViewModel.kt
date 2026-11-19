@@ -43,7 +43,7 @@ abstract class BaseLayoutsViewModel(protected val layoutsRepository: LayoutsRepo
 
     fun deleteLayout(layout: LayoutConfiguration) {
         viewModelScope.launch {
-            if (layout.id == selectedLayoutId.value) {
+            if (layout.id == selectedLayoutId.value.layoutId) {
                 applyFallbackLayout()
             }
             layoutsRepository.deleteLayout(layout)

@@ -116,8 +116,8 @@ object MelonRomDecryptor {
         }
 
         // Fallback: Copy to cache -> Decrypt -> Write back to SAF output stream
+        val cacheFile = File(context.cacheDir, "modcrypt_temp_${System.currentTimeMillis()}.nds")
         return try {
-            val cacheFile = File(context.cacheDir, "modcrypt_temp_${System.currentTimeMillis()}.nds")
             context.contentResolver.openInputStream(uri)?.use { input ->
                 FileOutputStream(cacheFile).use { output ->
                     input.copyTo(output)
@@ -137,19 +137,18 @@ object MelonRomDecryptor {
                             inStream.copyTo(out)
                         }
                     }
-                    cacheFile.delete()
                     DecryptResult.SUCCESS
                 } else {
-                    cacheFile.delete()
                     DecryptResult.ERROR_WRITING_FILE
                 }
             } else {
-                cacheFile.delete()
                 tempResult
             }
         } catch (e: Throwable) {
             Log.e(TAG, "Fallback decryption failed: ${e.message}")
             DecryptResult.ERROR_READING_FILE
+        } finally {
+            runCatching { cacheFile.delete() }
         }
     }
 

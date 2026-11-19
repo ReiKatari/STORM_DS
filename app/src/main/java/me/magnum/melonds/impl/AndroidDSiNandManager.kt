@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -38,6 +39,7 @@ class AndroidDSiNandManager(
         const val DSIWARE_TITLE_ID_OFFSET = 0x230L
         const val TMD_TITLE_ID_OFFSET = 0x18C
         val DSIWARE_CATEGORY = 0x00030004.toUInt()
+        private fun UInt.toHex(): String = toString(16).padStart(8, '0')
     }
 
     private val nandControlLock = Mutex()
@@ -421,10 +423,14 @@ class AndroidDSiNandManager(
     }
 
     override fun closeNand() {
-        if (nandUsageCount.decrementAndGet() <= 0) {
-            nandUsageCount.set(0)
-            isNandOpen.set(false)
-            MelonDSiNand.closeNand()
+        runBlocking {
+            nandControlLock.withLock {
+                if (nandUsageCount.decrementAndGet() <= 0) {
+                    nandUsageCount.set(0)
+                    isNandOpen.set(false)
+                    MelonDSiNand.closeNand()
+                }
+            }
         }
     }
 
@@ -450,49 +456,5 @@ class AndroidDSiNandManager(
             7 -> ImportDSiWareTitleResult.DSI_MEMORY_FULL
             else -> ImportDSiWareTitleResult.UNKNOWN
         }
-    }
-
-    private fun InputStream.skipFully(byteCount: Long) {
-        var remaining = byteCount
-        while (remaining > 0) {
-            val skipped = skip(remaining)
-            if (skipped > 0) {
-                remaining -= skipped
-                continue
-            }
-            if (read() == -1) {
-                throw EOFException("Reached EOF with $remaining bytes left to skip")
-            }
-            remaining--
-        }
-    }
-
-    private fun InputStream.readByteOrThrow(): Int {
-        val value = read()
-        if (value == -1) {
-            throw EOFException("Reached EOF while reading title id")
-        }
-        return value
-    }
-
-    private fun InputStream.readUIntLe(): UInt {
-        return readByteOrThrow().toUInt() or
-            readByteOrThrow().shl(8).toUInt() or
-            readByteOrThrow().shl(16).toUInt() or
-            readByteOrThrow().shl(24).toUInt()
-    }
-
-    private fun ByteArray.readUIntBe(offset: Int): UInt {
-        if (offset < 0 || offset + 4 > size) {
-            throw EOFException("Not enough bytes to read UInt at offset $offset")
-        }
-        return this[offset].toUByte().toUInt().shl(24) or
-            this[offset + 1].toUByte().toUInt().shl(16) or
-            this[offset + 2].toUByte().toUInt().shl(8) or
-            this[offset + 3].toUByte().toUInt()
-    }
-
-    private fun UInt.toHex(): String {
-        return toString(16).padStart(8, '0')
     }
 }

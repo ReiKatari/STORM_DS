@@ -8,11 +8,11 @@
     <string name="frame_advance_resume_btn">Reprendre</string>
     <string name="slow_motion_title">Vitesse de ralenti</string>
     <string name="slow_motion_subtitle">Choisissez un préréglage ou ajustez manuellement</string>
-    <string name="slow_motion_preset_025">0.25× — Quart de vitesse</string>
-    <string name="slow_motion_preset_050">0.50× — Demi-vitesse</string>
-    <string name="slow_motion_preset_075">0.75× — Ralentissement fluide</string>
-    <string name="slow_motion_preset_085">0.85× — Léger ralentissement</string>
-    <string name="slow_motion_preset_100">1.00× — Vitesse normale (désactivé)</string>
+    <string name="slow_motion_preset_025">0.25× - Quart de vitesse</string>
+    <string name="slow_motion_preset_050">0.50× - Demi-vitesse</string>
+    <string name="slow_motion_preset_075">0.75× - Ralentissement fluide</string>
+    <string name="slow_motion_preset_085">0.85× - Léger ralentissement</string>
+    <string name="slow_motion_preset_100">1.00× - Vitesse normale (désactivé)</string>
     <string name="slow_motion_custom_slider">Vitesse personnalisée : %1$.2f×</string>
     <string name="slow_motion_turn_off">Désactiver le ralenti</string>
     <string name="slow_motion_apply">Appliquer</string>

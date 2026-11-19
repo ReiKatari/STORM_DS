@@ -6,7 +6,7 @@
     <string name="feature_quick_resume_from_save">Salvamento rápido • %1$s</string>
     <string name="feature_quick_resume_from_save_ready">Retomar do salvamento rápido</string>
     <string name="feature_quick_resume_last_played">Jogado por último • %1$s</string>
-    <string name="feature_quick_resume_no_save_hint">Início normal — sem salvamento rápido ainda</string>
+    <string name="feature_quick_resume_no_save_hint">Início normal - sem salvamento rápido ainda</string>
     <string name="feature_quick_resume_tile_label">Continuar jogo</string>
     <string name="feature_quick_resume_no_recent_game">Nenhum jogo recente</string>
     <string name="feature_quick_resume_not_found">Não foi possível encontrar o último jogo</string>
@@ -27,7 +27,7 @@
     <string name="feature_stats_empty_desc">Inicie qualquer jogo para começar a registrar o tempo de jogo e a atividade diária</string>
     <string name="feature_problem_report_menu_title">Relatar um problema</string>
     <string name="feature_problem_report_dialog_title">Criar relatório de problema</string>
-    <string name="feature_problem_report_dialog_message">Cria um arquivo ZIP de diagnóstico contendo a versão do aplicativo, informações do dispositivo e GPU, versão do Android, configurações do emulador e do renderizador (sem contas ou tokens), código do último jogo e registros recentes. Nada é enviado automaticamente — você escolhe onde compartilhar o arquivo.</string>
+    <string name="feature_problem_report_dialog_message">Cria um arquivo ZIP de diagnóstico contendo a versão do aplicativo, informações do dispositivo e GPU, versão do Android, configurações do emulador e do renderizador (sem contas ou tokens), código do último jogo e registros recentes. Nada é enviado automaticamente - você escolhe onde compartilhar o arquivo.</string>
     <string name="feature_problem_report_create_action">Criar e compartilhar</string>
     <string name="feature_problem_report_generating">Coletando relatório de diagnóstico…</string>
     <string name="feature_problem_report_share_chooser">Compartilhar relatório de problema</string>

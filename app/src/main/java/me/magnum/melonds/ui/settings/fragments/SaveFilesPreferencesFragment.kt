@@ -3,8 +3,12 @@ package me.magnum.melonds.ui.settings.fragments
 import android.net.Uri
 import android.os.Bundle
 import androidx.appcompat.app.AlertDialog
+import androidx.lifecycle.lifecycleScope
 import androidx.preference.PreferenceFragmentCompat
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.magnum.melonds.R
 import me.magnum.melonds.common.DirectoryAccessValidator
 import me.magnum.melonds.common.UriPermissionManager
@@ -62,25 +66,39 @@ class SaveFilesPreferencesFragment : BasePreferenceFragment(), PreferenceFragmen
             return
         }
 
-        if (!settingsBackupManager.hasMirrorAt(uri)) {
-            persistDirectory()
-            settingsBackupManager.requestMirrorWrite()
-            return
-        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            val hasMirror = withContext(Dispatchers.IO) {
+                settingsBackupManager.hasMirrorAt(uri)
+            }
+            if (!hasMirror) {
+                persistDirectory()
+                settingsBackupManager.requestMirrorWrite()
+                return@launch
+            }
 
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.settings_mirror_detected_title)
-            .setMessage(R.string.settings_mirror_detected_message)
-            .setPositiveButton(R.string.settings_mirror_restore) { _, _ ->
-                settingsBackupManager.restoreMirrorFrom(uri)
-                persistDirectory()
-                settingsBackupManager.requestMirrorWrite()
-            }
-            .setNegativeButton(R.string.settings_mirror_ignore) { _, _ ->
-                persistDirectory()
-                settingsBackupManager.overwriteMirrorAt(uri)
-                settingsBackupManager.requestMirrorWrite()
-            }
-            .show()
+            if (!isAdded) return@launch
+            AlertDialog.Builder(requireContext())
+                .setTitle(R.string.settings_mirror_detected_title)
+                .setMessage(R.string.settings_mirror_detected_message)
+                .setPositiveButton(R.string.settings_mirror_restore) { _, _ ->
+                    viewLifecycleOwner.lifecycleScope.launch {
+                        withContext(Dispatchers.IO) {
+                            settingsBackupManager.restoreMirrorFrom(uri)
+                        }
+                        persistDirectory()
+                        settingsBackupManager.requestMirrorWrite()
+                    }
+                }
+                .setNegativeButton(R.string.settings_mirror_ignore) { _, _ ->
+                    viewLifecycleOwner.lifecycleScope.launch {
+                        persistDirectory()
+                        withContext(Dispatchers.IO) {
+                            settingsBackupManager.overwriteMirrorAt(uri)
+                        }
+                        settingsBackupManager.requestMirrorWrite()
+                    }
+                }
+                .show()
+        }
     }
 }

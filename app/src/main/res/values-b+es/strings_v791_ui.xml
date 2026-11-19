@@ -8,11 +8,11 @@
     <string name="frame_advance_resume_btn">Continuar</string>
     <string name="slow_motion_title">Velocidad de cámara lenta</string>
     <string name="slow_motion_subtitle">Seleccione un ajuste preestablecido o configure manualmente</string>
-    <string name="slow_motion_preset_025">0.25× — Cuarto de velocidad</string>
-    <string name="slow_motion_preset_050">0.50× — Mitad de velocidad</string>
-    <string name="slow_motion_preset_075">0.75× — Ralentización suave</string>
-    <string name="slow_motion_preset_085">0.85× — Ralentización ligera</string>
-    <string name="slow_motion_preset_100">1.00× — Velocidad normal (desactivado)</string>
+    <string name="slow_motion_preset_025">0.25× - Cuarto de velocidad</string>
+    <string name="slow_motion_preset_050">0.50× - Mitad de velocidad</string>
+    <string name="slow_motion_preset_075">0.75× - Ralentización suave</string>
+    <string name="slow_motion_preset_085">0.85× - Ralentización ligera</string>
+    <string name="slow_motion_preset_100">1.00× - Velocidad normal (desactivado)</string>
     <string name="slow_motion_custom_slider">Velocidad personalizada: %1$.2f×</string>
     <string name="slow_motion_turn_off">Desactivar cámara lenta</string>
     <string name="slow_motion_apply">Aplicar</string>

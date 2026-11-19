@@ -4,14 +4,13 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
-import android.os.Environment
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import me.magnum.melonds.common.network.HttpRedirectHelper
 import me.magnum.melonds.common.providers.UpdateContentProvider
 import me.magnum.melonds.domain.model.DownloadProgress
 import me.magnum.melonds.domain.model.appupdate.AppUpdate
@@ -23,19 +22,10 @@ import me.magnum.melonds.github.STORM_GAMES_WORLD_DOWNLOAD_URL_PREFIX
 import me.magnum.melonds.github.STORM_GAMES_WORLD_RELEASE_URL_PREFIX
 import me.magnum.melonds.utils.PackageManagerCompat
 import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
 import java.security.MessageDigest
 
 class GitHubUpdateInstallManager(private val context: Context) : UpdateInstallManager {
     private fun getUpdatesDirectory(): File {
-        val extRoot = runCatching { Environment.getExternalStorageDirectory() }.getOrNull()
-        if (extRoot != null) {
-            val stormUpdates = File(extRoot, "STORM DS/updates")
-            if (stormUpdates.isDirectory || stormUpdates.mkdirs()) {
-                return stormUpdates
-            }
-        }
         return File(context.cacheDir, "updates").apply { mkdirs() }
     }
 
@@ -66,37 +56,14 @@ class GitHubUpdateInstallManager(private val context: Context) : UpdateInstallMa
                 if (destinationFile.isFile) {
                     destinationFile.delete()
                 }
-                var currentUrl = candidateUrl
-                var connection: HttpURLConnection? = null
-                var redirects = 0
-                while (redirects < 10) {
-                    val conn = (URL(currentUrl).openConnection() as HttpURLConnection).apply {
-                        instanceFollowRedirects = false
-                        connectTimeout = 20_000
-                        readTimeout = 30_000
-                        setRequestProperty("User-Agent", "STORM-DS-Updater")
-                        setRequestProperty("Accept", "application/octet-stream, */*")
-                    }
-                    val code = conn.responseCode
-                    if (code in 300..399) {
-                        val location = conn.getHeaderField("Location")
-                        conn.disconnect()
-                        if (location.isNullOrBlank()) {
-                            break
-                        }
-                        currentUrl = URL(URL(currentUrl), location).toString()
-                        redirects++
-                    } else {
-                        connection = conn
-                        break
-                    }
-                }
-
-                val activeConnection = connection
-                if (activeConnection == null || activeConnection.responseCode !in 200..299) {
-                    activeConnection?.disconnect()
-                    continue
-                }
+                val activeConnection = HttpRedirectHelper.openConnectionWithRedirects(
+                    initialUrl = candidateUrl,
+                    maxRedirects = 10,
+                    connectTimeoutMs = 20_000,
+                    readTimeoutMs = 30_000,
+                    userAgent = "STORM-DS-Updater",
+                    accept = "application/octet-stream, */*",
+                )
 
                 try {
                     val totalSize = activeConnection.contentLengthLong.takeIf { it > 0L } ?: update.binarySize
@@ -138,8 +105,7 @@ class GitHubUpdateInstallManager(private val context: Context) : UpdateInstallMa
             return@flow
         }
 
-        if (validateDownloadedApk(update, destinationFile)) {
-            openInstaller(destinationFile)
+        if (validateDownloadedApk(update, destinationFile) && openInstaller(destinationFile)) {
             emit(DownloadProgress.DownloadComplete)
         } else {
             emit(DownloadProgress.DownloadFailed)
@@ -197,15 +163,18 @@ class GitHubUpdateInstallManager(private val context: Context) : UpdateInstallMa
         return validReleaseOrigin && validDownloadOrigin
     }
 
-    private fun openInstaller(destinationFile: File) {
+    private fun openInstaller(destinationFile: File): Boolean {
         val fileUri = runCatching {
             UpdateContentProvider.getUpdateFileUri(context, destinationFile)
-        }.getOrNull() ?: Uri.fromFile(destinationFile)
+        }.onFailure {
+            Log.e(TAG, "Failed to resolve content URI for update APK", it)
+        }.getOrNull() ?: return false
         val installIntent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(fileUri, APK_MIME)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
         }
         context.startActivity(installIntent)
+        return true
     }
 
     @Suppress("DEPRECATION")

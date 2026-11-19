@@ -21,6 +21,7 @@ import kotlinx.serialization.json.Json
 import me.magnum.melonds.common.DirectoryAccessValidator
 import me.magnum.melonds.common.PermissionHandler
 import me.magnum.melonds.common.UriPermissionManager
+import me.magnum.melonds.common.network.SharedOkHttpClient
 import me.magnum.melonds.common.uridelegates.CompositeUriHandler
 import me.magnum.melonds.common.uridelegates.UriHandler
 import me.magnum.melonds.impl.dtos.input.ControllerConfigurationDto
@@ -30,6 +31,7 @@ import me.magnum.melonds.utils.InputAssignmentDtoTypeAdapter
 import me.magnum.melonds.impl.system.AppForegroundStateObserver
 import me.magnum.melonds.impl.system.AppForegroundStateTracker
 import me.magnum.melonds.utils.UriTypeHierarchyAdapter
+import okhttp3.OkHttpClient
 import javax.inject.Singleton
 
 @Module
@@ -61,6 +63,12 @@ object AppModule {
             ignoreUnknownKeys = true
             explicitNulls = false
         }
+    }
+
+    @Provides
+    @Singleton
+    fun provideOkHttpClient(): OkHttpClient {
+        return SharedOkHttpClient.instance
     }
 
     @Provides

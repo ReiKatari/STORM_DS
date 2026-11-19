@@ -134,27 +134,43 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
             pref.isVisible = requireContext().isSustainedPerformanceModeAvailable()
         }
 
-        val themePreference = findPreference<ListPreference>("theme")
-        if (themePreference != null) {
-            helper.bindPreferenceSummaryToValue(themePreference)
-            themePreference.setOnPreferenceChangeListener { _, newValue ->
-                me.magnum.melonds.ui.theme.AppThemeManager.updateTheme(requireContext(), newValue as String)
-                activity?.recreate()
-                true
-            }
-        }
-
         val accentPreference = findPreference<ListPreference>("theme_accent_color")
         if (accentPreference != null) {
             if (accentPreference.value.isNullOrEmpty()) {
-                accentPreference.value = "electric_cyan"
+                accentPreference.value = me.magnum.melonds.ui.theme.AppThemeManager.DEFAULT_ACCENT_KEY
             }
             helper.bindPreferenceSummaryToValue(accentPreference)
             accentPreference.setOnPreferenceChangeListener { _, newValue ->
                 val newAccent = newValue as String
                 me.magnum.melonds.ui.theme.AppThemeManager.accentColorState.value = newAccent
                 accentPreference.sharedPreferences?.edit()?.putString("theme_accent_color", newAccent)?.apply()
+                val idx = accentPreference.findIndexOfValue(newAccent)
+                if (idx >= 0) {
+                    accentPreference.summary = accentPreference.entries?.getOrNull(idx)
+                }
                 view?.post { applyAccentColorToViews() }
+                activity?.recreate()
+                true
+            }
+        }
+
+        val themePreference = findPreference<ListPreference>("theme")
+        if (themePreference != null) {
+            helper.bindPreferenceSummaryToValue(themePreference)
+            themePreference.setOnPreferenceChangeListener { _, newValue ->
+                val newThemeKey = newValue as String
+                me.magnum.melonds.ui.theme.AppThemeManager.updateTheme(requireContext(), newThemeKey)
+                val themeIdx = themePreference.findIndexOfValue(newThemeKey)
+                if (themeIdx >= 0) {
+                    themePreference.summary = themePreference.entries?.getOrNull(themeIdx)
+                }
+                accentPreference?.let { accPref ->
+                    accPref.value = me.magnum.melonds.ui.theme.AppThemeManager.DEFAULT_ACCENT_KEY
+                    val accIdx = accPref.findIndexOfValue(me.magnum.melonds.ui.theme.AppThemeManager.DEFAULT_ACCENT_KEY)
+                    if (accIdx >= 0) {
+                        accPref.summary = accPref.entries?.getOrNull(accIdx)
+                    }
+                }
                 activity?.recreate()
                 true
             }
@@ -373,7 +389,7 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
             val result = runCatching {
                 val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
                 val all = prefs.all
-                val sensitiveKeys = listOf("token", "ra_token", "password", "cookie", "secret", "auth")
+                val sensitiveKeys = listOf("token", "ra_token", "password", "cookie", "secret", "auth", "_key", "api_key")
 
                 val rootJson = org.json.JSONObject()
                 rootJson.put("app", "STORM DS")
@@ -453,7 +469,7 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
                 val editor = prefs.edit()
                 var appliedCount = 0
 
-                val sensitiveKeys = listOf("token", "ra_token", "password", "cookie", "secret", "auth")
+                val sensitiveKeys = listOf("token", "ra_token", "password", "cookie", "secret", "auth", "_key", "api_key")
 
                 val keys = prefsJson.keys()
                 while (keys.hasNext()) {

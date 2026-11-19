@@ -27,6 +27,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import me.magnum.melonds.translator.context.OcrContextGraph
 import me.magnum.melonds.translator.context.OcrContextGraph.SpeakerVoiceProfile
 import me.magnum.melonds.translator.context.OcrContextGraph.TimbreEqPreset
+import me.magnum.melonds.translator.grammar.Gender
 import me.magnum.melonds.translator.model.TranslatedTextBlock
 import java.io.File
 import java.io.FileOutputStream
@@ -1030,7 +1031,7 @@ class GameTtsManager(private val context: Context) {
         profile: SpeakerVoiceProfile,
         persona: CharacterPersona
     ): Pair<String, String> {
-        val isFemale = profile.gender == OcrContextGraph.Gender.FEMALE || when (persona) {
+        val isFemale = profile.gender == Gender.FEMALE || when (persona) {
             CharacterPersona.PROTAGONIST_FEMALE,
             CharacterPersona.YOUNG_GIRL,
             CharacterPersona.ROYAL_QUEEN,
@@ -1425,7 +1426,7 @@ class GameTtsManager(private val context: Context) {
         }
 
         val isMale = if (profile != null) {
-            profile.gender != OcrContextGraph.Gender.FEMALE
+            profile.gender != Gender.FEMALE
         } else {
             when (persona) {
                 CharacterPersona.PROTAGONIST_FEMALE,

@@ -36,7 +36,7 @@
                 android:id="@android:id/icon"
                 android:layout_width="22dp"
                 android:layout_height="22dp"
-                app:tint="@color/melonMain" />
+                app:tint="?attr/colorAccent" />
         </LinearLayout>
 
         <LinearLayout
@@ -52,7 +52,7 @@
                 android:textSize="14.5sp"
                 android:textFontWeight="600"
                 android:fontFamily="@font/space_grotesk"
-                android:textColor="@color/watermelon_pref_title"
+                android:textColor="?android:attr/textColorPrimary"
                 android:maxLines="2"
                 android:ellipsize="end" />
 
@@ -64,7 +64,7 @@
                 android:textSize="13sp"
                 android:textFontWeight="500"
                 android:fontFamily="@font/manrope"
-                android:textColor="@color/textColorSecondary"
+                android:textColor="?android:attr/textColorSecondary"
                 android:maxLines="4"
                 android:ellipsize="end" />
         </LinearLayout>

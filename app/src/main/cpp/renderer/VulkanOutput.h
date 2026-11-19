@@ -1042,6 +1042,7 @@ private:
     std::array<SameBankMode2SourceCache, 4> sameBankMode2SourceCaches{};
 
     std::unordered_map<Frame*, FrameResource> resources;
+    mutable std::recursive_mutex resourcesLock;
     std::mutex commandPoolLock;
     mutable std::mutex temporalReferenceLock;
     Frame* lastPreparedFrame{nullptr};

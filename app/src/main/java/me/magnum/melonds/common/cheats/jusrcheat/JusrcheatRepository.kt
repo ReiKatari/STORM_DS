@@ -3,6 +3,7 @@ package me.magnum.melonds.common.cheats.jusrcheat
 import android.content.Context
 import android.os.Environment
 import android.util.Log
+import androidx.room.withTransaction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -69,6 +70,12 @@ class JusrcheatRepository private constructor(
     @Volatile
     private var cachedIndex: List<JusrcheatGameMeta>? = null
 
+    @Volatile
+    private var dbCharset: java.nio.charset.Charset = Charsets.UTF_8
+
+    @Volatile
+    private var gameMetaByCodeSnapshot: Map<String, List<JusrcheatGameMeta>> = emptyMap()
+
     private val gameMetaList = ArrayList<JusrcheatGameMeta>(4100)
     private val gameMetaByCode = HashMap<String, MutableList<JusrcheatGameMeta>>(4100)
     private var activeDatFile: File? = null
@@ -87,14 +94,17 @@ class JusrcheatRepository private constructor(
                 }
                 activeDatFile = datFile
 
-                val raf = RandomAccessFile(datFile, "r")
-                val channel = raf.channel
-                val mbb = channel.map(FileChannel.MapMode.READ_ONLY, 0, channel.size())
+                val mbb = RandomAccessFile(datFile, "r").use { raf ->
+                    raf.channel.use { channel ->
+                        channel.map(FileChannel.MapMode.READ_ONLY, 0, channel.size())
+                    }
+                }
                 mbb.order(ByteOrder.LITTLE_ENDIAN)
                 mappedByteBuffer = mbb
 
                 val (parsedHeader, metas) = JusrcheatBinaryCodec.parseHeaderAndIndex(mbb)
                 header = parsedHeader
+                dbCharset = JusrcheatBinaryCodec.resolveCharset(parsedHeader.encoding)
 
                 gameMetaList.clear()
                 gameMetaList.addAll(metas)
@@ -105,6 +115,7 @@ class JusrcheatRepository private constructor(
                     val codeUpper = meta.gameId.trim().uppercase()
                     gameMetaByCode.getOrPut(codeUpper) { mutableListOf() }.add(meta)
                 }
+                gameMetaByCodeSnapshot = gameMetaByCode.mapValues { (_, list) -> list.toList() }
 
                 isInitialized = true
                 Log.i(TAG, "Successfully memory-mapped Jusrcheat database with ${gameMetaList.size} games")
@@ -249,12 +260,12 @@ class JusrcheatRepository private constructor(
     fun loadGame(meta: JusrcheatGameMeta): JusrcheatGame? {
         val buffer = mappedByteBuffer ?: return null
         return runCatching {
-            JusrcheatBinaryCodec.parseGameCheats(buffer, meta)
+            JusrcheatBinaryCodec.parseGameCheats(buffer, meta, dbCharset)
         }.getOrNull()
     }
 
     fun loadGameById(gameId: String): JusrcheatGame? {
-        val meta = gameMetaByCode[gameId.trim().uppercase()]?.firstOrNull() ?: return null
+        val meta = gameMetaByCodeSnapshot[gameId.trim().uppercase()]?.firstOrNull() ?: return null
         return loadGame(meta)
     }
 
@@ -270,7 +281,7 @@ class JusrcheatRepository private constructor(
 
         // 1. Exact 4-char gameCode
         if (cleanCode.length >= 4) {
-            val exact = gameMetaByCode[cleanCode.take(4)].orEmpty()
+            val exact = gameMetaByCodeSnapshot[cleanCode.take(4)].orEmpty()
             val loaded = exact.mapNotNull { loadGame(it) }.filter { it.totalCheatsCount > 0 }
             if (loaded.isNotEmpty()) return@withContext loaded
         }
@@ -404,61 +415,77 @@ class JusrcheatRepository private constructor(
         val targetChecksum = romInfo.headerChecksumString().trim().uppercase()
         val targetTitle = romInfo.gameTitle.ifBlank { romInfo.gameName.ifBlank { jusrGame.title } }
 
-        var gameEntity = (if (targetChecksum.isNotBlank()) database.gameDao().findGameByChecksum(targetChecksum) else null)
-            ?: database.gameDao().findGameByCode(targetGameCode)
+        database.withTransaction {
+            val gameEntity = (if (targetChecksum.isNotBlank()) database.gameDao().findGameByChecksum(targetChecksum) else null)
+                ?: database.gameDao().findGameByCode(targetGameCode)
 
-        val gameId = gameEntity?.id ?: database.gameDao().insertGame(
-            GameEntity(
-                id = null,
-                name = targetTitle,
-                gameCode = targetGameCode,
-                gameChecksum = targetChecksum
-            )
-        )
-
-        for (folder in jusrGame.folders) {
-            if (folder.cheats.isEmpty()) continue
-            val folderId = database.cheatFolderDao().insertCheatFolder(
-                CheatFolderEntity(
+            val gameId = gameEntity?.id ?: database.gameDao().insertGame(
+                GameEntity(
                     id = null,
-                    gameId = gameId,
-                    name = folder.name
+                    name = targetTitle,
+                    gameCode = targetGameCode,
+                    gameChecksum = targetChecksum
                 )
             )
-            val cheats = folder.cheats.map { c ->
-                CheatEntity(
-                    id = null,
-                    cheatFolderId = folderId,
-                    cheatDatabaseId = CheatDatabaseEntity.CUSTOM_CHEATS_DATABASE_ID,
-                    name = c.name,
-                    description = c.note.ifBlank { null },
-                    code = c.getFormattedCode(),
-                    enabled = enableAll || c.enabled
-                )
+
+            val existingFoldersByName = database.cheatFolderDao()
+                .getFoldersForGame(gameId)
+                .associateBy { it.name.trim().lowercase() }
+                .toMutableMap()
+
+            suspend fun attachFolderCheats(folderName: String, sourceCheats: List<JusrcheatCode>) {
+                if (sourceCheats.isEmpty()) return
+                val normalizedFolderKey = folderName.trim().lowercase()
+                val existingFolder = existingFoldersByName[normalizedFolderKey]
+                val folderId = existingFolder?.id ?: database.cheatFolderDao().insertCheatFolder(
+                    CheatFolderEntity(
+                        id = null,
+                        gameId = gameId,
+                        name = folderName
+                    )
+                ).also { insertedId ->
+                    existingFoldersByName[normalizedFolderKey] = CheatFolderEntity(
+                        id = insertedId,
+                        gameId = gameId,
+                        name = folderName
+                    )
+                }
+
+                val existingCheats = database.cheatDao().getFolderCheatsList(folderId)
+                val existingCodes = existingCheats.map { it.code.trim() }.toMutableSet()
+                val existingNames = existingCheats.map { it.name.trim().lowercase() }.toMutableSet()
+
+                val newCheats = sourceCheats.mapNotNull { c ->
+                    val formattedCode = c.getFormattedCode().trim()
+                    val nameKey = c.name.trim().lowercase()
+                    if (formattedCode in existingCodes || nameKey in existingNames) {
+                        null
+                    } else {
+                        existingCodes.add(formattedCode)
+                        existingNames.add(nameKey)
+                        CheatEntity(
+                            id = null,
+                            cheatFolderId = folderId,
+                            cheatDatabaseId = CheatDatabaseEntity.CUSTOM_CHEATS_DATABASE_ID,
+                            name = c.name,
+                            description = c.note.ifBlank { null },
+                            code = formattedCode,
+                            enabled = enableAll || c.enabled
+                        )
+                    }
+                }
+                if (newCheats.isNotEmpty()) {
+                    database.cheatDao().insertCheats(newCheats)
+                }
             }
-            database.cheatDao().insertCheats(cheats)
-        }
 
-        if (jusrGame.directCheats.isNotEmpty()) {
-            val folderId = database.cheatFolderDao().insertCheatFolder(
-                CheatFolderEntity(
-                    id = null,
-                    gameId = gameId,
-                    name = "Main"
-                )
-            )
-            val cheats = jusrGame.directCheats.map { c ->
-                CheatEntity(
-                    id = null,
-                    cheatFolderId = folderId,
-                    cheatDatabaseId = CheatDatabaseEntity.CUSTOM_CHEATS_DATABASE_ID,
-                    name = c.name,
-                    description = c.note.ifBlank { null },
-                    code = c.getFormattedCode(),
-                    enabled = enableAll || c.enabled
-                )
+            for (folder in jusrGame.folders) {
+                attachFolderCheats(folder.name, folder.cheats)
             }
-            database.cheatDao().insertCheats(cheats)
+
+            if (jusrGame.directCheats.isNotEmpty()) {
+                attachFolderCheats("Main", jusrGame.directCheats)
+            }
         }
     }
 

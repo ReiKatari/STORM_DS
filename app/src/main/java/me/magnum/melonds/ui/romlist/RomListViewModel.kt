@@ -298,9 +298,9 @@ class RomListViewModel @Inject constructor(
             _sortingOrder,
         ) { roms, mode, order ->
             withContext(Dispatchers.Default) {
-                sortRoms(roms, mode, order) to mode
+                Triple(sortRoms(roms, mode, order), mode, order)
             }
-        }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList<RomWithParent>() to _sortingMode.value)
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, Triple(emptyList<RomWithParent>(), _sortingMode.value, _sortingOrder.value))
 
         @OptIn(FlowPreview::class)
         val debouncedQuery = _searchQuery
@@ -315,16 +315,17 @@ class RomListViewModel @Inject constructor(
                 rootDirectories,
                 _filter,
                 viewMode,
+                _sortingOrder,
             ) { values: Array<Any?> ->
                 @Suppress("UNCHECKED_CAST")
-                val sortedPair = values[0] as Pair<List<RomWithParent>, SortingMode>
+                val sortedTriple = values[0] as Triple<List<RomWithParent>, SortingMode, SortingOrder>
                 buildBrowserState(
-                    sortedPair.first,
+                    sortedTriple.first,
                     values[1] as String,
                     values[2] as List<BrowserLocation>,
                     values[3] as List<RootDirectory>,
-                    sortedPair.second,
-                    _sortingOrder.value,
+                    sortedTriple.second,
+                    values[6] as SortingOrder,
                     values[4] as RomFilter,
                     values[5] as RomViewMode,
                 )
@@ -386,7 +387,7 @@ class RomListViewModel @Inject constructor(
             else
                 SortingOrder.ASCENDING
 
-            settingsRepository.setRomSortingOrder(_sortingOrder.value)
+            settingsRepository.setRomSortingOrder(newSortingOrder)
             _sortingOrder.value = newSortingOrder
         } else {
             settingsRepository.setRomSortingMode(sortingMode)
@@ -446,7 +447,7 @@ class RomListViewModel @Inject constructor(
         sortingOrder: SortingOrder,
         filter: RomFilter,
         viewMode: RomViewMode,
-    ): RomBrowserUiState = withContext(Dispatchers.Default) {
+    ): RomBrowserUiState = withContext(Dispatchers.IO) {
         val continuePlaying = sortedRoms
             .mapNotNull { it.rom.takeIf { rom -> rom.lastPlayed != null } }
             .sortedByDescending { it.lastPlayed }
@@ -495,7 +496,6 @@ class RomListViewModel @Inject constructor(
             )
         }
 
-        val directoryNodes = buildDirectoryNodes(sortedRoms, roots)
         val baseLocation = defaultLocationForRoots(roots)
         val effectiveStack = if (navigationStack.isEmpty()) listOf(baseLocation) else navigationStack
         val currentLocation = effectiveStack.lastOrNull() ?: baseLocation

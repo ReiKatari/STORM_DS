@@ -10,6 +10,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -342,7 +343,7 @@ private fun LayoutsScreenContent(
         ) {
             items(
                 items = layouts,
-                key = { it.id ?: UUID.randomUUID() },
+                key = { it.id ?: "global_layout" },
             ) { layout ->
                 LayoutItem(
                     layout = layout,
@@ -406,7 +407,8 @@ private fun LayoutItem(
             .focusProperties {
                 end = if (isCustomLayout) optionsFocusRequester else FocusRequester.Default
             }
-            .bouncingClickable(onClick = onLayoutSelected)
+            .focusable(interactionSource = interactionSource)
+            .bouncingClickable(interactionSource = interactionSource, onClick = onLayoutSelected)
             .onKeyEvent {
                 if (it.type == KeyEventType.KeyDown && it.key == Key.Menu) {
                     showMenu = true

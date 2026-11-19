@@ -13,12 +13,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
-import android.view.Menu
-import android.view.MenuInflater
-import android.view.MenuItem
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
-import androidx.core.view.MenuProvider
 import me.magnum.melonds.R
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -82,8 +78,7 @@ class InputSetupActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        setTheme(me.magnum.melonds.ui.theme.AppThemeManager.currentTheme.getThemeResId())
-        enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT))
+        me.magnum.melonds.ui.theme.AppThemeManager.applyEdgeToEdgeTheme(this)
         super.onCreate(savedInstanceState)
         window.applyImmersiveFullscreen()
 
@@ -91,33 +86,12 @@ class InputSetupActivity : AppCompatActivity() {
             MelonTheme {
                 InputSetupScreen(
                     viewModel = viewModel,
-                    onBackClick = ::onNavigateUp,
+                    onBackClick = { onBackPressedDispatcher.onBackPressed() },
                     onAutoMapClick = ::autoMapStandardGamepadWithFeedback,
                     onClearAllClick = ::showClearAllConfirmDialog,
                 )
             }
         }
-
-        addMenuProvider(object : MenuProvider {
-            override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
-                menu.add(0, 101, 0, R.string.v780_input_auto_map_title)
-                menu.add(0, 102, 1, R.string.v780_input_clear_all_title)
-            }
-
-            override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
-                return when (menuItem.itemId) {
-                    101 -> {
-                        autoMapStandardGamepadWithFeedback()
-                        true
-                    }
-                    102 -> {
-                        showClearAllConfirmDialog()
-                        true
-                    }
-                    else -> false
-                }
-            }
-        }, this)
 
         lifecycleScope.launch {
             lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -125,15 +99,8 @@ class InputSetupActivity : AppCompatActivity() {
                     inputAssignment != null || slot2Assignment != null
                 }.collect { hasPendingAssignment ->
                     if (hasPendingAssignment) {
-                        // A new assignment has started. Reset reference values
+                        // A new assignment has started. Capture resting values from the first MotionEvent.
                         referenceAxisValues.clear()
-                        InputDevice.getDeviceIds().forEach { deviceId ->
-                            InputDevice.getDevice(deviceId)?.motionRanges?.forEach { range ->
-                                if (range.isJoystickOrGamepadRange()) {
-                                    referenceAxisValues[deviceId to range.axis] = 0f
-                                }
-                            }
-                        }
                     }
                 }
             }
@@ -152,6 +119,17 @@ class InputSetupActivity : AppCompatActivity() {
                     ?.distinct()
                     ?.toList()
                     ?: emptyList()
+                var initializedBaseline = false
+                for (axis in joystickAxes) {
+                    val key = event.deviceId to axis
+                    if (!referenceAxisValues.containsKey(key)) {
+                        referenceAxisValues[key] = event.getAxisValue(axis)
+                        initializedBaseline = true
+                    }
+                }
+                if (initializedBaseline) {
+                    return true
+                }
                 val detectedAxis = joystickAxes.firstOrNull { axis ->
                     val key = event.deviceId to axis
                     val baseline = referenceAxisValues[key] ?: 0f
@@ -215,25 +193,6 @@ class InputSetupActivity : AppCompatActivity() {
             pendingChordModifierKey = null
         }
         return super.dispatchKeyEvent(event)
-    }
-    override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        menu.add(0, 101, 0, R.string.v780_input_auto_map_title)
-        menu.add(0, 102, 1, R.string.v780_input_clear_all_title)
-        return true
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        return when (item.itemId) {
-            101 -> {
-                autoMapStandardGamepadWithFeedback()
-                true
-            }
-            102 -> {
-                showClearAllConfirmDialog()
-                true
-            }
-            else -> super.onOptionsItemSelected(item)
-        }
     }
 
     fun autoMapStandardGamepadWithFeedback() {

@@ -240,12 +240,12 @@
     <string name="layout_already_imported">Dieses Layout-Profil ist bereits importiert</string>
     <string name="layout_operation_failed">Layout-Vorgang fehlgeschlagen</string>
     <string name="ds_bios_dir_not_set">DS-BIOS-Verzeichnis nicht festgelegt</string>
-    <string name="ds_bios_dir_not_set_info">Das DS-BIOS-Verzeichnis ist nicht festgelegt. Wähle das Verzeichnis, das folgende Dateien enthält:\n&#8226; bios7.bin\n&#8226; bios9.bin\n&#8226; firmware.bin</string>
+    <string name="ds_bios_dir_not_set_info">Das DS-BIOS-Verzeichnis ist nicht festgelegt. Wähle das Verzeichnis, das folgende Dateien enthält:\n and #8226; bios7.bin\n and #8226; bios9.bin\n and #8226; firmware.bin</string>
     <string name="dsi_bios_dir_not_set">DSi-BIOS-Verzeichnis nicht festgelegt</string>
-    <string name="dsi_bios_dir_not_set_info">Das DSi-BIOS-Verzeichnis ist nicht festgelegt. Wähle das Verzeichnis, das folgende Dateien enthält:\n&#8226; bios7.bin\n&#8226; bios9.bin\n&#8226; firmware.bin\n&#8226; nand.bin</string>
+    <string name="dsi_bios_dir_not_set_info">Das DSi-BIOS-Verzeichnis ist nicht festgelegt. Wähle das Verzeichnis, das folgende Dateien enthält:\n and #8226; bios7.bin\n and #8226; bios9.bin\n and #8226; firmware.bin\n and #8226; nand.bin</string>
     <string name="incorrect_bios_dir">Ungültiges BIOS-Verzeichnis</string>
-    <string name="ds_incorrect_bios_dir_info">Das BIOS-Verzeichnis für das DS-System ist ungültig. Stelle sicher, dass das ausgewählte Verzeichnis folgende Dateien enthält:\n&#8226; bios7.bin\n&#8226; bios9.bin\n&#8226; firmware.bin</string>
-    <string name="dsi_incorrect_bios_dir_info">Das BIOS-Verzeichnis für das DSi-System ist ungültig. Stelle sicher, dass das ausgewählte Verzeichnis folgende Dateien enthält:\n&#8226; bios7.bin\n&#8226; bios9.bin\n&#8226; firmware.bin\n&#8226; nand.bin</string>
+    <string name="ds_incorrect_bios_dir_info">Das BIOS-Verzeichnis für das DS-System ist ungültig. Stelle sicher, dass das ausgewählte Verzeichnis folgende Dateien enthält:\n and #8226; bios7.bin\n and #8226; bios9.bin\n and #8226; firmware.bin</string>
+    <string name="dsi_incorrect_bios_dir_info">Das BIOS-Verzeichnis für das DSi-System ist ungültig. Stelle sicher, dass das ausgewählte Verzeichnis folgende Dateien enthält:\n and #8226; bios7.bin\n and #8226; bios9.bin\n and #8226; firmware.bin\n and #8226; nand.bin</string>
     <string name="storage_permission_required">Speicherberechtigung erforderlich</string>
     <string name="storage_permission_required_info">Die Speicherberechtigung ist erforderlich, um ROMs von deinem Gerät zu laden. Bitte gewähre den Speicherzugriff im nächsten Dialog.</string>
     <string name="microphone_permission_required">Audioaufnahme-Berechtigung erforderlich</string>
@@ -433,7 +433,7 @@
     <string name="system_ignore_display_cutout_in_layouts_summary">Ermöglicht es Emulator-Layouts, den Bereich von Notch oder Kameraaussparung zu nutzen. Nach Änderung den Layout-Editor oder Emulator neu starten.</string>
     <string name="backup_settings">Einstellungen sichern</string>
     <string name="restore_settings">Einstellungen wiederherstellen</string>
-    <string name="settings_backup_success">Sicherung der Einstellungen erstellt.\n\nFolgendes wurde übersprungen:\n&#8226; RetroAchievements-Sitzungstoken\n&#8226; ROM-Suchverzeichnisse\n&#8226; DS-BIOS-Verzeichnis\n&#8226; DSi-BIOS-Verzeichnis</string>
+    <string name="settings_backup_success">Sicherung der Einstellungen erstellt.\n\nFolgendes wurde übersprungen:\n and #8226; RetroAchievements-Sitzungstoken\n and #8226; ROM-Suchverzeichnisse\n and #8226; DS-BIOS-Verzeichnis\n and #8226; DSi-BIOS-Verzeichnis</string>
     <string name="settings_backup_error">Sichern der Einstellungen fehlgeschlagen</string>
     <string name="settings_restore_success">Einstellungen wiederhergestellt.</string>
     <string name="settings_restore_error">Wiederherstellen der Einstellungen fehlgeschlagen</string>
@@ -501,15 +501,15 @@
     <string name="renderer_3d_debug_controls">3D-Renderer-Steuerung</string>
     <string name="renderer_3d_debug_controls_reset">3D-Steuerung zurücksetzen</string>
     <string name="conservative_coverage_enabled">Conservative Coverage Fix (experimentell)</string>
-    <string name="conservative_coverage_enabled_summary">Erweitert die Polygonabdeckung im Bildschirmraum, um 1–2 Pixel große Lücken zwischen Polygonen zu schließen. Behebt schwarze Linien in Pokémon. Kann zu leichtem Overdraw führen.</string>
+    <string name="conservative_coverage_enabled_summary">Erweitert die Polygonabdeckung im Bildschirmraum, um 1-2 Pixel große Lücken zwischen Polygonen zu schließen. Behebt schwarze Linien in Pokémon. Kann zu leichtem Overdraw führen.</string>
     <string name="conservative_coverage_px">Abdeckungserweiterung</string>
-    <string name="conservative_coverage_px_summary">Erweiterungsgrad in Pixeln interner Auflösung (0–200 = 0.00–2.00 px).</string>
+    <string name="conservative_coverage_px_summary">Erweiterungsgrad in Pixeln interner Auflösung (0-200 = 0.00-2.00 px).</string>
     <string name="conservative_coverage_apply_repeat">Auf Repeat anwenden</string>
     <string name="conservative_coverage_apply_repeat_summary">Wendet den Fix auf REPEAT-Texturen (Kachelung) an. Empfohlen für Böden/Wasser.</string>
     <string name="conservative_coverage_apply_clamp">Auf Clamp anwenden</string>
     <string name="conservative_coverage_apply_clamp_summary">Wendet den Fix auch auf CLAMP-Texturen an. Aggressiver und kann Sprites/Billboards beeinflussen.</string>
     <string name="conservative_coverage_depth_bias">Tiefen-Bias</string>
-    <string name="conservative_coverage_depth_bias_summary">Tiefen-Bias für erweiterte Polygone (0–2000 = 0.000000–0.002000). Nur nutzen bei Z-Fighting oder Flackern.</string>
+    <string name="conservative_coverage_depth_bias_summary">Tiefen-Bias für erweiterte Polygone (0-2000 = 0.000000-0.002000). Nur nutzen bei Z-Fighting oder Flackern.</string>
     <string name="debug_3d_clear_magenta">Debug: 3D auf Magenta leeren</string>
     <string name="debug_3d_clear_magenta_summary">Wenn Risse magentafarben werden, handelt es sich um Abdeckungslücken. Nur für Debugging.</string>
     <string name="category_video">Grafik</string>
@@ -651,7 +651,7 @@
     <string name="label_rom_config_gba_save_path">GBA-Speicherpfad</string>
     <string name="rom_details_configuration_tab">Konfiguration</string>
     <string name="rom_details_audio_tab">Audio</string>
-    <string name="retro_achievements_tab">Retro&#8203;Achievements</string>
+    <string name="retro_achievements_tab">Retro and #8203;Achievements</string>
     <string name="rom_details_offline_achievements_tab">Offline</string>
     <string name="theme_option_light">Hell</string>
     <string name="theme_option_dark">Dunkel</string>
@@ -764,7 +764,7 @@
     <string name="dual_screen_vertical_alignment_option_bottom">Unten</string>
     <string name="dual_screen_vertical_alignment_summary">Intern: %1$s • Extern: %2$s</string>
     <string name="dual_screen_vertical_alignment_preset_value">Voreinstellung (%1$s)</string>
-    <string name="dual_screen_vertical_alignment_default_hint">Voreinstellung — Intern: %1$s • Extern: %2$s</string>
+    <string name="dual_screen_vertical_alignment_default_hint">Voreinstellung - Intern: %1$s • Extern: %2$s</string>
     <string name="presets">Dual-Screen-Voreinstellungen</string>
     <string name="layout_editing_disabled_by_presets">Layouts können nicht bearbeitet werden, während eine Dual-Screen-Voreinstellung aktiv ist.</string>
     <string name="above_other_screen">Über anderem Bildschirm</string>
@@ -1035,13 +1035,13 @@
     <string name="about_credits_jpeacekeeper_title">JPeacekeeper (4PDA)</string>
     <string name="about_credits_jpeacekeeper_summary">Unschätzbare Testbeiträge, detaillierte DSi-Fehlerberichte, Bildraten-Standardisierung und kontinuierliche Projektverbesserungen</string>
     <string name="about_credits_watermelonds_title">WatermelonDS (Android-Port)</string>
-    <string name="about_credits_watermelonds_summary">SapphireRhodonite, rafaelvcaetano und Mitwirkende — Android-Portierung, Vulkan-Rendering-Fastpaths, librashader-Integration, moderne Benutzeroberfläche und Touch-Steuerung</string>
+    <string name="about_credits_watermelonds_summary">SapphireRhodonite, rafaelvcaetano und Mitwirkende - Android-Portierung, Vulkan-Rendering-Fastpaths, librashader-Integration, moderne Benutzeroberfläche und Touch-Steuerung</string>
     <string name="about_credits_melonds_title">melonDS (Ursprünglicher Core)</string>
-    <string name="about_credits_melonds_summary">StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura und das melonDS-Team — originaler hochpräziser Nintendo DS / DSi-Emulator-Core</string>
+    <string name="about_credits_melonds_summary">StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura und das melonDS-Team - originaler hochpräziser Nintendo DS / DSi-Emulator-Core</string>
     <string name="about_credits_melonds_ds_title">melonDS DS (RetroArch-Core)</string>
-    <string name="about_credits_melonds_ds_summary">JesseTG und das Libretro-Team — DSiWare-Autoloading-Mechaniken, TLNC-Warmboot-Architektur und Libretro-Core-Innovationen</string>
+    <string name="about_credits_melonds_ds_summary">JesseTG und das Libretro-Team - DSiWare-Autoloading-Mechaniken, TLNC-Warmboot-Architektur und Libretro-Core-Innovationen</string>
     <string name="about_credits_drastic_title">Inspirationen von DraStic und fastDS</string>
-    <string name="about_credits_drastic_summary">Exophase sowie die Schöpfer von DraStic und fastDS — Bildschirmlayout-Inspirationen, Schnellanzeigen und ergonomische Touch-Konzepte</string>
+    <string name="about_credits_drastic_summary">Exophase sowie die Schöpfer von DraStic und fastDS - Bildschirmlayout-Inspirationen, Schnellanzeigen und ergonomische Touch-Konzepte</string>
     <string name="about_credits_libraries_title">Open-Source-Bibliotheken und Tools</string>
     <string name="about_credits_libraries_summary">Google Oboe (AAudio/OpenSL ES), librashader (RetroArch Slang-Shader), RetroAchievements (rcheevos), libslirp (WLAN), libadrenotools (Adreno/Turnip-Treiber)</string>
     <string name="about_github_title">STORM DS Repository</string>
@@ -1192,6 +1192,7 @@
     <string name="dual_screen_info_desc">Ermöglicht die Verteilung des oberen und unteren Nintendo DS-Bildschirms zwischen deinem Gerät und einem externen Monitor/Fernseher (über USB-C, HDMI oder drahtlose Übertragung).\n\n• 📱 DS-Seitenverhältnis beibehalten: behält das authentische 4:3-Seitenverhältnis ohne Verzerrung bei.\n• 🔲 Ganzzahlige Skalierung: skaliert Pixel in ganzzahligen Multiplikatoren (1x, 2x, 3x) für gestochen scharfe Grafik ohne Weichzeichner.\n• 📏 Bereichsausfüllung und Ausrichtung: passe die vertikale Ausrichtung und Bildschirmabdeckung individuell an.</string>
     <string name="theme_accent_color_title">Akzentfarbe</string>
     <string name="theme_accent_color_summary">Wähle eine Neon-Akzentfarbe für das Theme STORM NIGHT</string>
+    <string name="accent_theme_default">Design-Standard</string>
     <string name="accent_electric_cyan">💎 Elektrisches Cyan</string>
     <string name="accent_matrix_emerald">🌿 Matrix-Smaragd</string>
     <string name="accent_amber_gold">⚡ Cyber-Gold</string>

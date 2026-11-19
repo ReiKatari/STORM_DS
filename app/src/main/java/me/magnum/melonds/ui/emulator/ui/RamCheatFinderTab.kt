@@ -40,6 +40,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.magnum.melonds.MelonEmulator
 import me.magnum.melonds.R
+import me.magnum.melonds.domain.model.Game
 import me.magnum.melonds.domain.model.RomInfo
 import me.magnum.melonds.domain.repositories.CheatsRepository
 import me.magnum.melonds.ui.cheats.model.CheatSubmissionForm
@@ -156,6 +157,11 @@ fun RamCheatFinderTab(
 
     fun startNewSearch() {
         if (isScanning) return
+        val targetValue = parseInputTarget()
+        if (searchMode == RamSearchMode.EXACT && targetValue == null) {
+            Toast.makeText(context, context.getString(R.string.v790_ram_value_required), Toast.LENGTH_SHORT).show()
+            return
+        }
         isScanning = true
         testStatusMap.clear()
         testValuesMap.clear()
@@ -172,33 +178,40 @@ fun RamCheatFinderTab(
                 return@launch
             }
 
-            val targetValue = parseInputTarget()
             val step = bitness.bytes
             val ramSize = snapshot.size
 
             val matches = withContext(Dispatchers.Default) {
-                val list = ArrayList<Int>(if (searchMode == RamSearchMode.EXACT) 1024 else ramSize / step)
                 if (searchMode == RamSearchMode.EXACT && targetValue != null) {
                     val maskedTarget = when (bitness) {
                         RamBitness.BYTE -> targetValue and 0xFFL
                         RamBitness.SHORT -> targetValue and 0xFFFFL
                         RamBitness.WORD -> targetValue and 0xFFFFFFFFL
                     }
+                    var buf = IntArray(1024)
+                    var matchCount = 0
                     var offset = 0
                     while (offset <= ramSize - step) {
                         if (readRamValue(snapshot, offset, step) == maskedTarget) {
-                            list.add(offset)
+                            if (matchCount == buf.size) {
+                                buf = buf.copyOf(buf.size * 2)
+                            }
+                            buf[matchCount++] = offset
                         }
                         offset += step
                     }
+                    buf.copyOf(matchCount)
                 } else {
+                    val total = ((ramSize - step) / step + 1).coerceAtLeast(0)
+                    val buf = IntArray(total)
+                    var matchCount = 0
                     var offset = 0
-                    while (offset <= ramSize - step) {
-                        list.add(offset)
+                    while (offset <= ramSize - step && matchCount < total) {
+                        buf[matchCount++] = offset
                         offset += step
                     }
+                    if (matchCount == buf.size) buf else buf.copyOf(matchCount)
                 }
-                list.toIntArray()
             }
 
             withContext(Dispatchers.Main) {
@@ -214,9 +227,14 @@ fun RamCheatFinderTab(
     fun filterSearch() {
         if (isScanning) return
         val currentCandidates = candidateOffsets
-        val prevSnap = previousSnapshot
+        val prevSnap = currentSnapshot
         if (currentCandidates == null || prevSnap == null) {
             startNewSearch()
+            return
+        }
+        val targetValue = parseInputTarget()
+        if (searchMode == RamSearchMode.EXACT && targetValue == null) {
+            Toast.makeText(context, context.getString(R.string.v790_ram_value_required), Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -235,11 +253,11 @@ fun RamCheatFinderTab(
                 return@launch
             }
 
-            val targetValue = parseInputTarget()
             val step = bitness.bytes
 
             val filtered = withContext(Dispatchers.Default) {
-                val list = ArrayList<Int>(currentCandidates.size)
+                val buf = IntArray(currentCandidates.size)
+                var matchCount = 0
                 val maskedTarget = targetValue?.let {
                     when (bitness) {
                         RamBitness.BYTE -> it and 0xFFL
@@ -261,14 +279,14 @@ fun RamCheatFinderTab(
                         RamSearchMode.UNCHANGED -> newVal == oldVal
                     }
                     if (matched) {
-                        list.add(offset)
+                        buf[matchCount++] = offset
                     }
                 }
-                list.toIntArray()
+                buf.copyOf(matchCount)
             }
 
             withContext(Dispatchers.Main) {
-                previousSnapshot = freshSnapshot
+                previousSnapshot = prevSnap
                 currentSnapshot = freshSnapshot
                 candidateOffsets = filtered
                 isScanning = false
@@ -291,8 +309,20 @@ fun RamCheatFinderTab(
         val cheatName = String.format(context.getString(R.string.v790_ram_cheat_name), ramAddress)
 
         coroutineScope.launch {
-            val game = cheatsRepository.findGameForRom(romInfo)
-            if (game != null) {
+            val savedToDb = withContext(Dispatchers.IO) {
+                val existingGame = cheatsRepository.findGameForRom(romInfo)
+                val game = existingGame ?: run {
+                    val gameTitle = romInfo.gameTitle.ifBlank { romInfo.gameName }.ifBlank { romInfo.cheatGameCode }
+                    cheatsRepository.addGameCheats(
+                        Game(
+                            id = null,
+                            name = gameTitle,
+                            gameCode = romInfo.cheatGameCode,
+                            gameChecksum = romInfo.headerChecksumString(),
+                            cheats = emptyList(),
+                        )
+                    )
+                }
                 val folders = cheatsRepository.getAllGameCheats(game).firstOrNull() ?: emptyList()
                 val targetFolder = folders.firstOrNull { it.name == "RAM Finder" }
                     ?: run {
@@ -307,8 +337,13 @@ fun RamCheatFinderTab(
                         code = code,
                     )
                     cheatsRepository.addCustomCheat(targetFolder, form)
-                    onCheatCreated()
+                    true
+                } else {
+                    false
                 }
+            }
+            if (savedToDb) {
+                onCheatCreated()
             }
 
             withContext(Dispatchers.Main) {

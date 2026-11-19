@@ -246,6 +246,23 @@ void DSi::SyncNtrIpcMirror() noexcept
     syncWindow(0x007FFF80u, NtrIpcShadowF80);
 }
 
+void DSi::ReloadNtrIpcShadow() noexcept
+{
+    if (MainRAM == nullptr)
+        return;
+
+    auto reloadWindow = [&](u32 baseOffset, u32 (&shadow)[32]) noexcept {
+        for (u32 i = 0; i < 32; ++i)
+        {
+            const u32 offLow = (baseOffset + (i << 2)) & MainRAMMask;
+            shadow[i] = *reinterpret_cast<const u32*>(&MainRAM[offLow]);
+        }
+    };
+
+    reloadWindow(0x007FFC80u, NtrIpcShadowC80);
+    reloadWindow(0x007FFF80u, NtrIpcShadowF80);
+}
+
 void DSi::SetDSPHLE(bool hle)
 {
     DSP.SetDSPHLE(hle);
@@ -344,6 +361,9 @@ void DSi::DoSavestateExtra(Savestate* file)
     SDIO.DoSavestate(file);
 
     UpdateVRAMTimings();
+
+    if (!file->Saving)
+        ReloadNtrIpcShadow();
 }
 
 void DSi::SetCartInserted(bool inserted)
@@ -1846,6 +1866,8 @@ void DSi::SoftReset()
     GPU.DispStat[1] |= (1<<6);
 
     UpdateVRAMTimings();
+
+    ReloadNtrIpcShadow();
 }
 
 bool DSi::LoadNAND()

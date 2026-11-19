@@ -6,7 +6,7 @@
     <string name="feature_quick_resume_from_save">快速存档 • %1$s</string>
     <string name="feature_quick_resume_from_save_ready">从快速存档恢复</string>
     <string name="feature_quick_resume_last_played">上次游玩 • %1$s</string>
-    <string name="feature_quick_resume_no_save_hint">正常启动 — 暂无快速存档</string>
+    <string name="feature_quick_resume_no_save_hint">正常启动 - 暂无快速存档</string>
     <string name="feature_quick_resume_tile_label">继续游戏</string>
     <string name="feature_quick_resume_no_recent_game">没有最近游玩的游戏</string>
     <string name="feature_quick_resume_not_found">找不到上次游玩的游戏</string>
@@ -27,7 +27,7 @@
     <string name="feature_stats_empty_desc">启动任意游戏即可开始记录游玩时长与每日活动</string>
     <string name="feature_problem_report_menu_title">报告问题</string>
     <string name="feature_problem_report_dialog_title">创建问题报告</string>
-    <string name="feature_problem_report_dialog_message">创建一个诊断 ZIP 压缩包，包含应用版本、设备与 GPU 信息、Android 版本、模拟器和渲染器设置（不含账号或令牌）、上次游玩的游戏代码以及最近日志。不会自动发送任何内容 — 您可以自行选择分享位置。</string>
+    <string name="feature_problem_report_dialog_message">创建一个诊断 ZIP 压缩包，包含应用版本、设备与 GPU 信息、Android 版本、模拟器和渲染器设置（不含账号或令牌）、上次游玩的游戏代码以及最近日志。不会自动发送任何内容 - 您可以自行选择分享位置。</string>
     <string name="feature_problem_report_create_action">创建并分享</string>
     <string name="feature_problem_report_generating">正在收集诊断报告…</string>
     <string name="feature_problem_report_share_chooser">分享问题报告</string>

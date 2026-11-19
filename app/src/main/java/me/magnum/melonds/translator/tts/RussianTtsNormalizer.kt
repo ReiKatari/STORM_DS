@@ -147,17 +147,61 @@ object RussianTtsNormalizer {
         Pattern.compile("(?i)\\bKO\\b") to "нокаут"
     )
 
-    // Roman Numerals in names/titles
-    private val ROMAN_NUMERALS = listOf(
-        Pattern.compile("\\bX\\b") to "десятая",
-        Pattern.compile("\\bIX\\b") to "девятая",
-        Pattern.compile("\\bVIII\\b") to "восьмая",
-        Pattern.compile("\\bVII\\b") to "седьмая",
-        Pattern.compile("\\bVI\\b") to "шестая",
-        Pattern.compile("\\bIV\\b") to "четвёртая",
-        Pattern.compile("\\bV\\b") to "пятая",
-        Pattern.compile("\\bIII\\b") to "третья",
-        Pattern.compile("\\bII\\b") to "вторая"
+    private val COMPILED_STRESS_REPLACEMENTS: List<Triple<String, Pattern, String>> = STRESS_REPLACEMENTS.map { (word, stressed) ->
+        Triple(
+            word,
+            Pattern.compile("\\b" + Pattern.quote(word) + "\\b", Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE),
+            stressed
+        )
+    }
+
+    private val STRIP_SYMBOLS_REGEX = Regex("[|_~^`<>♦•▪▫►◄▲▼★☆♪♫\\\\]+")
+    private val STRIP_STARS_REGEX = Regex("\\*{1,3}")
+    private val MULTI_SPACE_REGEX = Regex("\\s+")
+    private val ELLIPSIS_REGEX = Regex("\\.{3,}")
+    private val EM_DASH_REGEX = Regex("\\s*—\\s*")
+    private val EN_DASH_REGEX = Regex("\\s*–\\s*")
+    private val INTERJECTION_HMM = Regex("(?iu)\\bхмм+\\b")
+    private val INTERJECTION_MMM = Regex("(?iu)\\bммм+\\b")
+    private val INTERJECTION_PFF = Regex("(?iu)\\bпфф+\\b")
+    private val INTERJECTION_TSS = Regex("(?iu)\\bтц+\\b")
+    private val INTERJECTION_UGH = Regex("(?iu)\\bугх+\\b")
+    private val INTERJECTION_ARGH = Regex("(?iu)\\bагрх+\\b")
+    private val INTERJECTION_EEE = Regex("(?iu)\\bээ+\\b")
+    private val MULTI_EXCL_REGEX = Regex("!{2,}")
+    private val MULTI_QST_REGEX = Regex("\\?{2,}")
+    private val ZAMOK_REGEX = Regex("(?iu)\\b(замок|замка|замку|замком|замке)\\b")
+
+    private val ROMAN_MASC_MAP = mapOf(
+        "X" to "десятый",
+        "IX" to "девятый",
+        "VIII" to "восьмой",
+        "VII" to "седьмой",
+        "VI" to "шестой",
+        "IV" to "четвёртый",
+        "V" to "пятый",
+        "III" to "третий",
+        "II" to "второй"
+    )
+
+    private val ROMAN_FEM_MAP = mapOf(
+        "X" to "десятая",
+        "IX" to "девятая",
+        "VIII" to "восьмая",
+        "VII" to "седьмая",
+        "VI" to "шестая",
+        "IV" to "четвёртая",
+        "V" to "пятая",
+        "III" to "третья",
+        "II" to "вторая"
+    )
+
+    // Contextual Roman numerals only (never standalone X/V in buttons or titles like "Mega Man X")
+    private val ROMAN_MASC_CONTEXT_REGEX = Regex(
+        "(?iu)\\b(акт|том|век|уровень|эпизод|этап|сезон|класс|ранг|тир)\\s+(?-i)(X|IX|VIII|VII|VI|IV|V|III|II)\\b"
+    )
+    private val ROMAN_FEM_CONTEXT_REGEX = Regex(
+        "(?iu)\\b(глава|часть|серия|книга|версия|ступень|стадия|фаза|эпоха|Final\\s+Fantasy|Dragon\\s+Quest|Persona|Shin\\s+Megami\\s+Tensei|Castlevania|Phantasy\\s+Star|Fire\\s+Emblem)\\s+(?-i)(X|IX|VIII|VII|VI|IV|V|III|II)\\b"
     )
 
     fun normalize(text: String, languageCode: String = "ru"): String {
@@ -165,9 +209,9 @@ object RussianTtsNormalizer {
 
         // 1. Strip OCR border noise symbols that TTS engines read aloud
         var result = text
-            .replace(Regex("[|_~^`<>♦•▪▫►◄▲▼★☆♪♫\\\\]+"), " ")
-            .replace(Regex("\\*{1,3}"), " ")
-            .replace(Regex("\\s+"), " ")
+            .replace(STRIP_SYMBOLS_REGEX, " ")
+            .replace(STRIP_STARS_REGEX, " ")
+            .replace(MULTI_SPACE_REGEX, " ")
             .trim()
 
         // 2. Process gaming acronyms
@@ -177,33 +221,39 @@ object RussianTtsNormalizer {
 
         // 3. Clean pause handling on em-dashes and ellipses
         result = result
-            .replace(Regex("\\.{3,}"), "... ")
-            .replace(Regex("\\s*—\\s*"), " — ")
-            .replace(Regex("\\s*–\\s*"), " — ")
-            .replace(Regex("\\s+"), " ")
+            .replace(ELLIPSIS_REGEX, "... ")
+            .replace(EM_DASH_REGEX, " — ")
+            .replace(EN_DASH_REGEX, " — ")
+            .replace(MULTI_SPACE_REGEX, " ")
 
-        // 4. Expressive interjections, Roman numerals & stress for Russian
+        // 4. Expressive interjections, contextual Roman numerals & stress for Russian
         if (languageCode.lowercase().startsWith("ru")) {
             result = result
-                .replace(Regex("(?i)\\bхмм+\\b"), "хм")
-                .replace(Regex("(?i)\\bммм+\\b"), "м-м")
-                .replace(Regex("(?i)\\bпфф+\\b"), "пф-ф")
-                .replace(Regex("(?i)\\bтц+\\b"), "тс-с")
-                .replace(Regex("(?i)\\bугх+\\b"), "ух")
-                .replace(Regex("(?i)\\bагрх+\\b"), "аргх")
-                .replace(Regex("(?i)\\bээ+\\b"), "э-э")
+                .replace(INTERJECTION_HMM, "хм")
+                .replace(INTERJECTION_MMM, "м-м")
+                .replace(INTERJECTION_PFF, "пф-ф")
+                .replace(INTERJECTION_TSS, "тс-с")
+                .replace(INTERJECTION_UGH, "ух")
+                .replace(INTERJECTION_ARGH, "аргх")
+                .replace(INTERJECTION_EEE, "э-э")
 
-            for ((pattern, replacement) in ROMAN_NUMERALS) {
-                result = pattern.matcher(result).replaceAll(replacement)
+            result = ROMAN_FEM_CONTEXT_REGEX.replace(result) { match ->
+                val prefix = match.groupValues[1]
+                val numeral = match.groupValues[2]
+                "$prefix ${ROMAN_FEM_MAP[numeral] ?: numeral}"
+            }
+            result = ROMAN_MASC_CONTEXT_REGEX.replace(result) { match ->
+                val prefix = match.groupValues[1]
+                val numeral = match.groupValues[2]
+                "$prefix ${ROMAN_MASC_MAP[numeral] ?: numeral}"
             }
 
-            // Disambiguate "замок" (castle: за́мок vs lock: замо́к)
+            // Disambiguate "замок" (castle: за́мок vs lock: замо́к) across inflected forms
             result = disambiguateZamok(result)
 
-            // Apply word stress replacements
-            for ((word, stressed) in STRESS_REPLACEMENTS) {
+            // Apply precompiled word stress replacements
+            for ((word, pattern, stressed) in COMPILED_STRESS_REPLACEMENTS) {
                 if (!result.contains(word, ignoreCase = true)) continue
-                val pattern = Pattern.compile("(?i)\\b" + Pattern.quote(word) + "\\b")
                 val matcher = pattern.matcher(result)
                 val sb = StringBuffer()
                 while (matcher.find()) {
@@ -221,33 +271,35 @@ object RussianTtsNormalizer {
         }
 
         // Clean up multiple exclamation / question marks
-        result = result.replace(Regex("!{2,}"), "!")
-            .replace(Regex("\\?{2,}"), "?")
+        result = result.replace(MULTI_EXCL_REGEX, "!")
+            .replace(MULTI_QST_REGEX, "?")
 
         return result.trim()
     }
 
     private fun disambiguateZamok(text: String): String {
-        if (!text.contains("замок", ignoreCase = true) && !text.contains("замка", ignoreCase = true) &&
-            !text.contains("замку", ignoreCase = true) && !text.contains("замком", ignoreCase = true) &&
-            !text.contains("замке", ignoreCase = true)
-        ) {
+        if (!text.contains("зам", ignoreCase = true)) {
             return text
         }
 
         val lower = text.lowercase()
         val isLock = LOCK_CONTEXT_WORDS.any { lower.contains(it) }
 
-        val stressedCastle = "за${ACCENT}мок"
-        val stressedLock = "замо${ACCENT}к"
-        val chosenReplacement = if (isLock) stressedLock else stressedCastle
-
-        return text.replace(Regex("(?i)\\bзамок\\b")) { match ->
+        return ZAMOK_REGEX.replace(text) { match ->
             val orig = match.value
-            if (Character.isUpperCase(orig[0])) {
-                chosenReplacement.replaceFirstChar { it.uppercase() }
+            val formLower = orig.lowercase()
+            val stressed = when (formLower) {
+                "замок" -> if (isLock) "замо${ACCENT}к" else "за${ACCENT}мок"
+                "замка" -> if (isLock) "замка${ACCENT}" else "за${ACCENT}мка"
+                "замку" -> if (isLock) "замку${ACCENT}" else "за${ACCENT}мку"
+                "замком" -> if (isLock) "замко${ACCENT}м" else "за${ACCENT}мком"
+                "замке" -> if (isLock) "замке${ACCENT}" else "за${ACCENT}мке"
+                else -> orig
+            }
+            if (orig.isNotEmpty() && Character.isUpperCase(orig[0])) {
+                stressed.replaceFirstChar { it.uppercase() }
             } else {
-                chosenReplacement
+                stressed
             }
         }
     }

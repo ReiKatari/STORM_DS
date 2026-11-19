@@ -139,6 +139,20 @@ bool OpenGlRetroArchFilterChain::createChain(
     const std::vector<std::pair<std::string, float>>& parameterOverrides)
 {
     libra_preset_ctx_t presetContext = nullptr;
+    libra_shader_preset_t preset = nullptr;
+    struct PresetCleanupGuard
+    {
+        libra_preset_ctx_t& ctx;
+        libra_shader_preset_t& preset;
+        ~PresetCleanupGuard()
+        {
+            if (preset != nullptr)
+                (void)libra_preset_free(&preset);
+            if (ctx != nullptr)
+                (void)libra_preset_ctx_free(&ctx);
+        }
+    } cleanupGuard{presetContext, preset};
+
     libra_error_t error = libra_preset_ctx_create(&presetContext);
     if (error != nullptr)
     {
@@ -169,7 +183,6 @@ bool OpenGlRetroArchFilterChain::createChain(
         ShaderDiagnostics::get().record(entry);
     };
 
-    libra_shader_preset_t preset = nullptr;
     error = libra_preset_create_with_options(presetPath.c_str(), &presetContext, &presetOptions, &preset);
     if (error != nullptr)
     {

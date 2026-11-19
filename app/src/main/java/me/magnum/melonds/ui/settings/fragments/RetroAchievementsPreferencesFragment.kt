@@ -233,6 +233,12 @@ class RetroAchievementsPreferencesFragment : BasePreferenceFragment(), Preferenc
         }
     }
 
+    override fun onDestroyView() {
+        loginProgressDialog?.dismiss()
+        loginProgressDialog = null
+        super.onDestroyView()
+    }
+
     private fun showLoginDialog(existingUsername: String?) {
         val ctx = context ?: return
         me.magnum.melonds.ui.settings.dialogs.showSettingsComposeDialog(ctx) { dismiss ->

@@ -1,30 +1,19 @@
-# This is a basic workflow to help you get started with Actions
+name: STORM DS Nightly Build
 
-name: melonDS Android Nightly Build
-
-# Controls when the action will run.
 on:
-  # Triggers the workflow on push to any branch
   push:
     branches: [ '**' ]
 
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
   build:
-    # The type of runner that the job will run on
     runs-on: ubuntu-latest
     permissions:
       contents: write
       actions: read
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -51,10 +40,12 @@ jobs:
         with:
           targets: aarch64-linux-android, armv7-linux-androideabi, x86_64-linux-android
 
-      - name: Build melonDS Android
+      - name: Build STORM DS
         env:
-          MELONDS_KEYSTORE: ${{ secrets.MELONDS_KEYSTORE }}
-          MELONDS_KEYSTORE_PASSWORD: ${{ secrets.MELONDS_KEYSTORE_PASSWORD }}
+          STORM_CERT_BASE64: ${{ secrets.STORM_CERT_BASE64 }}
+          STORM_CERT_PASSWORD: ${{ secrets.STORM_CERT_PASSWORD }}
+          STORM_KEY_ALIAS: ${{ secrets.STORM_KEY_ALIAS }}
+          STORM_KEY_PASSWORD: ${{ secrets.STORM_KEY_PASSWORD }}
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
@@ -62,12 +53,12 @@ jobs:
           git config user.name "ReiKatari"
           git config user.email "45316432+ReiKatari@users.noreply.github.com"
           sed -i -e 's/\(versionName = "\)\(.*\)\("\)/\1\2 ('"$COMMIT"')\3/g' buildSrc/src/main/kotlin/AppConfig.kt
-          if [ -n "$MELONDS_KEYSTORE" ]; then
-            echo "$MELONDS_KEYSTORE" | base64 -d > ${{runner.workspace}}/keystore.jks
-            echo "MELONDS_KEYSTORE=${{runner.workspace}}/keystore.jks" >> local.properties
-            echo "MELONDS_KEYSTORE_PASSWORD=$MELONDS_KEYSTORE_PASSWORD" >> local.properties
-            echo "MELONDS_KEY_ALIAS=melonds" >> local.properties
-            echo "MELONDS_KEY_PASSWORD=$MELONDS_KEYSTORE_PASSWORD" >> local.properties
+          if [ -n "$STORM_CERT_BASE64" ]; then
+            echo "$STORM_CERT_BASE64" | base64 -d > ${{runner.workspace}}/storm_cert.jks
+            echo "STORM_CERT_FILE=${{runner.workspace}}/storm_cert.jks" >> local.properties
+            echo "STORM_CERT_PASSWORD=$STORM_CERT_PASSWORD" >> local.properties
+            echo "STORM_KEY_ALIAS=${STORM_KEY_ALIAS:-storm}" >> local.properties
+            echo "STORM_KEY_PASSWORD=${STORM_KEY_PASSWORD:-$STORM_CERT_PASSWORD}" >> local.properties
           fi
           chmod +x ./gradlew
           ./gradlew :app:assembleGitHubNightlyRelease
@@ -75,7 +66,7 @@ jobs:
       - name: Report Vulkan SPIR-V Header Changes
         if: always()
         run: |
-          CHANGED_HEADERS="$(git ls-files -m -- 'melonDS-android-lib/src/*ShaderData.h' 'melonDS-android-lib/src/android/renderer/*ShaderData.h')"
+          CHANGED_HEADERS="$(git ls-files -m -- 'melonDS-android-lib/src/*ShaderData.h' 'melonDS-android-lib/src/compatibility/*ShaderData.h' 'app/src/main/cpp/renderer/*ShaderData.h')"
           if [[ -n "$CHANGED_HEADERS" ]]; then
             echo "::warning::Vulkan SPIR-V headers changed during CI build. Commit regenerated headers."
             echo "$CHANGED_HEADERS"
@@ -99,5 +90,5 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: melonDS-android
+          name: STORM-DS-Nightly
           path: app/build/outputs/apk/gitHubNightly/release/*.apk

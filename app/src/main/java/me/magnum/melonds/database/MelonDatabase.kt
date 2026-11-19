@@ -66,8 +66,10 @@ abstract class MelonDatabase : RoomDatabase() {
 
     class Migration2to3Spec : AutoMigrationSpec {
         override fun onPostMigrate(db: SupportSQLiteDatabase) {
-            val result = db.query("SELECT COUNT(*) FROM game")
-            if (result.moveToFirst() && result.getInt(0) > 0) {
+            val hasGames = db.query("SELECT COUNT(*) FROM game").use { result ->
+                result.moveToFirst() && result.getInt(0) > 0
+            }
+            if (hasGames) {
                 // If there are games, insert a cheat database. Most likely the cheat database that was used was the one
                 // from DeadSkullzJr, which has the name "DeadSkullzJr's NDS Cheat Database"
                 val contentValues = ContentValues().apply {

@@ -3608,7 +3608,10 @@ bool VulkanSurfacePresenter::ensureRetroArchResources(
     poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     poolInfo.queueFamilyIndex = queueFamilyIndex;
     if (vkCreateCommandPool(device, &poolInfo, nullptr, &retro.commandPool) != VK_SUCCESS)
+    {
+        destroyRetroArchResources(surfaceState);
         return false;
+    }
 
     VkCommandBufferAllocateInfo commandBufferInfo{};
     commandBufferInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -3616,18 +3619,27 @@ bool VulkanSurfacePresenter::ensureRetroArchResources(
     commandBufferInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     commandBufferInfo.commandBufferCount = 1;
     if (vkAllocateCommandBuffers(device, &commandBufferInfo, &retro.commandBuffer) != VK_SUCCESS)
+    {
+        destroyRetroArchResources(surfaceState);
         return false;
+    }
 
     VkFenceCreateInfo fenceInfo{};
     fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
     if (vkCreateFence(device, &fenceInfo, nullptr, &retro.fence) != VK_SUCCESS)
+    {
+        destroyRetroArchResources(surfaceState);
         return false;
+    }
 
     VkSemaphoreCreateInfo semaphoreInfo{};
     semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
     if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &retro.filterFinishedSemaphore) != VK_SUCCESS)
+    {
+        destroyRetroArchResources(surfaceState);
         return false;
+    }
 
     if (!createRetroArchImage(retro.topInput, sourceScreenWidth, sourceScreenHeight, pipelineProfile)
         || !createRetroArchImage(retro.bottomInput, sourceScreenWidth, sourceScreenHeight, pipelineProfile)
@@ -4014,6 +4026,62 @@ bool VulkanSurfacePresenter::createTextureFromPixels(BackgroundResource& resourc
     VkCommandPool uploadCommandPool = VK_NULL_HANDLE;
     VkCommandBuffer uploadCommandBuffer = VK_NULL_HANDLE;
     VkFence uploadFence = VK_NULL_HANDLE;
+    bool succeeded = false;
+
+    struct CleanupGuard
+    {
+        VkDevice device;
+        BackgroundResource& resource;
+        VkBuffer& stagingBuffer;
+        VkDeviceMemory& stagingMemory;
+        VkCommandPool& uploadCommandPool;
+        VkCommandBuffer& uploadCommandBuffer;
+        VkFence& uploadFence;
+        bool& succeeded;
+        void (*destroyBg)(VkDevice, BackgroundResource&);
+
+        ~CleanupGuard()
+        {
+            if (uploadFence != VK_NULL_HANDLE)
+                vkDestroyFence(device, uploadFence, nullptr);
+            if (uploadCommandBuffer != VK_NULL_HANDLE && uploadCommandPool != VK_NULL_HANDLE)
+                vkFreeCommandBuffers(device, uploadCommandPool, 1, &uploadCommandBuffer);
+            if (uploadCommandPool != VK_NULL_HANDLE)
+                vkDestroyCommandPool(device, uploadCommandPool, nullptr);
+            if (stagingBuffer != VK_NULL_HANDLE)
+                vkDestroyBuffer(device, stagingBuffer, nullptr);
+            if (stagingMemory != VK_NULL_HANDLE)
+                vkFreeMemory(device, stagingMemory, nullptr);
+            if (!succeeded)
+                destroyBg(device, resource);
+        }
+    } cleanup{
+        device,
+        resource,
+        stagingBuffer,
+        stagingMemory,
+        uploadCommandPool,
+        uploadCommandBuffer,
+        uploadFence,
+        succeeded,
+        [](VkDevice dev, BackgroundResource& bg) {
+            if (bg.imageView != VK_NULL_HANDLE)
+            {
+                vkDestroyImageView(dev, bg.imageView, nullptr);
+                bg.imageView = VK_NULL_HANDLE;
+            }
+            if (bg.image != VK_NULL_HANDLE)
+            {
+                vkDestroyImage(dev, bg.image, nullptr);
+                bg.image = VK_NULL_HANDLE;
+            }
+            if (bg.memory != VK_NULL_HANDLE)
+            {
+                vkFreeMemory(dev, bg.memory, nullptr);
+                bg.memory = VK_NULL_HANDLE;
+            }
+        }
+    };
 
     const VkDeviceSize uploadSize = static_cast<VkDeviceSize>(backgroundImage.width) * static_cast<VkDeviceSize>(backgroundImage.height) * 4;
 
@@ -4201,24 +4269,12 @@ bool VulkanSurfacePresenter::createTextureFromPixels(BackgroundResource& resourc
     imageViewInfo.subresourceRange.levelCount = 1;
     imageViewInfo.subresourceRange.layerCount = 1;
 
-    const bool createdImageView = vkCreateImageView(device, &imageViewInfo, nullptr, &resource.imageView) == VK_SUCCESS;
-
-    if (uploadFence != VK_NULL_HANDLE)
-        vkDestroyFence(device, uploadFence, nullptr);
-    if (uploadCommandBuffer != VK_NULL_HANDLE && uploadCommandPool != VK_NULL_HANDLE)
-        vkFreeCommandBuffers(device, uploadCommandPool, 1, &uploadCommandBuffer);
-    if (uploadCommandPool != VK_NULL_HANDLE)
-        vkDestroyCommandPool(device, uploadCommandPool, nullptr);
-    if (stagingBuffer != VK_NULL_HANDLE)
-        vkDestroyBuffer(device, stagingBuffer, nullptr);
-    if (stagingMemory != VK_NULL_HANDLE)
-        vkFreeMemory(device, stagingMemory, nullptr);
-
-    if (!createdImageView)
+    if (vkCreateImageView(device, &imageViewInfo, nullptr, &resource.imageView) != VK_SUCCESS)
         return false;
 
     resource.width = backgroundImage.width;
     resource.height = backgroundImage.height;
+    succeeded = true;
     return true;
 }
 

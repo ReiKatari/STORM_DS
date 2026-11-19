@@ -1,5 +1,6 @@
 #include "OboeCallback.h"
 #include <algorithm>
+#include <thread>
 #include "types.h"
 #include "Platform.h"
 #include "SPU.h"
@@ -15,7 +16,11 @@ OboeCallback::OboeCallback(int volume, void (*onErrorCallback)(void), std::ostre
 
 oboe::DataCallbackResult
 OboeCallback::onAudioReady(oboe::AudioStream *stream, void *audioData, int32_t numFrames) {
-    auto currentInstance = activeInstance.lock();
+    std::shared_ptr<MelonDSAndroid::MelonInstance> currentInstance;
+    {
+        std::lock_guard<std::mutex> lock(activeInstanceMutex);
+        currentInstance = activeInstance.lock();
+    }
 
     if (!currentInstance || (MelonDSAndroid::isFastForwardActive() && MelonDSAndroid::isMuteOnFastForwardActive()) || MelonDSAndroid::isRewindActive())
     {
@@ -144,7 +149,10 @@ inline melonDS::s16 OboeCallback::applySoftLimit(melonDS::s32 sample)
 void OboeCallback::onErrorAfterClose(oboe::AudioStream* stream, oboe::Result result)
 {
     if (result == oboe::Result::ErrorDisconnected && onErrorCallback != nullptr) {
-        onErrorCallback();
+        void (*cb)(void) = onErrorCallback;
+        std::thread([cb]() {
+            cb();
+        }).detach();
     }
 }
 

@@ -20,25 +20,28 @@ class RarRomFileProcessor(
         private val archive: Archive,
     ) : FilterInputStream(inputStream) {
         override fun close() {
-            super.close()
             try {
-                archive.close()
-            } catch (_: Throwable) {}
+                super.close()
+            } finally {
+                runCatching { archive.close() }
+            }
         }
     }
 
     override fun getNdsEntryStreamInFileStream(fileStream: InputStream): RomFileStream? {
+        var archive: Archive? = null
         return try {
-            val archive = Archive(fileStream)
+            archive = Archive(fileStream)
             val header = getNdsEntryInRar(archive)
             if (header == null) {
-                archive.close()
+                runCatching { archive.close() }
                 null
             } else {
                 val entryStream = RarEntryInputStream(archive.getInputStream(header).buffered(), archive)
                 RomFileStream(entryStream, SizeUnit.Bytes(header.fullUnpackSize))
             }
         } catch (e: Throwable) {
+            runCatching { archive?.close() }
             e.printStackTrace()
             null
         }

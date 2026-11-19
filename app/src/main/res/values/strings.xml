@@ -271,12 +271,12 @@
     <string name="layout_operation_failed">Layout operation failed</string>
 
     <string name="ds_bios_dir_not_set">DS BIOS directory not set</string>
-    <string name="ds_bios_dir_not_set_info">DS BIOS directory is not set. Select the directory that contains the following files:\n&#8226; bios7.bin\n&#8226; bios9.bin\n&#8226; firmware.bin</string>
+    <string name="ds_bios_dir_not_set_info">DS BIOS directory is not set. Select the directory that contains the following files:\n and #8226; bios7.bin\n and #8226; bios9.bin\n and #8226; firmware.bin</string>
     <string name="dsi_bios_dir_not_set">DSi BIOS directory not set</string>
-    <string name="dsi_bios_dir_not_set_info">DSi BIOS directory is not set. Select the directory that contains the following files:\n&#8226; bios7.bin\n&#8226; bios9.bin\n&#8226; firmware.bin\n&#8226; nand.bin</string>
+    <string name="dsi_bios_dir_not_set_info">DSi BIOS directory is not set. Select the directory that contains the following files:\n and #8226; bios7.bin\n and #8226; bios9.bin\n and #8226; firmware.bin\n and #8226; nand.bin</string>
     <string name="incorrect_bios_dir">Incorrect BIOS directory</string>
-    <string name="ds_incorrect_bios_dir_info">The BIOS directory for the DS system is not correct. Make sure that the selected directory contains the following files:\n&#8226; bios7.bin\n&#8226; bios9.bin\n&#8226; firmware.bin</string>
-    <string name="dsi_incorrect_bios_dir_info">The BIOS directory for the DSi system is not correct. Make sure that the selected directory that contains the following files:\n&#8226; bios7.bin\n&#8226; bios9.bin\n&#8226; firmware.bin\n&#8226; nand.bin</string>
+    <string name="ds_incorrect_bios_dir_info">The BIOS directory for the DS system is not correct. Make sure that the selected directory contains the following files:\n and #8226; bios7.bin\n and #8226; bios9.bin\n and #8226; firmware.bin</string>
+    <string name="dsi_incorrect_bios_dir_info">The BIOS directory for the DSi system is not correct. Make sure that the selected directory that contains the following files:\n and #8226; bios7.bin\n and #8226; bios9.bin\n and #8226; firmware.bin\n and #8226; nand.bin</string>
     <string name="storage_permission_required">Storage permission required</string>
     <string name="storage_permission_required_info">Storage permission is required to load ROMs from your device. Please grant access to storage on the next dialog.</string>
     <string name="microphone_permission_required">Audio recording permission required</string>
@@ -418,6 +418,7 @@
     <string name="cache_size">Cache size: %s</string>
     <string name="cache_size_calculating">Cache size: calculating…</string>
     <string name="rom_search_directory">Search directory</string>
+    <string name="rom_search_dir_saf_fallback_hint">Could not access directory, please select again</string>
     <string name="use_custom_bios">Use custom BIOS and firmware</string>
     <string name="console_type">Default system</string>
     <string name="internal_firmware_settings">Internal firmware settings</string>
@@ -469,9 +470,9 @@
     <string name="system_ignore_display_cutout_in_layouts_summary">Lets emulator layouts use the notch or camera cutout area. Restart the layout editor or emulator after changing this.</string>
     <string name="backup_settings">Backup settings</string>
     <string name="restore_settings">Restore settings</string>
-    <string name="settings_backup_success">Settings backup created.\n\nThe following were skipped:\n&#8226; RetroAchievements session token\n&#8226; ROM search directories\n&#8226; DS BIOS directory\n&#8226; DSi BIOS directory</string>
+    <string name="settings_backup_success">Settings backup created.\n\nThe following were skipped:\n and #8226; RetroAchievements session token\n and #8226; ROM search directories\n and #8226; DS BIOS directory\n and #8226; DSi BIOS directory</string>
     <string name="settings_backup_error">Failed to backup settings</string>
-    <string name="settings_restore_success">Settings restored.\n\nThe following were unchanged:\n&#8226; RetroAchievements session token\n&#8226; ROM search directories\n&#8226; DS BIOS directory\n&#8226; DSi BIOS directory</string>
+    <string name="settings_restore_success">Settings restored.\n\nThe following were unchanged:\n and #8226; RetroAchievements session token\n and #8226; ROM search directories\n and #8226; DS BIOS directory\n and #8226; DSi BIOS directory</string>
     <string name="settings_restore_error">Failed to restore settings</string>
     <string name="settings_mirror_detected_title">Previous settings detected</string>
     <string name="settings_mirror_detected_message">A STORM DS.opts file was found in this directory. Restore settings from the previous installation?</string>
@@ -539,13 +540,13 @@
     <string name="conservative_coverage_enabled">Conservative coverage fix (experimental)</string>
     <string name="conservative_coverage_enabled_summary">Expands polygon coverage in screen space to reduce 1px-2px cracks between polygons. Pokemon black lines fix. May cause slight overdraw.</string>
     <string name="conservative_coverage_px">Coverage expand</string>
-    <string name="conservative_coverage_px_summary">Expansion amount in internal-resolution pixels (0–200 = 0.00–2.00px).</string>
+    <string name="conservative_coverage_px_summary">Expansion amount in internal-resolution pixels (0-200 = 0.00-2.00px).</string>
     <string name="conservative_coverage_apply_repeat">Apply to repeat</string>
     <string name="conservative_coverage_apply_repeat_summary">Applies the coverage fix to REPEAT textures (wrap). Recommended for floors/water that use tiling.</string>
     <string name="conservative_coverage_apply_clamp">Apply to clamp</string>
     <string name="conservative_coverage_apply_clamp_summary">Also applies the coverage fix to CLAMP textures. More aggressive and may affect sprites/billboards.</string>
     <string name="conservative_coverage_depth_bias">Depth bias</string>
-    <string name="conservative_coverage_depth_bias_summary">Depth bias applied to expanded polys (0–2000 = 0.000000–0.002000). Use only if you see z-fighting/flicker.</string>
+    <string name="conservative_coverage_depth_bias_summary">Depth bias applied to expanded polys (0-2000 = 0.000000-0.002000). Use only if you see z-fighting/flicker.</string>
     <string name="debug_3d_clear_magenta">Debug: clear 3D to magenta</string>
     <string name="debug_3d_clear_magenta_summary">If cracks turn magenta, they are coverage gaps. Debug only.</string>
     <string name="category_video">Video</string>
@@ -692,7 +693,7 @@
     <string name="label_rom_config_gba_save_path">GBA save path</string>
     <string name="rom_details_configuration_tab">Configuration</string>
     <string name="rom_details_audio_tab">Audio</string>
-    <string name="retro_achievements_tab">Retro&#8203;Achievements</string> <!-- Keep zero-width space to allow line breaks in the middle of the word -->
+    <string name="retro_achievements_tab">Retro and #8203;Achievements</string> <!-- Keep zero-width space to allow line breaks in the middle of the word -->
     <string name="rom_details_offline_achievements_tab">Offline</string>
 
     <string name="theme_option_light">Light</string>
@@ -810,7 +811,7 @@
     <string name="dual_screen_vertical_alignment_option_bottom">Bottom</string>
     <string name="dual_screen_vertical_alignment_summary">Internal: %1$s • External: %2$s</string>
     <string name="dual_screen_vertical_alignment_preset_value">Preset (%1$s)</string>
-    <string name="dual_screen_vertical_alignment_default_hint">Preset defaults — Internal: %1$s • External: %2$s</string>
+    <string name="dual_screen_vertical_alignment_default_hint">Preset defaults - Internal: %1$s • External: %2$s</string>
     <string name="presets">Dual screen presets</string>
     <string name="layout_editing_disabled_by_presets">Layouts can not be edited while a dual screen preset is active.</string>
     <string name="above_other_screen">Above other screen</string>
@@ -1290,13 +1291,13 @@
     <string name="about_credits_jpeacekeeper_title">JPeacekeeper (4PDA)</string>
     <string name="about_credits_jpeacekeeper_summary">Invaluable testing contributions, detailed DSi bug reports, frame rate standardization, and ongoing project improvements</string>
     <string name="about_credits_watermelonds_title">WatermelonDS (Android port)</string>
-    <string name="about_credits_watermelonds_summary">SapphireRhodonite, rafaelvcaetano and contributors — Android port, Vulkan rendering fastpaths, librashader integration, modern UI and touch controls</string>
+    <string name="about_credits_watermelonds_summary">SapphireRhodonite, rafaelvcaetano and contributors - Android port, Vulkan rendering fastpaths, librashader integration, modern UI and touch controls</string>
     <string name="about_credits_melonds_title">melonDS (original core)</string>
-    <string name="about_credits_melonds_summary">StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura and melonDS team — original high-accuracy Nintendo DS / DSi core emulator</string>
+    <string name="about_credits_melonds_summary">StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura and melonDS team - original high-accuracy Nintendo DS / DSi core emulator</string>
     <string name="about_credits_melonds_ds_title">melonDS DS (RetroArch core)</string>
-    <string name="about_credits_melonds_ds_summary">JesseTG and Libretro team — DSiWare autoloading mechanics, TLNC warmboot architecture, and Libretro core innovations</string>
+    <string name="about_credits_melonds_ds_summary">JesseTG and Libretro team - DSiWare autoloading mechanics, TLNC warmboot architecture, and Libretro core innovations</string>
     <string name="about_credits_drastic_title">DraStic and fastDS inspirations</string>
-    <string name="about_credits_drastic_summary">Exophase and DraStic / fastDS creators — screen preset inspirations, quick display layouts, and touch ergonomic concepts</string>
+    <string name="about_credits_drastic_summary">Exophase and DraStic / fastDS creators - screen preset inspirations, quick display layouts, and touch ergonomic concepts</string>
     <string name="about_credits_libraries_title">Open source libraries and tools</string>
     <string name="about_credits_libraries_summary">Google Oboe (AAudio/OpenSL ES), librashader (RetroArch Slang shaders), RetroAchievements (rcheevos), libslirp (Wi-Fi), libadrenotools (Adreno/Turnip drivers)</string>
     <string name="about_github_title">STORM DS repository</string>
@@ -1504,6 +1505,7 @@
     <!-- STORM Theme Studio and Colors -->
     <string name="theme_accent_color_title">Accent color</string>
     <string name="theme_accent_color_summary">Select accent neon color for STORM NIGHT theme</string>
+    <string name="accent_theme_default">Theme default</string>
     <string name="accent_electric_cyan">💎 Electric cyan</string>
     <string name="accent_matrix_emerald">🌿 Matrix emerald</string>
     <string name="accent_amber_gold">⚡ Cyber gold</string>
@@ -1563,7 +1565,7 @@
     <string name="pref_touch_dpad_stick_mode_title">Analog stick instead of D-Pad</string>
     <string name="pref_touch_dpad_stick_mode_summary">Display a virtual analog thumbstick instead of the classic directional pad</string>
 
-    <!-- UI & Subtitles Localization -->
+    <!-- UI  and  Subtitles Localization -->
     <string name="layouts_subtitle">Configure and select screen and button layout</string>
     <string name="layout_profile_custom">Custom profile</string>
     <string name="layout_profile_standard">Standard layout</string>

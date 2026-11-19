@@ -258,6 +258,7 @@ private fun Content(
         if (romConfig.dualScreenPreset != null) count++
         if (romConfig.layoutId != null) count++
         if (romConfig.translatorSourceLang != null) count++
+        if (romConfig.useHgEngineFix) count++
         if (romConfig.gbaSlotConfig.type != RomGbaSlotConfigUiModel.Type.None) count++
         count
     }
@@ -896,6 +897,9 @@ private fun Content(
     SingleChoiceDialog(retroAchievementsDialogState)
     SingleChoiceDialog(dualScreenPresetDialogState)
     SingleChoiceDialog(translatorSourceLangDialogState)
+    SingleChoiceDialog(arm9OverclockDialogState)
+    SingleChoiceDialog(fastForwardSpeedDialogState)
+    SingleChoiceDialog(customVulkanDriverDialogState)
     TextInputDialog(
         title = stringResource(R.string.video_retroarch_shader_preset_title),
         dialogState = retroArchPresetPathDialogState,

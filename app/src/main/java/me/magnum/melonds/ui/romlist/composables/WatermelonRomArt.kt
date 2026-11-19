@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -191,7 +192,7 @@ fun PlatformBadge(
 ) {
     val (bgColor, fgColor) = when (text) {
         "DSiWare" -> Color(0xFF6200EA).copy(alpha = 0.70f) to Color(0xFFE1BEE7)
-        "DSi E." -> Color(0xFF00695C).copy(alpha = 0.75f) to Color(0xFF80E27E)
+        "DSi" -> Color(0xFF00695C).copy(alpha = 0.75f) to Color(0xFF80E27E)
         else -> Color.Black.copy(alpha = 0.55f) to Color.White
     }
     Box(
@@ -213,6 +214,44 @@ fun PlatformBadge(
 }
 
 private val failedCoverUrls = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+
+internal data class CoverPrefsSnapshot(
+    val isScraperEnabled: Boolean = false,
+    val isGameTdb2dEnabled: Boolean = false,
+    val isGameTdb3dEnabled: Boolean = false,
+    val isRaCoversEnabled: Boolean = false,
+)
+
+internal object CoverPrefsObserver {
+    private val initialized = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val state = kotlinx.coroutines.flow.MutableStateFlow(CoverPrefsSnapshot())
+    private var sharedListener: android.content.SharedPreferences.OnSharedPreferenceChangeListener? = null
+
+    fun flow(context: Context): kotlinx.coroutines.flow.StateFlow<CoverPrefsSnapshot> {
+        if (initialized.compareAndSet(false, true)) {
+            val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(context.applicationContext)
+            fun readSnapshot(sp: android.content.SharedPreferences) = CoverPrefsSnapshot(
+                isScraperEnabled = sp.getBoolean("rom_gametdb_covers_enabled", false),
+                isGameTdb2dEnabled = sp.getBoolean("rom_gametdb_2d_covers_enabled", false),
+                isGameTdb3dEnabled = sp.getBoolean("rom_gametdb_3d_covers_enabled", false),
+                isRaCoversEnabled = sp.getBoolean("rom_ra_covers_enabled", false),
+            )
+            state.value = readSnapshot(prefs)
+            val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { sp, key ->
+                if (key == "rom_gametdb_covers_enabled" ||
+                    key == "rom_gametdb_2d_covers_enabled" ||
+                    key == "rom_gametdb_3d_covers_enabled" ||
+                    key == "rom_ra_covers_enabled"
+                ) {
+                    state.value = readSnapshot(sp)
+                }
+            }
+            sharedListener = listener
+            prefs.registerOnSharedPreferenceChangeListener(listener)
+        }
+        return state
+    }
+}
 
 fun getCustomCoverFile(context: Context, rom: Rom): java.io.File? {
     val clean = rom.fileName.substringBeforeLast('.').trim()
@@ -288,26 +327,11 @@ fun WatermelonRomArt(
     var raFailed by remember(rom.uri, raCoverUrl) { mutableStateOf(raCoverUrl == null || failedCoverUrls.contains(raCoverUrl)) }
     var artLoaded by remember(rom.uri, boxArtUrl, raCoverUrl, customCover) { mutableStateOf(false) }
 
-    val prefs = remember { androidx.preference.PreferenceManager.getDefaultSharedPreferences(context) }
-    var isScraperEnabled by remember { mutableStateOf(prefs.getBoolean("rom_gametdb_covers_enabled", false)) }
-    var isGameTdb2dEnabled by remember { mutableStateOf(prefs.getBoolean("rom_gametdb_2d_covers_enabled", false)) }
-    var isGameTdb3dEnabled by remember { mutableStateOf(prefs.getBoolean("rom_gametdb_3d_covers_enabled", false)) }
-    var isRaCoversEnabled by remember { mutableStateOf(prefs.getBoolean("rom_ra_covers_enabled", false)) }
-
-    androidx.compose.runtime.DisposableEffect(prefs) {
-        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { sp, key ->
-            when (key) {
-                "rom_gametdb_covers_enabled" -> isScraperEnabled = sp.getBoolean(key, false)
-                "rom_gametdb_2d_covers_enabled" -> isGameTdb2dEnabled = sp.getBoolean(key, false)
-                "rom_gametdb_3d_covers_enabled" -> isGameTdb3dEnabled = sp.getBoolean(key, false)
-                "rom_ra_covers_enabled" -> isRaCoversEnabled = sp.getBoolean(key, false)
-            }
-        }
-        prefs.registerOnSharedPreferenceChangeListener(listener)
-        onDispose {
-            prefs.unregisterOnSharedPreferenceChangeListener(listener)
-        }
-    }
+    val coverPrefs by CoverPrefsObserver.flow(context).collectAsState()
+    val isScraperEnabled = coverPrefs.isScraperEnabled
+    val isGameTdb2dEnabled = coverPrefs.isGameTdb2dEnabled
+    val isGameTdb3dEnabled = coverPrefs.isGameTdb3dEnabled
+    val isRaCoversEnabled = coverPrefs.isRaCoversEnabled
 
     val isRaPlaceholder = raCoverUrl != null && (
         raCoverUrl.contains("/Images/000001") ||
