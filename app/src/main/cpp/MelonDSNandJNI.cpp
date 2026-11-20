@@ -1,7 +1,5 @@
 #include <jni.h>
 #include <string>
-#include <locale>
-#include <codecvt>
 #include <vector>
 #include <set>
 #include <algorithm>
@@ -434,16 +432,25 @@ Java_me_magnum_melonds_MelonDSiNand_listTitles(JNIEnv* env, jobject thiz)
     nandMount->ListTitles(category, titleList);
 
     jclass listClass = env->FindClass("java/util/ArrayList");
+    if (!listClass)
+        return nullptr;
     jmethodID listConstructor = env->GetMethodID(listClass, "<init>", "()V");
     jmethodID listAddMethod = env->GetMethodID(listClass, "add", "(ILjava/lang/Object;)V");
-    jobject jniTitleList = env->NewObject(listClass, listConstructor);
+    jobject jniTitleList = (listConstructor && listAddMethod) ? env->NewObject(listClass, listConstructor) : nullptr;
+    env->DeleteLocalRef(listClass);
+    if (!jniTitleList)
+        return nullptr;
 
     int index = 0;
     for (std::vector<u32>::iterator it = titleList.begin(); it != titleList.end(); it++)
     {
         u32 titleId = *it;
         jobject titleData = getTitleData(env, category, titleId);
-        env->CallVoidMethod(jniTitleList, listAddMethod, index++, titleData);
+        if (titleData != nullptr)
+        {
+            env->CallVoidMethod(jniTitleList, listAddMethod, index++, titleData);
+            env->DeleteLocalRef(titleData);
+        }
     }
 
     return jniTitleList;
@@ -1195,43 +1202,65 @@ jobject getTitleData(JNIEnv* env, u32 category, u32 titleId)
     env->ReleaseByteArrayElements(iconBytes, iconArrayElements, 0);
 
     jclass dsiWareTitleClass = env->FindClass("me/magnum/melonds/domain/model/DSiWareTitle");
+    if (!dsiWareTitleClass)
+    {
+        if (iconBytes) env->DeleteLocalRef(iconBytes);
+        return nullptr;
+    }
     jmethodID dsiWareTitleConstructor = env->GetMethodID(dsiWareTitleClass, "<init>", "(Ljava/lang/String;Ljava/lang/String;J[BJJI)V");
+    if (!dsiWareTitleConstructor)
+    {
+        if (iconBytes) env->DeleteLocalRef(iconBytes);
+        env->DeleteLocalRef(dsiWareTitleClass);
+        return nullptr;
+    }
 
-    std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t> convert;
-    std::string englishTitle = convert.to_bytes(banner.EnglishTitle);
-    if (englishTitle.empty())
-        englishTitle = convert.to_bytes(banner.JapaneseTitle);
-    if (englishTitle.empty())
-        englishTitle = convert.to_bytes(banner.FrenchTitle);
-    if (englishTitle.empty())
-        englishTitle = convert.to_bytes(banner.GermanTitle);
-    if (englishTitle.empty())
-        englishTitle = convert.to_bytes(banner.ItalianTitle);
-    if (englishTitle.empty())
-        englishTitle = convert.to_bytes(banner.SpanishTitle);
+    auto extractU16Title = [](const char16_t (&arr)[128]) -> std::u16string {
+        size_t len = 0;
+        while (len < 128 && arr[len] != u'\0')
+            ++len;
+        return std::u16string(arr, len);
+    };
 
-    size_t pos = englishTitle.find("\n");
-    std::string title = pos != std::string::npos ? englishTitle.substr(0, pos) : englishTitle;
-    std::string producer = pos != std::string::npos ? englishTitle.substr(pos + 1) : "";
+    std::u16string fullTitle = extractU16Title(banner.EnglishTitle);
+    if (fullTitle.empty()) fullTitle = extractU16Title(banner.JapaneseTitle);
+    if (fullTitle.empty()) fullTitle = extractU16Title(banner.FrenchTitle);
+    if (fullTitle.empty()) fullTitle = extractU16Title(banner.GermanTitle);
+    if (fullTitle.empty()) fullTitle = extractU16Title(banner.ItalianTitle);
+    if (fullTitle.empty()) fullTitle = extractU16Title(banner.SpanishTitle);
 
-    if (title.empty())
+    const size_t pos = fullTitle.find(u'\n');
+    std::u16string titleU16 = pos != std::u16string::npos ? fullTitle.substr(0, pos) : fullTitle;
+    std::u16string producerU16 = pos != std::u16string::npos ? fullTitle.substr(pos + 1) : std::u16string();
+
+    if (titleU16.empty())
     {
         char rawTitle[13] = {0};
         memcpy(rawTitle, header.GameTitle, 12);
-        title = rawTitle;
+        for (int i = 0; rawTitle[i] != '\0'; ++i)
+            titleU16.push_back(static_cast<char16_t>(static_cast<unsigned char>(rawTitle[i])));
     }
+
+    static_assert(sizeof(char16_t) == sizeof(jchar), "char16_t must match jchar");
+    jstring jTitle = env->NewString(reinterpret_cast<const jchar*>(titleU16.data()), static_cast<jsize>(titleU16.size()));
+    jstring jProducer = env->NewString(reinterpret_cast<const jchar*>(producerU16.data()), static_cast<jsize>(producerU16.size()));
 
     jobject titleObject = env->NewObject(
         dsiWareTitleClass,
         dsiWareTitleConstructor,
-        env->NewStringUTF(title.c_str()),
-        env->NewStringUTF(producer.c_str()),
+        jTitle,
+        jProducer,
         (jlong) titleId,
         iconBytes,
         (jlong) header.DSiPublicSavSize,
         (jlong) header.DSiPrivateSavSize,
         header.AppFlags
     );
+
+    if (jTitle) env->DeleteLocalRef(jTitle);
+    if (jProducer) env->DeleteLocalRef(jProducer);
+    if (iconBytes) env->DeleteLocalRef(iconBytes);
+    env->DeleteLocalRef(dsiWareTitleClass);
     return titleObject;
 }
 

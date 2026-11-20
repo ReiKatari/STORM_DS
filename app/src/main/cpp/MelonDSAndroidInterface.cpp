@@ -1,15 +1,17 @@
 #include <vector>
 #include <cstring>
+#include <cerrno>
+#include <cstdint>
 #include <atomic>
+#include <mutex>
 #include <string>
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_android.h>
 #include <signal.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <android/log.h>
-#include <time.h>
-#include <sys/prctl.h>
 #include "JniEnvHandler.h"
 #include "UriFileHandler.h"
 #include "MelonDS.h"
@@ -27,88 +29,160 @@ static struct sigaction old_sa_segv;
 static struct sigaction old_sa_bus;
 static struct sigaction old_sa_fpe;
 static struct sigaction old_sa_ill;
+static std::once_flag sCrashTrapOnceFlag;
+static std::atomic_flag sCrashHandlerActive = ATOMIC_FLAG_INIT;
 
-#include <dlfcn.h>
-#include <unwind.h>
-#include <pthread.h>
-
-struct BacktraceState {
-    void** current;
-    void** end;
-};
-
-static _Unwind_Reason_Code unwindCallback(struct _Unwind_Context* context, void* arg) {
-    BacktraceState* state = static_cast<BacktraceState*>(arg);
-    uintptr_t pc = _Unwind_GetIP(context);
-    if (pc) {
-        if (state->current == state->end) {
-            return _URC_END_OF_STACK;
-        } else {
-            *state->current++ = reinterpret_cast<void*>(pc);
-        }
+static void crashAppendCstr(char* buf, size_t cap, size_t& pos, const char* s)
+{
+    if (!s)
+        return;
+    while (*s && pos < cap)
+    {
+        buf[pos++] = *s++;
     }
-    return _URC_NO_REASON;
 }
 
-static size_t captureBacktrace(void** buffer, size_t max) {
-    BacktraceState state = {buffer, buffer + max};
-    _Unwind_Backtrace(unwindCallback, &state);
-    return state.current - buffer;
+static void crashAppendSignedDec(char* buf, size_t cap, size_t& pos, long val)
+{
+    if (val < 0)
+    {
+        if (pos < cap)
+            buf[pos++] = '-';
+        unsigned long uval = static_cast<unsigned long>(-(val + 1)) + 1UL;
+        char tmp[32];
+        size_t n = 0;
+        do {
+            tmp[n++] = static_cast<char>('0' + (uval % 10UL));
+            uval /= 10UL;
+        } while (uval > 0 && n < sizeof(tmp));
+        while (n > 0 && pos < cap)
+            buf[pos++] = tmp[--n];
+        return;
+    }
+    unsigned long uval = static_cast<unsigned long>(val);
+    char tmp[32];
+    size_t n = 0;
+    do {
+        tmp[n++] = static_cast<char>('0' + (uval % 10UL));
+        uval /= 10UL;
+    } while (uval > 0 && n < sizeof(tmp));
+    while (n > 0 && pos < cap)
+        buf[pos++] = tmp[--n];
+}
+
+static void crashAppendHex(char* buf, size_t cap, size_t& pos, uintptr_t val)
+{
+    static const char kHex[] = "0123456789abcdef";
+    crashAppendCstr(buf, cap, pos, "0x");
+    char tmp[sizeof(uintptr_t) * 2];
+    size_t n = 0;
+    do {
+        tmp[n++] = kHex[val & 0xFU];
+        val >>= 4U;
+    } while (val > 0 && n < sizeof(tmp));
+    while (n > 0 && pos < cap)
+        buf[pos++] = tmp[--n];
+}
+
+static void crashWriteAll(int fd, const char* data, size_t len)
+{
+    size_t offset = 0;
+    while (offset < len)
+    {
+        ssize_t written = write(fd, data + offset, len - offset);
+        if (written > 0)
+        {
+            offset += static_cast<size_t>(written);
+            continue;
+        }
+        if (written < 0 && errno == EINTR)
+            continue;
+        break;
+    }
+}
+
+static void resetSignalDefaultAndRaise(int sig)
+{
+    struct sigaction dfl{};
+    sigemptyset(&dfl.sa_mask);
+    dfl.sa_handler = SIG_DFL;
+    sigaction(sig, &dfl, nullptr);
+    raise(sig);
 }
 
 static void stormNativeCrashHandler(int sig, siginfo_t* info, void* context)
 {
-    mkdir("/sdcard/STORM DS", 0777);
-    mkdir("/sdcard/STORM DS/logs", 0777);
-    mkdir("/storage/emulated/0/STORM DS", 0777);
-    mkdir("/storage/emulated/0/STORM DS/logs", 0777);
-    FILE* f = fopen("/storage/emulated/0/STORM DS/logs/STORM_INFO.txt", "a");
-    if (!f) {
-        f = fopen("/sdcard/STORM DS/logs/STORM_INFO.txt", "a");
+    if (sCrashHandlerActive.test_and_set(std::memory_order_acq_rel))
+    {
+        resetSignalDefaultAndRaise(sig);
+        _exit(128 + sig);
     }
-    if (f) {
-        time_t now = time(nullptr);
-        char threadName[64] = {0};
-        prctl(PR_GET_NAME, threadName);
-        fprintf(f, "\n================ STORM DS NATIVE CRASH REPORT ================\n");
-        fprintf(f, "Time: %ld\n", (long)now);
-        fprintf(f, "Thread: %s (tid=%d)\n", threadName, (int)gettid());
-        fprintf(f, "Fatal Signal: %d (%s)\n", sig, strsignal(sig));
-        fprintf(f, "Fault Address: %p\n", info ? info->si_addr : nullptr);
-        fprintf(f, "Call Stack:\n");
-        void* buffer[32];
-        size_t count = captureBacktrace(buffer, 32);
-        for (size_t i = 0; i < count; i++) {
-            Dl_info dlinfo;
-            if (dladdr(buffer[i], &dlinfo) && dlinfo.dli_sname) {
-                fprintf(f, "  #%02zu %p (%s + %ld) [%s]\n", i, buffer[i], dlinfo.dli_sname, (long)((char*)buffer[i] - (char*)dlinfo.dli_saddr), dlinfo.dli_fname ? dlinfo.dli_fname : "unknown");
-            } else if (dladdr(buffer[i], &dlinfo) && dlinfo.dli_fname) {
-                fprintf(f, "  #%02zu %p [%s]\n", i, buffer[i], dlinfo.dli_fname);
-            } else {
-                fprintf(f, "  #%02zu %p\n", i, buffer[i]);
-            }
-        }
-        fprintf(f, "==============================================================\n");
-        fclose(f);
+
+    const int savedErrno = errno;
+    int fd = open("/storage/emulated/0/STORM DS/logs/STORM_INFO.txt", O_WRONLY | O_CREAT | O_APPEND, 0644);
+    if (fd < 0)
+        fd = open("/sdcard/STORM DS/logs/STORM_INFO.txt", O_WRONLY | O_CREAT | O_APPEND, 0644);
+    if (fd >= 0)
+    {
+        char buf[192];
+        size_t pos = 0;
+        crashAppendCstr(buf, sizeof(buf), pos, "\n=== STORM DS NATIVE CRASH ===\nsig=");
+        crashAppendSignedDec(buf, sizeof(buf), pos, static_cast<long>(sig));
+        crashAppendCstr(buf, sizeof(buf), pos, " tid=");
+        crashAppendSignedDec(buf, sizeof(buf), pos, static_cast<long>(gettid()));
+        crashAppendCstr(buf, sizeof(buf), pos, " addr=");
+        crashAppendHex(buf, sizeof(buf), pos, reinterpret_cast<uintptr_t>(info ? info->si_addr : nullptr));
+        crashAppendCstr(buf, sizeof(buf), pos, "\n");
+        crashWriteAll(fd, buf, pos);
+        close(fd);
     }
-    if (sig == SIGSEGV && old_sa_segv.sa_sigaction) old_sa_segv.sa_sigaction(sig, info, context);
-    else if (sig == SIGBUS && old_sa_bus.sa_sigaction) old_sa_bus.sa_sigaction(sig, info, context);
-    else {
-        signal(sig, SIG_DFL);
-        raise(sig);
+    errno = savedErrno;
+
+    const struct sigaction* old_sa = nullptr;
+    switch (sig)
+    {
+        case SIGSEGV: old_sa = &old_sa_segv; break;
+        case SIGBUS:  old_sa = &old_sa_bus;  break;
+        case SIGFPE:  old_sa = &old_sa_fpe;  break;
+        case SIGILL:  old_sa = &old_sa_ill;  break;
+        default: break;
     }
+
+    if (old_sa != nullptr && (old_sa->sa_flags & SA_SIGINFO) != 0 && old_sa->sa_sigaction != nullptr)
+    {
+        old_sa->sa_sigaction(sig, info, context);
+        sCrashHandlerActive.clear(std::memory_order_release);
+        return;
+    }
+    if (old_sa != nullptr && (old_sa->sa_flags & SA_SIGINFO) == 0 &&
+        old_sa->sa_handler != SIG_DFL && old_sa->sa_handler != SIG_IGN && old_sa->sa_handler != nullptr)
+    {
+        old_sa->sa_handler(sig);
+        sCrashHandlerActive.clear(std::memory_order_release);
+        return;
+    }
+    if (old_sa != nullptr && (old_sa->sa_flags & SA_SIGINFO) == 0 && old_sa->sa_handler == SIG_IGN)
+    {
+        sCrashHandlerActive.clear(std::memory_order_release);
+        return;
+    }
+
+    sCrashHandlerActive.clear(std::memory_order_release);
+    resetSignalDefaultAndRaise(sig);
 }
 
 static void installStormNativeCrashTrap()
 {
-    struct sigaction sa;
-    memset(&sa, 0, sizeof(sa));
-    sa.sa_flags = SA_SIGINFO | SA_ONSTACK;
-    sa.sa_sigaction = stormNativeCrashHandler;
-    sigaction(SIGSEGV, &sa, &old_sa_segv);
-    sigaction(SIGBUS, &sa, &old_sa_bus);
-    sigaction(SIGFPE, &sa, &old_sa_fpe);
-    sigaction(SIGILL, &sa, &old_sa_ill);
+    std::call_once(sCrashTrapOnceFlag, []() {
+        struct sigaction sa{};
+        sigemptyset(&sa.sa_mask);
+        sa.sa_flags = SA_SIGINFO | SA_ONSTACK;
+        sa.sa_sigaction = stormNativeCrashHandler;
+        sigaction(SIGSEGV, &sa, &old_sa_segv);
+        sigaction(SIGBUS, &sa, &old_sa_bus);
+        sigaction(SIGFPE, &sa, &old_sa_fpe);
+        sigaction(SIGILL, &sa, &old_sa_ill);
+    });
 }
 
 JniEnvHandler* jniEnvHandler;
@@ -871,18 +945,23 @@ JNIEXPORT void JNICALL
 Java_me_magnum_melonds_MelonDSAndroidInterface_cleanup(JNIEnv* env, jobject thiz)
 {
     MelonDSAndroid::RetroAchievements::RetroAchievementsManager::SetJavaVm(nullptr);
-    env->DeleteGlobalRef(androidUriFileHandler);
-    androidUriFileHandler = nullptr;
+    if (androidUriFileHandler != nullptr)
+    {
+        env->DeleteGlobalRef(androidUriFileHandler);
+        androidUriFileHandler = nullptr;
+    }
     vm = nullptr;
 
     if (MelonDSAndroid::openGlContext != nullptr)
     {
         MelonDSAndroid::openGlContext->DeInit();
         delete MelonDSAndroid::openGlContext;
+        MelonDSAndroid::openGlContext = nullptr;
     }
     delete fileHandler;
+    fileHandler = nullptr;
+    MelonDSAndroid::fileHandler = nullptr;
     delete jniEnvHandler;
-
-    MelonDSAndroid::openGlContext = nullptr;
+    jniEnvHandler = nullptr;
 }
 }

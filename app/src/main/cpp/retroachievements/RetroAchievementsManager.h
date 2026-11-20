@@ -2,10 +2,15 @@
 #define RETROACHIEVEMENTSMANAGER_H
 
 #include <atomic>
-#include <list>
+#include <chrono>
+#include <condition_variable>
 #include <cstdint>
+#include <deque>
+#include <list>
+#include <mutex>
 #include <optional>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 #include <jni.h>
@@ -242,7 +247,59 @@ private:
     uint64_t nextPendingSubmissionBarrierId = 1;
     std::atomic<bool> submissionTransportSuspended{false};
 
-    static JavaVM* javaVm;
+    struct HttpWorkItem
+    {
+        uint64_t requestId = 0;
+        uint64_t generation = 0;
+        rc_client_t* client = nullptr;
+        rc_client_server_callback_t callback = nullptr;
+        void* callbackData = nullptr;
+        uintptr_t callbackDataToken = 0;
+        std::string url;
+        std::string postData;
+        bool hasPostData = false;
+        std::string contentType;
+        bool hasContentType = false;
+        std::string userAgent;
+        std::string requestAction;
+        std::optional<uint64_t> leaderboardAttemptId;
+        std::optional<uint32_t> submittedLeaderboardId;
+    };
+
+    struct CompletedHttpResponse
+    {
+        uint64_t requestId = 0;
+        uint64_t generation = 0;
+        rc_client_t* client = nullptr;
+        rc_client_server_callback_t callback = nullptr;
+        void* callbackData = nullptr;
+        uintptr_t callbackDataToken = 0;
+        std::string requestAction;
+        std::optional<uint64_t> leaderboardAttemptId;
+        std::optional<uint32_t> submittedLeaderboardId;
+        std::string responseBody;
+        int httpStatusCode = RC_API_SERVER_RESPONSE_RETRYABLE_CLIENT_ERROR;
+    };
+
+    void EnsureHttpWorkerStartedLocked();
+    void StopHttpWorkerLocked();
+    void HttpWorkerLoop();
+    void DrainCompletedHttpResponsesLocked();
+    void InvokeCompletedHttpResponseLocked(const CompletedHttpResponse& completed);
+    bool WaitForHttpRequestLocked(uint64_t requestId, std::chrono::milliseconds timeout);
+
+    std::mutex httpQueueMutex;
+    std::condition_variable httpWorkerCv;
+    std::condition_variable httpCompletionCv;
+    std::deque<HttpWorkItem> pendingHttpRequests;
+    std::deque<CompletedHttpResponse> completedHttpResponses;
+    std::thread httpWorkerThread;
+    bool httpWorkerStop = false;
+    uint64_t httpSessionGeneration = 1;
+    uint64_t nextHttpRequestId = 1;
+    bool waitForServerCallCompletion = false;
+
+    static std::atomic<JavaVM*> javaVm;
 };
 
 }

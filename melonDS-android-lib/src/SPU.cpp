@@ -852,6 +852,8 @@ void SPUCaptureUnit::Run(u32 cycles, s32 sample)
 
 void SPU::Mix(u32 spucycles)
 {
+    ApplyPendingOutputSkew();
+
     s32 left = 0, right = 0;
     s32 leftoutput = 0, rightoutput = 0;
 
@@ -1069,6 +1071,9 @@ void SPU::InitOutput()
 {
     Platform::Mutex_Lock(AudioLock);
 
+    if (HasPendingOutputSkew.exchange(false, std::memory_order_acq_rel))
+        OutputSkew = PendingOutputSkew.load(std::memory_order_relaxed);
+
     blip_set_rates(BlipLeft, INTERNAL_SAMPLE_RATE * OutputSkew, OutputSampleRate);
     blip_set_rates(BlipRight, INTERNAL_SAMPLE_RATE * OutputSkew, OutputSampleRate);
 
@@ -1170,11 +1175,29 @@ void SPU::SetOutputSampleRate(double rate)
     InitOutput();
 }
 
+void SPU::ApplyPendingOutputSkew()
+{
+    if (!HasPendingOutputSkew.load(std::memory_order_acquire))
+        return;
+
+    if (!HasPendingOutputSkew.exchange(false, std::memory_order_acq_rel))
+        return;
+
+    const double skew = PendingOutputSkew.load(std::memory_order_relaxed);
+    Platform::Mutex_Lock(AudioLock);
+    if (skew != OutputSkew)
+    {
+        OutputSkew = skew;
+        blip_set_rates(BlipLeft, INTERNAL_SAMPLE_RATE * OutputSkew, OutputSampleRate);
+        blip_set_rates(BlipRight, INTERNAL_SAMPLE_RATE * OutputSkew, OutputSampleRate);
+    }
+    Platform::Mutex_Unlock(AudioLock);
+}
+
 void SPU::SetOutputSkew(double skew)
 {
-    blip_set_rates(BlipLeft, INTERNAL_SAMPLE_RATE * skew, OutputSampleRate);
-    blip_set_rates(BlipRight, INTERNAL_SAMPLE_RATE * skew, OutputSampleRate);
-    OutputSkew = skew;
+    PendingOutputSkew.store(skew, std::memory_order_relaxed);
+    HasPendingOutputSkew.store(true, std::memory_order_release);
 }
 
 

@@ -41,8 +41,8 @@ class MotionSensorManager(
     var shakeMicEnabled: Boolean = false
     var threeDParallaxEnabled: Boolean = false
     var motionPakEnabled: Boolean = false
-    var solarSensorAutoEnabled: Boolean = true
-    var pedometerAutoEnabled: Boolean = true
+    var solarSensorAutoEnabled: Boolean = false
+    var pedometerAutoEnabled: Boolean = false
     var gyroSensitivityX: Float = 1.25f
     var gyroSensitivityY: Float = 1.25f
     var invertX: Boolean = false
@@ -63,6 +63,9 @@ class MotionSensorManager(
     private val stepCounterSensor = sensorManager?.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
 
     private var isListening = false
+    private var registeredMotionSensors = false
+    private var registeredLightSensor = false
+    private var registeredStepCounterSensor = false
     private var hasTiltCenter = false
     private var tiltCenterAx = 0f
     private var tiltCenterAy = 0f
@@ -99,26 +102,43 @@ class MotionSensorManager(
     private var lastDown = false
 
     fun startListening() {
-        if (isListening || sensorManager == null) return
-        accelerometer?.let {
-            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
+        val manager = sensorManager ?: return
+        val needsMotion = gyroMode != GyroMode.OFF || shakeMicEnabled || threeDParallaxEnabled || motionPakEnabled || onMotionTilt != null
+        val needsLight = solarSensorAutoEnabled
+        val needsStep = pedometerAutoEnabled
+        if (!needsMotion && !needsLight && !needsStep) return
+
+        if (needsMotion && !registeredMotionSensors) {
+            accelerometer?.let {
+                manager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
+            }
+            gyroscope?.let {
+                manager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
+            }
+            registeredMotionSensors = true
         }
-        gyroscope?.let {
-            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
+        if (needsLight && !registeredLightSensor) {
+            lightSensor?.let {
+                runCatching { manager.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL) }
+            }
+            registeredLightSensor = true
         }
-        lightSensor?.let {
-            runCatching { sensorManager?.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL) }
+        if (needsStep && !registeredStepCounterSensor) {
+            stepCounterSensor?.let {
+                runCatching { manager.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL) }
+            }
+            registeredStepCounterSensor = true
         }
-        stepCounterSensor?.let {
-            runCatching { sensorManager?.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL) }
-        }
-        isListening = true
+        isListening = registeredMotionSensors || registeredLightSensor || registeredStepCounterSensor
     }
 
     fun stopListening() {
         if (!isListening || sensorManager == null) return
         sensorManager.unregisterListener(this)
         isListening = false
+        registeredMotionSensors = false
+        registeredLightSensor = false
+        registeredStepCounterSensor = false
         if (isTouchingScreen) {
             MelonEmulator.onScreenRelease()
             isTouchingScreen = false

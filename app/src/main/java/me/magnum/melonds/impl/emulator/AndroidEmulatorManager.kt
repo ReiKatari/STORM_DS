@@ -17,7 +17,6 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import me.magnum.melonds.MelonDSAndroidInterface
 import me.magnum.melonds.MelonEmulator
@@ -97,6 +96,8 @@ class AndroidEmulatorManager(
     override val emulatorEvents: Flow<EmulatorEvent> = _emulatorEvents.asSharedFlow()
 
     private val achievementsSharedFlow = MutableSharedFlow<RAEvent>(replay = 0, extraBufferCapacity = 256)
+    private val dsiWareSessionLock = Any()
+    @Volatile
     private var activeDsiWareSession: ActiveDsiWareSession? = null
     @Volatile private var leaderboardDiagnosticsEnabled = false
     private val leaderboardTrackerUpdateLogLimiter = LeaderboardTrackerUpdateLogLimiter()
@@ -1411,64 +1412,82 @@ class AndroidEmulatorManager(
 
     override fun stopEmulator() {
         MelonEmulator.stopEmulation()
-        syncDsiWareSessionSaveAndCleanup()
+        val session = takeActiveDsiWareSession()
+        if (session != null) {
+            coroutineScope.launch(Dispatchers.IO) {
+                syncDsiWareSessionSaveAndCleanup(session)
+            }
+        }
         cameraManager.stopCurrentCameraSource()
         messageQueue.stop()
     }
 
-    private fun syncDsiWareSessionSaveAndCleanup() {
-        val session = activeDsiWareSession ?: return
-        activeDsiWareSession = null
+    suspend fun stopEmulatorSuspend() {
+        withContext(Dispatchers.IO) {
+            MelonEmulator.stopEmulation()
+            val session = takeActiveDsiWareSession()
+            if (session != null) {
+                syncDsiWareSessionSaveAndCleanup(session)
+            }
+            cameraManager.stopCurrentCameraSource()
+            messageQueue.stop()
+        }
+    }
 
+    private fun takeActiveDsiWareSession(): ActiveDsiWareSession? {
+        return synchronized(dsiWareSessionLock) {
+            activeDsiWareSession.also { activeDsiWareSession = null }
+        }
+    }
+
+    private suspend fun syncDsiWareSessionSaveAndCleanup(session: ActiveDsiWareSession) {
         val cacheSave = session.cachePublicSaveFile
         val cacheSaveWasModified = cacheSave != null &&
             cacheSave.exists() &&
             cacheSave.length() > 0L &&
             cacheSave.lastModified() > session.cacheSaveInitialModified
 
-        runBlocking(Dispatchers.IO) {
-            // Step 1: If the emulator updated the cache .sav file directly during the session, copy it to user's save folder
-            if (cacheSaveWasModified && cacheSave != null) {
-                runCatching {
-                    context.contentResolver.openOutputStream(session.sramUri, "wt")?.use { output ->
-                        cacheSave.inputStream().use { input ->
-                            input.copyTo(output)
-                        }
+        // Step 1: If the emulator updated the cache .sav file directly during the session, copy it to user's save folder
+        if (cacheSaveWasModified && cacheSave != null) {
+            runCatching {
+                context.contentResolver.openOutputStream(session.sramUri, "wt")?.use { output ->
+                    cacheSave.inputStream().use { input ->
+                        input.copyTo(output)
                     }
-                    Log.i(TAG, "DSiWare session: synced updated cache save to user save folder (${session.sramUri})")
-                }.onFailure {
-                    Log.w(TAG, "DSiWare session: failed to sync save to user save folder", it)
                 }
+                Log.i(TAG, "DSiWare session: synced updated cache save to user save folder (${session.sramUri})")
+            }.onFailure {
+                Log.w(TAG, "DSiWare session: failed to sync save to user save folder", it)
             }
+        }
 
-            // Step 2: Sync save with NAND and cleanup
-            val openNandResult = dsiNandManager.openNand()
-            if (openNandResult.isFailure()) {
-                Log.w(TAG, "DSiWare session: failed to reopen NAND for save sync title=${session.titleIdHex} result=$openNandResult")
-                return@runBlocking
-            }
+        // Step 2: Sync save with NAND and cleanup
+        val openNandResult = dsiNandManager.openNand()
+        if (openNandResult.isFailure()) {
+            Log.w(TAG, "DSiWare session: failed to reopen NAND for save sync title=${session.titleIdHex} result=$openNandResult")
+            return
+        }
 
-            try {
-                if (cacheSaveWasModified && cacheSave != null) {
-                    val imported = dsiNandManager.importTitleFileFromPath(
-                        titleId = session.titleId,
-                        fileType = session.fileType,
-                        filePath = cacheSave.absolutePath,
-                    )
-                    Log.i(TAG, "DSiWare session: synced updated cache save into NAND title=${session.titleIdHex} fileType=${session.fileType} result=$imported")
-                } else {
-                    val exported = dsiNandManager.exportTitleFile(
-                        titleId = session.titleId,
-                        fileType = session.fileType,
-                        fileUri = session.sramUri,
-                    )
-                    Log.i(TAG, "DSiWare session: exported NAND save to user sramUri result=$exported")
-                }
-            } catch (e: Throwable) {
-                Log.w(TAG, "DSiWare session: error during save sync title=${session.titleIdHex}", e)
-            } finally {
-                dsiNandManager.closeNand()
+        try {
+            if (cacheSaveWasModified && cacheSave != null) {
+                val imported = dsiNandManager.importTitleFileFromPath(
+                    titleId = session.titleId,
+                    fileType = session.fileType,
+                    filePath = cacheSave.absolutePath,
+                )
+                Log.i(TAG, "DSiWare session: synced updated cache save into NAND title=${session.titleIdHex} fileType=${session.fileType} result=$imported")
+            } else {
+                val exported = dsiNandManager.exportTitleFile(
+                    titleId = session.titleId,
+                    fileType = session.fileType,
+                    fileUri = session.sramUri,
+                )
+                Log.i(TAG, "DSiWare session: exported NAND save to user sramUri result=$exported")
             }
+        } catch (e: Throwable) {
+            Log.w(TAG, "DSiWare session: error during save sync title=${session.titleIdHex}", e)
+        } finally {
+            dsiNandManager.closeNand()
         }
     }
 

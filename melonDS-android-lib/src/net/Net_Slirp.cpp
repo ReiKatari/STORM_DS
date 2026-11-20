@@ -293,7 +293,7 @@ static int QueryUpstreamDNS(u32 dnsServerHostOrder, const u8* dnsQuery, int dnsQ
     pollfd pfd {};
     pfd.fd = sock;
     pfd.events = POLLIN;
-    int pollRes = poll(&pfd, 1, 1500);
+    int pollRes = poll(&pfd, 1, 150);
     if (pollRes <= 0 || !(pfd.revents & POLLIN))
     {
         close_socket(sock);
@@ -412,13 +412,10 @@ void Net_Slirp::HandleDNSFrame(u8* data, int len) noexcept
     *(u16*)out = 0; out += 2; // checksum
 
     // If an upstream WFC / custom DNS server is applicable, forward the raw DNS query via UDP
-    if (primaryUpstream != 0)
+    const u32 upstreamDns = (primaryUpstream != 0) ? primaryUpstream : secondaryUpstream;
+    if (upstreamDns != 0)
     {
-        int replyLen = QueryUpstreamDNS(primaryUpstream, dnsbody, dnslen, out, (int)(sizeof(resp) - (out - &resp[0]) - 2));
-        if (replyLen < 0 && secondaryUpstream != 0 && secondaryUpstream != primaryUpstream)
-        {
-            replyLen = QueryUpstreamDNS(secondaryUpstream, dnsbody, dnslen, out, (int)(sizeof(resp) - (out - &resp[0]) - 2));
-        }
+        int replyLen = QueryUpstreamDNS(upstreamDns, dnsbody, dnslen, out, (int)(sizeof(resp) - (out - &resp[0]) - 2));
         if (replyLen >= 12)
         {
             out += replyLen;

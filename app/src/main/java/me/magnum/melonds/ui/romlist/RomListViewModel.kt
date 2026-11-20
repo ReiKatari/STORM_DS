@@ -87,6 +87,7 @@ class RomListViewModel @Inject constructor(
 
     private val boxArtRequestsInFlight = mutableSetOf<String>()
     private val raCoverRequestsInFlight = mutableSetOf<String>()
+    private val raCoverAttemptedHashes = mutableSetOf<String>()
     private val boxArtSemaphore = kotlinx.coroutines.sync.Semaphore(12)
 
     fun requestBoxArt(rom: Rom) {
@@ -102,13 +103,20 @@ class RomListViewModel @Inject constructor(
             if (!raCoverByHash.value.containsKey(raHash)) {
                 val shouldFetchRa: Boolean
                 synchronized(raCoverRequestsInFlight) {
-                    shouldFetchRa = raCoverRequestsInFlight.add(raHash)
+                    shouldFetchRa = !raCoverAttemptedHashes.contains(raHash) && raCoverRequestsInFlight.add(raHash)
                 }
                 if (shouldFetchRa) {
                     viewModelScope.launch(Dispatchers.IO) {
                         try {
-                            runCatching {
-                                retroAchievementsRepository.getUserGameData(raHash, false)
+                            retroAchievementsRepository.getUserGameData(raHash, false)
+                            synchronized(raCoverRequestsInFlight) {
+                                raCoverAttemptedHashes.add(raHash)
+                            }
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            throw e
+                        } catch (_: Throwable) {
+                            synchronized(raCoverRequestsInFlight) {
+                                raCoverAttemptedHashes.add(raHash)
                             }
                         } finally {
                             synchronized(raCoverRequestsInFlight) {

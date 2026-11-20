@@ -20,6 +20,8 @@
 #define REWINDMANAGER_H
 
 #include <list>
+#include <memory>
+#include <mutex>
 #include "types.h"
 
 namespace melonDS
@@ -32,6 +34,8 @@ struct RewindSaveState {
     u8* screenshot;
     u32 screenshotSize;
     int frame;
+    std::shared_ptr<u8[]> ownedBuffer{};
+    std::shared_ptr<u8[]> ownedScreenshot{};
 };
 
 typedef struct {
@@ -55,9 +59,15 @@ private:
     RewindSaveState CreateRewindSaveState(int frame);
     void TrimRewindWindowIfRequired();
     void DeleteRewindSaveState(RewindSaveState state);
-    int RewindWindowSize() { return RewindLengthSeconds / RewindCapturingIntervalSeconds; };
+    int RewindWindowSize() const
+    {
+        if (RewindCapturingIntervalSeconds <= 0 || RewindLengthSeconds <= 0)
+            return 0;
+        return RewindLengthSeconds / RewindCapturingIntervalSeconds;
+    }
 
 private:
+    mutable std::mutex RewindMutex;
     bool Enabled;
     std::list<RewindSaveState> RewindWindow = std::list<RewindSaveState>();
     int RewindLengthSeconds;

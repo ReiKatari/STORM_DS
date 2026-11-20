@@ -45,14 +45,21 @@ static char* duplicateAndDecodeJavaUriString(JNIEnv* env, jobject uriObj, jmetho
 
     jstring uriString = (jstring) env->CallObjectMethod(uriObj, uriToStringMethod);
     if (uriString == nullptr)
+    {
+        if (env->ExceptionCheck()) env->ExceptionClear();
         return nullptr;
+    }
 
     const char* rawChars = env->GetStringUTFChars(uriString, nullptr);
     if (rawChars == nullptr)
+    {
+        env->DeleteLocalRef(uriString);
         return nullptr;
+    }
 
     std::string path = rawChars;
     env->ReleaseStringUTFChars(uriString, rawChars);
+    env->DeleteLocalRef(uriString);
 
     if (path.rfind("file://", 0) == 0)
     {
@@ -191,12 +198,16 @@ MelonDSAndroid::SdCardSettings buildSdCardSettings(JNIEnv* env, jobject sdCardCo
     if (env->ExceptionCheck())
     {
         env->ExceptionClear();
+        if (imagePathString != nullptr) env->DeleteLocalRef(imagePathString);
+        if (folderPathString != nullptr) env->DeleteLocalRef(folderPathString);
         env->DeleteLocalRef(sdCardConfigurationClass);
         return disabledSdCardSettings();
     }
 
     char* imagePath = duplicateJavaString(env, imagePathString);
     char* folderPath = duplicateJavaString(env, folderPathString);
+    if (imagePathString != nullptr) env->DeleteLocalRef(imagePathString);
+    if (folderPathString != nullptr) env->DeleteLocalRef(folderPathString);
     env->DeleteLocalRef(sdCardConfigurationClass);
 
     return MelonDSAndroid::SdCardSettings {
@@ -385,6 +396,34 @@ MelonDSAndroid::EmulatorConfiguration MelonDSAndroidConfiguration::buildEmulator
             env->DeleteLocalRef(dnsString);
         }
     }
+
+    if (firmwareConfigurationObject) env->DeleteLocalRef(firmwareConfigurationObject);
+    if (rendererConfigurationObject) env->DeleteLocalRef(rendererConfigurationObject);
+    if (dldiSdCardConfigurationObject) env->DeleteLocalRef(dldiSdCardConfigurationObject);
+    if (dsBios7Uri) env->DeleteLocalRef(dsBios7Uri);
+    if (dsBios9Uri) env->DeleteLocalRef(dsBios9Uri);
+    if (dsFirmwareUri) env->DeleteLocalRef(dsFirmwareUri);
+    if (dsiBios7Uri) env->DeleteLocalRef(dsiBios7Uri);
+    if (dsiBios9Uri) env->DeleteLocalRef(dsiBios9Uri);
+    if (dsiFirmwareUri) env->DeleteLocalRef(dsiFirmwareUri);
+    if (dsiNandUri) env->DeleteLocalRef(dsiNandUri);
+    if (internalFilesDir) env->DeleteLocalRef(internalFilesDir);
+    if (consoleTypeEnum) env->DeleteLocalRef(consoleTypeEnum);
+    if (audioInterpolationEnum) env->DeleteLocalRef(audioInterpolationEnum);
+    if (audioBitrateEnum) env->DeleteLocalRef(audioBitrateEnum);
+    if (audioLatencyEnum) env->DeleteLocalRef(audioLatencyEnum);
+    if (micSourceEnum) env->DeleteLocalRef(micSourceEnum);
+    if (videoRendererEnum) env->DeleteLocalRef(videoRendererEnum);
+    if (renderConfigurationClass) env->DeleteLocalRef(renderConfigurationClass);
+    if (videoRendererEnumClass) env->DeleteLocalRef(videoRendererEnumClass);
+    if (micSourceEnumClass) env->DeleteLocalRef(micSourceEnumClass);
+    if (audioLatencyEnumClass) env->DeleteLocalRef(audioLatencyEnumClass);
+    if (audioInterpolationEnumClass) env->DeleteLocalRef(audioInterpolationEnumClass);
+    if (audioBitrateEnumClass) env->DeleteLocalRef(audioBitrateEnumClass);
+    if (consoleTypeEnumClass) env->DeleteLocalRef(consoleTypeEnumClass);
+    if (uriClass) env->DeleteLocalRef(uriClass);
+    if (emulatorConfigurationClass) env->DeleteLocalRef(emulatorConfigurationClass);
+
     return finalEmulatorConfiguration;
 }
 
@@ -428,7 +467,11 @@ MelonDSAndroid::FirmwareConfiguration MelonDSAndroidConfiguration::buildFirmware
 
     if (nicknameString && nickname) env->ReleaseStringUTFChars(nicknameString, nickname);
     if (messageString && message) env->ReleaseStringUTFChars(messageString, message);
-    if (macAddress) env->ReleaseStringUTFChars(macAddressString, macAddress);
+    if (macAddressString && macAddress) env->ReleaseStringUTFChars(macAddressString, macAddress);
+    if (nicknameString) env->DeleteLocalRef(nicknameString);
+    if (messageString) env->DeleteLocalRef(messageString);
+    if (macAddressString) env->DeleteLocalRef(macAddressString);
+    if (firmwareConfigurationClass) env->DeleteLocalRef(firmwareConfigurationClass);
 
     return finalFirmwareConfiguration;
 }
@@ -462,6 +505,7 @@ std::unique_ptr<MelonDSAndroid::RenderSettings> MelonDSAndroidConfiguration::bui
     if (videoFilteringObject != nullptr)
         env->DeleteLocalRef(videoFilteringObject);
     jint internalResolutionScaling = env->CallIntMethod(renderSettings, getResolutionScalingMethod);
+    if (renderSettingsClass) env->DeleteLocalRef(renderSettingsClass);
 
     std::unique_ptr<MelonDSAndroid::RenderSettings> settings;
     if (renderer == MelonDSAndroid::Renderer::OpenGl)

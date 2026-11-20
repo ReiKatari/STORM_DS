@@ -57,6 +57,7 @@ class SevenZRomFileProcessor(private val context: Context, uriHandler: UriHandle
 
     override fun getNdsEntryStreamInFileStream(fileStream: InputStream): RomFileStream? {
         if (fileStream !is FileInputStream) {
+            runCatching { fileStream.close() }
             return null
         }
 
@@ -65,23 +66,24 @@ class SevenZRomFileProcessor(private val context: Context, uriHandler: UriHandle
             maxHeapBytes = Runtime.getRuntime().maxMemory()
         )
 
-        val sevenZFile = SevenZFile.Builder()
-            .setMaxMemoryLimitKb(maxMemoryLimitKb)
-            .setSeekableByteChannel(fileStream.channel)
-            .get()
-
-        val ndsEntry = getNdsEntryInFile(sevenZFile)
-        if (ndsEntry == null) {
-            sevenZFile.close()
-            return null
-        }
-
+        var sevenZFile: SevenZFile? = null
+        var returned = false
         return try {
-            val entryStream = SevenZEntryInputStream(sevenZFile.getInputStream(ndsEntry), sevenZFile)
-            RomFileStream(entryStream, SizeUnit.Bytes(ndsEntry.size))
-        } catch (e: Exception) {
-            sevenZFile.close()
-            throw e
+            sevenZFile = SevenZFile.Builder()
+                .setMaxMemoryLimitKb(maxMemoryLimitKb)
+                .setSeekableByteChannel(fileStream.channel)
+                .get()
+
+            val ndsEntry = getNdsEntryInFile(sevenZFile) ?: return null
+            val entryStream = SevenZEntryInputStream(sevenZFile.getInputStream(ndsEntry), sevenZFile, fileStream)
+            val romFileStream = RomFileStream(entryStream, SizeUnit.Bytes(ndsEntry.size))
+            returned = true
+            romFileStream
+        } finally {
+            if (!returned) {
+                runCatching { sevenZFile?.close() }
+                runCatching { fileStream.close() }
+            }
         }
     }
 
@@ -103,7 +105,11 @@ class SevenZRomFileProcessor(private val context: Context, uriHandler: UriHandle
         return null
     }
 
-    private class SevenZEntryInputStream(stream: InputStream, private val sevenZFile: SevenZFile) : FilterInputStream(stream) {
+    private class SevenZEntryInputStream(
+        stream: InputStream,
+        private val sevenZFile: SevenZFile,
+        private val fileStream: InputStream,
+    ) : FilterInputStream(stream) {
         override fun close() {
             try {
                 super.close()
@@ -112,6 +118,12 @@ class SevenZRomFileProcessor(private val context: Context, uriHandler: UriHandle
                     sevenZFile.close()
                 } catch (e: Exception) {
                     Log.w(TAG, "Failed to close 7z archive", e)
+                } finally {
+                    try {
+                        fileStream.close()
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to close 7z file stream", e)
+                    }
                 }
             }
         }

@@ -19,6 +19,8 @@
 #ifndef SAVEMANAGER_H
 #define SAVEMANAGER_H
 
+#include <atomic>
+#include <memory>
 #include <string>
 #include <unistd.h>
 #include <time.h>
@@ -50,23 +52,23 @@ private:
 
     std::string Path;
 
-    std::atomic_bool Running;
+    std::atomic_bool Running{false};
 
     std::unique_ptr<u8[]> Buffer;
-    u32 Length;
-    bool FlushRequested;
+    u32 Length = 0;
+    std::atomic_bool FlushRequested{false};
 
-    Platform::Thread* Thread;
-    Platform::Mutex* SecondaryBufferLock;
+    Platform::Thread* Thread = nullptr;
+    Platform::Mutex* SecondaryBufferLock = nullptr;
     std::unique_ptr<u8[]> SecondaryBuffer;
-    u32 SecondaryBufferLength;
+    u32 SecondaryBufferLength = 0;
 
-    time_t TimeAtLastFlushRequest;
+    std::atomic<time_t> TimeAtLastFlushRequest{0};
 
     // We keep versions in case the user closes the application before
     // a flush cycle is finished.
-    u32 PreviousFlushVersion;
-    u32 FlushVersion;
+    std::atomic<u32> PreviousFlushVersion{0};
+    std::atomic<u32> FlushVersion{0};
 };
 
 #endif // SAVEMANAGER_H

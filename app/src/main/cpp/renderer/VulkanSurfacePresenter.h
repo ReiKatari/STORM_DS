@@ -224,6 +224,7 @@ private:
     struct DescriptorSetCacheState
     {
         bool ready = false;
+        bool fastPathProfile = false;
         VkImageView sampledImageView = VK_NULL_HANDLE;
         VkImageLayout sampledImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         VkSampler sampledSampler = VK_NULL_HANDLE;
@@ -246,8 +247,11 @@ private:
     {
         int id = 0;
         ANativeWindow* window = nullptr;
+        ANativeWindow* nativeWindow = nullptr;
         u32 requestedWidth = 0;
         u32 requestedHeight = 0;
+        u32 consecutiveSurfaceRecoveryAttempts = 0;
+        bool surfacePaused = false;
 
         VkSurfaceKHR surface = VK_NULL_HANDLE;
         VkSwapchainKHR swapchain = VK_NULL_HANDLE;
@@ -271,6 +275,8 @@ private:
 
         VkDescriptorSet screenDescriptorSet = VK_NULL_HANDLE;
         VkDescriptorSet backgroundDescriptorSet = VK_NULL_HANDLE;
+        VkDescriptorSet compatibilityScreenDescriptorSet = VK_NULL_HANDLE;
+        VkDescriptorSet compatibilityBackgroundDescriptorSet = VK_NULL_HANDLE;
 
         VkBuffer vertexBuffer = VK_NULL_HANDLE;
         VkDeviceMemory vertexMemory = VK_NULL_HANDLE;
@@ -288,6 +294,7 @@ private:
         DescriptorSetCacheState screenDescriptorCache{};
         DescriptorSetCacheState backgroundDescriptorCache{};
         bool cachedDirectPresent = false;
+        bool cachedFastPathProfile = false;
         bool cachedRetroArchApplied = false;
         bool cachedVisibleCompositePresent = false;
         bool cachedFastHighresOnlyTop = false;
@@ -364,10 +371,12 @@ private:
     bool ensureSwapchain(SurfaceState& surfaceState, bool fastPathProfile);
     void destroySwapchain(SurfaceState& surfaceState);
     void recoverSwapchain(SurfaceState& surfaceState, const char* reason);
+    bool recoverLostSurface(SurfaceState& surfaceState, const char* reason);
+    void markDeviceLost(const char* context);
     bool createInFlightFence(SurfaceState& surfaceState, bool signaled);
     void destroyInFlightFence(SurfaceState& surfaceState);
     void ensureSurfacePipelineCache();
-    void saveSurfacePipelineCache();
+    void saveSurfacePipelineCache(bool onlyIfSizeChanged = false);
     void destroySurfacePipelineCache();
     VkResult waitForSurfaceIdle(SurfaceState& surfaceState, u64 timeoutNs = UINT64_MAX);
     bool resetSurfaceInFlightFence(SurfaceState& surfaceState);
@@ -385,7 +394,8 @@ private:
         VkImageView frameImageView,
         const VulkanCompositionInputs& inputs,
         VulkanFilterMode filtering,
-        bool directPresent
+        bool directPresent,
+        bool fastPathProfile
     );
     bool updateVertexBuffer(
         SurfaceState& surfaceState,
@@ -418,7 +428,8 @@ private:
         u64& presentCpuNs,
         u64& presentTimelineValueOut,
         bool& queueSubmitSucceededOut,
-        bool& presentAcceptedOut);
+        bool& presentAcceptedOut,
+        bool& surfaceLostOut);
     bool ensureRetroArchResources(
         SurfaceState& surfaceState,
         u32 sourceScreenWidth,
@@ -452,6 +463,8 @@ private:
 private:
     bool initialized = false;
     bool contextAcquired = false;
+    bool deviceLost = false;
+    bool fastPathHardwareSupported = false;
     int nextSurfaceId = 1;
 
     VkInstance instance = VK_NULL_HANDLE;
@@ -465,10 +478,13 @@ private:
     PFN_vkWaitSemaphoresKHR waitSemaphores = nullptr;
 
     VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
+    VkDescriptorSetLayout compatibilityDescriptorSetLayout = VK_NULL_HANDLE;
     VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
     VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
+    VkPipelineLayout compatibilityPipelineLayout = VK_NULL_HANDLE;
     VkPipelineCache surfacePipelineCache = VK_NULL_HANDLE;
     std::string surfacePipelineCacheFile;
+    size_t lastSavedPipelineCacheSize = 0;
     VkShaderModule vertexShaderModule = VK_NULL_HANDLE;
     VkShaderModule fragmentShaderModule = VK_NULL_HANDLE;
     VkShaderModule compatibilityFragmentShaderModule = VK_NULL_HANDLE;

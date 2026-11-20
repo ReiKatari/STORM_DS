@@ -63,6 +63,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.magnum.melonds.R
 import me.magnum.melonds.common.cheats.EmbeddedActionReplayCheats
+import me.magnum.melonds.common.network.SharedOkHttpClient
 import me.magnum.melonds.di.entrypoint.CheatsEntryPoint
 import me.magnum.melonds.domain.model.Cheat
 import me.magnum.melonds.domain.model.CheatFolder
@@ -75,7 +76,6 @@ import me.magnum.melonds.ui.theme.SpaceGrotesk
 import me.magnum.melonds.ui.theme.WatermelonMono
 import me.magnum.melonds.ui.theme.watermelon
 import me.magnum.melonds.utils.RomProcessor
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
@@ -224,16 +224,18 @@ fun RomCheatsUi(
                 "https://ghproxy.net/https://raw.githubusercontent.com/3song/Hacking-DeadSkullzJr-s-NDS-i--Cheat-Databases/main/Cheat%20Databases/usrcheat.dat",
             )
 
-            val client = OkHttpClient.Builder()
+            val client = SharedOkHttpClient.instance.newBuilder()
                 .followRedirects(true)
                 .followSslRedirects(true)
                 .connectTimeout(12, TimeUnit.SECONDS)
-                .readTimeout(35, TimeUnit.SECONDS)
+                .readTimeout(40, TimeUnit.SECONDS)
+                .callTimeout(180, TimeUnit.SECONDS)
                 .build()
 
             val rootBase = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS")
             val cheatsDir = File(rootBase, "cheats").apply { mkdirs() }
             val targetCheatFile = File(cheatsDir, "usrcheat.dat")
+            val tempCheatFile = File(cheatsDir, "usrcheat.dat.tmp")
 
             for (url in candidateUrls) {
                 try {
@@ -242,20 +244,39 @@ fun RomCheatsUi(
                         .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
                         .build()
 
-                    val response = client.newCall(request).execute()
-                    if (response.isSuccessful && response.body != null) {
-                        val bytes = response.body!!.bytes()
-                        if (bytes.isNotEmpty()) {
-                            FileOutputStream(targetCheatFile).use { fos ->
-                                fos.write(bytes)
+                    client.newCall(request).execute().use { response ->
+                        val body = response.body
+                        if (response.isSuccessful && body != null) {
+                            var totalBytes = 0L
+                            body.byteStream().use { input ->
+                                FileOutputStream(tempCheatFile).use { fos ->
+                                    val buffer = ByteArray(32 * 1024)
+                                    while (true) {
+                                        val read = input.read(buffer)
+                                        if (read <= 0) break
+                                        fos.write(buffer, 0, read)
+                                        totalBytes += read
+                                    }
+                                    fos.flush()
+                                }
                             }
-
-                            cheatsRepository.importCheats(Uri.fromFile(targetCheatFile))
-                            downloaded = true
-                            break
+                            if (totalBytes > 0L) {
+                                if (targetCheatFile.exists()) targetCheatFile.delete()
+                                if (!tempCheatFile.renameTo(targetCheatFile)) {
+                                    tempCheatFile.copyTo(targetCheatFile, overwrite = true)
+                                    tempCheatFile.delete()
+                                }
+                                cheatsRepository.importCheats(Uri.fromFile(targetCheatFile))
+                                downloaded = true
+                            } else {
+                                tempCheatFile.delete()
+                            }
                         }
                     }
-                } catch (_: Throwable) {}
+                    if (downloaded) break
+                } catch (_: Throwable) {
+                    runCatching { tempCheatFile.delete() }
+                }
             }
 
             withContext(Dispatchers.Main) {

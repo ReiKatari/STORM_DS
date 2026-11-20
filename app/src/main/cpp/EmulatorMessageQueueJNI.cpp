@@ -4,6 +4,7 @@
 #include <cerrno>
 #include <cstring>
 #include <mutex>
+#include <sched.h>
 #include <vector>
 #include <Platform.h>
 
@@ -19,6 +20,7 @@ extern "C"
 JNIEXPORT jint JNICALL
 Java_me_magnum_melonds_impl_emulator_EmulatorMessageQueue_initMessagePipe(JNIEnv* env, jobject thiz)
 {
+    std::lock_guard guard(writeMutex);
     if (messagePipes[0] != -1) {
         return messagePipes[0];
     }
@@ -29,8 +31,16 @@ Java_me_magnum_melonds_impl_emulator_EmulatorMessageQueue_initMessagePipe(JNIEnv
     }
 
     // Make read end non-blocking
-    int flags = fcntl(messagePipes[0], F_GETFL, 0);
-    fcntl(messagePipes[0], F_SETFL, flags | O_NONBLOCK);
+    int readFlags = fcntl(messagePipes[0], F_GETFL, 0);
+    if (readFlags != -1) {
+        fcntl(messagePipes[0], F_SETFL, readFlags | O_NONBLOCK);
+    }
+
+    // Make write end non-blocking so emuThread never deadlocks if the 64 KB pipe fills
+    int writeFlags = fcntl(messagePipes[1], F_GETFL, 0);
+    if (writeFlags != -1) {
+        fcntl(messagePipes[1], F_SETFL, writeFlags | O_NONBLOCK);
+    }
 
     return messagePipes[0];
 }
@@ -70,15 +80,24 @@ namespace MelonDSAndroid {
         }
 
         ssize_t written = 0;
+        int eagainRetries = 0;
         while (written < (ssize_t) totalSize) {
             ssize_t result = write(messagePipes[1], buffer.data() + written, totalSize - written);
             if (result < 0) {
                 if (errno == EINTR) continue;
+                if ((errno == EAGAIN || errno == EWOULDBLOCK) && written > 0 && eagainRetries < 50) {
+                    eagainRetries++;
+                    sched_yield();
+                    continue;
+                }
                 melonDS::Platform::Log(
                     melonDS::Platform::LogLevel::Warn,
-                    "[RAClient] runtime_event_dropped reason=pipe_write_failed errno=%d type=%d\n",
+                    "[RAClient] runtime_event_dropped reason=%s errno=%d type=%d size=%zu written=%zd\n",
+                    (errno == EAGAIN || errno == EWOULDBLOCK) ? "pipe_full" : "pipe_write_failed",
                     errno,
-                    type
+                    type,
+                    totalSize,
+                    written
                 );
                 return;
             }

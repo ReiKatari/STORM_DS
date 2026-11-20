@@ -19,6 +19,7 @@ import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Handler
+import android.os.HandlerThread
 import android.os.IBinder
 import android.os.Looper
 import android.util.DisplayMetrics
@@ -52,9 +53,13 @@ class ScreenCaptureService : Service() {
         var pendingDataIntent: Intent? = null
 
         private var mediaProjection: MediaProjection? = null
+        private var projectionCallback: MediaProjection.Callback? = null
         private var virtualDisplay: VirtualDisplay? = null
         private var imageReader: ImageReader? = null
-        private val handler = Handler(Looper.getMainLooper())
+        private val mainHandler = Handler(Looper.getMainLooper())
+        private var captureThread: HandlerThread? = null
+        private var captureHandler: Handler? = null
+        private val frameLock = Any()
 
         @Volatile
         private var latestFrameBitmap: Bitmap? = null
@@ -127,18 +132,25 @@ class ScreenCaptureService : Service() {
 
         suspend fun captureFrame(): Bitmap? = withContext(Dispatchers.IO) {
             // Simply read the latest cached frame that the permanent listener maintains.
-            // NEVER touch reader.setOnImageAvailableListener here — the permanent listener
+            // NEVER touch reader.setOnImageAvailableListener here - the permanent listener
             // set in setupMediaProjection() keeps latestFrameBitmap updated continuously.
             // Overwriting it would cause a race condition that stalls VirtualDisplay.
-            var retries = 10 // Wait up to 500ms (10 × 50ms)
+            var retries = 10 // Wait up to 500ms (10 x 50ms)
             while (retries > 0) {
-                val bmp = latestFrameBitmap
-                if (bmp != null && !bmp.isRecycled) {
-                    return@withContext try {
-                        bmp.copy(Bitmap.Config.ARGB_8888, false)
-                    } catch (_: Exception) {
+                val copy = synchronized(frameLock) {
+                    val bmp = latestFrameBitmap
+                    if (bmp != null && !bmp.isRecycled) {
+                        try {
+                            bmp.copy(Bitmap.Config.ARGB_8888, false)
+                        } catch (_: Exception) {
+                            null
+                        }
+                    } else {
                         null
                     }
+                }
+                if (copy != null) {
+                    return@withContext copy
                 }
                 delay(50)
                 retries--
@@ -148,17 +160,34 @@ class ScreenCaptureService : Service() {
 
         fun cleanup() {
             isReady = false
+            pendingResultCode = Activity.RESULT_CANCELED
+            pendingDataIntent = null
             try {
-                latestFrameBitmap?.recycle()
-                latestFrameBitmap = null
                 virtualDisplay?.release()
                 virtualDisplay = null
+                imageReader?.setOnImageAvailableListener(null, null)
                 imageReader?.close()
                 imageReader = null
-                mediaProjection?.stop()
+                val mp = mediaProjection
                 mediaProjection = null
+                val cb = projectionCallback
+                projectionCallback = null
+                if (mp != null) {
+                    if (cb != null) {
+                        runCatching { mp.unregisterCallback(cb) }
+                    }
+                    mp.stop()
+                }
+                captureThread?.quitSafely()
+                captureThread = null
+                captureHandler = null
             } catch (e: Throwable) {
                 Log.e(TAG, "Error cleaning up screen capture", e)
+            } finally {
+                synchronized(frameLock) {
+                    latestFrameBitmap?.recycle()
+                    latestFrameBitmap = null
+                }
             }
         }
     }
@@ -168,7 +197,14 @@ class ScreenCaptureService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
             cleanup()
-            stopForeground(STOP_FOREGROUND_REMOVE)
+            ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
+        if (intent == null || pendingResultCode != Activity.RESULT_OK || pendingDataIntent == null) {
+            MediaProjectionCapturer.resetPermissionFlag()
+            cleanup()
             stopSelf()
             return START_NOT_STICKY
         }
@@ -187,19 +223,14 @@ class ScreenCaptureService : Service() {
         ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, fgsType)
 
         // 2. Initialize MediaProjection and VirtualDisplay inside the Foreground Service
-        val resultCode = if (pendingResultCode != Activity.RESULT_CANCELED) pendingResultCode else (intent?.getIntExtra(EXTRA_RESULT_CODE, Activity.RESULT_CANCELED) ?: Activity.RESULT_CANCELED)
-        val dataIntent = pendingDataIntent ?: (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            intent?.getParcelableExtra(EXTRA_DATA_INTENT, Intent::class.java)
-        } else {
-            @Suppress("DEPRECATION")
-            intent?.getParcelableExtra(EXTRA_DATA_INTENT)
-        })
+        val resultCode = pendingResultCode
+        val dataIntent = pendingDataIntent
 
         if (resultCode == Activity.RESULT_OK && dataIntent != null && mediaProjection == null) {
             setupMediaProjection(resultCode, dataIntent)
         }
 
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     @SuppressLint("WrongConstant")
@@ -209,15 +240,30 @@ class ScreenCaptureService : Service() {
             val mp = mpManager.getMediaProjection(resultCode, data)
             if (mp == null) {
                 Log.e(TAG, "MediaProjectionManager.getMediaProjection returned null")
+                MediaProjectionCapturer.resetPermissionFlag()
+                cleanup()
+                ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+                stopSelf()
                 return
             }
 
-            mediaProjection = mp
-            mp.registerCallback(object : MediaProjection.Callback() {
+            captureThread?.quitSafely()
+            val thread = HandlerThread("StormScreenCaptureThread").apply { start() }
+            captureThread = thread
+            val threadHandler = Handler(thread.looper)
+            captureHandler = threadHandler
+
+            val callback = object : MediaProjection.Callback() {
                 override fun onStop() {
+                    MediaProjectionCapturer.resetPermissionFlag()
                     cleanup()
+                    ServiceCompat.stopForeground(this@ScreenCaptureService, ServiceCompat.STOP_FOREGROUND_REMOVE)
+                    stopSelf()
                 }
-            }, handler)
+            }
+            mediaProjection = mp
+            projectionCallback = callback
+            mp.registerCallback(callback, mainHandler)
 
             val windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
             val metrics = DisplayMetrics()
@@ -236,6 +282,7 @@ class ScreenCaptureService : Service() {
             val dpi = metrics.densityDpi.coerceAtLeast(1)
 
             val reader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
+            imageReader = reader
             reader.setOnImageAvailableListener({ ir ->
                 var image: Image? = null
                 try {
@@ -243,10 +290,20 @@ class ScreenCaptureService : Service() {
                     if (image != null) {
                         val freshBmp = convertImageToBitmap(image)
                         if (freshBmp != null) {
-                            val old = latestFrameBitmap
-                            latestFrameBitmap = freshBmp
-                            if (old !== freshBmp) {
-                                old?.recycle()
+                            var discardFresh = false
+                            synchronized(frameLock) {
+                                if (imageReader == null) {
+                                    discardFresh = true
+                                } else {
+                                    val old = latestFrameBitmap
+                                    latestFrameBitmap = freshBmp
+                                    if (old !== freshBmp) {
+                                        old?.recycle()
+                                    }
+                                }
+                            }
+                            if (discardFresh) {
+                                freshBmp.recycle()
                             }
                         }
                     }
@@ -254,8 +311,7 @@ class ScreenCaptureService : Service() {
                 } finally {
                     image?.close()
                 }
-            }, handler)
-            imageReader = reader
+            }, threadHandler)
 
             virtualDisplay = mp.createVirtualDisplay(
                 "StormScreenCapture",
@@ -265,14 +321,17 @@ class ScreenCaptureService : Service() {
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
                 reader.surface,
                 null,
-                handler
+                threadHandler
             )
 
             isReady = true
             Log.i(TAG, "MediaProjection and VirtualDisplay successfully initialized (${width}x${height} @ ${dpi}dpi)")
         } catch (e: Throwable) {
             Log.e(TAG, "Failed to initialize MediaProjection in service", e)
+            MediaProjectionCapturer.resetPermissionFlag()
             cleanup()
+            ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+            stopSelf()
         }
     }
 

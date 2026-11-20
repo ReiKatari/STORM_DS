@@ -3,7 +3,6 @@ package me.magnum.melonds.ui.emulator.skin
 import android.content.SharedPreferences
 import android.graphics.Paint
 import android.graphics.Typeface
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
@@ -556,31 +555,9 @@ fun ConsoleSkinFullFrame(
 
     val effectiveBrightness = (brightnessOverride ?: savedBrightness).coerceIn(30, 100)
 
-    val ledAlpha: Float
-    val wifiAlpha: Float
-    val threeDAlpha: Float
-    if (overrideTheme) {
-        ledAlpha = 0.92f
-        wifiAlpha = 0.72f
-        threeDAlpha = 0.88f
-    } else {
-        val infiniteTransition = rememberInfiniteTransition(label = "skinLeds")
-        ledAlpha = infiniteTransition.animateFloat(
-            initialValue = 0.72f, targetValue = 1.0f,
-            animationSpec = infiniteRepeatable(tween(1400, easing = LinearEasing), RepeatMode.Reverse),
-            label = "ledAlpha"
-        ).value
-        wifiAlpha = infiniteTransition.animateFloat(
-            initialValue = 0.30f, targetValue = 0.92f,
-            animationSpec = infiniteRepeatable(tween(650, easing = LinearEasing), RepeatMode.Reverse),
-            label = "wifiAlpha"
-        ).value
-        threeDAlpha = infiniteTransition.animateFloat(
-            initialValue = 0.68f, targetValue = 1.0f,
-            animationSpec = infiniteRepeatable(tween(1100, easing = LinearEasing), RepeatMode.Reverse),
-            label = "threeDAlpha"
-        ).value
-    }
+    val ledAlpha = 0.94f
+    val wifiAlpha = 0.78f
+    val threeDAlpha = 0.90f
 
     // Observe theme and accent state so AURORA_AUTO_THEME follows all 8 app themes live
     val currentAppTheme = AppThemeManager.themeState.value

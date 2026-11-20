@@ -178,13 +178,16 @@ set(BUILD_SHARED_LIBS OFF)
 add_subdirectory(teakra EXCLUDE_FROM_ALL)
 # Workaround for building teakra with -O0 on Windows either failing or hanging forever
 target_compile_options(teakra PRIVATE "$<$<CONFIG:DEBUG>:-Og>")
+if (NOT MSVC)
+    target_compile_options(teakra PRIVATE "$<$<OR:$<CONFIG:RELEASE>,$<CONFIG:RELWITHDEBINFO>>:-O3>")
+endif()
 target_link_libraries(core PRIVATE teakra)
 
 if (NOT MSVC)
     # MSVC has its own compiler flag syntax; if we ever support it,
     # be sure to add equivalent flags here.
 
-    target_compile_options(core PUBLIC -fwrapv)
+    target_compile_options(core PRIVATE -fwrapv)
 
     target_compile_options(core PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:-Wno-invalid-offsetof>")
     # These warnings are excessive, and are only triggered in the ARMJIT code
@@ -197,9 +200,7 @@ if (NOT MSVC)
             -fno-math-errno
             -fno-trapping-math
         )
-        if (CMAKE_BUILD_TYPE STREQUAL "Release")
-            target_compile_options(core PRIVATE -O3)
-        endif()
+        target_compile_options(core PRIVATE "$<$<OR:$<CONFIG:RELEASE>,$<CONFIG:RELWITHDEBINFO>>:-O3>")
         if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
             target_compile_options(core PRIVATE
                 -fvectorize

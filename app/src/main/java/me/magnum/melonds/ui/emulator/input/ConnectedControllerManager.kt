@@ -41,6 +41,7 @@ class ConnectedControllerManager : InputManager.InputDeviceListener {
 
     fun stopTrackingControllers() {
         coroutineScope?.cancel()
+        coroutineScope = null
         _managedControllers.value = emptyList()
     }
 

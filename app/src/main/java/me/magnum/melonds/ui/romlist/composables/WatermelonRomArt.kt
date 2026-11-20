@@ -17,8 +17,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -213,7 +216,31 @@ fun PlatformBadge(
     }
 }
 
-private val failedCoverUrls = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+private const val MAX_FAILED_COVER_URLS = 1000
+private val failedCoverUrls = LinkedHashSet<String>()
+
+private fun isFailedCoverUrl(url: String?): Boolean {
+    if (url == null) return false
+    return synchronized(failedCoverUrls) {
+        failedCoverUrls.contains(url)
+    }
+}
+
+private fun markFailedCoverUrl(url: String) {
+    synchronized(failedCoverUrls) {
+        if (failedCoverUrls.contains(url)) return
+        while (failedCoverUrls.size >= MAX_FAILED_COVER_URLS) {
+            val iterator = failedCoverUrls.iterator()
+            if (iterator.hasNext()) {
+                iterator.next()
+                iterator.remove()
+            } else {
+                break
+            }
+        }
+        failedCoverUrls.add(url)
+    }
+}
 
 internal data class CoverPrefsSnapshot(
     val isScraperEnabled: Boolean = false,
@@ -280,7 +307,7 @@ fun getGameTdbCover3dUrl(rom: Rom): String? {
         else -> "US"
     }
     val url = if (!code.startsWith("NDS", true)) "https://art.gametdb.com/ds/box/$region/$code.png" else null
-    return if (url != null && !failedCoverUrls.contains(url)) url else null
+    return if (url != null && !isFailedCoverUrl(url)) url else null
 }
 
 fun getGameTdbCover2dUrl(rom: Rom): String? {
@@ -303,7 +330,7 @@ fun getGameTdbCover2dUrl(rom: Rom): String? {
         else -> "US"
     }
     val url = if (!code.startsWith("NDS", true)) "https://art.gametdb.com/ds/coverM/$region/$code.jpg" else null
-    return if (url != null && !failedCoverUrls.contains(url)) url else null
+    return if (url != null && !isFailedCoverUrl(url)) url else null
 }
 
 @Composable
@@ -318,13 +345,17 @@ fun WatermelonRomArt(
     onArtLoadedChanged: (Boolean) -> Unit = {},
 ) {
     val context = LocalContext.current
-    val customCover = remember(rom.fileName) { getCustomCoverFile(context, rom) }
+    val customCover by produceState<java.io.File?>(initialValue = null, rom.fileName) {
+        value = withContext(Dispatchers.IO) {
+            getCustomCoverFile(context, rom)
+        }
+    }
     val gameTdbUrl = remember(rom.fileName, rom.gameCode) { getGameTdbCover3dUrl(rom) }
     val gameTdb2dUrl = remember(rom.fileName, rom.gameCode) { getGameTdbCover2dUrl(rom) }
-    var gameTdbFailed by remember(rom.uri) { mutableStateOf(gameTdbUrl == null || failedCoverUrls.contains(gameTdbUrl)) }
-    var gameTdb2dFailed by remember(rom.uri) { mutableStateOf(gameTdb2dUrl == null || failedCoverUrls.contains(gameTdb2dUrl)) }
-    var boxArtFailed by remember(rom.uri, boxArtUrl) { mutableStateOf(boxArtUrl == null || failedCoverUrls.contains(boxArtUrl)) }
-    var raFailed by remember(rom.uri, raCoverUrl) { mutableStateOf(raCoverUrl == null || failedCoverUrls.contains(raCoverUrl)) }
+    var gameTdbFailed by remember(rom.uri) { mutableStateOf(gameTdbUrl == null || isFailedCoverUrl(gameTdbUrl)) }
+    var gameTdb2dFailed by remember(rom.uri) { mutableStateOf(gameTdb2dUrl == null || isFailedCoverUrl(gameTdb2dUrl)) }
+    var boxArtFailed by remember(rom.uri, boxArtUrl) { mutableStateOf(boxArtUrl == null || isFailedCoverUrl(boxArtUrl)) }
+    var raFailed by remember(rom.uri, raCoverUrl) { mutableStateOf(raCoverUrl == null || isFailedCoverUrl(raCoverUrl)) }
     var artLoaded by remember(rom.uri, boxArtUrl, raCoverUrl, customCover) { mutableStateOf(false) }
 
     val coverPrefs by CoverPrefsObserver.flow(context).collectAsState()
@@ -341,10 +372,10 @@ fun WatermelonRomArt(
     )
     val activeModel: Any? = when {
         customCover != null -> customCover
-        isRaCoversEnabled && raCoverUrl != null && !isRaPlaceholder && !raFailed && !failedCoverUrls.contains(raCoverUrl) -> raCoverUrl
-        isGameTdb3dEnabled && gameTdbUrl != null && !gameTdbFailed && !failedCoverUrls.contains(gameTdbUrl) -> gameTdbUrl
-        isGameTdb2dEnabled && gameTdb2dUrl != null && !gameTdb2dFailed && !failedCoverUrls.contains(gameTdb2dUrl) -> gameTdb2dUrl
-        isScraperEnabled && boxArtUrl != null && !boxArtFailed && !failedCoverUrls.contains(boxArtUrl) -> boxArtUrl
+        isRaCoversEnabled && raCoverUrl != null && !isRaPlaceholder && !raFailed && !isFailedCoverUrl(raCoverUrl) -> raCoverUrl
+        isGameTdb3dEnabled && gameTdbUrl != null && !gameTdbFailed && !isFailedCoverUrl(gameTdbUrl) -> gameTdbUrl
+        isGameTdb2dEnabled && gameTdb2dUrl != null && !gameTdb2dFailed && !isFailedCoverUrl(gameTdb2dUrl) -> gameTdb2dUrl
+        isScraperEnabled && boxArtUrl != null && !boxArtFailed && !isFailedCoverUrl(boxArtUrl) -> boxArtUrl
         else -> null
     }
 
@@ -388,7 +419,7 @@ fun WatermelonRomArt(
                         onError = { _, errorResult ->
                             val httpCode = (errorResult.throwable as? coil.network.HttpException)?.response?.code
                             if (activeModel is String && httpCode == 404) {
-                                failedCoverUrls.add(activeModel)
+                                markFailedCoverUrl(activeModel)
                             }
                             if (activeModel == gameTdbUrl) {
                                 gameTdbFailed = true

@@ -35,29 +35,34 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context, callbacks: Set<@JvmSuppressWildcards RoomDatabase.Callback>): MelonDatabase {
-        val rootBase = java.io.File(android.os.Environment.getExternalStorageDirectory(), "STORM DS")
-        val dbDir = java.io.File(rootBase, "database").apply { mkdirs() }
-        val dbFile = java.io.File(dbDir, "melon-database")
-
-        // Migrate existing database from internal storage if it exists and external does not yet
+        // Always open Room using internal storage ("melon-database") to prevent SQLite WAL corruption over Android 14 FUSE
+        // and eliminate pre/post-permission database switching. Perform a one-time safe copy from legacy external DB if present.
         val internalDb = context.getDatabasePath("melon-database")
-        if (internalDb != null && internalDb.exists() && !dbFile.exists()) {
-            runCatching {
-                internalDb.copyTo(dbFile, overwrite = false)
-                val shm = java.io.File(internalDb.parentFile, "melon-database-shm")
-                if (shm.exists()) shm.copyTo(java.io.File(dbDir, "melon-database-shm"), overwrite = false)
-                val wal = java.io.File(internalDb.parentFile, "melon-database-wal")
-                if (wal.exists()) wal.copyTo(java.io.File(dbDir, "melon-database-wal"), overwrite = false)
+        if (internalDb != null && !internalDb.exists()) {
+            val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
+            if (extRoot != null) {
+                val legacyDbDir = java.io.File(java.io.File(extRoot, "STORM DS"), "database")
+                val legacyDbFile = java.io.File(legacyDbDir, "melon-database")
+                if (legacyDbFile.exists() && legacyDbFile.isFile && legacyDbFile.length() > 0L) {
+                    runCatching {
+                        internalDb.parentFile?.mkdirs()
+                        legacyDbFile.copyTo(internalDb, overwrite = false)
+                        val legacyShm = java.io.File(legacyDbDir, "melon-database-shm")
+                        if (legacyShm.exists() && legacyShm.isFile) {
+                            legacyShm.copyTo(java.io.File(internalDb.parentFile, "melon-database-shm"), overwrite = false)
+                        }
+                        val legacyWal = java.io.File(legacyDbDir, "melon-database-wal")
+                        if (legacyWal.exists() && legacyWal.isFile) {
+                            legacyWal.copyTo(java.io.File(internalDb.parentFile, "melon-database-wal"), overwrite = false)
+                        }
+                    }.onFailure {
+                        runCatching { internalDb.delete() }
+                    }
+                }
             }
         }
 
-        val dbPath = if (dbDir.exists() && (dbDir.canWrite() || rootBase.canWrite())) {
-            dbFile.absolutePath
-        } else {
-            "melon-database"
-        }
-
-        return Room.databaseBuilder(context, MelonDatabase::class.java, dbPath)
+        return Room.databaseBuilder(context, MelonDatabase::class.java, "melon-database")
             .apply {
                 callbacks.forEach {
                     addCallback(it)

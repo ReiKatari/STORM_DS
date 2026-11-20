@@ -72,6 +72,7 @@ import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -117,6 +118,9 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import me.magnum.melonds.ui.theme.Manrope
 import me.magnum.melonds.ui.theme.WatermelonColors
 import me.magnum.melonds.ui.theme.WatermelonMono
@@ -281,14 +285,24 @@ fun PauseMenuOverlay(
     val batteryManager = remember(context) {
         context.getSystemService(android.content.Context.BATTERY_SERVICE) as? android.os.BatteryManager
     }
-    val batteryLevel = remember(batteryManager) {
-        val level = batteryManager?.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: -1
-        if (level in 0..100) level else null
+    var batteryLevelState by remember { mutableStateOf<Int?>(null) }
+    val timeFormatter = remember {
+        java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
     }
-
-    val currentTimeStr = remember {
-        java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
+    var currentTimeStr by remember {
+        mutableStateOf(timeFormatter.format(java.util.Date()))
     }
+    LaunchedEffect(batteryManager) {
+        while (true) {
+            val level = withContext(Dispatchers.IO) {
+                batteryManager?.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: -1
+            }
+            batteryLevelState = if (level in 0..100) level else null
+            currentTimeStr = timeFormatter.format(java.util.Date())
+            delay(30_000L)
+        }
+    }
+    val batteryLevel = batteryLevelState
 
     val formattedSession = remember(sessionDurationMs) {
         val durationSec = (sessionDurationMs ?: 0L) / 1000L

@@ -217,9 +217,11 @@ class RoomCheatsRepository(
     }
 
     override suspend fun deleteCheatDatabaseIfExists(databaseName: String) {
-        database.cheatDatabaseDao().deleteCheatDatabase(databaseName)
-        database.gameDao().deleteEmptyGames()
-        database.cheatFolderDao().deleteEmptyFolders()
+        database.withTransaction {
+            database.cheatDatabaseDao().deleteCheatDatabase(databaseName)
+            database.cheatFolderDao().deleteEmptyFolders()
+            database.gameDao().deleteEmptyGames()
+        }
         settingsBackupManager.requestMirrorWrite()
     }
 
@@ -256,6 +258,27 @@ class RoomCheatsRepository(
     }
 
     override suspend fun addGameCheats(game: Game): Game {
+        val inserted = database.withTransaction {
+            insertGameCheatsInternal(game)
+        }
+        settingsBackupManager.requestMirrorWrite()
+        return inserted
+    }
+
+    suspend fun addGameCheatsBatch(games: List<Game>) {
+        if (games.isEmpty()) return
+        database.withTransaction {
+            for (game in games) {
+                insertGameCheatsInternal(game)
+            }
+        }
+    }
+
+    fun notifyCheatsUpdated() {
+        settingsBackupManager.requestMirrorWrite()
+    }
+
+    private suspend fun insertGameCheatsInternal(game: Game): Game {
         var insertedGame = database.gameDao().findGame(game.gameCode, game.gameChecksum)
         if (insertedGame == null) {
             val gameEntity = GameEntity(
@@ -266,13 +289,28 @@ class RoomCheatsRepository(
             )
 
             val id = database.gameDao().insertGame(gameEntity)
-            insertedGame = gameEntity.copy(id = id)
+            insertedGame = if (id != -1L) {
+                gameEntity.copy(id = id)
+            } else {
+                database.gameDao().findGame(game.gameCode, game.gameChecksum)
+            }
+        }
+
+        val gameId = insertedGame?.id
+        if (gameId == null) {
+            return Game(
+                id = null,
+                name = game.name,
+                gameCode = game.gameCode,
+                gameChecksum = game.gameChecksum,
+                cheats = emptyList(),
+            )
         }
 
         game.cheats.forEach { folder ->
             val folderEntity = CheatFolderEntity(
                 id = null,
-                gameId = insertedGame.id!!,
+                gameId = gameId,
                 name = folder.name,
             )
 
@@ -293,7 +331,6 @@ class RoomCheatsRepository(
             }
         }
 
-        settingsBackupManager.requestMirrorWrite()
         return Game(
             id = insertedGame.id,
             name = insertedGame.name,

@@ -57,6 +57,9 @@ public:
     bool SupportsNonUniformTextureIndexing() const { return NonUniformTextureIndexingSupported; }
     bool IsTimelineSemaphoreForcedOff() const { return ForceDisableTimelineSemaphores; }
     bool IsDynamicTextureIndexingForcedOff() const { return ForceDisableDynamicTextureIndexing; }
+    bool IsIndependentBlendEnabled() const { return IndependentBlendEnabled; }
+    bool IsFragmentStoresAndAtomicsEnabled() const { return FragmentStoresAndAtomicsEnabled; }
+    const VkPhysicalDeviceLimits& GetDeviceLimits() const { return DeviceLimits; }
 
     u32 FindMemoryType(u32 typeBits, VkMemoryPropertyFlags properties) const;
     static void SetCompatibilityOverrides(bool disableTimelineSemaphores, bool disableDynamicTextureIndexing);
@@ -92,6 +95,10 @@ private:
     bool NonUniformTextureIndexingSupported = false;
     bool ForceDisableTimelineSemaphores = false;
     bool ForceDisableDynamicTextureIndexing = false;
+    u32 EffectiveInstanceApiVersion = VK_API_VERSION_1_0;
+    bool IndependentBlendEnabled = false;
+    bool FragmentStoresAndAtomicsEnabled = false;
+    VkPhysicalDeviceLimits DeviceLimits{};
     VulkanDeviceProfile DeviceProfile{};
 };
 

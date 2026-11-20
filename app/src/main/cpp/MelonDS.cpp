@@ -43,9 +43,9 @@ namespace MelonDSAndroid
 {
     namespace
     {
-        bool fastForwardActive = false;
-        bool muteOnFastForwardActive = true;
-        bool rewindActive = false;
+        std::atomic<bool> fastForwardActive{false};
+        std::atomic<bool> muteOnFastForwardActive{true};
+        std::atomic<bool> rewindActive{false};
         std::atomic_bool rendererDebugToolsEnabled = false;
         std::atomic_bool rendererDebugBgObjEnabled = false;
         std::atomic_bool rendererDebugLatchTraceEnabled = false;
@@ -443,7 +443,7 @@ namespace MelonDSAndroid
      */
     void setConfiguration(EmulatorConfiguration emulatorConfiguration) {
         currentConfiguration = ShareConfiguration(std::move(emulatorConfiguration));
-        internalFilesDir = currentConfiguration->internalFilesDir;
+        internalFilesDir = currentConfiguration->internalFilesDir ? currentConfiguration->internalFilesDir : "";
         rendererDebugToolsEnabled.store(ResolveRendererDebugToolsEnabled(*currentConfiguration), std::memory_order_relaxed);
         rendererDebugBgObjEnabled.store(ResolveRendererDebugBgObjEnabled(*currentConfiguration), std::memory_order_relaxed);
         rendererDebugLatchTraceEnabled.store(ResolveRendererDebugLatchTraceEnabled(*currentConfiguration), std::memory_order_relaxed);
@@ -493,9 +493,10 @@ namespace MelonDSAndroid
 
     void setCodeList(std::list<Cheat> cheats)
     {
-        if (instance == nullptr)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return;
-        instance->loadCheats(std::move(cheats));
+        currentInstance->loadCheats(std::move(cheats));
     }
 
     bool setupAchievements(
@@ -609,8 +610,9 @@ namespace MelonDSAndroid
 
     Renderer getCurrentRenderer()
     {
-        if (instance != nullptr)
-            return instance->getCurrentRenderer();
+        auto currentInstance = GetInstanceSnapshot();
+        if (currentInstance)
+            return currentInstance->getCurrentRenderer();
 
         if (currentConfiguration != nullptr)
             return currentConfiguration->renderer;
@@ -624,9 +626,10 @@ namespace MelonDSAndroid
      * @param emulatorConfiguration The new emulator configuration
      */
     void updateEmulatorConfiguration(std::unique_ptr<EmulatorConfiguration> emulatorConfiguration) {
-        if (instance != nullptr)
+        auto currentInstance = GetInstanceSnapshot();
+        if (currentInstance)
         {
-            instance->normalizeVulkanPipelineProfileForSession(
+            currentInstance->normalizeVulkanPipelineProfileForSession(
                 *emulatorConfiguration);
         }
         std::shared_ptr<EmulatorConfiguration> sharedConfig = ShareConfiguration(std::move(emulatorConfiguration));
@@ -641,39 +644,43 @@ namespace MelonDSAndroid
         vulkanSetupPerfLoggingEnabled.store(ResolveVulkanSetupPerfLoggingEnabled(), std::memory_order_relaxed);
         vulkanDiagnosticFlags.store(ResolveVulkanDiagnosticFlags(), std::memory_order_relaxed);
 
-        if (instance == nullptr)
+        if (!currentInstance)
             return;
 
-        instance->updateConfiguration(sharedConfig);
+        currentInstance->updateConfiguration(sharedConfig);
         updateAudioSettings(sharedConfig->audioSettings);
     }
 
     int loadRom(std::string romPath, std::string sramPath, RomGbaSlotConfig* gbaSlotConfig)
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return 2;
 
-        if (!instance->loadRom(std::move(romPath), std::move(sramPath)))
+        if (!currentInstance->loadRom(std::move(romPath), std::move(sramPath)))
             return 2;
 
-        if (gbaSlotConfig->type == GBA_ROM)
+        if (gbaSlotConfig != nullptr)
         {
-            RomGbaSlotConfigGbaRom* gbaRomConfig = (RomGbaSlotConfigGbaRom*) gbaSlotConfig;
-            if (!instance->loadGbaRom(gbaRomConfig->romPath, gbaRomConfig->savePath))
-                return 1;
-        }
-        else if (gbaSlotConfig->type == RUMBLE_PAK)
-        {
-            instance->loadRumblePak();
-        }
-        else if (gbaSlotConfig->type == MEMORY_EXPANSION)
-        {
-            instance->loadGbaMemoryExpansion();
-        }
-        else if (gbaSlotConfig->type == ANALOG_INPUT)
-        {
-            Platform::Log(Platform::LogLevel::Warn, "MelonDSAndroid: enabling Slot-2 analog input addon\n");
-            instance->loadGbaAnalogInput();
+            if (gbaSlotConfig->type == GBA_ROM)
+            {
+                RomGbaSlotConfigGbaRom* gbaRomConfig = (RomGbaSlotConfigGbaRom*) gbaSlotConfig;
+                if (!currentInstance->loadGbaRom(gbaRomConfig->romPath, gbaRomConfig->savePath))
+                    return 1;
+            }
+            else if (gbaSlotConfig->type == RUMBLE_PAK)
+            {
+                currentInstance->loadRumblePak();
+            }
+            else if (gbaSlotConfig->type == MEMORY_EXPANSION)
+            {
+                currentInstance->loadGbaMemoryExpansion();
+            }
+            else if (gbaSlotConfig->type == ANALOG_INPUT)
+            {
+                Platform::Log(Platform::LogLevel::Warn, "MelonDSAndroid: enabling Slot-2 analog input addon\n");
+                currentInstance->loadGbaAnalogInput();
+            }
         }
 
         return 0;
@@ -681,10 +688,11 @@ namespace MelonDSAndroid
 
     int bootFirmware()
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return ROMManager::FIRMWARE_BAD;
 
-        if (instance->bootFirmware())
+        if (currentInstance->bootFirmware())
             return ROMManager::SUCCESS;
         else
             return ROMManager::FIRMWARE_NOT_BOOTABLE;
@@ -692,135 +700,150 @@ namespace MelonDSAndroid
 
     bool precompileVulkanPipelines(const VulkanSurfaceConfig& retroArchConfig)
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return false;
 
-        return instance->precompileVulkanPipelines(retroArchConfig);
+        return currentInstance->precompileVulkanPipelines(retroArchConfig);
     }
 
     void touchScreen(u16 x, u16 y)
     {
-        if (instance)
-            instance->touchScreen(x, y);
+        if (auto currentInstance = GetInstanceSnapshot())
+            currentInstance->touchScreen(x, y);
     }
 
     void releaseScreen()
     {
-        if (instance)
-            instance->releaseScreen();
+        if (auto currentInstance = GetInstanceSnapshot())
+            currentInstance->releaseScreen();
     }
 
     void pressKey(u32 key)
     {
-        if (instance)
-            instance->pressKey(key);
+        if (auto currentInstance = GetInstanceSnapshot())
+            currentInstance->pressKey(key);
     }
 
     void releaseKey(u32 key)
     {
-        if (instance)
-            instance->releaseKey(key);
+        if (auto currentInstance = GetInstanceSnapshot())
+            currentInstance->releaseKey(key);
     }
 
     void setSlot2AnalogInput(float x, float y)
     {
-        if (instance)
-            instance->setSlot2AnalogInput(x, y);
+        if (auto currentInstance = GetInstanceSnapshot())
+            currentInstance->setSlot2AnalogInput(x, y);
     }
 
     void setSlot2AddonType(int addonType)
     {
-        if (instance)
-            instance->setSlot2AddonType(addonType);
+        if (auto currentInstance = GetInstanceSnapshot())
+            currentInstance->setSlot2AddonType(addonType);
     }
 
     void start()
     {
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
+            return;
+
         startAudio();
-        if (currentConfiguration->renderer != Renderer::Vulkan)
+        if (currentConfiguration != nullptr && currentConfiguration->renderer != Renderer::Vulkan)
             setupOpenGlContext();
 
-        instance->start();
+        currentInstance->start();
     }
 
     u32 loop()
     {
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
+            return 0;
+
         MPInterface::Get().Process();
         if (currentConfiguration != nullptr && currentConfiguration->renderer != Renderer::Vulkan)
             setupOpenGlContext();
-        return instance->runFrame();
+        return currentInstance->runFrame();
     }
 
     Frame* getPresentationFrame(std::optional<std::chrono::time_point<std::chrono::steady_clock>> deadline)
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return nullptr;
 
-        return instance->getPresentationFrame(deadline);
+        return currentInstance->getPresentationFrame(deadline);
     }
 
     bool waitForPresentationFrame(Frame* frame, u64 timeoutNs)
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return false;
 
-        return instance->waitForPresentationFrame(frame, timeoutNs);
+        return currentInstance->waitForPresentationFrame(frame, timeoutNs);
     }
 
     int attachVulkanSurface(ANativeWindow* window, u32 width, u32 height)
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
         {
             if (window != nullptr)
                 ANativeWindow_release(window);
             return 0;
         }
 
-        return instance->attachVulkanSurface(window, width, height);
+        return currentInstance->attachVulkanSurface(window, width, height);
     }
 
     bool resizeVulkanSurface(int surfaceId, u32 width, u32 height)
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return false;
 
-        return instance->resizeVulkanSurface(surfaceId, width, height);
+        return currentInstance->resizeVulkanSurface(surfaceId, width, height);
     }
 
     bool configureVulkanSurface(int surfaceId, const VulkanSurfaceConfig& config, const VulkanBackgroundImage& backgroundImage)
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return false;
 
-        return instance->configureVulkanSurface(surfaceId, config, backgroundImage);
+        return currentInstance->configureVulkanSurface(surfaceId, config, backgroundImage);
     }
 
     void detachVulkanSurface(int surfaceId)
     {
-        if (instance)
-            instance->detachVulkanSurface(surfaceId);
+        if (auto currentInstance = GetInstanceSnapshot())
+            currentInstance->detachVulkanSurface(surfaceId);
     }
 
     bool presentVulkanFrame(
         std::optional<std::chrono::time_point<std::chrono::steady_clock>> deadline,
         std::optional<std::chrono::time_point<std::chrono::steady_clock>> budgetDeadline)
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return false;
 
-        return instance->presentVulkanFrame(deadline, budgetDeadline);
+        return currentInstance->presentVulkanFrame(deadline, budgetDeadline);
     }
 
     void requestVulkanPresentationResync()
     {
-        if (instance)
-            instance->requestVulkanPresentationResync();
+        if (auto currentInstance = GetInstanceSnapshot())
+            currentInstance->requestVulkanPresentationResync();
     }
 
     void requestVulkanFastForwardPresentationTransition()
     {
-        if (instance)
-            instance->requestVulkanFastForwardPresentationTransition();
+        if (auto currentInstance = GetInstanceSnapshot())
+            currentInstance->requestVulkanFastForwardPresentationTransition();
     }
 
     bool areRendererDebugToolsEnabled()
@@ -1081,326 +1104,359 @@ namespace MelonDSAndroid
 
     std::vector<u32> captureCurrentFrameForDebug()
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return {};
 
-        return instance->captureCurrentFrameForDebug();
+        return currentInstance->captureCurrentFrameForDebug();
     }
 
     std::vector<u32> captureCurrentPackedTopPrimaryForDebug()
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return {};
 
-        return instance->captureCurrentPackedTopPrimaryForDebug();
+        return currentInstance->captureCurrentPackedTopPrimaryForDebug();
     }
 
     std::vector<u32> captureCurrentPackedBottomPrimaryForDebug()
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return {};
 
-        return instance->captureCurrentPackedBottomPrimaryForDebug();
+        return currentInstance->captureCurrentPackedBottomPrimaryForDebug();
     }
 
     std::vector<u32> captureCurrentPackedPlaneForDebug(int screenIndex, int planeIndex)
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return {};
 
-        return instance->captureCurrentPackedPlaneForDebug(screenIndex, planeIndex);
+        return currentInstance->captureCurrentPackedPlaneForDebug(screenIndex, planeIndex);
     }
 
     std::vector<u32> captureCurrentCapture3dSourceForDebug()
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return {};
 
-        return instance->captureCurrentCapture3dSourceForDebug();
+        return currentInstance->captureCurrentCapture3dSourceForDebug();
     }
 
     std::vector<u32> captureCurrentCaptureLineUses3dMaskForDebug()
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return {};
 
-        return instance->captureCurrentCaptureLineUses3dMaskForDebug();
+        return currentInstance->captureCurrentCaptureLineUses3dMaskForDebug();
     }
 
     std::vector<u32> captureCurrentComp4TopPlaceholderForDebug()
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return {};
 
-        return instance->captureCurrentComp4TopPlaceholderForDebug();
+        return currentInstance->captureCurrentComp4TopPlaceholderForDebug();
     }
 
     std::vector<u32> captureCurrentComp4BottomPlaceholderForDebug()
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return {};
 
-        return instance->captureCurrentComp4BottomPlaceholderForDebug();
+        return currentInstance->captureCurrentComp4BottomPlaceholderForDebug();
     }
 
     std::vector<u32> captureCurrentCaptureFallbackMaskForDebug()
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return {};
 
-        return instance->captureCurrentCaptureFallbackMaskForDebug();
+        return currentInstance->captureCurrentCaptureFallbackMaskForDebug();
     }
 
     std::string captureCurrentSoftPackedFrameMetaJsonForDebug()
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return {};
 
-        return instance->captureCurrentSoftPackedFrameMetaJsonForDebug();
+        return currentInstance->captureCurrentSoftPackedFrameMetaJsonForDebug();
     }
 
     std::vector<u32> captureCurrentCompositedDimensionsForDebug()
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return {};
 
-        return instance->captureCurrentCompositedDimensionsForDebug();
+        return currentInstance->captureCurrentCompositedDimensionsForDebug();
     }
 
     std::vector<u32> captureCurrentCompositedFrameForDebug()
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return {};
 
-        return instance->captureCurrentCompositedFrameForDebug();
+        return currentInstance->captureCurrentCompositedFrameForDebug();
     }
 
     std::vector<u32> captureCurrent3dDimensionsForDebug()
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return {};
 
-        return instance->captureCurrent3dDimensionsForDebug();
+        return currentInstance->captureCurrent3dDimensionsForDebug();
     }
 
     std::vector<u32> captureCurrent3dFrameForDebug()
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return {};
 
-        return instance->captureCurrent3dFrameForDebug();
+        return currentInstance->captureCurrent3dFrameForDebug();
     }
 
     std::vector<u32> captureCurrent3dCaptureFrameForDebug()
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return {};
 
-        return instance->captureCurrent3dCaptureFrameForDebug();
+        return currentInstance->captureCurrent3dCaptureFrameForDebug();
     }
 
     std::vector<u32> captureCurrent3dDepthForDebug()
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return {};
 
-        return instance->captureCurrent3dDepthForDebug();
+        return currentInstance->captureCurrent3dDepthForDebug();
     }
 
     std::vector<u32> captureCurrent3dAttrForDebug()
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return {};
 
-        return instance->captureCurrent3dAttrForDebug();
+        return currentInstance->captureCurrent3dAttrForDebug();
     }
 
     std::vector<u32> captureCurrent3dCoverageForDebug()
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return {};
 
-        return instance->captureCurrent3dCoverageForDebug();
+        return currentInstance->captureCurrent3dCoverageForDebug();
     }
 
     bool isCurrentFrameReadyForDebug()
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return false;
 
-        return instance->isCurrentFrameReadyForDebug();
+        return currentInstance->isCurrentFrameReadyForDebug();
     }
 
     int getCurrentFrameIndexForDebug()
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return -1;
 
-        return instance->getCurrentFrameIndexForDebug();
+        return currentInstance->getCurrentFrameIndexForDebug();
     }
 
     void requestPreparedRendererDebugSnapshot()
     {
-        if (instance)
-            instance->requestPreparedRendererDebugSnapshotForDebug();
+        if (auto currentInstance = GetInstanceSnapshot())
+            currentInstance->requestPreparedRendererDebugSnapshotForDebug();
     }
 
     void clearPreparedRendererDebugSnapshot()
     {
-        if (instance)
-            instance->clearPreparedRendererDebugSnapshotForDebug();
+        if (auto currentInstance = GetInstanceSnapshot())
+            currentInstance->clearPreparedRendererDebugSnapshotForDebug();
     }
 
     void startDenseScreenBurstCaptureForDebug(int frameCount, int stepFrames, int warmupFrames, u32 captureKindsMask)
     {
-        if (instance)
-            instance->startDenseScreenBurstCaptureForDebug(frameCount, stepFrames, warmupFrames, captureKindsMask);
+        if (auto currentInstance = GetInstanceSnapshot())
+            currentInstance->startDenseScreenBurstCaptureForDebug(frameCount, stepFrames, warmupFrames, captureKindsMask);
     }
 
     bool isDenseScreenBurstCaptureCompleteForDebug()
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return false;
 
-        return instance->isDenseScreenBurstCaptureCompleteForDebug();
+        return currentInstance->isDenseScreenBurstCaptureCompleteForDebug();
     }
 
     std::vector<u32> getDenseScreenBurstScheduleStatsForDebug()
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return {};
 
-        return instance->getDenseScreenBurstScheduleStatsForDebug();
+        return currentInstance->getDenseScreenBurstScheduleStatsForDebug();
     }
 
     int getDenseScreenBurstCaptureFrameCountForDebug()
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return 0;
 
-        return instance->getDenseScreenBurstCaptureFrameCountForDebug();
+        return currentInstance->getDenseScreenBurstCaptureFrameCountForDebug();
     }
 
     int getDenseScreenBurstCaptureFrameIdForDebug(int index)
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return -1;
 
-        return instance->getDenseScreenBurstCaptureFrameIdForDebug(index);
+        return currentInstance->getDenseScreenBurstCaptureFrameIdForDebug(index);
     }
 
     std::vector<u32> getDenseScreenBurstCaptureFrameForDebug(int index)
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return {};
 
-        return instance->getDenseScreenBurstCaptureFrameForDebug(index);
+        return currentInstance->getDenseScreenBurstCaptureFrameForDebug(index);
     }
 
     std::vector<u32> getDenseScreenBurstPackedTopFrameForDebug(int index)
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return {};
 
-        return instance->getDenseScreenBurstPackedTopFrameForDebug(index);
+        return currentInstance->getDenseScreenBurstPackedTopFrameForDebug(index);
     }
 
     std::vector<u32> getDenseScreenBurstPackedBottomFrameForDebug(int index)
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return {};
 
-        return instance->getDenseScreenBurstPackedBottomFrameForDebug(index);
+        return currentInstance->getDenseScreenBurstPackedBottomFrameForDebug(index);
     }
 
     std::vector<u32> getDenseScreenBurstPackedPlaneFrameForDebug(int index, int screenIndex, int planeIndex)
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return {};
 
-        return instance->getDenseScreenBurstPackedPlaneFrameForDebug(index, screenIndex, planeIndex);
+        return currentInstance->getDenseScreenBurstPackedPlaneFrameForDebug(index, screenIndex, planeIndex);
     }
 
     std::vector<u32> getDenseScreenBurstCapture3dSourceFrameForDebug(int index)
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return {};
 
-        return instance->getDenseScreenBurstCapture3dSourceFrameForDebug(index);
+        return currentInstance->getDenseScreenBurstCapture3dSourceFrameForDebug(index);
     }
 
     std::vector<u32> getDenseScreenBurstCaptureLineUses3dMaskFrameForDebug(int index)
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return {};
 
-        return instance->getDenseScreenBurstCaptureLineUses3dMaskFrameForDebug(index);
+        return currentInstance->getDenseScreenBurstCaptureLineUses3dMaskFrameForDebug(index);
     }
 
     std::string getDenseScreenBurstSoftPackedFrameMetaJsonForDebug(int index)
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return {};
 
-        return instance->getDenseScreenBurstSoftPackedFrameMetaJsonForDebug(index);
+        return currentInstance->getDenseScreenBurstSoftPackedFrameMetaJsonForDebug(index);
     }
 
     std::vector<u32> getDenseScreenBurstRenderer3dFrameForDebug(int index)
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return {};
 
-        return instance->getDenseScreenBurstRenderer3dFrameForDebug(index);
+        return currentInstance->getDenseScreenBurstRenderer3dFrameForDebug(index);
     }
 
     std::vector<u32> getDenseScreenBurstRenderer3dCaptureFrameForDebug(int index)
     {
-        if (!instance)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return {};
 
-        return instance->getDenseScreenBurstRenderer3dCaptureFrameForDebug(index);
+        return currentInstance->getDenseScreenBurstRenderer3dCaptureFrameForDebug(index);
     }
 
     void clearDenseScreenBurstCaptureForDebug()
     {
-        if (instance)
-            instance->clearDenseScreenBurstCaptureForDebug();
+        if (auto currentInstance = GetInstanceSnapshot())
+            currentInstance->clearDenseScreenBurstCaptureForDebug();
     }
 
     void dumpCurrentRendererDebugSnapshot()
     {
-        if (instance)
-            instance->dumpDebugSnapshot();
+        if (auto currentInstance = GetInstanceSnapshot())
+            currentInstance->dumpDebugSnapshot();
     }
 
     void setFastForwardActive(bool enabled)
     {
-        fastForwardActive = enabled;
+        fastForwardActive.store(enabled, std::memory_order_relaxed);
     }
 
     bool isFastForwardActive()
     {
-        return fastForwardActive;
+        return fastForwardActive.load(std::memory_order_relaxed);
     }
 
     void setMuteOnFastForwardActive(bool enabled)
     {
-        muteOnFastForwardActive = enabled;
+        muteOnFastForwardActive.store(enabled, std::memory_order_relaxed);
     }
 
     bool isMuteOnFastForwardActive()
     {
-        return muteOnFastForwardActive;
+        return muteOnFastForwardActive.load(std::memory_order_relaxed);
     }
 
     void setRewindActive(bool enabled)
     {
-        rewindActive = enabled;
+        rewindActive.store(enabled, std::memory_order_relaxed);
     }
 
     bool isRewindActive()
     {
-        return rewindActive;
+        return rewindActive.load(std::memory_order_relaxed);
     }
 
     void pause()
@@ -1415,12 +1471,17 @@ namespace MelonDSAndroid
 
     void reset()
     {
-        instance->reset();
+        if (auto currentInstance = GetInstanceSnapshot())
+            currentInstance->reset();
     }
 
     bool saveState(const char* path)
     {
-        if (instance == nullptr)
+        if (path == nullptr)
+            return false;
+
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
         {
             Platform::Log(Platform::LogLevel::Warn, "Savestate save denied: emulator instance unavailable\n");
             return false;
@@ -1432,7 +1493,7 @@ namespace MelonDSAndroid
             return false;
         }
 
-        const bool saved = instance->saveState(&state, true);
+        const bool saved = currentInstance->saveState(&state, true);
         if (!saved || state.Error)
         {
             Platform::Log(Platform::Error, "Failed to serialize savestate to %s\n", path);
@@ -1456,13 +1517,17 @@ namespace MelonDSAndroid
 
     bool loadState(const char* path)
     {
-        if (instance == nullptr)
+        if (path == nullptr)
+            return false;
+
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
         {
             Platform::Log(Platform::LogLevel::Warn, "Savestate load denied: emulator instance unavailable\n");
             return false;
         }
 
-        if (!instance->areSaveStatesAllowed())
+        if (!currentInstance->areSaveStatesAllowed())
         {
             Platform::Log(Platform::LogLevel::Warn, "Savestate load denied: RetroAchievements hardcore session active\n");
             return false;
@@ -1483,7 +1548,7 @@ namespace MelonDSAndroid
             return false;
         }
 
-        if (!instance->saveState(backup.get(), false) || backup->Error)
+        if (!currentInstance->saveState(backup.get(), false) || backup->Error)
         {
             Platform::Log(Platform::LogLevel::Error, "Failed to back up state, aborting load (from \"%s\")\n", path);
             Platform::CloseFile(saveStateFile);
@@ -1491,6 +1556,12 @@ namespace MelonDSAndroid
         }
 
         size_t size = Platform::FileLength(saveStateFile);
+        if (size == 0)
+        {
+            Platform::Log(Platform::LogLevel::Error, "State file \"%s\" is empty\n", path);
+            Platform::CloseFile(saveStateFile);
+            return false;
+        }
 
         // Allocate exactly as much memory as we need for the savestate
         std::vector<u8> buffer(size);
@@ -1504,14 +1575,14 @@ namespace MelonDSAndroid
 
         std::unique_ptr<Savestate> state = std::make_unique<Savestate>(buffer.data(), size, false);
 
-        if (!instance->loadState(state.get()) || state->Error)
+        if (!currentInstance->loadState(state.get()) || state->Error)
         {
             Platform::Log(Platform::LogLevel::Error, "Failed to load state file \"%s\" into emulator\n", path);
             // Restore backup
-            if (!instance->loadState(backup.get()) || backup->Error)
-                Platform::Log(Platform::LogLevel::Error, "Failed to load backup state\n", path);
+            if (!currentInstance->loadState(backup.get()) || backup->Error)
+                Platform::Log(Platform::LogLevel::Error, "Failed to load backup state\n");
             else
-                Platform::Log(Platform::LogLevel::Info, "Backup state loaded\n", path);
+                Platform::Log(Platform::LogLevel::Info, "Backup state loaded\n");
 
             return false;
         }
@@ -1521,13 +1592,14 @@ namespace MelonDSAndroid
 
     bool loadRewindState(melonDS::RewindSaveState rewindSaveState)
     {
-        if (instance == nullptr)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
         {
             Platform::Log(Platform::LogLevel::Warn, "Rewind load denied: emulator instance unavailable\n");
             return false;
         }
 
-        if (!instance->areSaveStatesAllowed())
+        if (!currentInstance->areSaveStatesAllowed())
         {
             Platform::Log(Platform::LogLevel::Warn, "Rewind load denied: RetroAchievements hardcore session active\n");
             return false;
@@ -1540,18 +1612,18 @@ namespace MelonDSAndroid
             return false;
         }
 
-        if (!instance->saveState(backup.get(), false) || backup->Error)
+        if (!currentInstance->saveState(backup.get(), false) || backup->Error)
         {
             Platform::Log(Platform::LogLevel::Error, "Failed to back up state, aborting rewind state load");
             return false;
         }
 
-        bool result = instance->loadRewindState(rewindSaveState);
+        bool result = currentInstance->loadRewindState(rewindSaveState);
         if (!result)
         {
             Platform::Log(Platform::LogLevel::Error, "Failed to load rewind state");
             // Restore backup
-            if (!instance->loadState(backup.get()) || backup->Error)
+            if (!currentInstance->loadState(backup.get()) || backup->Error)
                 Platform::Log(Platform::LogLevel::Error, "Failed to load backup state");
             else
                 Platform::Log(Platform::LogLevel::Info, "Backup state loaded");
@@ -1562,26 +1634,28 @@ namespace MelonDSAndroid
 
     RewindWindow getRewindWindow()
     {
-        if (instance == nullptr)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return RewindWindow{};
 
-        return instance->getRewindWindow();
+        return currentInstance->getRewindWindow();
     }
 
     bool takeScreenshot()
     {
-        if (instance)
-            return instance->takeScreenshot();
+        if (auto currentInstance = GetInstanceSnapshot())
+            return currentInstance->takeScreenshot();
 
         return false;
     }
 
     void stop()
     {
-        if (instance == nullptr)
+        auto currentInstance = GetInstanceSnapshot();
+        if (!currentInstance)
             return;
 
-        instance->stop();
+        currentInstance->stop();
         cleanupOpenGlContext();
     }
 

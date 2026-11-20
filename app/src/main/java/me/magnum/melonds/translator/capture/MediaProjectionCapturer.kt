@@ -8,11 +8,19 @@ import android.media.projection.MediaProjectionManager
 
 class MediaProjectionCapturer(private val activity: Activity) {
 
+    companion object {
+        @Volatile
+        private var permissionGranted: Boolean = false
+
+        fun resetPermissionFlag() {
+            permissionGranted = false
+        }
+    }
+
     private val mediaProjectionManager = activity.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-    private var hasGrantedPermission: Boolean = false
 
     val hasPermission: Boolean
-        get() = hasGrantedPermission || ScreenCaptureService.isReady
+        get() = permissionGranted || ScreenCaptureService.isReady
 
     fun createCaptureIntent(): Intent {
         return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -25,10 +33,10 @@ class MediaProjectionCapturer(private val activity: Activity) {
 
     fun setPermissionResult(resultCode: Int, data: Intent?) {
         if (resultCode == Activity.RESULT_OK && data != null) {
-            hasGrantedPermission = true
+            permissionGranted = true
             ScreenCaptureService.startCapture(activity, resultCode, data)
         } else {
-            hasGrantedPermission = false
+            permissionGranted = false
         }
     }
 
@@ -37,12 +45,12 @@ class MediaProjectionCapturer(private val activity: Activity) {
     }
 
     fun release() {
-        hasGrantedPermission = false
+        permissionGranted = false
         ScreenCaptureService.cleanup()
     }
 
     fun onDestroy() {
-        hasGrantedPermission = false
+        permissionGranted = false
         ScreenCaptureService.stop(activity)
     }
 }

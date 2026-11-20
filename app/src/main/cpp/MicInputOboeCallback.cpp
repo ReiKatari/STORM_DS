@@ -38,10 +38,9 @@ MicInputOboeCallback::onAudioReady(oboe::AudioStream *stream, void *audioData, i
         return oboe::DataCallbackResult::Continue;
 
     float res_incr = numFrames / (float)outlen;
-    float res_timer = -0.5;
+    float res_timer = -0.5f;
     int res_pos = 0;
 
-    int startBufferOffset = bufferOffset;
     for (int i = 0; i < outlen; i++)
     {
         if (bufferCount >= maxlen)
@@ -52,7 +51,8 @@ MicInputOboeCallback::onAudioReady(oboe::AudioStream *stream, void *audioData, i
         s16 s1 = input[idx1];
         s16 s2 = input[idx2];
 
-        float s = (float)s1 + ((s2 - s1) * res_timer);
+        const float interpFrac = std::max(0.0f, res_timer);
+        float s = (float)s1 + ((s2 - s1) * interpFrac);
 
         if (agcEnabled.load(std::memory_order_relaxed))
         {
@@ -121,19 +121,8 @@ MicInputOboeCallback::onAudioReady(oboe::AudioStream *stream, void *audioData, i
         }
     }
 
-    if (_recordingStream)
-    {
-        if (bufferOffset > startBufferOffset)
-        {
-            int writeLen = outlen > maxlen ? maxlen : outlen;
-            _recordingStream->write((char*)&buffer[startBufferOffset], writeLen * sizeof(s16));
-        }
-        else
-        {
-            _recordingStream->write((char*)&buffer[startBufferOffset], (maxlen - startBufferOffset) * sizeof(s16));
-            _recordingStream->write((char*)buffer, bufferOffset * sizeof(s16));
-        }
-    }
+    // Never perform blocking std::ostream disk I/O inside the real-time Oboe audio callback.
+    (void)_recordingStream;
 
     return oboe::DataCallbackResult::Continue;
 }

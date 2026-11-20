@@ -3,6 +3,8 @@ package me.magnum.melonds.translator.tts
 import android.util.Log
 import android.util.LruCache
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
@@ -245,7 +247,9 @@ object EdgeNeuralTtsClient {
                                 val headerLength = ((raw[0].toInt() and 0xFF) shl 8) or (raw[1].toInt() and 0xFF)
                                 val payloadStart = 2 + headerLength
                                 if (payloadStart in 2..raw.size) {
-                                    audioBuffer.write(raw, payloadStart, raw.size - payloadStart)
+                                    synchronized(audioBuffer) {
+                                        audioBuffer.write(raw, payloadStart, raw.size - payloadStart)
+                                    }
                                 }
                             }
                         } catch (e: Throwable) {
@@ -256,14 +260,14 @@ object EdgeNeuralTtsClient {
                     override fun onMessage(webSocket: WebSocket, text: String) {
                         if (text.contains("Path:turn.end")) {
                             turnCompleted.set(true)
-                            val result = audioBuffer.toByteArray()
+                            val result = synchronized(audioBuffer) { audioBuffer.toByteArray() }
                             deferred.complete(if (result.isNotEmpty()) result else null)
                         }
                     }
 
                     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                         if (turnCompleted.get()) {
-                            val result = audioBuffer.toByteArray()
+                            val result = synchronized(audioBuffer) { audioBuffer.toByteArray() }
                             deferred.complete(if (result.isNotEmpty()) result else null)
                         } else {
                             deferred.complete(null)
@@ -272,7 +276,7 @@ object EdgeNeuralTtsClient {
 
                     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                         if (turnCompleted.get()) {
-                            val result = audioBuffer.toByteArray()
+                            val result = synchronized(audioBuffer) { audioBuffer.toByteArray() }
                             deferred.complete(if (result.isNotEmpty()) result else null)
                         } else {
                             deferred.complete(null)
@@ -293,13 +297,13 @@ object EdgeNeuralTtsClient {
         }
     }
 
-    private fun synthesizeViaOpenAiCompatible(
+    private suspend fun synthesizeViaOpenAiCompatible(
         text: String,
         apiKey: String,
         endpoint: String,
         voiceName: String
-    ): ByteArray? {
-        return try {
+    ): ByteArray? = withContext(Dispatchers.IO) {
+        try {
             val targetUrl = if (endpoint.contains("/v1/")) {
                 endpoint.substringBefore("/v1/") + "/v1/audio/speech"
             } else {
@@ -340,8 +344,8 @@ object EdgeNeuralTtsClient {
         }
     }
 
-    private fun synthesizeViaFallback(text: String, langOrVoice: String): ByteArray? {
-        return try {
+    private suspend fun synthesizeViaFallback(text: String, langOrVoice: String): ByteArray? = withContext(Dispatchers.IO) {
+        try {
             val lower = langOrVoice.lowercase()
             val lang = when {
                 lower.startsWith("ru") -> "ru"
@@ -366,7 +370,7 @@ object EdgeNeuralTtsClient {
                 client.newCall(request).execute().use { response ->
                     val respBody = response.body
                     if (response.isSuccessful && respBody != null) {
-                        return respBody.bytes()
+                        return@withContext respBody.bytes()
                     }
                 }
             } else {
@@ -386,7 +390,7 @@ object EdgeNeuralTtsClient {
                         }
                     }
                 }
-                if (out.size() > 0) return out.toByteArray()
+                if (out.size() > 0) return@withContext out.toByteArray()
             }
             null
         } catch (_: Throwable) {

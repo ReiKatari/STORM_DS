@@ -13,9 +13,11 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
@@ -23,10 +25,12 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.FlowCollector
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
@@ -81,6 +85,11 @@ class FileSystemRomsRepository(
     private val romMetadataMirrorListType: Type = object : TypeToken<List<RomMetadataMirrorDto>>(){}.type
     private val directoryStateListType: Type = object : TypeToken<List<RomDirectoryStateDto>>(){}.type
     private val romsChannel = SubjectSharedFlow<List<Rom>>()
+    private val romDataSaveTrigger = MutableSharedFlow<List<Rom>>(
+        replay = 0,
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
     private val scanningStatusSubject = MutableStateFlow(RomScanningStatus.NOT_SCANNING)
     private val roms: java.util.concurrent.CopyOnWriteArrayList<Rom> = java.util.concurrent.CopyOnWriteArrayList()
     private var areRomsLoaded = AtomicBoolean(false)
@@ -91,9 +100,12 @@ class FileSystemRomsRepository(
     private val romOptionsReadErrorNotifications: MutableSet<String> = mutableSetOf()
     @Volatile private var currentDirectoryUris: Map<String, Uri> = emptyMap()
     @Volatile private var hasUnavailableSearchDirectories = false
-    private val skipNextRomDataSave = AtomicBoolean(false)
     private val scanMutex = Mutex()
     private val romDataMutex = Mutex()
+    private val initJob = coroutineScope.launch {
+        loadDirectoryStates()
+        ensureRomSearchDirectoriesInitialized()
+    }
 
     private fun getStorageSettingsFile(fileName: String): File {
         val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
@@ -116,16 +128,15 @@ class FileSystemRomsRepository(
     }
 
     init {
-        loadDirectoryStates()
-        ensureRomSearchDirectoriesInitialized()
-
         coroutineScope.launch {
-            romsChannel.collect {
-                if (skipNextRomDataSave.compareAndSet(true, false)) {
-                    return@collect
+            @OptIn(FlowPreview::class)
+            romDataSaveTrigger
+                .debounce(500L)
+                .collectLatest { snapshot ->
+                    if (!hasUnavailableSearchDirectories) {
+                        saveRomData(snapshot)
+                    }
                 }
-                saveRomData(it)
-            }
         }
 
         coroutineScope.launch {
@@ -155,33 +166,34 @@ class FileSystemRomsRepository(
         }
     }
 
-    private fun onRomSearchDirectoriesChanged(searchDirectories: Array<Uri>) {
-        val newDirectoryMap = searchDirectories.associateBy { it.toString() }
-        val previousDirectoryMap = currentDirectoryUris
-        currentDirectoryUris = newDirectoryMap
+    private suspend fun onRomSearchDirectoriesChanged(searchDirectories: Array<Uri>) {
+        initJob.join()
+        scanMutex.withLock {
+            val newDirectoryMap = searchDirectories.associateBy { it.toString() }
+            val previousDirectoryMap = currentDirectoryUris
+            currentDirectoryUris = newDirectoryMap
 
-        if (newDirectoryMap.isNotEmpty()) {
-            removeStaleDirectoryStates(newDirectoryMap.keys)
-        }
+            if (newDirectoryMap.isNotEmpty()) {
+                removeStaleDirectoryStates(newDirectoryMap.keys)
+            }
 
-        val removedDirectoryKeys = previousDirectoryMap.keys - newDirectoryMap.keys
-        val addedDirectoryKeys = newDirectoryMap.keys - previousDirectoryMap.keys
+            val removedDirectoryKeys = previousDirectoryMap.keys - newDirectoryMap.keys
+            val addedDirectoryKeys = newDirectoryMap.keys - previousDirectoryMap.keys
 
-        val removedDirectoryUris = removedDirectoryKeys.mapNotNull { previousDirectoryMap[it] }.toSet()
-        val addedDirectoryStrings = addedDirectoryKeys.toSet()
+            val removedDirectoryUris = removedDirectoryKeys.mapNotNull { previousDirectoryMap[it] }.toSet()
+            val addedDirectoryStrings = addedDirectoryKeys.toSet()
 
-        if (!areRomsLoaded.get()) {
-            return
-        }
+            if (!areRomsLoaded.get()) {
+                return@withLock
+            }
 
-        if (removedDirectoryUris.isNotEmpty()) {
-            removeRomsForDirectories(removedDirectoryUris)
-        }
-        purgeNonExistentRoms()
+            if (removedDirectoryUris.isNotEmpty()) {
+                removeRomsForDirectories(removedDirectoryUris)
+            }
+            purgeNonExistentRoms()
 
-        if (addedDirectoryStrings.isNotEmpty()) {
-            coroutineScope.launch {
-                runSerialisedScan(targetDirectories = addedDirectoryStrings)
+            if (addedDirectoryStrings.isNotEmpty()) {
+                executeScanLocked(targetDirectories = addedDirectoryStrings)
             }
         }
     }
@@ -191,29 +203,34 @@ class FileSystemRomsRepository(
      * and the scanning status is always reset in `finally`, so the UI can never stay in the scanning state.
      */
     private suspend fun runSerialisedScan(targetDirectories: Set<String>? = null) {
+        initJob.join()
         scanMutex.withLock {
-            scanningStatusSubject.emit(RomScanningStatus.SCANNING)
-            try {
-                val buffer = mutableListOf<Rom>()
-                scanForNewRoms(targetDirectories = targetDirectories).collect {
-                    buffer.add(it)
-                    if (buffer.size >= 4) {
-                        addRoms(buffer)
-                        buffer.clear()
-                    }
-                }
-                if (buffer.isNotEmpty()) {
+            executeScanLocked(targetDirectories)
+        }
+    }
+
+    private suspend fun executeScanLocked(targetDirectories: Set<String>? = null) {
+        scanningStatusSubject.emit(RomScanningStatus.SCANNING)
+        try {
+            val buffer = mutableListOf<Rom>()
+            scanForNewRoms(targetDirectories = targetDirectories).collect {
+                buffer.add(it)
+                if (buffer.size >= 4) {
                     addRoms(buffer)
                     buffer.clear()
                 }
-                purgeNonExistentRoms()
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.e(TAG, "Error during ROM scan", e)
-            } finally {
-                scanningStatusSubject.value = RomScanningStatus.NOT_SCANNING
             }
+            if (buffer.isNotEmpty()) {
+                addRoms(buffer)
+                buffer.clear()
+            }
+            purgeNonExistentRoms()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e(TAG, "Error during ROM scan", e)
+        } finally {
+            scanningStatusSubject.value = RomScanningStatus.NOT_SCANNING
         }
     }
 
@@ -356,18 +373,20 @@ class FileSystemRomsRepository(
             directoryScanStatuses.clear()
             emitDirectoryScanStatusesLocked()
         }
-        val directoryCacheFile = getStorageSettingsFile(ROM_DIRECTORY_STATE_FILE)
-        if (directoryCacheFile.isFile) {
-            directoryCacheFile.delete()
-        }
 
         coroutineScope.launch {
+            initJob.join()
+            val directoryCacheFile = getStorageSettingsFile(ROM_DIRECTORY_STATE_FILE)
+            if (directoryCacheFile.isFile) {
+                directoryCacheFile.delete()
+            }
             runSerialisedScan()
         }
     }
 
     override fun invalidateRoms() {
         runBlocking {
+            initJob.join()
             romDataMutex.withLock {
                 if (areRomsLoaded.compareAndSet(true, false)) {
                     roms.clear()
@@ -638,8 +657,10 @@ class FileSystemRomsRepository(
 
         val removed = roms.removeAll { rom ->
             val parentUri = rom.parentTreeUri ?: return@removeAll false
-            val parentDocId = runCatching { DocumentsContract.getDocumentId(parentUri) }.getOrNull() ?: return@removeAll false
-            directoryDocIds.any { parentDocId.startsWith(it) }
+            val parentDocId = runCatching { DocumentsContract.getDocumentId(parentUri) }.getOrNull()
+                ?: runCatching { DocumentsContract.getTreeDocumentId(parentUri) }.getOrNull()
+                ?: return@removeAll false
+            directoryDocIds.any { matchesDirectoryDocId(parentDocId, it) }
         }
 
         if (removed) {
@@ -647,14 +668,25 @@ class FileSystemRomsRepository(
         }
     }
 
-    private fun onRomsChanged(persist: Boolean = true) {
-        if (!persist || hasUnavailableSearchDirectories) {
-            skipNextRomDataSave.set(true)
+    private fun matchesDirectoryDocId(docId: String, directoryDocId: String): Boolean {
+        if (docId == directoryDocId) return true
+        if (directoryDocId.endsWith(":") || directoryDocId.endsWith("/")) {
+            return docId.startsWith(directoryDocId)
         }
-        romsChannel.tryEmit(roms.toList())
+        return docId.startsWith("$directoryDocId/")
     }
 
-    private suspend fun loadCachedRoms(): Unit = scanMutex.withLock {
+    private fun onRomsChanged(persist: Boolean = true) {
+        val snapshot = roms.toList()
+        romsChannel.tryEmit(snapshot)
+        if (persist && !hasUnavailableSearchDirectories) {
+            romDataSaveTrigger.tryEmit(snapshot)
+        }
+    }
+
+    private suspend fun loadCachedRoms() {
+        initJob.join()
+        scanMutex.withLock {
         scanningStatusSubject.emit(RomScanningStatus.SCANNING)
         try {
             val legacyCacheFile = File(context.filesDir, ROM_DATA_FILE)
@@ -755,6 +787,7 @@ class FileSystemRomsRepository(
             Log.e(TAG, "Error in loadCachedRoms", e)
         } finally {
             scanningStatusSubject.emit(RomScanningStatus.NOT_SCANNING)
+        }
         }
     }
 
@@ -872,7 +905,10 @@ class FileSystemRomsRepository(
                         launch(Dispatchers.IO) {
                             semaphore.withPermit {
                                 val parsedRom = runCatching {
-                                    val fileName = fileState.documentFile.name ?: fileState.uri.lastPathSegment?.substringAfterLast('/') ?: ""
+                                    val fileName = fileState.displayName.takeIf { it.isNotEmpty() }
+                                        ?: fileState.documentFile.name
+                                        ?: fileState.uri.lastPathSegment?.substringAfterLast('/')
+                                        ?: ""
                                     val fileRomProcessor = romFileProcessorFactory.getFileRomProcessorForFileName(fileName)
                                         ?: romFileProcessorFactory.getFileRomProcessorForDocument(fileState.documentFile)
                                         ?: return@runCatching null
@@ -1109,8 +1145,9 @@ class FileSystemRomsRepository(
                 continue
             }
 
+            val docName = file.name
             val fileProcessor = romFileProcessorFactory.getFileRomProcessorForDocument(file)
-                ?: file.name?.let { romFileProcessorFactory.getFileRomProcessorForFileName(it) }
+                ?: docName?.let { romFileProcessorFactory.getFileRomProcessorForFileName(it) }
             if (fileProcessor != null) {
                 accumulator.add(
                     DirectoryFileState(
@@ -1118,7 +1155,8 @@ class FileSystemRomsRepository(
                         parentUri = currentDirectory.uri,
                         lastModified = file.lastModified().coerceAtLeast(0),
                         size = file.length().coerceAtLeast(0),
-                        documentFile = file
+                        documentFile = file,
+                        displayName = docName.orEmpty(),
                     )
                 )
             }
@@ -1258,17 +1296,18 @@ class FileSystemRomsRepository(
                     ?: runCatching { DocumentsContract.getTreeDocumentId(it) }.getOrNull()
                     ?: it.lastPathSegment
             }
-            if (parentDocId != null && parentDocId.startsWith(directoryDocId)) {
+            if (parentDocId != null && matchesDirectoryDocId(parentDocId, directoryDocId)) {
                 return true
             }
             val romDocId = runCatching { DocumentsContract.getDocumentId(rom.uri) }.getOrNull()
                 ?: rom.uri.lastPathSegment
-            if (romDocId != null && romDocId.startsWith(directoryDocId)) {
+            if (romDocId != null && matchesDirectoryDocId(romDocId, directoryDocId)) {
                 return true
             }
         }
         val dirPath = directoryUri.path ?: directoryUri.toString()
-        if (romPath.startsWith(dirPath)) {
+        val normalizedDirPath = if (dirPath.endsWith("/")) dirPath else "$dirPath/"
+        if (romPath == dirPath || romPath.startsWith(normalizedDirPath)) {
             return true
         }
         val dirSegment = directoryUri.lastPathSegment ?: directoryUri.toString()

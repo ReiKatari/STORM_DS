@@ -69,6 +69,11 @@ OboeCallback::onAudioReady(oboe::AudioStream *stream, void *audioData, int32_t n
         }
     }
 
+    const bool useBassBoost = __atomic_load_n(&bassBoostEnabled, __ATOMIC_RELAXED);
+    const int bassStrength = __atomic_load_n(&bassBoostStrength, __ATOMIC_RELAXED);
+    const bool useSpatialAudio = __atomic_load_n(&spatialAudioEnabled, __ATOMIC_RELAXED);
+    const bool useReverb = __atomic_load_n(&reverbEnabled, __ATOMIC_RELAXED);
+
     // DSP Audio Processing Pipeline (Soft Limiter, Bass Boost, 3D Spatial, Reverb)
     s16* samples = (s16*) audioData;
     for (int i = 0; i < len_in; i++)
@@ -83,18 +88,18 @@ OboeCallback::onAudioReady(oboe::AudioStream *stream, void *audioData, int32_t n
         }
 
         // 1. Dynamic Bass Boost
-        if (bassBoostEnabled)
+        if (useBassBoost)
         {
             float alpha = 0.08f;
             bassFilterStateL += alpha * ((float)sampleL - bassFilterStateL);
             bassFilterStateR += alpha * ((float)sampleR - bassFilterStateR);
-            float boostFactor = (float)bassBoostStrength * 0.25f;
+            float boostFactor = (float)bassStrength * 0.25f;
             sampleL += (s32)(bassFilterStateL * boostFactor);
             sampleR += (s32)(bassFilterStateR * boostFactor);
         }
 
         // 2. 3D Spatial Stereo Width Expansion
-        if (spatialAudioEnabled)
+        if (useSpatialAudio)
         {
             s32 mid = (sampleL + sampleR) / 2;
             s32 side = (sampleL - sampleR) / 2;
@@ -104,7 +109,7 @@ OboeCallback::onAudioReady(oboe::AudioStream *stream, void *audioData, int32_t n
         }
 
         // 3. Acoustic Room Reverb
-        if (reverbEnabled)
+        if (useReverb)
         {
             int delayTap = (reverbHead - 800 + 1024) % 1024;
             float delayedL = reverbBufferL[delayTap];
@@ -129,7 +134,7 @@ OboeCallback::onAudioReady(oboe::AudioStream *stream, void *audioData, int32_t n
 
 inline melonDS::s16 OboeCallback::applySoftLimit(melonDS::s32 sample)
 {
-    if (!softLimiterEnabled) {
+    if (!__atomic_load_n(&softLimiterEnabled, __ATOMIC_RELAXED)) {
         return static_cast<melonDS::s16>(std::clamp<melonDS::s32>(sample, -32768, 32767));
     }
     if (sample > 24576) {

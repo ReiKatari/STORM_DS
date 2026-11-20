@@ -283,6 +283,7 @@ private:
     };
 
     void updateRenderer();
+    std::shared_ptr<EmulatorConfiguration> getConfigurationSnapshot() const;
     void updateVulkanFastForwardRenderScale();
     void handleVulkanRuntimeFailure(const char* reason);
     bool updateVulkanScreenshot(Frame* frame, int scale, bool clearOnFailure);
@@ -340,8 +341,10 @@ private:
     void applyPendingThreadSafeUpdates();
 
     const VulkanSessionProfile vulkanSessionProfile;
+    mutable std::mutex configurationMutex;
     std::shared_ptr<EmulatorConfiguration> currentConfiguration;
     FrameQueue frameQueue;
+    mutable std::recursive_mutex vulkanPresentationMutex;
     std::unique_ptr<VulkanOutput> vulkanOutput;
     std::unique_ptr<VulkanSurfacePresenter> vulkanSurfacePresenter;
     std::vector<u32> vulkanReadbackFrame;
@@ -394,7 +397,7 @@ private:
     std::unique_ptr<ScreenshotRenderer> screenshotRenderer;
     RewindManager rewindManager;
     Renderer currentRenderer;
-    bool isRenderConfigurationDirty;
+    std::atomic<bool> isRenderConfigurationDirty{true};
     bool vulkanRuntimeConfigLogged;
     bool vulkanRuntimeFailureHandled;
     int vulkanPrepareFailureCount;

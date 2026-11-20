@@ -755,8 +755,8 @@ class GameTranslatorManager(
         return result
     }
 
-    private fun isBitmapBlank(bitmap: Bitmap?): Boolean {
-        if (bitmap == null || bitmap.width < 4 || bitmap.height < 4) return true
+    private suspend fun isBitmapBlank(bitmap: Bitmap?): Boolean = withContext(Dispatchers.Default) {
+        if (bitmap == null || bitmap.isRecycled || bitmap.width < 4 || bitmap.height < 4) return@withContext true
         val stepX = (bitmap.width / 12).coerceAtLeast(1)
         val stepY = (bitmap.height / 12).coerceAtLeast(1)
         var nonBlackCount = 0
@@ -768,11 +768,11 @@ class GameTranslatorManager(
                 val b = pixel and 0xFF
                 if (r > 10 || g > 10 || b > 10) {
                     nonBlackCount++
-                    if (nonBlackCount >= 1) return false
+                    if (nonBlackCount >= 1) return@withContext false
                 }
             }
         }
-        return nonBlackCount == 0
+        nonBlackCount == 0
     }
 
     fun dismissTranslation() {
@@ -796,11 +796,12 @@ class GameTranslatorManager(
 
     private var lastFrameDHash: Long = 0L
 
-    private fun calculateDHash(bitmap: Bitmap): Long {
+    private suspend fun calculateDHash(bitmap: Bitmap): Long = withContext(Dispatchers.Default) {
+        if (bitmap.isRecycled) return@withContext 0L
         val scaled = try {
             Bitmap.createScaledBitmap(bitmap, 9, 8, false)
         } catch (_: Throwable) {
-            return 0L
+            return@withContext 0L
         }
         var hash = 0L
         for (y in 0 until 8) {
@@ -815,7 +816,7 @@ class GameTranslatorManager(
             }
         }
         if (scaled !== bitmap) scaled.recycle()
-        return hash
+        hash
     }
 
     private fun hammingDistance(h1: Long, h2: Long): Int {

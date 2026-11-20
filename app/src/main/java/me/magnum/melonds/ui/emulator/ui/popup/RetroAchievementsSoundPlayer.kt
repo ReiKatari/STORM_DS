@@ -3,7 +3,10 @@ package me.magnum.melonds.ui.emulator.ui.popup
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 import kotlin.math.PI
 import kotlin.math.exp
 import kotlin.math.sin
@@ -16,60 +19,117 @@ object RetroAchievementsSoundPlayer {
     const val SOUND_NONE = "none"
 
     private const val SAMPLE_RATE = 44100
-    private val activeTrackRef = AtomicReference<AudioTrack?>(null)
-
-    fun play(soundKey: String?) {
-        val normalized = soundKey ?: SOUND_CHIME
-        if (normalized == SOUND_NONE) {
-            stopActiveTrack()
-            return
-        }
-
-        Thread({
-            runCatching {
-                stopActiveTrack()
-                val pcm = synthesize(normalized)
-                if (pcm.isEmpty()) return@runCatching
-
-                val attrs = AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_GAME)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build()
-                val format = AudioFormat.Builder()
-                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                    .setSampleRate(SAMPLE_RATE)
-                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                    .build()
-                val track = AudioTrack.Builder()
-                    .setAudioAttributes(attrs)
-                    .setAudioFormat(format)
-                    .setTransferMode(AudioTrack.MODE_STATIC)
-                    .setBufferSizeInBytes(pcm.size * 2)
-                    .build()
-
-                activeTrackRef.set(track)
-                track.write(pcm, 0, pcm.size)
-                track.play()
-
-                val durationMs = (pcm.size * 1000L) / SAMPLE_RATE
-                Thread.sleep(durationMs + 50L)
-
-                runCatching {
-                    track.stop()
-                    track.release()
-                }
-                activeTrackRef.compareAndSet(track, null)
-            }
-        }, "RASoundPlayer").apply {
+    private val audioLock = ReentrantLock()
+    private val trackInterruptedCondition = audioLock.newCondition()
+    private val playGeneration = AtomicLong(0L)
+    private var activeTrack: AudioTrack? = null
+    private val executor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "RASoundPlayer").apply {
             isDaemon = true
-            start()
         }
     }
 
-    private fun stopActiveTrack() {
-        val prev = activeTrackRef.getAndSet(null) ?: return
+    fun play(soundKey: String?) {
+        val normalized = soundKey ?: SOUND_CHIME
+        val generation = playGeneration.incrementAndGet()
+        audioLock.withLock {
+            trackInterruptedCondition.signalAll()
+        }
+        if (normalized == SOUND_NONE) {
+            executor.execute {
+                audioLock.withLock {
+                    stopActiveTrackLocked()
+                }
+            }
+            return
+        }
+
+        executor.execute {
+            if (playGeneration.get() != generation) {
+                return@execute
+            }
+            playInternal(normalized, generation)
+        }
+    }
+
+    private fun playInternal(soundKey: String, generation: Long) {
+        var createdTrack: AudioTrack? = null
+        try {
+            audioLock.withLock {
+                stopActiveTrackLocked()
+            }
+            val pcm = synthesize(soundKey)
+            if (pcm.isEmpty() || playGeneration.get() != generation) {
+                return
+            }
+
+            val attrs = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_GAME)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build()
+            val format = AudioFormat.Builder()
+                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                .setSampleRate(SAMPLE_RATE)
+                .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                .build()
+            val track = AudioTrack.Builder()
+                .setAudioAttributes(attrs)
+                .setAudioFormat(format)
+                .setTransferMode(AudioTrack.MODE_STATIC)
+                .setBufferSizeInBytes(pcm.size * 2)
+                .build()
+            createdTrack = track
+
+            if (track.state != AudioTrack.STATE_INITIALIZED) {
+                runCatching { track.release() }
+                return
+            }
+
+            audioLock.withLock {
+                if (playGeneration.get() != generation) {
+                    runCatching { track.release() }
+                    return
+                }
+                stopActiveTrackLocked()
+                val written = track.write(pcm, 0, pcm.size)
+                if (written <= 0) {
+                    runCatching { track.release() }
+                    return
+                }
+                activeTrack = track
+                track.play()
+
+                val durationMs = (pcm.size * 1000L) / SAMPLE_RATE
+                val deadlineNs = System.nanoTime() + (durationMs + 50L) * 1_000_000L
+                while (playGeneration.get() == generation) {
+                    val remainingNs = deadlineNs - System.nanoTime()
+                    if (remainingNs <= 0L) break
+                    trackInterruptedCondition.awaitNanos(remainingNs)
+                }
+                if (activeTrack === track) {
+                    stopActiveTrackLocked()
+                }
+            }
+        } catch (_: Throwable) {
+            audioLock.withLock {
+                if (createdTrack != null && activeTrack === createdTrack) {
+                    stopActiveTrackLocked()
+                } else {
+                    createdTrack?.let { t -> runCatching { t.release() } }
+                }
+            }
+        }
+    }
+
+    private fun stopActiveTrackLocked() {
+        val prev = activeTrack ?: return
+        activeTrack = null
         runCatching {
-            prev.stop()
+            if (prev.playState == AudioTrack.PLAYSTATE_PLAYING) {
+                prev.stop()
+            }
+        }
+        runCatching {
             prev.release()
         }
     }

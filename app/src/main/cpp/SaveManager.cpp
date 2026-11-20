@@ -30,7 +30,7 @@ SaveManager::SaveManager(std::string path)
 
     Running = false;
 
-    Path = path;
+    Path = std::move(path);
 
     Buffer = nullptr;
     Length = 0;
@@ -39,62 +39,99 @@ SaveManager::SaveManager(std::string path)
     FlushVersion = 0;
     PreviousFlushVersion = 0;
     TimeAtLastFlushRequest = 0;
+    Thread = nullptr;
 
-    if (!path.empty())
+    if (!Path.empty())
     {
         Running = true;
         Thread = Platform::Thread_Create(std::bind(&SaveManager::run, this));
+        if (Thread == nullptr)
+        {
+            Running = false;
+        }
     }
 }
 
 SaveManager::~SaveManager()
 {
-    if (Running)
+    const bool wasRunning = Running.exchange(false, std::memory_order_acq_rel);
+    if (Thread != nullptr)
     {
-        Running = false;
         Platform::Thread_Wait(Thread);
+        Platform::Thread_Free(Thread);
+        Thread = nullptr;
+    }
+
+    if (wasRunning)
+    {
         FlushSecondaryBuffer();
     }
 
-    SecondaryBuffer = nullptr;
-
-    Platform::Mutex_Free(SecondaryBufferLock);
-    Platform::Thread_Free(Thread);
+    if (SecondaryBufferLock != nullptr)
+    {
+        Platform::Mutex_Lock(SecondaryBufferLock);
+        SecondaryBuffer = nullptr;
+        SecondaryBufferLength = 0;
+        Platform::Mutex_Unlock(SecondaryBufferLock);
+        Platform::Mutex_Free(SecondaryBufferLock);
+        SecondaryBufferLock = nullptr;
+    }
+    else
+    {
+        SecondaryBuffer = nullptr;
+        SecondaryBufferLength = 0;
+    }
 
     Buffer = nullptr;
 }
 
 std::string SaveManager::GetPath()
 {
-    return Path;
+    if (SecondaryBufferLock == nullptr)
+        return Path;
+
+    Platform::Mutex_Lock(SecondaryBufferLock);
+    std::string pathCopy = Path;
+    Platform::Mutex_Unlock(SecondaryBufferLock);
+    return pathCopy;
 }
 
 void SaveManager::SetPath(std::string path, bool reload)
 {
-    Path = path;
+    std::string targetPath;
+    if (SecondaryBufferLock != nullptr)
+        Platform::Mutex_Lock(SecondaryBufferLock);
+    Path = std::move(path);
+    targetPath = Path;
+    if (SecondaryBufferLock != nullptr)
+        Platform::Mutex_Unlock(SecondaryBufferLock);
 
     if (reload)
     {
-        FileHandle* f = Platform::OpenFile(Path, FileMode::Read);
+        FileHandle* f = Platform::OpenFile(targetPath, FileMode::Read);
         if (f)
         {
-            if (u32 length = Platform::FileLength(f); length != Length)
+            if (u32 length = static_cast<u32>(Platform::FileLength(f)); length != Length)
             { // If the new file is a different size, we need to re-allocate the buffer.
                 Length = length;
-                Buffer = std::make_unique<u8[]>(Length);
+                Buffer = Length > 0 ? std::make_unique<u8[]>(Length) : nullptr;
             }
 
-            FileRead(Buffer.get(), 1, Length, f);
+            if (Length > 0 && Buffer)
+                FileRead(Buffer.get(), 1, Length, f);
             CloseFile(f);
         }
     }
     else
-        FlushRequested = true;
+        FlushRequested.store(true, std::memory_order_release);
 }
 
 void SaveManager::RequestFlush(const u8* savedata, u32 savelen, u32 writeoffset, u32 writelen)
 {
-    if (Length != savelen)
+    if (savedata == nullptr || savelen == 0)
+        return;
+
+    if (Length != savelen || !Buffer)
     {
         Length = savelen;
         Buffer = std::make_unique<u8[]>(Length);
@@ -103,7 +140,12 @@ void SaveManager::RequestFlush(const u8* savedata, u32 savelen, u32 writeoffset,
     }
     else
     {
-        if ((writeoffset+writelen) > savelen)
+        if (writeoffset >= savelen)
+            writeoffset %= savelen;
+        if (writelen > savelen)
+            writelen = savelen;
+
+        if ((writeoffset + writelen) > savelen)
         {
             u32 len = savelen - writeoffset;
             memcpy(&Buffer[writeoffset], &savedata[writeoffset], len);
@@ -117,12 +159,13 @@ void SaveManager::RequestFlush(const u8* savedata, u32 savelen, u32 writeoffset,
         }
     }
 
-    FlushRequested = true;
+    FlushRequested.store(true, std::memory_order_release);
 }
 
 void SaveManager::CheckFlush()
 {
-    if (!FlushRequested) return;
+    if (!FlushRequested.load(std::memory_order_acquire)) return;
+    if (SecondaryBufferLock == nullptr) return;
 
     Platform::Mutex_Lock(SecondaryBufferLock);
 
@@ -131,14 +174,15 @@ void SaveManager::CheckFlush()
     if (SecondaryBufferLength != Length)
     {
         SecondaryBufferLength = Length;
-        SecondaryBuffer = std::make_unique<u8[]>(SecondaryBufferLength);
+        SecondaryBuffer = SecondaryBufferLength > 0 ? std::make_unique<u8[]>(SecondaryBufferLength) : nullptr;
     }
 
-    memcpy(SecondaryBuffer.get(), Buffer.get(), Length);
+    if (Length > 0 && Buffer && SecondaryBuffer)
+        memcpy(SecondaryBuffer.get(), Buffer.get(), Length);
 
-    FlushRequested = false;
-    FlushVersion++;
-    TimeAtLastFlushRequest = time(nullptr);
+    FlushRequested.store(false, std::memory_order_release);
+    FlushVersion.fetch_add(1, std::memory_order_acq_rel);
+    TimeAtLastFlushRequest.store(time(nullptr), std::memory_order_release);
 
     Platform::Mutex_Unlock(SecondaryBufferLock);
 }
@@ -149,10 +193,11 @@ void SaveManager::run()
     {
         Platform::Sleep(100000);
 
-        if (!Running) return;
+        if (!Running.load(std::memory_order_acquire)) return;
 
+        const time_t lastRequest = TimeAtLastFlushRequest.load(std::memory_order_acquire);
         // We debounce for two seconds after last flush request to ensure that writing has finished.
-        if (TimeAtLastFlushRequest == 0 || difftime(time(nullptr), TimeAtLastFlushRequest) < 2)
+        if (lastRequest == 0 || difftime(time(nullptr), lastRequest) < 2)
         {
             continue;
         }
@@ -163,34 +208,39 @@ void SaveManager::run()
 
 void SaveManager::FlushSecondaryBuffer(u8* dst, u32 dstLength)
 {
-    if (!SecondaryBuffer) return;
-
-    // When flushing to a file, there's no point in re-writing the exact same data.
-    if (!dst && !NeedsFlush()) return;
-    // When flushing to memory, we don't know if dst already has any data so we only check that we CAN flush.
-    if (dst && dstLength < SecondaryBufferLength) return;
+    if (SecondaryBufferLock == nullptr)
+        return;
 
     Platform::Mutex_Lock(SecondaryBufferLock);
+
+    if (!SecondaryBuffer || (!dst && !NeedsFlush()) || (dst && dstLength < SecondaryBufferLength))
+    {
+        Platform::Mutex_Unlock(SecondaryBufferLock);
+        return;
+    }
+
     if (dst)
     {
-        memcpy(dst, SecondaryBuffer.get(), SecondaryBufferLength);
+        if (SecondaryBufferLength > 0)
+            memcpy(dst, SecondaryBuffer.get(), SecondaryBufferLength);
     }
-    else
+    else if (!Path.empty())
     {
         FileHandle* f = Platform::OpenFile(Path, FileMode::Write);
         if (f)
         {
-            FileWrite(SecondaryBuffer.get(), SecondaryBufferLength, 1, f);
+            if (SecondaryBufferLength > 0)
+                FileWrite(SecondaryBuffer.get(), SecondaryBufferLength, 1, f);
             Log(LogLevel::Info, "SaveManager: Wrote %u bytes to %s\n", SecondaryBufferLength, Path.c_str());
             CloseFile(f);
         }
     }
-    PreviousFlushVersion = FlushVersion;
-    TimeAtLastFlushRequest = 0;
+    PreviousFlushVersion.store(FlushVersion.load(std::memory_order_acquire), std::memory_order_release);
+    TimeAtLastFlushRequest.store(0, std::memory_order_release);
     Platform::Mutex_Unlock(SecondaryBufferLock);
 }
 
 bool SaveManager::NeedsFlush()
 {
-    return FlushVersion != PreviousFlushVersion;
+    return FlushVersion.load(std::memory_order_acquire) != PreviousFlushVersion.load(std::memory_order_acquire);
 }

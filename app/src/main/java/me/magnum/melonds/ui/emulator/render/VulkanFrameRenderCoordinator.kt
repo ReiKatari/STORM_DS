@@ -8,6 +8,8 @@ import android.os.HandlerThread
 import android.os.Message
 import android.view.Surface
 import androidx.core.os.bundleOf
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -145,7 +147,13 @@ class VulkanFrameRenderCoordinator(
         coordinatorScope.cancel()
         frameRenderThread.requestStop()
         frameRenderThread.quitSafely()
-        frameRenderThread.join()
+        try {
+            if (Thread.currentThread() !== frameRenderThread) {
+                frameRenderThread.join(STOP_JOIN_TIMEOUT_MS)
+            }
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
     }
 
     override fun onSurfaceCreated(surfaceView: EmulatorSurfaceView, surface: Surface) {
@@ -179,15 +187,26 @@ class VulkanFrameRenderCoordinator(
         }
         val surfaceId = synchronized(surfacesLock) {
             pendingConfigs.remove(surfaceView)
-            managedSurfaces[surfaceView]?.also {
-                it.pendingSurface = null
-            }?.surfaceId ?: 0
-        }
-        frameRenderThread.requestSurfaceDetachment(surfaceId)
-        synchronized(surfacesLock) {
             managedSurfaces[surfaceView]?.let {
+                val id = it.surfaceId
                 it.surfaceId = 0
                 it.pendingSurface = null
+                id
+            } ?: 0
+        }
+        if (Thread.currentThread() === frameRenderThread || !frameRenderThread.isAlive || stopped) {
+            if (surfaceId != 0) {
+                frameRenderThread.requestSurfaceDetachment(surfaceId)
+            }
+            return
+        }
+
+        val detachLatch = CountDownLatch(1)
+        if (frameRenderThread.requestSurfaceDetachment(surfaceId, detachLatch)) {
+            try {
+                detachLatch.await(SURFACE_DETACH_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
             }
         }
     }
@@ -251,11 +270,23 @@ class VulkanFrameRenderCoordinator(
 
     private suspend fun decodeBackgroundBitmap(background: RuntimeBackground): Bitmap? {
         val backgroundUri = background.background?.uri ?: return null
-        val decodedBitmap = context.contentResolver.openInputStream(backgroundUri)?.use { stream ->
-            BitmapFactory.decodeStream(stream, null, BitmapFactory.Options().apply {
-                inPreferredConfig = Bitmap.Config.ARGB_8888
-            })
-        } ?: return null
+        val boundsOptions = BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
+        runCatching {
+            context.contentResolver.openInputStream(backgroundUri)?.use { stream ->
+                BitmapFactory.decodeStream(stream, null, boundsOptions)
+            }
+        }
+        val sampleSize = calculateBackgroundSampleSize(boundsOptions.outWidth, boundsOptions.outHeight)
+        val decodedBitmap = runCatching {
+            context.contentResolver.openInputStream(backgroundUri)?.use { stream ->
+                BitmapFactory.decodeStream(stream, null, BitmapFactory.Options().apply {
+                    inPreferredConfig = Bitmap.Config.ARGB_8888
+                    inSampleSize = sampleSize
+                })
+            }
+        }.getOrNull() ?: return null
 
         if (decodedBitmap.config == Bitmap.Config.ARGB_8888) {
             return decodedBitmap
@@ -268,6 +299,17 @@ class VulkanFrameRenderCoordinator(
         return convertedBitmap
     }
 
+    private fun calculateBackgroundSampleSize(width: Int, height: Int): Int {
+        if (width <= 0 || height <= 0) {
+            return 1
+        }
+        var sampleSize = 1
+        while ((width / sampleSize) > MAX_BACKGROUND_DECODE_DIMENSION || (height / sampleSize) > MAX_BACKGROUND_DECODE_DIMENSION) {
+            sampleSize *= 2
+        }
+        return sampleSize
+    }
+
     private inner class FrameRenderThread : HandlerThread("VulkanPresentThread") {
         @Volatile
         private var handler: Handler? = null
@@ -275,6 +317,7 @@ class VulkanFrameRenderCoordinator(
         private var running = true
         private var cleanedUp = false
         private val renderStatistics = RenderStatistics()
+        private val pendingDetachLatches = mutableSetOf<CountDownLatch>()
 
         override fun onLooperPrepared() {
             handler = object : Handler(looper) {
@@ -296,7 +339,7 @@ class VulkanFrameRenderCoordinator(
                             msg.data.getInt(MSG_GENERATION),
                             msg.data.parcelable(MSG_BACKGROUND_BITMAP),
                         )
-                        MSG_DETACH_SURFACE -> detachSurface(msg.arg1)
+                        MSG_DETACH_SURFACE -> detachSurface(msg.arg1, msg.obj as? CountDownLatch)
                         MSG_RENDER_FRAME -> renderFrame(msg.data.getLong(MSG_FRAME_DEADLINE_NS))
                         MSG_STOP -> stopThread()
                     }
@@ -411,23 +454,47 @@ class VulkanFrameRenderCoordinator(
             }
         }
 
-        fun requestSurfaceDetachment(surfaceId: Int) {
+        fun requestSurfaceDetachment(surfaceId: Int, completionLatch: CountDownLatch? = null): Boolean {
             if (!running) {
-                return
+                completionLatch?.countDown()
+                return false
             }
-            if (surfaceId == 0) {
-                return
+            if (surfaceId == 0 && completionLatch == null) {
+                return false
             }
-            val currentHandler = getActiveHandler() ?: return
-            currentHandler.obtainMessage(MSG_DETACH_SURFACE, surfaceId, 0).also {
+            val currentHandler = getActiveHandler()
+            if (currentHandler == null) {
+                completionLatch?.countDown()
+                return false
+            }
+            if (completionLatch != null) {
+                synchronized(pendingDetachLatches) {
+                    pendingDetachLatches.add(completionLatch)
+                }
+            }
+            currentHandler.obtainMessage(MSG_DETACH_SURFACE, surfaceId, 0, completionLatch).also {
                 try {
-                    currentHandler.sendMessage(it)
+                    return currentHandler.sendMessage(it).also { sent ->
+                        if (!sent && completionLatch != null) {
+                            synchronized(pendingDetachLatches) {
+                                pendingDetachLatches.remove(completionLatch)
+                            }
+                            completionLatch.countDown()
+                        }
+                    }
                 } catch (_: IllegalStateException) {
                     if (handler === currentHandler) {
                         currentHandler.removeCallbacksAndMessages(null)
                         handler = null
                     }
+                    if (completionLatch != null) {
+                        synchronized(pendingDetachLatches) {
+                            pendingDetachLatches.remove(completionLatch)
+                        }
+                        completionLatch.countDown()
+                    }
                     it.recycle()
+                    return false
                 }
             }
         }
@@ -596,11 +663,19 @@ class VulkanFrameRenderCoordinator(
             backgroundBitmap?.recycle()
         }
 
-        private fun detachSurface(surfaceId: Int) {
-            if (!running && cleanedUp) {
-                return
+        private fun detachSurface(surfaceId: Int, completionLatch: CountDownLatch?) {
+            try {
+                if (surfaceId != 0 && (running || !cleanedUp)) {
+                    MelonEmulator.detachVulkanSurface(surfaceId)
+                }
+            } finally {
+                if (completionLatch != null) {
+                    synchronized(pendingDetachLatches) {
+                        pendingDetachLatches.remove(completionLatch)
+                    }
+                    completionLatch.countDown()
+                }
             }
-            MelonEmulator.detachVulkanSurface(surfaceId)
         }
 
         private fun stopThread() {
@@ -626,6 +701,10 @@ class VulkanFrameRenderCoordinator(
                     it.pendingSurface = null
                 }
                 pendingConfigs.clear()
+            }
+            synchronized(pendingDetachLatches) {
+                pendingDetachLatches.forEach { it.countDown() }
+                pendingDetachLatches.clear()
             }
         }
     }
@@ -674,6 +753,10 @@ class VulkanFrameRenderCoordinator(
         const val MSG_HAS_CONFIG = "has-config"
         const val MSG_BACKGROUND_BITMAP = "background-bitmap"
         const val MSG_FRAME_DEADLINE_NS = "frame-deadline"
+
+        const val SURFACE_DETACH_TIMEOUT_MS = 1500L
+        const val STOP_JOIN_TIMEOUT_MS = 1500L
+        const val MAX_BACKGROUND_DECODE_DIMENSION = 1920
     }
 }
 

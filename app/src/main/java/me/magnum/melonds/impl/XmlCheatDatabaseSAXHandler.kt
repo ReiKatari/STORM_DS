@@ -111,23 +111,30 @@ class XmlCheatDatabaseSAXHandler(private val listener: HandlerListener) : Defaul
         if (parsingDatabase) {
             if (parsingDatabaseName) {
                 // Remove everything between parenthesis. Most likely it contains the DB's version
-                databaseName = textStringBuilder.toString().replace("\\(.*?\\)".toRegex(), "").trim()
+                val dbName = textStringBuilder.toString().replace("\\(.*?\\)".toRegex(), "").trim()
+                databaseName = dbName
                 parsingDatabaseName = false
-                emitCheatDatabaseName(databaseName!!)
+                emitCheatDatabaseName(dbName)
             }
         }
 
         if (parsingGame) {
             if (parsingGameName) {
-                gameName = textStringBuilder.toString()
+                val gName = textStringBuilder.toString()
+                gameName = gName
                 parsingGameName = false
-                emitGameNameParsed(gameName!!)
+                emitGameNameParsed(gName)
             }
 
             if (parsingGameCode) {
-                val parts = textStringBuilder.toString().split(' ')
-                gameCode = parts[0]
-                gameChecksum = parts[1]
+                val parts = textStringBuilder.toString().trim().split(Regex("\\s+"))
+                if (parts.size >= 2) {
+                    gameCode = parts[0]
+                    gameChecksum = parts[1]
+                } else {
+                    gameCode = parts.firstOrNull().orEmpty()
+                    gameChecksum = ""
+                }
                 parsingGameCode = false
             }
 
@@ -163,7 +170,12 @@ class XmlCheatDatabaseSAXHandler(private val listener: HandlerListener) : Defaul
             parsingCheatDescription = false
             parsingCheatCodes = false
 
-            currentFolderCheats.add(Cheat(null, cheatDatabase!!.id!!, cheatName!!, cheatDescription, cheatCodes!!, false))
+            val dbId = cheatDatabase?.id
+            val cName = cheatName
+            val cCodes = cheatCodes
+            if (dbId != null && cName != null && cCodes != null) {
+                currentFolderCheats.add(Cheat(null, dbId, cName, cheatDescription, cCodes, false))
+            }
             cheatName = null
             cheatDescription = null
             cheatCodes = null
@@ -175,7 +187,8 @@ class XmlCheatDatabaseSAXHandler(private val listener: HandlerListener) : Defaul
             parsingFolderName = false
 
             if (currentFolderCheats.isNotEmpty()) {
-                currentGameFolders.add(CheatFolder(null, folderName!!, ArrayList(currentFolderCheats)))
+                val fName = folderName?.takeIf { it.isNotBlank() } ?: "Cheats"
+                currentGameFolders.add(CheatFolder(null, fName, ArrayList(currentFolderCheats)))
             }
             folderName = null
             currentFolderCheats.clear()
@@ -186,17 +199,22 @@ class XmlCheatDatabaseSAXHandler(private val listener: HandlerListener) : Defaul
             parsingGame = false
             parsingGameName = false
 
-            if (currentGameFolders.isNotEmpty()) {
-                emitGame(Game(null, gameName!!, gameCode!!, gameChecksum!!, ArrayList(currentGameFolders)))
+            val gName = gameName
+            val gCode = gameCode
+            val gChecksum = gameChecksum
+            if (currentGameFolders.isNotEmpty() && gName != null && !gCode.isNullOrBlank() && gChecksum != null) {
+                emitGame(Game(null, gName, gCode, gChecksum, ArrayList(currentGameFolders)))
             }
             currentGameFolders.clear()
             gameName = null
+            gameCode = null
+            gameChecksum = null
         }
     }
 
     override fun characters(ch: CharArray?, start: Int, length: Int) {
         if (parsingText && ch != null) {
-            textStringBuilder.append(ch, 0, length)
+            textStringBuilder.append(ch, start, length)
         }
     }
 

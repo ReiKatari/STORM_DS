@@ -26,6 +26,12 @@ void ScreenshotRenderer::init()
 
 void ScreenshotRenderer::renderScreenshot(GPU* gpu, Renderer renderer, Frame* renderFrame)
 {
+    if (screenshotBuffer == nullptr)
+    {
+        notifyScreenshotReady();
+        return;
+    }
+
     if (renderer == Renderer::Vulkan)
     {
         constexpr size_t screenshotPixelCount = static_cast<size_t>(256) * static_cast<size_t>(192) * 2;
@@ -36,6 +42,11 @@ void ScreenshotRenderer::renderScreenshot(GPU* gpu, Renderer renderer, Frame* re
 
     if (renderer == Renderer::Software)
     {
+        if (gpu == nullptr)
+        {
+            notifyScreenshotReady();
+            return;
+        }
         int frontBuffer = gpu->FrontBuffer;
         if (gpu->Framebuffer[frontBuffer][0] && gpu->Framebuffer[frontBuffer][1])
         {
@@ -48,6 +59,11 @@ void ScreenshotRenderer::renderScreenshot(GPU* gpu, Renderer renderer, Frame* re
     }
     else
     {
+        if (renderFrame == nullptr || renderFrame->frameTexture == 0)
+        {
+            notifyScreenshotReady();
+            return;
+        }
         glDisable(GL_SCISSOR_TEST);
         glDisable(GL_DEPTH_TEST);
         glDisable(GL_STENCIL_TEST);

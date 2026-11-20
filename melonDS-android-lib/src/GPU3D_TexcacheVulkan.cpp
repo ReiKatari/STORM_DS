@@ -137,6 +137,11 @@ void TexcacheVulkanLoader::CleanupVulkanState()
             vkFreeCommandBuffers(State->Device, State->CommandPool, 1, &uploadSlot.CommandBuffer);
             uploadSlot.CommandBuffer = VK_NULL_HANDLE;
         }
+        if (uploadSlot.mappedPtr != nullptr && uploadSlot.StagingMemory != VK_NULL_HANDLE && State->Device != VK_NULL_HANDLE)
+        {
+            vkUnmapMemory(State->Device, uploadSlot.StagingMemory);
+            uploadSlot.mappedPtr = nullptr;
+        }
         if (uploadSlot.StagingBuffer != VK_NULL_HANDLE && State->Device != VK_NULL_HANDLE)
         {
             vkDestroyBuffer(State->Device, uploadSlot.StagingBuffer, nullptr);
@@ -148,6 +153,7 @@ void TexcacheVulkanLoader::CleanupVulkanState()
             uploadSlot.StagingMemory = VK_NULL_HANDLE;
         }
         uploadSlot.StagingSize = 0;
+        uploadSlot.mappedPtr = nullptr;
         uploadSlot.InFlight = false;
     }
     State->NextUploadSlot = 0;
@@ -592,8 +598,13 @@ void TexcacheVulkanLoader::UploadTexture(TextureHandle handle, u32 width, u32 he
             return;
     }
 
-    if (uploadSlot->StagingBuffer == VK_NULL_HANDLE || uploadSlot->StagingSize < requiredStagingSize)
+    if (uploadSlot->StagingBuffer == VK_NULL_HANDLE || uploadSlot->StagingSize < requiredStagingSize || uploadSlot->mappedPtr == nullptr)
     {
+        if (uploadSlot->mappedPtr != nullptr && uploadSlot->StagingMemory != VK_NULL_HANDLE)
+        {
+            vkUnmapMemory(State->Device, uploadSlot->StagingMemory);
+            uploadSlot->mappedPtr = nullptr;
+        }
         if (uploadSlot->StagingBuffer != VK_NULL_HANDLE)
         {
             vkDestroyBuffer(State->Device, uploadSlot->StagingBuffer, nullptr);
@@ -626,8 +637,15 @@ void TexcacheVulkanLoader::UploadTexture(TextureHandle handle, u32 width, u32 he
         );
         if (stagingMemoryAllocateInfo.memoryTypeIndex == UINT32_MAX
             || vkAllocateMemory(State->Device, &stagingMemoryAllocateInfo, nullptr, &uploadSlot->StagingMemory) != VK_SUCCESS
-            || vkBindBufferMemory(State->Device, uploadSlot->StagingBuffer, uploadSlot->StagingMemory, 0) != VK_SUCCESS)
+            || vkBindBufferMemory(State->Device, uploadSlot->StagingBuffer, uploadSlot->StagingMemory, 0) != VK_SUCCESS
+            || vkMapMemory(State->Device, uploadSlot->StagingMemory, 0, VK_WHOLE_SIZE, 0, &uploadSlot->mappedPtr) != VK_SUCCESS
+            || uploadSlot->mappedPtr == nullptr)
         {
+            if (uploadSlot->mappedPtr != nullptr && uploadSlot->StagingMemory != VK_NULL_HANDLE)
+            {
+                vkUnmapMemory(State->Device, uploadSlot->StagingMemory);
+                uploadSlot->mappedPtr = nullptr;
+            }
             if (uploadSlot->StagingBuffer != VK_NULL_HANDLE)
             {
                 vkDestroyBuffer(State->Device, uploadSlot->StagingBuffer, nullptr);
@@ -645,11 +663,7 @@ void TexcacheVulkanLoader::UploadTexture(TextureHandle handle, u32 width, u32 he
         uploadSlot->StagingSize = requiredStagingSize;
     }
 
-    void* mappedMemory = nullptr;
-    if (vkMapMemory(State->Device, uploadSlot->StagingMemory, 0, requiredStagingSize, 0, &mappedMemory) != VK_SUCCESS)
-        return;
-    std::memcpy(mappedMemory, data, requiredStagingSize);
-    vkUnmapMemory(State->Device, uploadSlot->StagingMemory);
+    std::memcpy(uploadSlot->mappedPtr, data, requiredStagingSize);
 
     if (vkResetCommandBuffer(uploadSlot->CommandBuffer, 0) != VK_SUCCESS)
     {

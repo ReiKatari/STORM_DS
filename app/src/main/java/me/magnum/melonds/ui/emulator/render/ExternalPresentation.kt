@@ -235,6 +235,11 @@ class ExternalPresentation(
     override fun onStop() {
         super.onStop()
         frameRenderCoordinator.removeSurface(surfaceView)
+        release()
+    }
+
+    fun release() {
+        emulatorRenderer.release()
     }
 
     fun updateBackground(background: RuntimeBackground) {

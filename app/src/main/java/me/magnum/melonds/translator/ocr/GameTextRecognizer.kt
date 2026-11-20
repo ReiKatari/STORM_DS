@@ -6,6 +6,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
+import android.os.Build
 import android.util.Log
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.Text
@@ -37,6 +38,7 @@ class GameTextRecognizer {
 
     companion object {
         private const val TAG = "GameTextRecognizer"
+        private const val MAX_OCR_DIMENSION = 1280
     }
 
     var lastOcrError: String? = null
@@ -277,58 +279,33 @@ class GameTextRecognizer {
         if (h <= 0 || w <= 0) return src
 
         return try {
-            when {
-                // 1x DS (native 192 or 384) -> 3x or 4x Nearest-Neighbor
-                h < 450 -> {
-                    val scale = if (h < 260) 4 else 3
-                    val dstW = w * scale
-                    val dstH = h * scale
-                    val out = Bitmap.createBitmap(dstW, dstH, Bitmap.Config.ARGB_8888)
-                    val canvas = Canvas(out)
-                    val nnPaint = Paint().apply {
-                        isFilterBitmap = false
-                        isAntiAlias = false
-                        isDither = false
-                    }
-                    canvas.drawBitmap(src, null, Rect(0, 0, dstW, dstH), nnPaint)
-                    out
-                }
-                // 2x DS (384..768) -> 2x Nearest-Neighbor
-                h in 450..850 -> {
-                    val scale = 2
-                    val dstW = w * scale
-                    val dstH = h * scale
-                    val out = Bitmap.createBitmap(dstW, dstH, Bitmap.Config.ARGB_8888)
-                    val canvas = Canvas(out)
-                    val nnPaint = Paint().apply {
-                        isFilterBitmap = false
-                        isAntiAlias = false
-                        isDither = false
-                    }
-                    canvas.drawBitmap(src, null, Rect(0, 0, dstW, dstH), nnPaint)
-                    out
-                }
-                // 3x - 4x DS (851..1400) -> 1:1 already perfect for ML Kit
-                h in 851..1400 -> {
-                    src
-                }
-                // 6x - 16x DS, or 1440p/4K capture (> 1400px) -> Bilinear downscale to target height ~1080px
-                else -> {
-                    val targetH = 1080
-                    val factor = targetH.toFloat() / h.toFloat()
-                    val dstW = (w * factor).toInt().coerceAtLeast(1)
-                    val dstH = targetH
-                    val out = Bitmap.createBitmap(dstW, dstH, Bitmap.Config.ARGB_8888)
-                    val canvas = Canvas(out)
-                    val smoothPaint = Paint().apply {
-                        isFilterBitmap = true
-                        isAntiAlias = true
-                        isDither = true
-                    }
-                    canvas.drawBitmap(src, null, Rect(0, 0, dstW, dstH), smoothPaint)
-                    out
-                }
+            val desiredScale = when {
+                h < 450 -> if (h < 260) 4f else 3f
+                h in 450..850 -> 2f
+                else -> 1f
             }
+            var dstW = (w * desiredScale).toInt().coerceAtLeast(1)
+            var dstH = (h * desiredScale).toInt().coerceAtLeast(1)
+            val maxDim = max(dstW, dstH)
+            if (maxDim > MAX_OCR_DIMENSION) {
+                val clampFactor = MAX_OCR_DIMENSION.toFloat() / maxDim.toFloat()
+                dstW = (dstW * clampFactor).toInt().coerceAtLeast(1)
+                dstH = (dstH * clampFactor).toInt().coerceAtLeast(1)
+            }
+            if (dstW == w && dstH == h) {
+                return src
+            }
+
+            val isDownscale = dstW < w || dstH < h
+            val out = Bitmap.createBitmap(dstW, dstH, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(out)
+            val paint = Paint().apply {
+                isFilterBitmap = isDownscale
+                isAntiAlias = isDownscale
+                isDither = isDownscale
+            }
+            canvas.drawBitmap(src, null, Rect(0, 0, dstW, dstH), paint)
+            out
         } catch (t: Throwable) {
             Log.w(TAG, "Adaptive OCR scaling failed, falling back to source bitmap: ${t.message}")
             src
@@ -409,14 +386,13 @@ class GameTextRecognizer {
             val pixels = IntArray(w * h)
             src.getPixels(pixels, 0, w, 0, 0, w, h)
 
-            // Convert to grayscale
-            val gray = IntArray(w * h)
+            // Convert to grayscale in-place to avoid allocating separate gray & output buffers
             for (i in pixels.indices) {
                 val p = pixels[i]
                 val r = (p shr 16) and 0xFF
                 val g = (p shr 8) and 0xFF
                 val b = p and 0xFF
-                gray[i] = (0.299f * r + 0.587f * g + 0.114f * b).toInt().coerceIn(0, 255)
+                pixels[i] = (0.299f * r + 0.587f * g + 0.114f * b).toInt().coerceIn(0, 255)
             }
 
             // Build Integral Images for sum and squared sum: (w+1) x (h+1)
@@ -428,7 +404,7 @@ class GameTextRecognizer {
                 var rowSum = 0L
                 var rowSqSum = 0L
                 for (x in 0 until w) {
-                    val gVal = gray[y * w + x].toLong()
+                    val gVal = pixels[y * w + x].toLong()
                     rowSum += gVal
                     rowSqSum += (gVal * gVal)
 
@@ -439,7 +415,6 @@ class GameTextRecognizer {
                 }
             }
 
-            val outPixels = IntArray(w * h)
             val r = if (windowRadius > 0) windowRadius else (h * 0.016f).toInt().coerceIn(6, 28)
 
             for (y in 0 until h) {
@@ -466,16 +441,16 @@ class GameTextRecognizer {
                     val std = sqrt(variance)
 
                     val threshold = mean * (1.0 + k * ((std / 128.0) - 1.0))
-                    val curVal = gray[rowIdx + x]
+                    val curVal = pixels[rowIdx + x]
 
                     // Produce clean high-contrast black text on white background (standard for OCR)
                     val isForeground = curVal >= threshold
-                    outPixels[rowIdx + x] = if (isForeground) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
+                    pixels[rowIdx + x] = if (isForeground) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
                 }
             }
 
             val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-            out.setPixels(outPixels, 0, w, 0, 0, w, h)
+            out.setPixels(pixels, 0, w, 0, 0, w, h)
             out
         } catch (_: Throwable) {
             null
@@ -589,6 +564,10 @@ class GameTextRecognizer {
 
     private fun ensureSoftwareBitmap(src: Bitmap): Bitmap {
         if (src.isRecycled) return src
+        val isHardware = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && src.config == Bitmap.Config.HARDWARE
+        if (!isHardware && src.config == Bitmap.Config.ARGB_8888) {
+            return src
+        }
         return try {
             val opaque = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(opaque)
@@ -616,17 +595,20 @@ class GameTextRecognizer {
         bitmap: Bitmap,
         sourceLang: String
     ): List<TranslatedTextBlock> {
-        val recognizersToTry = when (sourceLang.lowercase()) {
-            "ja", "japanese" -> listOf(japaneseRecognizer, latinRecognizer, chineseRecognizer)
-            "zh", "chinese" -> listOf(chineseRecognizer, latinRecognizer, japaneseRecognizer)
-            else -> listOf(latinRecognizer, japaneseRecognizer, chineseRecognizer)
+        val recognizerProviders: List<() -> TextRecognizer> = when (sourceLang.lowercase()) {
+            "ja", "japanese" -> listOf({ japaneseRecognizer }, { latinRecognizer })
+            "zh", "chinese" -> listOf({ chineseRecognizer }, { latinRecognizer })
+            "en", "english", "de", "german", "fr", "french", "es", "spanish", "it", "italian", "pt", "portuguese" ->
+                listOf({ latinRecognizer })
+            else -> listOf({ latinRecognizer }, { japaneseRecognizer }, { chineseRecognizer })
         }
 
         val inputImage = InputImage.fromBitmap(bitmap, 0)
         var visionText: Text? = null
 
-        for (rec in recognizersToTry) {
+        for (provider in recognizerProviders) {
             try {
+                val rec = provider()
                 val result = rec.processAsync(inputImage)
                 if (result.textBlocks.isNotEmpty()) {
                     visionText = result

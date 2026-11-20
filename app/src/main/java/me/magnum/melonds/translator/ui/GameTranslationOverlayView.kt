@@ -19,7 +19,8 @@ import me.magnum.melonds.translator.model.TranslatorOverlayStyle
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.max
 import kotlin.math.min
@@ -38,7 +39,7 @@ class GameTranslationOverlayView @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : View(context, attrs, defStyleAttr) {
 
-    private val viewScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private var viewScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private val blocks = mutableListOf<TranslatedTextBlock>()
     val customRegions = mutableListOf<TranslationRegion>()
 
@@ -1236,9 +1237,17 @@ class GameTranslationOverlayView @JvmOverloads constructor(
         return false
     }
 
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        if (!viewScope.isActive) {
+            viewScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+        }
+    }
+
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
+        longPressHandler.removeCallbacks(longPressRunnable)
         longPressHandler.removeCallbacksAndMessages(null)
-        viewScope.coroutineContext.cancelChildren()
+        viewScope.cancel()
     }
 }

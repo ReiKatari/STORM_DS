@@ -9,6 +9,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -16,15 +17,18 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import me.magnum.melonds.common.network.SharedOkHttpClient
 import me.magnum.melonds.domain.model.rom.Rom
+import okhttp3.Request
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
-import java.net.HttpURLConnection
-import java.net.URL
 import java.net.URLDecoder
 import java.text.Normalizer
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -55,12 +59,21 @@ class BoxArtRepository @Inject constructor(
 
     private val mutex = Mutex()
     private val memoryCache = ConcurrentHashMap<String, String>()
+    private val indexLock = Any()
     @Volatile private var indexEntries: List<IndexEntry>? = null
-    private val exactIndexMap = ConcurrentHashMap<String, IndexEntry>()
-    private val indexDownloadInFlight = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val exactIndexMap = HashMap<String, IndexEntry>()
+    private val indexDownloadInFlight = AtomicBoolean(false)
     @Volatile private var lastIndexDownloadFailure = 0L
     private var isMatchesLoaded = false
-    private var isDirty = false
+    @Volatile private var isDirty = false
+    private val dirtyVersion = AtomicLong(0L)
+    private val persistQueued = AtomicBoolean(false)
+    private val httpClient by lazy {
+        SharedOkHttpClient.instance.newBuilder()
+            .readTimeout(45, TimeUnit.SECONDS)
+            .callTimeout(60, TimeUnit.SECONDS)
+            .build()
+    }
 
     private val _coverUpdates = MutableSharedFlow<Pair<String, String?>>(extraBufferCapacity = 32)
     val coverUpdates: SharedFlow<Pair<String, String?>> = _coverUpdates.asSharedFlow()
@@ -268,21 +281,44 @@ class BoxArtRepository @Inject constructor(
 
     private fun schedulePersistMatches() {
         isDirty = true
+        dirtyVersion.incrementAndGet()
+        if (!persistQueued.compareAndSet(false, true)) {
+            return
+        }
         scope.launch {
-            mutex.withLock {
-                if (!isDirty) return@withLock
-                isDirty = false
-                runCatching {
-                    val json = JSONObject()
-                    memoryCache.forEach { (k, v) ->
-                        json.put(k, v)
+            var lastWriteSucceeded = true
+            try {
+                while (isDirty) {
+                    delay(750L)
+                    val targetVersion = dirtyVersion.get()
+                    val wrote = mutex.withLock {
+                        runCatching {
+                            matchesFile.parentFile?.mkdirs()
+                            val json = JSONObject()
+                            memoryCache.forEach { (k, v) ->
+                                json.put(k, v)
+                            }
+                            val tmpFile = File(matchesFile.parentFile, "${matchesFile.name}.tmp")
+                            tmpFile.writeText(json.toString())
+                            if (!tmpFile.renameTo(matchesFile)) {
+                                tmpFile.copyTo(matchesFile, overwrite = true)
+                                tmpFile.delete()
+                            }
+                        }.isSuccess
                     }
-                    val tmpFile = File(matchesFile.parentFile, "${matchesFile.name}.tmp")
-                    tmpFile.writeText(json.toString())
-                    if (!tmpFile.renameTo(matchesFile)) {
-                        tmpFile.copyTo(matchesFile, overwrite = true)
-                        tmpFile.delete()
+                    if (wrote) {
+                        if (dirtyVersion.get() == targetVersion) {
+                            isDirty = false
+                        }
+                    } else {
+                        lastWriteSucceeded = false
+                        break
                     }
+                }
+            } finally {
+                persistQueued.set(false)
+                if (lastWriteSucceeded && isDirty) {
+                    schedulePersistMatches()
                 }
             }
         }
@@ -339,6 +375,7 @@ class BoxArtRepository @Inject constructor(
     }
 
     private fun parseIndex(raw: String): List<IndexEntry> {
+        val newExactMap = HashMap<String, IndexEntry>()
         val entries = raw.lineSequence()
             .filter { it.isNotBlank() }
             .mapNotNull { line ->
@@ -354,11 +391,16 @@ class BoxArtRepository @Inject constructor(
                 val normalized = normalize(cleanName)
                 if (normalized.isNotBlank()) {
                     val entry = IndexEntry(baseUrl + encoded, normalized, normalized.split(' ').filter { it.isNotEmpty() }.toSet())
-                    exactIndexMap[normalized] = entry
+                    newExactMap[normalized] = entry
                     entry
                 } else null
             }
             .toList()
+        synchronized(indexLock) {
+            exactIndexMap.clear()
+            exactIndexMap.putAll(newExactMap)
+            indexEntries = entries
+        }
         return entries
     }
 
@@ -373,18 +415,18 @@ class BoxArtRepository @Inject constructor(
 
     private fun downloadRepoIndex(baseUrl: String, prefix: String): List<String> {
         return runCatching {
-            val connection = URL(baseUrl).openConnection() as HttpURLConnection
-            connection.connectTimeout = 15000
-            connection.readTimeout = 45000
-            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-            try {
-                val html = connection.inputStream.bufferedReader().readText()
+            val request = Request.Builder()
+                .url(baseUrl)
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .build()
+            httpClient.newCall(request).execute().use { response ->
+                val body = response.body
+                if (!response.isSuccessful || body == null) return@runCatching emptyList()
+                val html = body.string()
                 Regex("href=\"([^\"]+\\.png)\"").findAll(html)
                     .map { "$prefix\t${it.groupValues[1]}" }
                     .filter { !it.contains("/..") }
                     .toList()
-            } finally {
-                connection.disconnect()
             }
         }.getOrElse { emptyList() }
     }
@@ -395,7 +437,7 @@ class BoxArtRepository @Inject constructor(
             val fullNormalized = normalize(candidate.substringBefore(" (").ifBlank { candidate })
             if (fullNormalized.isBlank()) continue
 
-            exactIndexMap[fullNormalized]?.let { return it }
+            synchronized(indexLock) { exactIndexMap[fullNormalized] }?.let { return it }
             entries.firstOrNull { it.normalized == fullNormalized }?.let { return it }
         }
 

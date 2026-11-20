@@ -988,7 +988,7 @@ void ARMJIT::InvalidateByAddr(u32 localAddr) noexcept
     if (!region)
         return;
     AddressRange* range = &region[(localAddr & 0x7FFFFFF) / 512];
-    u32 mask = 1 << ((localAddr & 0x1FF) / 16);
+    const u32 writeMask = 1u << ((localAddr & 0x1FF) / 16);
 
     range->Code = 0;
     for (int i = 0; i < range->Blocks.Length;)
@@ -996,21 +996,21 @@ void ARMJIT::InvalidateByAddr(u32 localAddr) noexcept
         JitBlock* block = range->Blocks[i];
 
         bool invalidated = false;
-        u32 mask = 0;
+        u32 blockMask = 0;
         for (int j = 0; j < block->NumAddresses; j++)
         {
             if (block->AddressRanges()[j] == (localAddr & ~0x1FF))
             {
-                mask = block->AddressMasks()[j];
-                invalidated = block->AddressMasks()[j] & mask;
-                assert(mask);
+                blockMask = block->AddressMasks()[j];
+                invalidated = (blockMask & writeMask) != 0;
+                assert(blockMask);
                 break;
             }
         }
-        assert(mask);
+        assert(blockMask);
         if (!invalidated)
         {
-            range->Code |= mask;
+            range->Code |= blockMask;
             i++;
             continue;
         }

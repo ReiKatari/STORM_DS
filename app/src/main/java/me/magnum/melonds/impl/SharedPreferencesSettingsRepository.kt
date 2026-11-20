@@ -1841,7 +1841,7 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun getAudioLatency(): AudioLatency {
-        return getEnumPreference("audio_latency", AudioLatency.LOW)
+        return getEnumPreference("audio_latency", AudioLatency.MEDIUM)
     }
 
     override fun getMicSource(): MicSource {

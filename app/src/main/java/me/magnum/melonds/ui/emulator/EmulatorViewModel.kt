@@ -131,6 +131,7 @@ import me.magnum.melonds.domain.repositories.SaveStatesRepository
 import me.magnum.melonds.domain.repositories.SettingsRepository
 import me.magnum.melonds.domain.services.EmulatorManager
 import me.magnum.melonds.impl.ShaderCompileTimeStore
+import me.magnum.melonds.impl.emulator.AndroidEmulatorManager
 import me.magnum.melonds.impl.emulator.EmulatorSession
 import me.magnum.melonds.impl.emulator.LeaderboardTrackerUpdateLogLimiter
 import me.magnum.melonds.impl.emulator.debug.RendererDebugCaptureLogger
@@ -442,6 +443,8 @@ class EmulatorViewModel @Inject constructor(
 
     private val _emulatorState = MutableStateFlow<EmulatorState>(EmulatorState.Uninitialized)
     val emulatorState = _emulatorState.asStateFlow()
+    @Volatile
+    private var isNativeEmulationActive = false
 
     private val _layout = MutableStateFlow<LayoutConfiguration?>(null)
 
@@ -703,7 +706,7 @@ class EmulatorViewModel @Inject constructor(
                 maybeAutoSaveStateOnExit(it.rom)
             }
             discardHardcoreSubmissions()
-            stopEmulator()
+            stopEmulatorSuspend()
             launchEmulator(args)
         }
     }
@@ -901,6 +904,7 @@ class EmulatorViewModel @Inject constructor(
                 resolutionScaling = effectiveScale,
             )
 
+            isNativeEmulationActive = true
             var result = emulatorManager.loadRom(rom, cheats)
             if (result is RomLaunchResult.LaunchFailed &&
                 (didReceiveRendererInitFailure ||
@@ -937,6 +941,7 @@ class EmulatorViewModel @Inject constructor(
                 is RomLaunchResult.LaunchFailedRomNotSupported,
                 is RomLaunchResult.LaunchFailedSramProblem,
                 is RomLaunchResult.LaunchFailed -> {
+                    isNativeEmulationActive = false
                     GameCompatibilityManager.clearLaunchMarker(
                         context = context,
                         gameCode = rom.gameCode,
@@ -978,6 +983,7 @@ class EmulatorViewModel @Inject constructor(
                 throw exception
             }
             Log.e("EmulatorViewModel", "Failed to launch ROM '${rom.name}'", exception)
+            isNativeEmulationActive = false
             GameCompatibilityManager.clearLaunchMarker(
                 context = context,
                 gameCode = rom.gameCode,
@@ -1309,9 +1315,11 @@ class EmulatorViewModel @Inject constructor(
                 startObservingEmulatorEvents()
 
                 confirmRetroArchShaderCompile(romConfig = null)
+                isNativeEmulationActive = true
                 val result = emulatorManager.loadFirmware(consoleType)
                 when (result) {
                     is FirmwareLaunchResult.LaunchFailed -> {
+                        isNativeEmulationActive = false
                         _emulatorState.value = EmulatorState.FirmwareLoadError(result.reason)
                     }
                     FirmwareLaunchResult.LaunchSuccessful -> {
@@ -1887,7 +1895,8 @@ class EmulatorViewModel @Inject constructor(
         }
     }
 
-    fun stopEmulator() {
+    private fun resetSessionStateOnStop() {
+        isNativeEmulationActive = false
         GameCompatibilityManager.clearAllActiveLaunchMarkers(context)
         raBootstrapJob?.cancel()
         raSessionJob?.cancel()
@@ -1901,7 +1910,17 @@ class EmulatorViewModel @Inject constructor(
         unloadAndReleaseActiveRuntimeAuthenticationLease("emulator_stopped")
         activeRuntimeBridgeConfig = null
         activeRuntimePath = RetroAchievementsRuntimePath.DISABLED
+    }
+
+    fun stopEmulator() {
+        resetSessionStateOnStop()
         emulatorManager.stopEmulator()
+        screenshotFrameBufferProvider.clearBuffer()
+    }
+
+    private suspend fun stopEmulatorSuspend() {
+        resetSessionStateOnStop()
+        (emulatorManager as? AndroidEmulatorManager)?.stopEmulatorSuspend() ?: emulatorManager.stopEmulator()
         screenshotFrameBufferProvider.clearBuffer()
     }
 
@@ -1951,7 +1970,7 @@ class EmulatorViewModel @Inject constructor(
         sessionCoroutineScope.launch {
             val runningRom = _emulatorState.value as? EmulatorState.RunningRom
             if (runningRom == null) {
-                stopEmulator()
+                stopEmulatorSuspend()
                 _uiEvent.emit(EmulatorUiEvent.CloseEmulator)
                 return@launch
             }
@@ -1981,7 +2000,7 @@ class EmulatorViewModel @Inject constructor(
             if (userAuth == null) {
                 maybeAutoSaveStateOnExit(runningRom.rom)
                 discardHardcoreSubmissions()
-                stopEmulator()
+                stopEmulatorSuspend()
                 _uiEvent.emit(EmulatorUiEvent.CloseEmulator)
                 return@launch
             }
@@ -2022,7 +2041,7 @@ class EmulatorViewModel @Inject constructor(
 
             maybeAutoSaveStateOnExit(runningRom.rom)
             discardHardcoreSubmissions()
-            stopEmulator()
+            stopEmulatorSuspend()
             _uiEvent.emit(EmulatorUiEvent.CloseEmulator)
         }
     }
@@ -2310,8 +2329,10 @@ class EmulatorViewModel @Inject constructor(
                     FirmwarePauseMenuOption.SCREEN_LAYOUT -> _uiEvent.tryEmit(EmulatorUiEvent.ShowScreenLayoutDialog)
                     FirmwarePauseMenuOption.RESET -> resetEmulator()
                     FirmwarePauseMenuOption.EXIT -> {
-                        stopEmulator()
-                        _uiEvent.tryEmit(EmulatorUiEvent.CloseEmulator)
+                        viewModelScope.launch {
+                            stopEmulatorSuspend()
+                            _uiEvent.tryEmit(EmulatorUiEvent.CloseEmulator)
+                        }
                     }
                 }
             }
@@ -3094,11 +3115,11 @@ class EmulatorViewModel @Inject constructor(
                         }
                         when (_emulatorState.value) {
                             is EmulatorState.LoadingRom -> {
-                                stopEmulator()
+                                stopEmulatorSuspend()
                                 _emulatorState.value = EmulatorState.RomLoadError
                             }
                             is EmulatorState.LoadingFirmware -> {
-                                stopEmulator()
+                                stopEmulatorSuspend()
                                 _emulatorState.value = EmulatorState.FirmwareLoadError(MelonEmulator.FirmwareLoadResult.FIRMWARE_BAD)
                             }
                             else -> {
@@ -7017,6 +7038,10 @@ class EmulatorViewModel @Inject constructor(
         sessionCoroutineScope.cancel()
         unloadAndReleaseActiveRuntimeAuthenticationLease("view_model_cleared")
         retroAchievementsEndpointProvider.endSession()
+        if (isNativeEmulationActive) {
+            isNativeEmulationActive = false
+            runCatching { emulatorManager.stopEmulator() }
+        }
         emulatorManager.cleanEmulator()
     }
 

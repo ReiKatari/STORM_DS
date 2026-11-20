@@ -68,14 +68,20 @@ class InputProcessor(
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val axisStates: Map<Axis, AxisState>
+    private val axisEntries: Array<AxisEntry>
     private val lastFrontendInputPressMs = java.util.EnumMap<Input, Long>(Input::class.java)
     private var lastSlot2AnalogLogAtMs = 0L
     private var lastSlot2RawAnalogEventAtMs = 0L
+    private var lastSentSlot2AnalogX = 0f
+    private var lastSentSlot2AnalogY = 0f
     private var slot2DigitalLeftPressed = false
     private var slot2DigitalRightPressed = false
     private var slot2DigitalUpPressed = false
     private var slot2DigitalDownPressed = false
+
+    @Volatile private var cachedChordHotkeysEnabled: Boolean = true
+    @Volatile private var cachedGamepadAnalogDeadzone: Float = 0.15f
+    @Volatile private var cachedTurboFrequencyHz: Int = 15
 
     // Hardware Turbo state
     private var isHardwareTurboActive = false
@@ -117,30 +123,34 @@ class InputProcessor(
             }
         }
 
-        axisStates = configuredAxes.distinct().associateWith { AxisState(0f, false) }
+        axisEntries = configuredAxes.distinct().map {
+            AxisEntry(it, AxisState(0f, false))
+        }.toTypedArray()
+        refreshPreferences()
     }
 
     private fun getAppContext(): Context? {
         return context ?: MelonDSApplication.appContext
     }
 
+    fun refreshPreferences() {
+        val ctx = getAppContext() ?: return
+        val prefs = PreferenceManager.getDefaultSharedPreferences(ctx)
+        cachedChordHotkeysEnabled = prefs.getBoolean("input_chord_hotkeys_enabled", true)
+        cachedGamepadAnalogDeadzone = prefs.getInt("input_gamepad_analog_deadzone", 15).coerceIn(5, 40) / 100f
+        cachedTurboFrequencyHz = (prefs.getString("input_turbo_frequency_hz", "15") ?: "15").toIntOrNull() ?: 15
+    }
+
     private fun isChordHotkeysEnabled(): Boolean {
-        val ctx = getAppContext() ?: return true
-        return PreferenceManager.getDefaultSharedPreferences(ctx).getBoolean("input_chord_hotkeys_enabled", true)
+        return cachedChordHotkeysEnabled
     }
 
     private fun getGamepadAnalogDeadzone(): Float {
-        val ctx = getAppContext() ?: return 0.15f
-        val pct = PreferenceManager.getDefaultSharedPreferences(ctx)
-            .getInt("input_gamepad_analog_deadzone", 15)
-            .coerceIn(5, 40)
-        return pct / 100f
+        return cachedGamepadAnalogDeadzone
     }
 
     private fun getTurboFrequencyHz(): Int {
-        val ctx = getAppContext() ?: return 15
-        val freqStr = PreferenceManager.getDefaultSharedPreferences(ctx).getString("input_turbo_frequency_hz", "15") ?: "15"
-        return freqStr.toIntOrNull() ?: 15
+        return cachedTurboFrequencyHz
     }
 
     private fun isSelectKeyCode(keyCode: Int): Boolean {
@@ -255,10 +265,16 @@ class InputProcessor(
             val slot2Handled = processSlot2AnalogFromMotionEvent(motionEvent)
 
             val analogDeadzone = getGamepadAnalogDeadzone()
-            val deviceAxis = axisStates.filterKeys { it.deviceId == null || it.deviceId == motionEvent.deviceId }
-            deviceAxis.forEach {
-                val axis = it.key
-                val axisState = it.value
+            val eventDeviceId = motionEvent.deviceId
+            var handledAnyAxis = false
+            for (i in axisEntries.indices) {
+                val entry = axisEntries[i]
+                val axis = entry.axis
+                if (axis.deviceId != null && axis.deviceId != eventDeviceId) {
+                    continue
+                }
+                handledAnyAxis = true
+                val axisState = entry.state
 
                 val newValue = motionEvent.getAxisValue(axis.axisCode)
                 val clampedValue = when (axis.direction) {
@@ -281,7 +297,7 @@ class InputProcessor(
                 }
                 axisState.value = clampedValue
             }
-            return slot2Handled || deviceAxis.isNotEmpty()
+            return slot2Handled || handledAnyAxis
         } else {
             return false
         }
@@ -479,7 +495,7 @@ class InputProcessor(
             else -> 1f
         }
 
-        MelonEmulator.setSlot2AnalogInput(digitalX, digitalY)
+        dispatchSlot2AnalogInput(digitalX, digitalY)
         if ((digitalX.absoluteValue > 0f || digitalY.absoluteValue > 0f)
             && now - lastSlot2AnalogLogAtMs >= SLOT2_ANALOG_LOG_INTERVAL_MS
         ) {
@@ -489,6 +505,15 @@ class InputProcessor(
                 "slot2AnalogInput source=digital-fallback x=${"%.3f".format(Locale.US, digitalX)} y=${"%.3f".format(Locale.US, digitalY)}",
             )
         }
+    }
+
+    private fun dispatchSlot2AnalogInput(x: Float, y: Float) {
+        if (x == 0f && y == 0f && lastSentSlot2AnalogX == 0f && lastSentSlot2AnalogY == 0f) {
+            return
+        }
+        lastSentSlot2AnalogX = x
+        lastSentSlot2AnalogY = y
+        MelonEmulator.setSlot2AnalogInput(x, y)
     }
 
     private fun isControllerMotionEvent(motionEvent: MotionEvent): Boolean {
@@ -520,7 +545,7 @@ class InputProcessor(
         val mappedY = if (slot2Mapping.invertY) -rawAnalogY else rawAnalogY
         val analogX = if (mappedX.absoluteValue < deadzone) 0f else mappedX
         val analogY = if (mappedY.absoluteValue < deadzone) 0f else mappedY
-        MelonEmulator.setSlot2AnalogInput(analogX, analogY)
+        dispatchSlot2AnalogInput(analogX, analogY)
         val now = SystemClock.uptimeMillis()
         lastSlot2RawAnalogEventAtMs = now
         if ((analogX.absoluteValue > 0f || analogY.absoluteValue > 0f)
@@ -551,9 +576,9 @@ class InputProcessor(
 
         var bestAxisValue = preferredValue
         var bestAxisAbs = preferredValue.absoluteValue
-        fallbackAxisCodes.forEach { axisCode ->
+        for (axisCode in fallbackAxisCodes) {
             if (axisCode == preferredAxisCode) {
-                return@forEach
+                continue
             }
             val axisValue = motionEvent.getAxisValue(axisCode)
             val axisAbs = axisValue.absoluteValue
@@ -573,6 +598,11 @@ class InputProcessor(
             || device.getMotionRange(axisCode, InputDevice.SOURCE_GAMEPAD) != null
             || device.getMotionRange(axisCode) != null
     }
+
+    private class AxisEntry(
+        val axis: Axis,
+        val state: AxisState,
+    )
 
     private data class Axis(
         val deviceId: Int?,

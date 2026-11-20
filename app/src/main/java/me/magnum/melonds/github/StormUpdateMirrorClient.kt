@@ -180,8 +180,8 @@ object StormUpdateMirrorClient {
             val currentUrl = HttpRedirectHelper.resolveFinalRedirectUrl(
                 initialUrl = GITHUB_LATEST_REDIRECT_URL,
                 maxRedirects = 6,
-                connectTimeoutMs = 10_000,
-                readTimeoutMs = 10_000,
+                connectTimeoutMs = 6_000,
+                readTimeoutMs = 6_000,
                 userAgent = USER_AGENT,
             )
             val match = Regex("/releases/tag/(v?[0-9]+\\.[0-9]+(?:\\.[0-9]+)*)").find(currentUrl)
@@ -224,8 +224,8 @@ object StormUpdateMirrorClient {
             HttpRedirectHelper.openConnectionWithRedirects(
                 initialUrl = url,
                 maxRedirects = 6,
-                connectTimeoutMs = 12_000,
-                readTimeoutMs = 15_000,
+                connectTimeoutMs = 6_000,
+                readTimeoutMs = 6_000,
                 userAgent = USER_AGENT,
                 accept = "application/json",
             )

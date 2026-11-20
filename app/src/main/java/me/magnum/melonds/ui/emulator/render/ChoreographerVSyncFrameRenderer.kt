@@ -10,6 +10,7 @@ class ChoreographerVSyncFrameRenderer(
 ) : ChoreographerFrameRenderer, Choreographer.VsyncCallback {
 
     private var isRendering = false
+    private var lastRenderedFrameTimeNanos = 0L
 
     override fun startRendering() {
         if (isRendering) {
@@ -17,11 +18,13 @@ class ChoreographerVSyncFrameRenderer(
         }
 
         isRendering = true
+        lastRenderedFrameTimeNanos = 0L
         Choreographer.getInstance().postVsyncCallback(this)
     }
 
     override fun stopRendering() {
         isRendering = false
+        lastRenderedFrameTimeNanos = 0L
         Choreographer.getInstance().removeVsyncCallback(this)
     }
 
@@ -30,16 +33,26 @@ class ChoreographerVSyncFrameRenderer(
             return
         }
 
-        val frameDelta = data.preferredFrameTimeline.deadlineNanos - data.frameTimeNanos
-        val frameDeadline = if (frameDelta > ChoreographerFrameRenderer.DEADLINE_FRAME_TIME_THRESHOLD) {
-            data.preferredFrameTimeline.deadlineNanos
+        val frameDeadline = data.preferredFrameTimeline.deadlineNanos
+        val frameDelta = frameDeadline - data.frameTimeNanos
+        val shouldRender = if (frameDelta <= ChoreographerFrameRenderer.DEADLINE_FRAME_TIME_THRESHOLD) {
+            lastRenderedFrameTimeNanos == 0L ||
+                data.frameTimeNanos < lastRenderedFrameTimeNanos ||
+                (data.frameTimeNanos - lastRenderedFrameTimeNanos) >= HIGH_REFRESH_PACING_INTERVAL_NS
         } else {
-            null
+            true
         }
 
-        frameRenderCoordinator.renderFrame(frameDeadline)
+        if (shouldRender) {
+            lastRenderedFrameTimeNanos = data.frameTimeNanos
+            frameRenderCoordinator.renderFrame(frameDeadline)
+        }
         if (isRendering) {
             Choreographer.getInstance().postVsyncCallback(this)
         }
+    }
+
+    private companion object {
+        const val HIGH_REFRESH_PACING_INTERVAL_NS = 14_500_000L
     }
 }

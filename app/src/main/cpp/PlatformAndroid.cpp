@@ -48,6 +48,7 @@ namespace Platform
     typedef struct
     {
         int val;
+        bool useMonotonic;
         pthread_mutex_t mutex;
         pthread_cond_t cond;
     } AndroidSemaphore;
@@ -70,7 +71,8 @@ namespace Platform
 
     void SignalStop(StopReason reason, void* userdata)
     {
-        MelonDSAndroid::eventMessenger->onEmulatorStop(reason);
+        if (auto messenger = MelonDSAndroid::eventMessenger)
+            messenger->onEmulatorStop(reason);
     }
 
     constexpr char AccessMode(FileMode mode, bool fileExists)
@@ -194,6 +196,8 @@ namespace Platform
         }
         else
         {
+            if (MelonDSAndroid::fileHandler == nullptr)
+                return nullptr;
             return reinterpret_cast<FileHandle*>(MelonDSAndroid::fileHandler->open(rawPath.c_str(), mode));
         }
     }
@@ -291,7 +295,11 @@ namespace Platform
 
     u64 FilePosition(FileHandle* file)
     {
-        return ftell(reinterpret_cast<FILE *>(file));
+        FILE* stdfile = reinterpret_cast<FILE *>(file);
+        if (!stdfile)
+            return 0;
+        long pos = ftell(stdfile);
+        return pos >= 0 ? static_cast<u64>(pos) : 0;
     }
 
     bool FileSeek(FileHandle* file, s64 offset, FileSeekOrigin origin)
@@ -344,6 +352,8 @@ namespace Platform
     u64 FileLength(FileHandle* file)
     {
         FILE* stdfile = reinterpret_cast<FILE *>(file);
+        if (!stdfile)
+            return 0;
         int fd = fileno(stdfile);
         if (fd >= 0)
         {
@@ -354,10 +364,13 @@ namespace Platform
             }
         }
         long pos = ftell(stdfile);
-        fseek(stdfile, 0, SEEK_END);
+        if (pos < 0)
+            return 0;
+        if (fseek(stdfile, 0, SEEK_END) != 0)
+            return 0;
         long len = ftell(stdfile);
         fseek(stdfile, pos, SEEK_SET);
-        return len;
+        return len > 0 ? static_cast<u64>(len) : 0;
     }
 
     // Boot diagnostic buffer — captures DSi-related native logs for the game execution log
@@ -425,18 +438,27 @@ namespace Platform
     Thread* Thread_Create(std::function<void()> func)
     {
         AndroidThread* data = new AndroidThread;
-        data->Func = func;
-        pthread_create(&data->ID, nullptr, ThreadEntry, data);
+        data->Func = std::move(func);
+        if (pthread_create(&data->ID, nullptr, ThreadEntry, data) != 0)
+        {
+            Log(LogLevel::Error, "PlatformAndroid: pthread_create failed\n");
+            delete data;
+            return nullptr;
+        }
         return (Thread*) data;
     }
 
     void Thread_Free(Thread* thread)
     {
+        if (thread == nullptr)
+            return;
         delete (AndroidThread*)thread;
     }
 
     void Thread_Wait(Thread* thread)
     {
+        if (thread == nullptr)
+            return;
         pthread_t pthread = ((AndroidThread*) thread)->ID;
         pthread_join(pthread, NULL);
     }
@@ -444,8 +466,14 @@ namespace Platform
     Semaphore* Semaphore_Create()
     {
         AndroidSemaphore* semaphore = (AndroidSemaphore*) malloc(sizeof(AndroidSemaphore));
+        if (!semaphore)
+            return nullptr;
         pthread_mutex_init(&semaphore->mutex, NULL);
-        pthread_cond_init(&semaphore->cond, NULL);
+        pthread_condattr_t attr;
+        pthread_condattr_init(&attr);
+        semaphore->useMonotonic = (pthread_condattr_setclock(&attr, CLOCK_MONOTONIC) == 0);
+        pthread_cond_init(&semaphore->cond, &attr);
+        pthread_condattr_destroy(&attr);
         semaphore->val = 0;
         return (Semaphore*) semaphore;
     }
@@ -499,7 +527,7 @@ namespace Platform
         else
         {
             timespec timeout{};
-            clock_gettime(CLOCK_REALTIME, &timeout);
+            clock_gettime(semaphore->useMonotonic ? CLOCK_MONOTONIC : CLOCK_REALTIME, &timeout);
             const long addSec = timeout_ms / 1000;
             const long addNs = static_cast<long>(timeout_ms % 1000) * 1000000L;
             timeout.tv_sec += addSec;
@@ -735,12 +763,14 @@ namespace Platform
 
     void Addon_RumbleStart(u32 len, void* userdata)
     {
-        MelonDSAndroid::eventMessenger->onRumbleStart(len);
+        if (auto messenger = MelonDSAndroid::eventMessenger)
+            messenger->onRumbleStart(len);
     }
 
     void Addon_RumbleStop(void* userdata)
     {
-        MelonDSAndroid::eventMessenger->onRumbleStop();
+        if (auto messenger = MelonDSAndroid::eventMessenger)
+            messenger->onRumbleStop();
     }
 
     float Addon_MotionQuery(MotionQueryType type, void* userdata)

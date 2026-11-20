@@ -1,6 +1,7 @@
 #include "renderer/VulkanRetroArchFilterChain.h"
 
 #include <cstring>
+#include <mutex>
 #include <utility>
 
 #include "Platform.h"
@@ -59,7 +60,11 @@ void VulkanRetroArchFilterChain::shutdown()
 {
     if (chain != nullptr)
     {
-        libra_error_t error = libra_vk_filter_chain_free(&chain);
+        libra_error_t error = nullptr;
+        {
+            std::lock_guard<std::mutex> queueLock(melonDS::VulkanContext::Get().GetQueueLock());
+            error = libra_vk_filter_chain_free(&chain);
+        }
         if (error != nullptr)
             logError("libra_vk_filter_chain_free", error);
         chain = nullptr;
@@ -166,7 +171,10 @@ bool VulkanRetroArchFilterChain::createChain(
     options.use_dynamic_rendering = false;
     options.disable_cache = false;
 
-    error = libra_vk_filter_chain_create(&preset, deviceInfo, &options, &chain);
+    {
+        std::lock_guard<std::mutex> queueLock(context.GetQueueLock());
+        error = libra_vk_filter_chain_create(&preset, deviceInfo, &options, &chain);
+    }
     if (error != nullptr)
     {
         reportFailure("libra_vk_filter_chain_create", error);

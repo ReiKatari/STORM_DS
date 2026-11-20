@@ -9,6 +9,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import me.magnum.melonds.common.opengl.Shader
 import me.magnum.melonds.common.opengl.ShaderFactory
@@ -146,7 +148,7 @@ class DSRenderer(private val context: Context) : EmulatorRenderer {
             }.getOrNull() ?: return@launch
 
             synchronized(backgroundLock) {
-                if (this@DSRenderer.background === background) {
+                if (this@DSRenderer.background === background && backgroundDecodeScope.isActive) {
                     pendingDecodedBackground?.recycle()
                     pendingDecodedBackground = decoded
                     mustLoadBackground = true
@@ -154,6 +156,19 @@ class DSRenderer(private val context: Context) : EmulatorRenderer {
                     decoded.recycle()
                 }
             }
+        }
+    }
+
+    fun release() {
+        backgroundDecodeJob?.cancel()
+        backgroundDecodeJob = null
+        backgroundDecodeScope.cancel()
+        synchronized(backgroundLock) {
+            pendingDecodedBackground?.recycle()
+            pendingDecodedBackground = null
+            background = null
+            mustLoadBackground = false
+            isBackgroundLoaded = false
         }
     }
 

@@ -55,7 +55,7 @@
 -keep interface me.magnum.melonds.common.camera.DSiCameraSource { *; }
 
 # Migration fields. These rules are required for migrations to work properly
--keep,allowobfuscation class me.magnum.melonds.migrations.legacy.** { *; }
+-keep class me.magnum.melonds.migrations.legacy.** { *; }
 
 # Prevent DTOs and models from being obfuscated or removed
 -keep class me.magnum.melonds.impl.dtos.** { *; }

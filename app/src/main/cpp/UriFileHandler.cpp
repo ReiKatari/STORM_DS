@@ -1,5 +1,6 @@
 #include "UriFileHandler.h"
 #include "Platform.h"
+#include <unistd.h>
 
 using namespace melonDS::Platform;
 
@@ -11,24 +12,50 @@ UriFileHandler::UriFileHandler(JniEnvHandler* jniEnvHandler, jobject uriFileHand
 
 FILE* UriFileHandler::open(const char* path, FileMode mode)
 {
+    if (!this->jniEnvHandler || !this->uriFileHandler || !path)
+        return nullptr;
+
     JNIEnv* env = this->jniEnvHandler->getCurrentThreadEnv();
+    if (!env)
+        return nullptr;
 
     jstring pathString = env->NewStringUTF(path);
     jstring modeString = env->NewStringUTF(getAccessMode(mode, true).c_str());
     jclass handlerClass = env->GetObjectClass(this->uriFileHandler);
-    jmethodID openMethod = env->GetMethodID(handlerClass, "open", "(Ljava/lang/String;Ljava/lang/String;)I");
-    jint fileDescriptor = env->CallIntMethod(this->uriFileHandler, openMethod, pathString, modeString);
-    if (env->ExceptionCheck()) {
+    jmethodID openMethod = handlerClass ? env->GetMethodID(handlerClass, "open", "(Ljava/lang/String;Ljava/lang/String;)I") : nullptr;
+
+    jint fileDescriptor = -1;
+    bool hadException = false;
+    if (pathString && modeString && openMethod)
+    {
+        fileDescriptor = env->CallIntMethod(this->uriFileHandler, openMethod, pathString, modeString);
+        if (env->ExceptionCheck())
+        {
+            env->ExceptionClear();
+            hadException = true;
+        }
+    }
+    else if (env->ExceptionCheck())
+    {
         env->ExceptionClear();
-        return nullptr;
+        hadException = true;
     }
 
-    if (fileDescriptor == -1) {
+    if (pathString) env->DeleteLocalRef(pathString);
+    if (modeString) env->DeleteLocalRef(modeString);
+    if (handlerClass) env->DeleteLocalRef(handlerClass);
+
+    if (hadException || fileDescriptor == -1)
         return nullptr;
-    } else {
-        std::string nativeMode = getNativeAccessMode(mode, true);
-        return fdopen(fileDescriptor, nativeMode.c_str());
+
+    std::string nativeMode = getNativeAccessMode(mode, true);
+    FILE* file = fdopen(fileDescriptor, nativeMode.c_str());
+    if (!file)
+    {
+        close(fileDescriptor);
+        return nullptr;
     }
+    return file;
 }
 
 std::string UriFileHandler::getNativeAccessMode(FileMode mode, bool fileExists)

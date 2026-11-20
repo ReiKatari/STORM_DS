@@ -19,6 +19,8 @@
 #ifndef SPU_H
 #define SPU_H
 
+#include <atomic>
+
 #include "Savestate.h"
 #include "Platform.h"
 
@@ -264,9 +266,13 @@ public:
     void Write32(u32 addr, u32 val);
 
 private:
+    void ApplyPendingOutputSkew();
+
     u32 OutputBufferSize = 0;
     double OutputSampleRate;
     double OutputSkew = 1.0;
+    std::atomic<double> PendingOutputSkew{1.0};
+    std::atomic<bool> HasPendingOutputSkew{false};
     melonDS::NDS& NDS;
 
     blip_t* BlipLeft;

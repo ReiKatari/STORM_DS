@@ -340,8 +340,12 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
                     .build()
             }
             .diskCache {
-                val rootBase = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS")
-                val storageCoversCache = File(rootBase, "cache/covers_cache").apply { mkdirs() }
+                val externalCoversCache = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS/cache/covers_cache")
+                val storageCoversCache = if (isDirectoryWritable(externalCoversCache)) {
+                    externalCoversCache
+                } else {
+                    File(cacheDir, "covers_cache").apply { mkdirs() }
+                }
                 coil.disk.DiskCache.Builder()
                     .directory(storageCoversCache)
                     .maxSizeBytes(256L * 1024 * 1024)
@@ -428,10 +432,21 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
                     appendLine("========================================================")
                 }
 
-                // Write crash report into /storage/emulated/0/STORM DS/logs/STORM_INFO.txt
+                // Write crash report into /storage/emulated/0/STORM DS/logs/STORM_INFO.txt when writable,
+                // otherwise fall back to app-specific external/internal files directory.
                 runCatching {
-                    val rootBase = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS/logs").apply { mkdirs() }
-                    val crashFile = File(rootBase, "STORM_INFO.txt")
+                    val externalLogsDir = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS/logs")
+                    val logsDir = if (isDirectoryWritable(externalLogsDir)) {
+                        externalLogsDir
+                    } else {
+                        val appExternalLogsDir = getExternalFilesDir(null)?.let { File(it, "logs") }
+                        if (appExternalLogsDir != null && isDirectoryWritable(appExternalLogsDir)) {
+                            appExternalLogsDir
+                        } else {
+                            File(filesDir, "logs").apply { mkdirs() }
+                        }
+                    }
+                    val crashFile = File(logsDir, "STORM_INFO.txt")
                     crashFile.appendText("\n\n$report")
                 }
             }
@@ -441,13 +456,29 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
 
     private fun giveLibrashaderACacheDirectory() {
         runCatching {
-            val rootBase = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS").apply { mkdirs() }
-            val cacheDir = File(rootBase, "cache").apply { mkdirs() }
-            Os.setenv("HOME", rootBase.absolutePath, false)
-            Os.setenv("XDG_CACHE_HOME", cacheDir.absolutePath, false)
+            val externalRoot = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS")
+            val externalCacheDir = File(externalRoot, "cache")
+            val (homeDir, xdgCacheDir) = if (isDirectoryWritable(externalRoot) && isDirectoryWritable(externalCacheDir)) {
+                externalRoot to externalCacheDir
+            } else {
+                val internalCache = cacheDir.apply { mkdirs() }
+                internalCache to internalCache
+            }
+            Os.setenv("HOME", homeDir.absolutePath, false)
+            Os.setenv("XDG_CACHE_HOME", xdgCacheDir.absolutePath, false)
         }.onFailure {
             Log.w("MelonDSApplication", "Could not point librashader at a cache directory", it)
         }
+    }
+
+    private fun isDirectoryWritable(dir: File): Boolean {
+        return runCatching {
+            if (!dir.exists() && !dir.mkdirs()) return@runCatching false
+            if (!dir.isDirectory || !dir.canWrite()) return@runCatching false
+            val probe = File.createTempFile(".storm_write_probe_", null, dir)
+            probe.delete()
+            true
+        }.getOrDefault(false)
     }
 
     private fun createNotificationChannels() {

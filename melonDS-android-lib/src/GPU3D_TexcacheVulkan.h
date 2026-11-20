@@ -60,12 +60,13 @@ private:
             VkBuffer StagingBuffer = VK_NULL_HANDLE;
             VkDeviceMemory StagingMemory = VK_NULL_HANDLE;
             VkDeviceSize StagingSize = 0;
+            void* mappedPtr = nullptr;
             VkCommandBuffer CommandBuffer = VK_NULL_HANDLE;
             VkFence Fence = VK_NULL_HANDLE;
             bool InFlight = false;
         };
 
-        static constexpr size_t UploadSlotCount = 8;
+        static constexpr size_t UploadSlotCount = 24;
 
         TextureHandle NextHandle = 1;
         VulkanPipelineProfile PipelineProfile = VulkanPipelineProfile::Compatibility;

@@ -17,6 +17,8 @@
 */
 
 #include "RewindManager.h"
+#include <algorithm>
+#include <cstring>
 #include <list>
 
 namespace melonDS
@@ -28,28 +30,34 @@ RewindManager::RewindManager(bool enabled, int rewindLengthSeconds, int rewindCa
     Enabled(enabled),
     RewindLengthSeconds(rewindLengthSeconds),
     RewindCapturingIntervalSeconds(rewindCapturingIntervalSeconds),
-    SavestateBufferSize(rewindBufferSize),
-    ScreenshotBufferSize(screenshotBufferSize)
+    SavestateBufferSize(static_cast<u32>(rewindBufferSize)),
+    ScreenshotBufferSize(static_cast<u32>(screenshotBufferSize))
 {
 }
 
 RewindManager::~RewindManager()
 {
-    for (auto state : RewindWindow)
-        DeleteRewindSaveState(state);
+    Reset();
 }
 
 void RewindManager::UpdateRewindSettings(bool enabled, int rewindLengthSeconds, int rewindCapturingIntervalSeconds)
 {
+    std::lock_guard<std::mutex> lock(RewindMutex);
     RewindLengthSeconds = rewindLengthSeconds;
     RewindCapturingIntervalSeconds = rewindCapturingIntervalSeconds;
 
     if (Enabled)
     {
-        if (!enabled)
-            Reset();
+        if (!enabled || RewindWindowSize() <= 0)
+        {
+            for (const auto& state : RewindWindow)
+                DeleteRewindSaveState(state);
+            RewindWindow.clear();
+        }
         else
+        {
             TrimRewindWindowIfRequired();
+        }
     }
 
     Enabled = enabled;
@@ -57,7 +65,8 @@ void RewindManager::UpdateRewindSettings(bool enabled, int rewindLengthSeconds, 
 
 bool RewindManager::ShouldCaptureState(int currentFrame)
 {
-    if (!Enabled || RewindWindowSize() == 0)
+    std::lock_guard<std::mutex> lock(RewindMutex);
+    if (!Enabled || RewindCapturingIntervalSeconds <= 0 || RewindWindowSize() <= 0)
     {
         return false;
     }
@@ -67,9 +76,14 @@ bool RewindManager::ShouldCaptureState(int currentFrame)
 
 RewindSaveState* RewindManager::GetNextRewindSaveState(int currentFrame)
 {
-    if (RewindWindow.size() < RewindWindowSize())
+    std::lock_guard<std::mutex> lock(RewindMutex);
+    const int windowSize = RewindWindowSize();
+    if (windowSize <= 0)
+        return nullptr;
+
+    if (RewindWindow.size() < static_cast<size_t>(windowSize))
     {
-        // Windows is not yet full. Create new savestate
+        // Window is not yet full. Create new savestate
         RewindSaveState newRewindSaveState = CreateRewindSaveState(currentFrame);
         RewindWindow.push_front(newRewindSaveState);
     }
@@ -78,6 +92,7 @@ RewindSaveState* RewindManager::GetNextRewindSaveState(int currentFrame)
         // Window is already full. Reuse the oldest savestate and move it to the front
         auto oldestState = RewindWindow.back();
         oldestState.frame = currentFrame;
+        oldestState.bufferContentSize = 0;
         RewindWindow.pop_back();
         RewindWindow.push_front(oldestState);
     }
@@ -87,18 +102,46 @@ RewindSaveState* RewindManager::GetNextRewindSaveState(int currentFrame)
 
 std::list<RewindSaveState> RewindManager::GetRewindWindow()
 {
-    return RewindWindow;
+    std::lock_guard<std::mutex> lock(RewindMutex);
+    std::list<RewindSaveState> snapshot;
+    for (const auto& state : RewindWindow)
+    {
+        if (state.buffer == nullptr || state.bufferSize == 0 || state.bufferContentSize == 0 ||
+            state.screenshot == nullptr || state.screenshotSize == 0)
+        {
+            continue;
+        }
+
+        const u32 copyBufferSize = std::min(state.bufferContentSize, state.bufferSize);
+        std::shared_ptr<u8[]> copiedBuffer(new u8[copyBufferSize]);
+        std::memcpy(copiedBuffer.get(), state.buffer, copyBufferSize);
+
+        std::shared_ptr<u8[]> copiedScreenshot(new u8[state.screenshotSize]);
+        std::memcpy(copiedScreenshot.get(), state.screenshot, state.screenshotSize);
+
+        snapshot.push_back(RewindSaveState {
+            .buffer = copiedBuffer.get(),
+            .bufferSize = copyBufferSize,
+            .bufferContentSize = copyBufferSize,
+            .screenshot = copiedScreenshot.get(),
+            .screenshotSize = state.screenshotSize,
+            .frame = state.frame,
+            .ownedBuffer = std::move(copiedBuffer),
+            .ownedScreenshot = std::move(copiedScreenshot),
+        });
+    }
+    return snapshot;
 }
 
 void RewindManager::OnRewindFromState(RewindSaveState state)
 {
+    std::lock_guard<std::mutex> lock(RewindMutex);
     auto iterator = RewindWindow.begin();
-    while ((*iterator).frame > state.frame && iterator != RewindWindow.end())
+    while (iterator != RewindWindow.end() && (*iterator).frame > state.frame)
     {
         RewindSaveState lastState = *iterator;
         DeleteRewindSaveState(lastState);
-        iterator++;
-        RewindWindow.pop_front();
+        iterator = RewindWindow.erase(iterator);
     }
 }
 
@@ -116,7 +159,7 @@ RewindSaveState RewindManager::CreateRewindSaveState(int frame)
 
 void RewindManager::TrimRewindWindowIfRequired()
 {
-    int windowSize = RewindWindowSize();
+    const size_t windowSize = static_cast<size_t>(std::max(0, RewindWindowSize()));
     while (RewindWindow.size() > windowSize)
     {
         auto lastState = RewindWindow.back();
@@ -127,7 +170,8 @@ void RewindManager::TrimRewindWindowIfRequired()
 
 void RewindManager::Reset()
 {
-    for (auto state : RewindWindow)
+    std::lock_guard<std::mutex> lock(RewindMutex);
+    for (const auto& state : RewindWindow)
     {
         DeleteRewindSaveState(state);
     }
@@ -137,8 +181,10 @@ void RewindManager::Reset()
 
 void RewindManager::DeleteRewindSaveState(RewindSaveState state)
 {
-    delete[] state.buffer;
-    delete[] state.screenshot;
+    if (!state.ownedBuffer)
+        delete[] state.buffer;
+    if (!state.ownedScreenshot)
+        delete[] state.screenshot;
 }
 
 }

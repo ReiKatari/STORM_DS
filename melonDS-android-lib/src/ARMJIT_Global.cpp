@@ -1,5 +1,6 @@
 #include "ARMJIT_Global.h"
 #include "ARMJIT_Memory.h"
+#include "Platform.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -8,6 +9,8 @@
 #include <unistd.h>
 #endif
 
+#include <cerrno>
+#include <cstring>
 #include <stdio.h>
 #include <stdint.h>
 
@@ -105,7 +108,10 @@ void Init()
         #elif defined(APPLE_AARCH64) || defined(__NetBSD__) || defined(__OpenBSD__)
             // Apple aarch64 always uses dynamic allocation
         #else
-            mprotect(GetAlignedCodeMemoryStart(), CodeMemoryAlignedSize, PROT_EXEC | PROT_READ | PROT_WRITE);
+            if (mprotect(GetAlignedCodeMemoryStart(), CodeMemoryAlignedSize, PROT_EXEC | PROT_READ | PROT_WRITE) != 0)
+            {
+                Platform::Log(Platform::LogLevel::Error, "ARMJIT_Global: mprotect RWX failed (errno=%d: %s)\n", errno, strerror(errno));
+            }
         #endif
 
         ARMJIT_Memory::RegisterFaultHandler();

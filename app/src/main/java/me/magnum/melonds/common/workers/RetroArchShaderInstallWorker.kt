@@ -49,7 +49,11 @@ class RetroArchShaderInstallWorker @AssistedInject constructor(
     private var lastProgressEmitMs = 0L
 
     override suspend fun doWork(): Result {
-        setForeground(createForegroundInfo(applicationContext.getString(R.string.video_retroarch_shader_downloading), 0, true))
+        runCatching {
+            setForeground(createForegroundInfo(applicationContext.getString(R.string.video_retroarch_shader_downloading), 0, true))
+        }.onFailure {
+            if (it is CancellationException) throw it
+        }
 
         return withContext(Dispatchers.IO) {
             try {

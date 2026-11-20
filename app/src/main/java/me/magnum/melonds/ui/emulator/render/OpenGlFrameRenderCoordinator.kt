@@ -34,7 +34,10 @@ class OpenGlFrameRenderCoordinator : FrameRenderCoordinator {
             return
         }
         synchronized(surfacesLock) {
-            managedSurfaces.add(surface)
+            surfacesPendingRemoval.removeAll { it === surface }
+            if (managedSurfaces.none { it === surface }) {
+                managedSurfaces.add(surface)
+            }
         }
     }
 
@@ -78,7 +81,13 @@ class OpenGlFrameRenderCoordinator : FrameRenderCoordinator {
         stopped = true
         frameRenderThread.requestStop()
         frameRenderThread.quitSafely()
-        frameRenderThread.join()
+        try {
+            if (Thread.currentThread() !== frameRenderThread) {
+                frameRenderThread.join(STOP_JOIN_TIMEOUT_MS)
+            }
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
     }
 
     private inner class FrameRenderThread : HandlerThread("FrameRenderThread") {
@@ -262,5 +271,6 @@ class OpenGlFrameRenderCoordinator : FrameRenderCoordinator {
         const val MSG_RENDER_FRAME_FRAME_DEADLINE_NS = "frame-deadline"
 
         const val PREWARM_TIMEOUT_MINUTES = 10L
+        const val STOP_JOIN_TIMEOUT_MS = 1500L
     }
 }

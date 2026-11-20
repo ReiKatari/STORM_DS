@@ -13,6 +13,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import me.magnum.melonds.database.MelonDatabase
 import org.json.JSONArray
@@ -83,6 +84,7 @@ class SettingsBackupManager @Inject constructor(
 
     private val mirrorScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mirrorWriteQueued = AtomicBoolean(false)
+    private val mirrorWriteDirty = AtomicBoolean(false)
     private val isRestoringMirror = AtomicBoolean(false)
 
     init {
@@ -301,17 +303,25 @@ class SettingsBackupManager @Inject constructor(
         if (isRestoringMirror.get()) {
             return
         }
+        mirrorWriteDirty.set(true)
         if (!mirrorWriteQueued.compareAndSet(false, true)) {
             return
         }
 
         mirrorScope.launch {
             try {
-                writeInternalMirror()
+                while (mirrorWriteDirty.getAndSet(false)) {
+                    delay(500L)
+                    mirrorWriteDirty.set(false)
+                    writeInternalMirror()
+                }
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to write settings mirror", e)
             } finally {
                 mirrorWriteQueued.set(false)
+                if (mirrorWriteDirty.get() && !isRestoringMirror.get()) {
+                    requestMirrorWrite()
+                }
             }
         }
     }
@@ -663,10 +673,29 @@ class SettingsBackupManager @Inject constructor(
 
     private fun createCheatsJson(): JSONObject {
         val readableDb = database.openHelper.readableDatabase
+        val queries = mapOf(
+            "cheat_database" to (
+                listOf("id", "name") to
+                    "SELECT id, name FROM cheat_database WHERE id = 0 OR id IN (SELECT DISTINCT cheat_database_id FROM cheat WHERE cheat_database_id = 0 OR enabled = 1) ORDER BY id"
+                ),
+            "game" to (
+                listOf("id", "name", "game_code", "game_checksum") to
+                    "SELECT id, name, game_code, game_checksum FROM game WHERE id IN (SELECT DISTINCT cf.game_id FROM cheat_folder cf INNER JOIN cheat c ON c.cheat_folder_id = cf.id WHERE c.cheat_database_id = 0 OR c.enabled = 1) ORDER BY id"
+                ),
+            "cheat_folder" to (
+                listOf("id", "game_id", "name") to
+                    "SELECT id, game_id, name FROM cheat_folder WHERE id IN (SELECT DISTINCT cheat_folder_id FROM cheat WHERE cheat_database_id = 0 OR enabled = 1) ORDER BY id"
+                ),
+            "cheat" to (
+                listOf("id", "cheat_folder_id", "cheat_database_id", "name", "description", "code", "enabled") to
+                    "SELECT id, cheat_folder_id, cheat_database_id, name, description, code, enabled FROM cheat WHERE cheat_database_id = 0 OR enabled = 1 ORDER BY id"
+                ),
+        )
         return JSONObject().apply {
-            for ((tableName, columns) in CHEAT_TABLES) {
+            for ((tableName, spec) in queries) {
+                val (columns, sql) = spec
                 val rows = JSONArray()
-                val cursor = readableDb.query("SELECT ${columns.joinToString(", ")} FROM $tableName ORDER BY id")
+                val cursor = readableDb.query(sql)
                 cursor.use {
                     while (it.moveToNext()) {
                         val row = JSONObject()
@@ -720,10 +749,18 @@ class SettingsBackupManager @Inject constructor(
                     writableDb.insert(tableName, SQLiteDatabase.CONFLICT_REPLACE, values)
                 }
             }
+            writableDb.execSQL(
+                "INSERT OR IGNORE INTO cheat_database (id, name) VALUES (?, ?)",
+                arrayOf<Any>(
+                    me.magnum.melonds.database.entities.CheatDatabaseEntity.CUSTOM_CHEATS_DATABASE_ID,
+                    me.magnum.melonds.database.entities.CheatDatabaseEntity.CUSTOM_CHEATS_DATABASE_NAME,
+                ),
+            )
             writableDb.setTransactionSuccessful()
         } finally {
             writableDb.endTransaction()
         }
+        database.invalidationTracker.refreshVersionsAsync()
         if (!isRestoringMirror.get()) {
             requestMirrorWrite()
         }
@@ -987,6 +1024,7 @@ class SettingsBackupManager @Inject constructor(
     }
 
     private fun writeBytesAtomically(file: File, bytes: ByteArray) {
+        file.parentFile?.mkdirs()
         val tempFile = File(file.parentFile, "${file.name}.tmp")
         FileOutputStream(tempFile).use { stream ->
             stream.write(bytes)

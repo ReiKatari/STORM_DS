@@ -144,7 +144,7 @@ object RetroAchievementsEndpointStorage {
         if (!preferences.contains(KEY_BACKEND)) {
             preferences.edit()
                 .putString(KEY_BACKEND, RetroAchievementsOfflineBackend.BUILT_IN.preferenceValue)
-                .commit()
+                .apply()
         }
     }
 
@@ -208,7 +208,7 @@ object RetroAchievementsEndpointStorage {
                 .putBoolean(KEY_HARDCORE, false)
         }
 
-        check(editor.commit()) { "Could not persist RAOfflineProxy activation" }
+        editor.apply()
         return Result.success(snapshot(preferences))
     }
 
@@ -228,7 +228,7 @@ object RetroAchievementsEndpointStorage {
         if (selected == RetroAchievementsOfflineBackend.BUILT_IN) {
             applyHardcoreRestoreIfSafe(preferences, editor)
         }
-        check(editor.commit()) { "Could not persist RAOfflineProxy clear" }
+        editor.apply()
         return snapshot(preferences)
     }
 
@@ -256,7 +256,7 @@ object RetroAchievementsEndpointStorage {
             applyHardcoreRestoreIfSafe(preferences, editor)
         }
 
-        check(editor.commit()) { "Could not persist RA offline backend" }
+        editor.apply()
         return snapshot(preferences)
     }
 

@@ -25,6 +25,7 @@ class EmulatorSurfaceView(context: Context, attrs: AttributeSet? = null) : Surfa
     private var surfaceHeight = 0
     private var surfaceState = SurfaceState.UNINITIALIZED
     private var surface: Surface? = null
+    private var boundSurface: Surface? = null
     private var windowSurface: EGLSurface? = null
     private var renderer: EmulatorRenderer? = null
     private var surfaceLifecycleListener: SurfaceLifecycleListener? = null
@@ -68,16 +69,16 @@ class EmulatorSurfaceView(context: Context, attrs: AttributeSet? = null) : Surfa
     override fun surfaceCreated(holder: SurfaceHolder) {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
             try {
-                val currentDisplay = display
-                if (currentDisplay != null) {
-                    val maxRate = currentDisplay.supportedModes.maxOfOrNull { it.refreshRate } ?: currentDisplay.mode.refreshRate
-                    val targetRate = if (maxRate >= 85f) maxRate else 60f
-                    holder.surface.setFrameRate(
-                        targetRate,
-                        Surface.FRAME_RATE_COMPATIBILITY_DEFAULT,
-                        Surface.CHANGE_FRAME_RATE_ALWAYS
-                    )
+                val compatibility = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                    Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE
+                } else {
+                    Surface.FRAME_RATE_COMPATIBILITY_DEFAULT
                 }
+                holder.surface.setFrameRate(
+                    60f,
+                    compatibility,
+                    Surface.CHANGE_FRAME_RATE_ALWAYS
+                )
             } catch (_: Throwable) {
             }
         }
@@ -114,6 +115,7 @@ class EmulatorSurfaceView(context: Context, attrs: AttributeSet? = null) : Surfa
         val listener: SurfaceLifecycleListener?
         synchronized(surfaceLock) {
             surface = null
+            surfaceState = SurfaceState.UNINITIALIZED
             listener = surfaceLifecycleListener
         }
         listener?.onSurfaceDestroyed(this)
@@ -121,17 +123,22 @@ class EmulatorSurfaceView(context: Context, attrs: AttributeSet? = null) : Surfa
 
     fun doFrame(glContext: GlContext, presentFrameWrapper: PresentFrameWrapper) {
         synchronized(surfaceLock) {
-            if (windowSurface == null) {
-                if (!setupWindowSurface(glContext)) {
-                    return
-                }
-            } else if (surface == null) {
-                // We had a surface, but it has been destroyed
+            val currentSurface = surface
+            if (windowSurface != null && (currentSurface == null || boundSurface !== currentSurface)) {
                 windowSurface?.let {
                     glContext.destroyWindowSurface(it)
                     windowSurface = null
                 }
-                return
+                boundSurface = null
+                surfaceState = SurfaceState.UNINITIALIZED
+                if (currentSurface == null) {
+                    return
+                }
+            }
+            if (windowSurface == null) {
+                if (!setupWindowSurface(glContext)) {
+                    return
+                }
             }
 
             glContext.use(windowSurface!!)
@@ -156,7 +163,9 @@ class EmulatorSurfaceView(context: Context, attrs: AttributeSet? = null) : Surfa
 
     private fun setupWindowSurface(glContext: GlContext): Boolean {
         val currentSurface = surface ?: return false
+        if (!currentSurface.isValid) return false
         windowSurface = glContext.createWindowSurface(currentSurface)
+        boundSurface = currentSurface
         return true
     }
 
@@ -166,6 +175,8 @@ class EmulatorSurfaceView(context: Context, attrs: AttributeSet? = null) : Surfa
                 glContext.destroyWindowSurface(it)
                 windowSurface = null
             }
+            boundSurface = null
+            surfaceState = SurfaceState.UNINITIALIZED
         }
     }
 }

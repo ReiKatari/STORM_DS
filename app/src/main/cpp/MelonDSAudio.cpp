@@ -2,9 +2,10 @@
 #include "MicInputOboeCallback.h"
 #include "mic_blow.h"
 #include "OboeCallback.h"
+#include <atomic>
 #include <oboe/Oboe.h>
 
-#define MIC_BUFFER_SIZE 2048
+#define MIC_BUFFER_SIZE 8192
 
 std::mutex activeInstanceMutex;
 std::weak_ptr<MelonDSAndroid::MelonInstance> activeInstance;
@@ -19,9 +20,9 @@ std::shared_ptr<MicInputOboeCallback> micInputCallback;
 
 MelonDSAndroid::AudioSettings currentAudioSettings;
 std::mutex micBufferMutex;
-int actualMicSource = 0;
-bool isMicInputEnabled = true;
-bool isMicOn = false;
+std::atomic<int> actualMicSource{0};
+std::atomic<bool> isMicInputEnabled{true};
+std::atomic<bool> isMicOn{false};
 int micBufferReadPos = 0;
 
 namespace MelonDSAndroid
@@ -30,7 +31,7 @@ namespace MelonDSAndroid
 
     void resetAudioOutputStream();
 
-    int getAudioBufferSizeInFrames(int audioLatency)
+    static int getAudioBufferSizeInFrames(int audioLatency)
     {
         switch (audioLatency) {
             case 0:
@@ -44,7 +45,19 @@ namespace MelonDSAndroid
         }
     }
 
-    void setupAudioOutputStream(int audioLatency, int volume)
+    static void applyOutputDspSettings(const std::shared_ptr<OboeCallback>& callback, const AudioSettings& settings)
+    {
+        if (!callback)
+            return;
+
+        __atomic_store_n(&callback->softLimiterEnabled, settings.softLimiterEnabled, __ATOMIC_RELAXED);
+        __atomic_store_n(&callback->bassBoostEnabled, settings.bassBoostEnabled, __ATOMIC_RELAXED);
+        __atomic_store_n(&callback->bassBoostStrength, settings.bassBoostStrength, __ATOMIC_RELAXED);
+        __atomic_store_n(&callback->spatialAudioEnabled, settings.spatialAudioEnabled, __ATOMIC_RELAXED);
+        __atomic_store_n(&callback->reverbEnabled, settings.reverbEnabled, __ATOMIC_RELAXED);
+    }
+
+    static void setupAudioOutputStreamLocked(int audioLatency, int volume)
     {
         oboe::PerformanceMode performanceMode;
         switch (audioLatency) {
@@ -62,15 +75,14 @@ namespace MelonDSAndroid
         }
 
         outputCallback = std::make_shared<OboeCallback>(volume, resetAudioOutputStream);
-        outputCallback->softLimiterEnabled = currentAudioSettings.softLimiterEnabled;
-        outputCallback->bassBoostEnabled = currentAudioSettings.bassBoostEnabled;
-        outputCallback->bassBoostStrength = currentAudioSettings.bassBoostStrength;
-        outputCallback->spatialAudioEnabled = currentAudioSettings.spatialAudioEnabled;
-        outputCallback->reverbEnabled = currentAudioSettings.reverbEnabled;
+        applyOutputDspSettings(outputCallback, currentAudioSettings);
 
         stabilizedOutputCallback = std::make_shared<oboe::StabilizedCallback>(outputCallback.get());
 
-        outputCallback->setActiveInstance(activeInstance);
+        {
+            std::lock_guard<std::mutex> instanceLock(activeInstanceMutex);
+            outputCallback->setActiveInstance(activeInstance);
+        }
 
         oboe::AudioStreamBuilder streamBuilder;
         streamBuilder.setChannelCount(2);
@@ -106,7 +118,7 @@ namespace MelonDSAndroid
                 getAudioBufferSizeInFrames(audioLatency)));
     }
 
-    void cleanupAudioOutputStream()
+    static void cleanupAudioOutputStreamLocked()
     {
         if (audioStream) {
             if (audioStream->getState() < oboe::StreamState::Closing) {
@@ -122,18 +134,33 @@ namespace MelonDSAndroid
 
     void resetAudioOutputStream()
     {
-        cleanupAudioOutputStream();
-        setupAudioOutputStream(currentAudioSettings.audioLatency, currentAudioSettings.volume);
-        if (audioStream) {
-            audioStream->requestStart();
+        std::lock_guard<std::mutex> streamLock(audioStreamMutex);
+        {
+            std::lock_guard<std::mutex> instanceLock(activeInstanceMutex);
+            if (activeInstance.expired())
+                return;
+        }
+
+        cleanupAudioOutputStreamLocked();
+        if (currentAudioSettings.soundEnabled && currentAudioSettings.volume > 0) {
+            setupAudioOutputStreamLocked(currentAudioSettings.audioLatency, currentAudioSettings.volume);
+            if (audioStream) {
+                audioStream->requestStart();
+            }
         }
     }
 
     // MICROPHONE
 
-    void setupMicInputStream()
+    static void setupMicInputStreamLocked()
     {
-        micInputCallback = std::make_shared<MicInputOboeCallback>(MIC_BUFFER_SIZE, micBufferMutex);
+        std::shared_ptr<MicInputOboeCallback> callback = std::make_shared<MicInputOboeCallback>(MIC_BUFFER_SIZE, micBufferMutex);
+        {
+            std::lock_guard<std::mutex> lock(micBufferMutex);
+            micInputCallback = callback;
+            micBufferReadPos = 0;
+        }
+
         oboe::AudioStreamBuilder micStreamBuilder;
         micStreamBuilder.setChannelCount(1);
         micStreamBuilder.setFramesPerCallback(1024);
@@ -145,67 +172,78 @@ namespace MelonDSAndroid
         micStreamBuilder.setPerformanceMode(oboe::PerformanceMode::None);
         micStreamBuilder.setSharingMode(oboe::SharingMode::Exclusive);
         micStreamBuilder.setUsage(oboe::Usage::Game);
-        micStreamBuilder.setDataCallback(micInputCallback);
+        micStreamBuilder.setDataCallback(callback);
 
         oboe::Result micResult = micStreamBuilder.openStream(micInputStream);
         if (micResult != oboe::Result::OK)
         {
-            actualMicSource = 1;
+            actualMicSource.store(1, std::memory_order_relaxed);
             Log(Error, "Failed to init mic audio stream");
-            micInputCallback = nullptr;
-        }
-    }
-
-    void cleanupMicInputStream()
-    {
-        if (micInputStream)
-        {
-            micInputStream->requestStop();
-            micInputStream->close();
-
             micInputStream = nullptr;
-
             std::lock_guard<std::mutex> lock(micBufferMutex);
             micInputCallback = nullptr;
         }
     }
 
-    void startMicStreamIfAllowed()
+    static void cleanupMicInputStreamLocked()
     {
-        if (actualMicSource == 2 && micInputStream && isMicInputEnabled && isMicOn)
+        if (micInputStream)
+        {
+            micInputStream->requestStop();
+            micInputStream->close();
+            micInputStream = nullptr;
+        }
+
+        std::lock_guard<std::mutex> lock(micBufferMutex);
+        micInputCallback = nullptr;
+        micBufferReadPos = 0;
+    }
+
+    static void startMicStreamIfAllowedLocked()
+    {
+        if (actualMicSource.load(std::memory_order_relaxed) == 2 &&
+            micInputStream &&
+            isMicInputEnabled.load(std::memory_order_relaxed) &&
+            isMicOn.load(std::memory_order_relaxed))
+        {
             micInputStream->requestStart();
+        }
     }
 
     void userEnableMic()
     {
-        isMicInputEnabled = true;
-        startMicStreamIfAllowed();
+        std::lock_guard<std::mutex> streamLock(audioStreamMutex);
+        isMicInputEnabled.store(true, std::memory_order_relaxed);
+        startMicStreamIfAllowedLocked();
     }
 
     void userDisableMic()
     {
-        isMicInputEnabled = false;
+        std::lock_guard<std::mutex> streamLock(audioStreamMutex);
+        isMicInputEnabled.store(false, std::memory_order_relaxed);
         if (micInputStream)
             micInputStream->requestStop();
     }
 
     void enableMic()
     {
-        isMicOn = true;
-        startMicStreamIfAllowed();
+        std::lock_guard<std::mutex> streamLock(audioStreamMutex);
+        isMicOn.store(true, std::memory_order_relaxed);
+        startMicStreamIfAllowedLocked();
     }
 
     void disableMic()
     {
-        isMicOn = false;
+        std::lock_guard<std::mutex> streamLock(audioStreamMutex);
+        isMicOn.store(false, std::memory_order_relaxed);
         if (micInputStream)
             micInputStream->requestStop();
     }
 
     int readMic(s16* data, int maxlength)
     {
-        int micSource = actualMicSource;
-        if (!isMicInputEnabled)
+        int micSource = actualMicSource.load(std::memory_order_relaxed);
+        if (!isMicInputEnabled.load(std::memory_order_relaxed))
         {
             micSource = 0;
         }
@@ -218,13 +256,14 @@ namespace MelonDSAndroid
 
         int micBufferLength;
         s16* micBuffer;
+        std::unique_lock<std::mutex> micLock(micBufferMutex, std::defer_lock);
 
         if (micSource == 2)
         {
-            micBufferMutex.lock();
+            micLock.lock();
             if (!micInputCallback)
             {
-                micBufferMutex.unlock();
+                micLock.unlock();
                 memset(data, 0, maxlength * sizeof(s16));
                 return maxlength;
             }
@@ -264,9 +303,6 @@ namespace MelonDSAndroid
             readlength += thislen;
         }
 
-        if (micSource == 2)
-            micBufferMutex.unlock();
-
         return readlength;
     }
 
@@ -274,79 +310,85 @@ namespace MelonDSAndroid
 
     void setupAudio(AudioSettings audioSettings)
     {
-        isMicOn = false;
-        actualMicSource = audioSettings.micSource;
+        std::lock_guard<std::mutex> streamLock(audioStreamMutex);
+        isMicOn.store(false, std::memory_order_relaxed);
+        actualMicSource.store(audioSettings.micSource, std::memory_order_relaxed);
         currentAudioSettings = audioSettings;
 
         if (audioSettings.soundEnabled)
-            setupAudioOutputStream(audioSettings.audioLatency, audioSettings.volume);
+            setupAudioOutputStreamLocked(audioSettings.audioLatency, audioSettings.volume);
 
         if (audioSettings.micSource == 2)
-            setupMicInputStream();
+            setupMicInputStreamLocked();
     }
 
     void updateAudioSettings(AudioSettings audioSettings)
     {
-        if (outputCallback) {
-            outputCallback->softLimiterEnabled = audioSettings.softLimiterEnabled;
-            outputCallback->bassBoostEnabled = audioSettings.bassBoostEnabled;
-            outputCallback->bassBoostStrength = audioSettings.bassBoostStrength;
-            outputCallback->spatialAudioEnabled = audioSettings.spatialAudioEnabled;
-            outputCallback->reverbEnabled = audioSettings.reverbEnabled;
-        }
+        std::lock_guard<std::mutex> streamLock(audioStreamMutex);
+        applyOutputDspSettings(outputCallback, audioSettings);
+
+        const int previousLatency = currentAudioSettings.audioLatency;
+        const int previousVolume = currentAudioSettings.volume;
+        currentAudioSettings = audioSettings;
 
         if (audioSettings.soundEnabled && audioSettings.volume > 0) {
             if (!audioStream) {
-                setupAudioOutputStream(audioSettings.audioLatency, audioSettings.volume);
-            } else if (currentAudioSettings.audioLatency != audioSettings.audioLatency || currentAudioSettings.volume != audioSettings.volume) {
+                setupAudioOutputStreamLocked(audioSettings.audioLatency, audioSettings.volume);
+            } else if (previousLatency != audioSettings.audioLatency || previousVolume != audioSettings.volume) {
                 // Recreate audio stream with new settings
-                cleanupAudioOutputStream();
-                setupAudioOutputStream(audioSettings.audioLatency, audioSettings.volume);
+                cleanupAudioOutputStreamLocked();
+                setupAudioOutputStreamLocked(audioSettings.audioLatency, audioSettings.volume);
             }
         } else if (audioStream) {
-            cleanupAudioOutputStream();
+            cleanupAudioOutputStreamLocked();
         }
 
-        currentAudioSettings = audioSettings;
-
-        int oldMicSource = actualMicSource;
-        actualMicSource = audioSettings.micSource;
+        int oldMicSource = actualMicSource.load(std::memory_order_relaxed);
+        actualMicSource.store(audioSettings.micSource, std::memory_order_relaxed);
 
         if (oldMicSource == 2 && audioSettings.micSource != 2) {
             // No longer using device mic. Destroy stream
-            cleanupMicInputStream();
+            cleanupMicInputStreamLocked();
         } else if (oldMicSource != 2 && audioSettings.micSource == 2) {
             // Now using device mic. Setup stream
-            setupMicInputStream();
+            setupMicInputStreamLocked();
         }
-
-        currentAudioSettings = audioSettings;
     }
 
     void setAudioActiveInstance(std::shared_ptr<MelonInstance> instance)
     {
-        activeInstance = instance;
+        std::lock_guard<std::mutex> streamLock(audioStreamMutex);
+        {
+            std::lock_guard<std::mutex> instanceLock(activeInstanceMutex);
+            activeInstance = instance;
+        }
         if (outputCallback)
-            outputCallback->setActiveInstance(activeInstance);
+            outputCallback->setActiveInstance(instance);
     }
 
     void cleanupAudio()
     {
-        cleanupAudioOutputStream();
-        cleanupMicInputStream();
-        activeInstance.reset();
+        std::lock_guard<std::mutex> streamLock(audioStreamMutex);
+        cleanupAudioOutputStreamLocked();
+        cleanupMicInputStreamLocked();
+        {
+            std::lock_guard<std::mutex> instanceLock(activeInstanceMutex);
+            activeInstance.reset();
+        }
     }
 
     void startAudio()
     {
+        std::lock_guard<std::mutex> streamLock(audioStreamMutex);
         if (audioStream)
             audioStream->requestStart();
 
-        startMicStreamIfAllowed();
+        startMicStreamIfAllowedLocked();
     }
 
     void pauseAudio()
     {
+        std::lock_guard<std::mutex> streamLock(audioStreamMutex);
         if (audioStream)
             audioStream->requestPause();
 

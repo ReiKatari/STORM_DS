@@ -6,11 +6,16 @@ import android.util.LruCache
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.io.File
+import java.io.FileOutputStream
+import java.io.OutputStreamWriter
 import java.text.Normalizer
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * High-performance Two-Tier Translation Cache:
@@ -27,10 +32,16 @@ class TranslationCache(
     private val lru = LruCache<String, String>(maxEntries)
     private val diskCacheMap = ConcurrentHashMap<String, String>()
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val cacheLock = Any()
+    private val writeLock = Any()
 
     private var activeGameKey: String = "global"
     @Volatile
+    private var loadedGameKey: String? = null
+    @Volatile
     private var isDirty = false
+    private val dirtyVersion = AtomicLong(0L)
+    private val persistQueued = AtomicBoolean(false)
 
     private val cacheDir: File by lazy {
         val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
@@ -54,11 +65,32 @@ class TranslationCache(
 
     fun setGameKey(gameKey: String) {
         val safeKey = gameKey.replace(Regex("[^a-zA-Z0-9_]"), "_").take(32)
-        if (safeKey == activeGameKey && diskCacheMap.isNotEmpty()) return
+        val dirtySnapshot: Pair<String, Map<String, String>>?
+        synchronized(cacheLock) {
+            if (safeKey == activeGameKey && (loadedGameKey == safeKey || diskCacheMap.isNotEmpty())) {
+                return
+            }
+            dirtySnapshot = if (isDirty) {
+                isDirty = false
+                dirtyVersion.incrementAndGet()
+                activeGameKey to HashMap(diskCacheMap)
+            } else {
+                null
+            }
+            activeGameKey = safeKey
+            loadedGameKey = null
+            diskCacheMap.clear()
+        }
 
-        flush()
-        activeGameKey = safeKey
-        loadFromDisk(safeKey)
+        if (dirtySnapshot != null) {
+            val (prevKey, entries) = dirtySnapshot
+            scope.launch {
+                writeSnapshotToDisk(prevKey, entries)
+            }
+        }
+        scope.launch {
+            loadFromDisk(safeKey)
+        }
     }
 
     private fun getCacheFile(safeKey: String): File {
@@ -70,7 +102,7 @@ class TranslationCache(
     }
 
     private fun loadFromDisk(safeKey: String) {
-        diskCacheMap.clear()
+        val loaded = LinkedHashMap<String, String>()
         for (file in listOf(getCacheFile(safeKey), getStormDictFile(safeKey))) {
             if (!file.exists() || !file.isFile) continue
             try {
@@ -81,16 +113,25 @@ class TranslationCache(
                     val k = keys.next()
                     val v = json.optString(k, "")
                     if (v.isNotBlank()) {
-                        diskCacheMap[k] = v
-                        lru.put(k, v)
+                        loaded[k] = v
                     }
                 }
             } catch (e: Throwable) {
                 Log.w("TranslationCache", "Failed to load translation memory from [${file.name}]: ${e.message}")
             }
         }
-        if (diskCacheMap.isNotEmpty()) {
-            Log.i("TranslationCache", "Loaded ${diskCacheMap.size} persistent translations for game [$safeKey]")
+        synchronized(cacheLock) {
+            if (activeGameKey != safeKey) return
+            for ((k, v) in loaded) {
+                diskCacheMap.putIfAbsent(k, v)
+                if (lru.get(k) == null) {
+                    lru.put(k, v)
+                }
+            }
+            loadedGameKey = safeKey
+        }
+        if (loaded.isNotEmpty()) {
+            Log.i("TranslationCache", "Loaded ${loaded.size} persistent translations for game [$safeKey]")
         }
     }
 
@@ -119,47 +160,113 @@ class TranslationCache(
         if (translation.isBlank()) return
         val exactKey = key(engine, sourceLang, targetLang, text)
         val sharedDictKey = dictKey(sourceLang, targetLang, text)
-        lru.put(exactKey, translation)
-        lru.put(sharedDictKey, translation)
-        diskCacheMap[exactKey] = translation
-        diskCacheMap[sharedDictKey] = translation
-        isDirty = true
-
-        scope.launch {
-            saveToDisk()
+        synchronized(cacheLock) {
+            lru.put(exactKey, translation)
+            lru.put(sharedDictKey, translation)
+            diskCacheMap[exactKey] = translation
+            diskCacheMap[sharedDictKey] = translation
+            isDirty = true
+            dirtyVersion.incrementAndGet()
         }
+        scheduleDebouncedSave()
     }
 
     fun flush() {
-        if (!isDirty) return
+        val snapshot: Pair<String, Map<String, String>>?
+        synchronized(cacheLock) {
+            if (!isDirty) return
+            isDirty = false
+            dirtyVersion.incrementAndGet()
+            snapshot = activeGameKey to HashMap(diskCacheMap)
+        }
+        val (safeKey, entries) = snapshot ?: return
         scope.launch {
-            saveToDisk()
+            writeSnapshotToDisk(safeKey, entries)
         }
     }
 
-    @Synchronized
-    private fun saveToDisk() {
-        if (!isDirty) return
-        try {
-            val safeKey = activeGameKey
-            val cacheFile = getCacheFile(safeKey)
-            val dictFile = getStormDictFile(safeKey)
-            val fullJson = JSONObject()
-            val dictJson = JSONObject()
-            for ((k, v) in diskCacheMap) {
-                fullJson.put(k, v)
-                if (k.contains("->")) {
-                    dictJson.put(k, v)
+    private fun scheduleDebouncedSave() {
+        if (!persistQueued.compareAndSet(false, true)) {
+            return
+        }
+        scope.launch {
+            var lastWriteSucceeded = true
+            try {
+                while (isDirty) {
+                    delay(750L)
+                    val snapshotKey: String
+                    val snapshotEntries: Map<String, String>
+                    val targetVersion: Long
+                    synchronized(cacheLock) {
+                        if (!isDirty) break
+                        targetVersion = dirtyVersion.get()
+                        snapshotKey = activeGameKey
+                        snapshotEntries = HashMap(diskCacheMap)
+                    }
+                    val wrote = writeSnapshotToDisk(snapshotKey, snapshotEntries)
+                    if (wrote) {
+                        synchronized(cacheLock) {
+                            if (dirtyVersion.get() == targetVersion && activeGameKey == snapshotKey) {
+                                isDirty = false
+                            }
+                        }
+                    } else {
+                        lastWriteSucceeded = false
+                        break
+                    }
+                }
+            } finally {
+                persistQueued.set(false)
+                if (lastWriteSucceeded && isDirty) {
+                    scheduleDebouncedSave()
                 }
             }
-            cacheFile.writeText(fullJson.toString(), Charsets.UTF_8)
-            if (dictJson.length() > 0) {
-                dictFile.writeText(dictJson.toString(2), Charsets.UTF_8)
+        }
+    }
+
+    private fun writeSnapshotToDisk(safeKey: String, entries: Map<String, String>): Boolean {
+        return synchronized(writeLock) {
+            try {
+                val cacheFile = getCacheFile(safeKey)
+                val dictFile = getStormDictFile(safeKey)
+                val fullJson = JSONObject()
+                val dictJson = JSONObject()
+                for ((k, v) in entries) {
+                    fullJson.put(k, v)
+                    if (k.contains("->")) {
+                        dictJson.put(k, v)
+                    }
+                }
+                writeTextAtomically(cacheFile, fullJson.toString())
+                if (dictJson.length() > 0) {
+                    writeTextAtomically(dictFile, dictJson.toString(2))
+                }
+                Log.i("TranslationCache", "Saved ${entries.size} entries to persistent cache and ${dictFile.name}")
+                true
+            } catch (e: Throwable) {
+                Log.w("TranslationCache", "Failed to write persistent translation cache: ${e.message}")
+                false
             }
-            isDirty = false
-            Log.i("TranslationCache", "Saved ${diskCacheMap.size} entries to persistent cache and ${dictFile.name}")
-        } catch (e: Throwable) {
-            Log.w("TranslationCache", "Failed to write persistent translation cache: ${e.message}")
+        }
+    }
+
+    private fun writeTextAtomically(file: File, text: String) {
+        file.parentFile?.mkdirs()
+        val tempFile = File(file.parentFile, "${file.name}.tmp")
+        FileOutputStream(tempFile).use { stream ->
+            OutputStreamWriter(stream, Charsets.UTF_8).use { writer ->
+                writer.write(text)
+                writer.flush()
+            }
+        }
+        if (!tempFile.renameTo(file)) {
+            if (file.exists()) {
+                file.delete()
+            }
+            if (!tempFile.renameTo(file)) {
+                tempFile.copyTo(file, overwrite = true)
+                tempFile.delete()
+            }
         }
     }
 
@@ -169,21 +276,27 @@ class TranslationCache(
         val lowerNorm = norm.lowercase(java.util.Locale.ROOT)
         val keysToRemove = mutableListOf<String>()
 
-        for ((k, v) in diskCacheMap) {
-            if (k.contains(norm, ignoreCase = true) || v.contains(norm, ignoreCase = true) ||
-                k.lowercase(java.util.Locale.ROOT).contains(lowerNorm) || v.lowercase(java.util.Locale.ROOT).contains(lowerNorm)) {
-                keysToRemove.add(k)
+        synchronized(cacheLock) {
+            for ((k, v) in diskCacheMap) {
+                if (k.contains(norm, ignoreCase = true) || v.contains(norm, ignoreCase = true) ||
+                    k.lowercase(java.util.Locale.ROOT).contains(lowerNorm) || v.lowercase(java.util.Locale.ROOT).contains(lowerNorm)) {
+                    keysToRemove.add(k)
+                }
+            }
+
+            for (k in keysToRemove) {
+                diskCacheMap.remove(k)
+                lru.remove(k)
+            }
+
+            if (keysToRemove.isNotEmpty()) {
+                isDirty = true
+                dirtyVersion.incrementAndGet()
             }
         }
 
-        for (k in keysToRemove) {
-            diskCacheMap.remove(k)
-            lru.remove(k)
-        }
-
         if (keysToRemove.isNotEmpty()) {
-            isDirty = true
-            flush()
+            scheduleDebouncedSave()
             Log.i("TranslationCache", "Evicted ${keysToRemove.size} cached translations containing '$term'")
         }
     }
@@ -197,19 +310,28 @@ class TranslationCache(
     }
 
     fun clearAll() {
-        lru.evictAll()
-        diskCacheMap.clear()
-        runCatching {
-            cacheDir.listFiles { f -> f.isFile && f.name.startsWith("cache_") && f.name.endsWith(".json") }
-                ?.forEach { it.delete() }
-            translationsDir.listFiles { f -> f.isFile && f.name.endsWith(".stormdict.json") }
-                ?.forEach { it.delete() }
+        val currentKey: String
+        synchronized(cacheLock) {
+            lru.evictAll()
+            diskCacheMap.clear()
+            isDirty = false
+            dirtyVersion.incrementAndGet()
+            currentKey = activeGameKey
         }
-        val file = getCacheFile(activeGameKey)
-        if (file.exists()) file.delete()
-        val dictFile = getStormDictFile(activeGameKey)
-        if (dictFile.exists()) dictFile.delete()
-        isDirty = false
+        scope.launch {
+            synchronized(writeLock) {
+                runCatching {
+                    cacheDir.listFiles { f -> f.isFile && (f.name.startsWith("cache_") && f.name.endsWith(".json") || f.name.endsWith(".tmp")) }
+                        ?.forEach { it.delete() }
+                    translationsDir.listFiles { f -> f.isFile && (f.name.endsWith(".stormdict.json") || f.name.endsWith(".tmp")) }
+                        ?.forEach { it.delete() }
+                }
+                val file = getCacheFile(currentKey)
+                if (file.exists()) file.delete()
+                val dictFile = getStormDictFile(currentKey)
+                if (dictFile.exists()) dictFile.delete()
+            }
+        }
     }
 
     companion object {

@@ -29,6 +29,7 @@ constexpr const char* kDescriptorIndexingExtension = VK_EXT_DESCRIPTOR_INDEXING_
 constexpr const char* kOptionalHostQueryResetExtension = VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME;
 constexpr const char* kOptionalExternalMemoryExtension = VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME;
 constexpr const char* kOptionalAndroidHardwareBufferExtension = VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME;
+constexpr const char* kOptionalQueueFamilyForeignExtension = VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME;
 constexpr const char* kOptionalDebugUtilsExtension = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
 constexpr const char* kValidationLayerName = "VK_LAYER_KHRONOS_validation";
 std::atomic<bool> gForceDisableTimelineSemaphores{false};
@@ -212,13 +213,22 @@ bool VulkanContext::initializeLocked()
         }
     }
 
+    std::vector<u32> candidateApiVersions;
+    if (isApiAtLeast(loaderApiVersion, 1, 3))
+        candidateApiVersions.push_back(VK_API_VERSION_1_3);
+    if (isApiAtLeast(loaderApiVersion, 1, 2))
+        candidateApiVersions.push_back(VK_API_VERSION_1_2);
+    if (isApiAtLeast(loaderApiVersion, 1, 1))
+        candidateApiVersions.push_back(VK_API_VERSION_1_1);
+    candidateApiVersions.push_back(VK_API_VERSION_1_0);
+
     VkApplicationInfo appInfo{};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     appInfo.pApplicationName = "melonDS-android";
     appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
     appInfo.pEngineName = "melonDS";
     appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.apiVersion = isApiAtLeast(loaderApiVersion, 1, 1) ? VK_API_VERSION_1_1 : VK_API_VERSION_1_0;
+    appInfo.apiVersion = candidateApiVersions.front();
 
     u32 extensionCount = 0;
     if (vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr) != VK_SUCCESS)
@@ -293,28 +303,29 @@ bool VulkanContext::initializeLocked()
     if (enableValidationLayers)
         instanceCreateInfo.pNext = &debugMessengerCreateInfo;
 
-    if (vkCreateInstance(&instanceCreateInfo, nullptr, &Instance) != VK_SUCCESS)
+    u32 effectiveInstanceApiVersion = VK_API_VERSION_1_0;
+    for (u32 candidateVersion : candidateApiVersions)
     {
-        appInfo.apiVersion = VK_API_VERSION_1_0;
-        if (vkCreateInstance(&instanceCreateInfo, nullptr, &Instance) != VK_SUCCESS)
+        appInfo.apiVersion = candidateVersion;
+        if (vkCreateInstance(&instanceCreateInfo, nullptr, &Instance) == VK_SUCCESS && Instance != VK_NULL_HANDLE)
         {
-            if (VulkanDispatch::IsUsingCustomDriver() && VulkanDispatch::FallbackToSystemDriver())
-            {
-                appInfo.apiVersion = VK_API_VERSION_1_1;
-                if (vkCreateInstance(&instanceCreateInfo, nullptr, &Instance) != VK_SUCCESS)
-                {
-                    appInfo.apiVersion = VK_API_VERSION_1_0;
-                    vkCreateInstance(&instanceCreateInfo, nullptr, &Instance);
-                }
-            }
+            effectiveInstanceApiVersion = candidateVersion;
+            break;
         }
-        if (Instance == VK_NULL_HANDLE)
-        {
-            Platform::Log(Platform::LogLevel::Error, "VulkanContext: vkCreateInstance failed");
-            shutdownLocked();
-            return false;
-        }
+        Instance = VK_NULL_HANDLE;
     }
+    if (Instance == VK_NULL_HANDLE)
+    {
+        if (VulkanDispatch::IsUsingCustomDriver() && VulkanDispatch::FallbackToSystemDriver())
+        {
+            shutdownLocked();
+            return initializeLocked();
+        }
+        Platform::Log(Platform::LogLevel::Error, "VulkanContext: vkCreateInstance failed");
+        shutdownLocked();
+        return false;
+    }
+    EffectiveInstanceApiVersion = effectiveInstanceApiVersion;
     VulkanDispatch::LoadInstance(Instance);
 
     if (enableValidationLayers)
@@ -358,6 +369,7 @@ bool VulkanContext::initializeLocked()
     vkEnumeratePhysicalDevices(Instance, &physicalDeviceCount, physicalDevices.data());
 
     bool ahbInteropRequested = false;
+    bool hostQueryResetRequested = false;
     for (VkPhysicalDevice candidate : physicalDevices)
     {
         u32 deviceExtensionCount = 0;
@@ -371,7 +383,9 @@ bool VulkanContext::initializeLocked()
         VkPhysicalDeviceProperties deviceProperties{};
         vkGetPhysicalDeviceProperties(candidate, &deviceProperties);
         const VulkanDeviceProfile candidateProfile = makeDeviceProfile(deviceProperties);
-        const bool apiAtLeast12 = isApiAtLeast(deviceProperties.apiVersion, 1, 2);
+        const u32 activeApiVersion = std::min(effectiveInstanceApiVersion, deviceProperties.apiVersion);
+        const bool apiAtLeast11 = isApiAtLeast(activeApiVersion, 1, 1);
+        const bool apiAtLeast12 = isApiAtLeast(activeApiVersion, 1, 2);
 
         std::vector<const char*> requiredDeviceExtensions(
             kRequiredDeviceExtensions.begin(),
@@ -399,21 +413,27 @@ bool VulkanContext::initializeLocked()
         std::vector<const char*> enabledDeviceExtensions(requiredDeviceExtensions.begin(), requiredDeviceExtensions.end());
         const bool hasExternalMemoryExtension = hasExtension(kOptionalExternalMemoryExtension, deviceExtensions);
         const bool hasAndroidHardwareBufferExtension = hasExtension(kOptionalAndroidHardwareBufferExtension, deviceExtensions);
+        const bool hasQueueFamilyForeignExtension = hasExtension(kOptionalQueueFamilyForeignExtension, deviceExtensions);
         bool enableAhbInterop = false;
-        if (apiAtLeast12 && hasExternalMemoryExtension && hasAndroidHardwareBufferExtension)
+        if (apiAtLeast12
+            && hasExternalMemoryExtension
+            && hasAndroidHardwareBufferExtension
+            && hasQueueFamilyForeignExtension)
         {
             enabledDeviceExtensions.push_back(kOptionalExternalMemoryExtension);
             enabledDeviceExtensions.push_back(kOptionalAndroidHardwareBufferExtension);
+            enabledDeviceExtensions.push_back(kOptionalQueueFamilyForeignExtension);
             enableAhbInterop = true;
         }
-        else if (hasAndroidHardwareBufferExtension && !hasExternalMemoryExtension)
+        else if (hasAndroidHardwareBufferExtension && (!hasExternalMemoryExtension || !hasQueueFamilyForeignExtension))
         {
             Platform::Log(
                 Platform::LogLevel::Warn,
-                "VulkanContext: device '%s' reports %s without %s; disabling AndroidHardwareBuffer interop",
+                "VulkanContext: device '%s' reports %s without %s/%s; disabling AndroidHardwareBuffer interop",
                 deviceProperties.deviceName,
                 kOptionalAndroidHardwareBufferExtension,
-                kOptionalExternalMemoryExtension
+                kOptionalExternalMemoryExtension,
+                kOptionalQueueFamilyForeignExtension
             );
         }
         else if (!hasAndroidHardwareBufferExtension)
@@ -425,8 +445,8 @@ bool VulkanContext::initializeLocked()
                 kOptionalAndroidHardwareBufferExtension
             );
         }
-        const bool hasHostQueryReset = hasExtension(kOptionalHostQueryResetExtension, deviceExtensions);
-        if (hasHostQueryReset)
+        const bool hasHostQueryReset = apiAtLeast11 && hasExtension(kOptionalHostQueryResetExtension, deviceExtensions);
+        if (hasHostQueryReset && !apiAtLeast12)
             enabledDeviceExtensions.push_back(kOptionalHostQueryResetExtension);
 
         u32 queueFamilyCount = 0;
@@ -464,9 +484,10 @@ bool VulkanContext::initializeLocked()
 
         const VkQueueFamilyProperties& selectedQueueFamilyProps = queueFamilies[static_cast<u32>(selectedQueueFamily)];
         const bool queueSupportsTimestamps = selectedQueueFamilyProps.timestampValidBits > 0;
-        const bool timelineExtensionAvailable = apiAtLeast12 || hasExtension(kTimelineSemaphoreExtension, deviceExtensions);
+        const bool timelineExtensionAvailable =
+            apiAtLeast11 && (apiAtLeast12 || hasExtension(kTimelineSemaphoreExtension, deviceExtensions));
         const bool descriptorIndexingExtensionAvailable =
-            apiAtLeast12 || hasExtension(kDescriptorIndexingExtension, deviceExtensions);
+            apiAtLeast11 && (apiAtLeast12 || hasExtension(kDescriptorIndexingExtension, deviceExtensions));
 
         VkPhysicalDeviceTimelineSemaphoreFeatures timelineFeaturesAvailable{};
         timelineFeaturesAvailable.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES;
@@ -488,7 +509,7 @@ bool VulkanContext::initializeLocked()
             descriptorIndexingFeaturesAvailable.pNext = queryFeatureChainHead;
             queryFeatureChainHead = &descriptorIndexingFeaturesAvailable;
         }
-        if (apiAtLeast12 || hasHostQueryReset)
+        if (apiAtLeast11 && (apiAtLeast12 || hasHostQueryReset))
         {
             hostQueryResetFeaturesAvailable.pNext = queryFeatureChainHead;
             queryFeatureChainHead = &hostQueryResetFeaturesAvailable;
@@ -498,15 +519,10 @@ bool VulkanContext::initializeLocked()
         deviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
         deviceFeatures2.pNext = queryFeatureChainHead;
         PFN_vkGetPhysicalDeviceFeatures2 getPhysicalDeviceFeatures2 = nullptr;
-        if (isApiAtLeast(deviceProperties.apiVersion, 1, 1))
+        if (apiAtLeast11)
         {
             getPhysicalDeviceFeatures2 = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2>(
                 vkGetInstanceProcAddr(Instance, "vkGetPhysicalDeviceFeatures2"));
-        }
-        if (getPhysicalDeviceFeatures2 == nullptr)
-        {
-            getPhysicalDeviceFeatures2 = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2>(
-                vkGetInstanceProcAddr(Instance, "vkGetPhysicalDeviceFeatures2KHR"));
         }
 
         if (getPhysicalDeviceFeatures2 != nullptr)
@@ -562,7 +578,7 @@ bool VulkanContext::initializeLocked()
             || candidateProfile.IsArmMali
             || candidateProfile.IsPowerVR
             || isOlderAdrenoVulkan11;
-        const bool enableDynamicTextureIndexing =
+        bool enableDynamicTextureIndexing =
             !ForceDisableDynamicTextureIndexing
             && !forceDynamicTextureIndexingOffForDevice
             && dynamicTextureIndexingFeatureAvailable;
@@ -646,7 +662,8 @@ bool VulkanContext::initializeLocked()
         VkPhysicalDeviceHostQueryResetFeatures hostQueryResetFeatures{};
         hostQueryResetFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES;
         hostQueryResetFeatures.pNext = nullptr;
-        const bool enableHostQueryReset = hasHostQueryReset && hostQueryResetFeaturesAvailable.hostQueryReset == VK_TRUE;
+        bool enableHostQueryReset =
+            apiAtLeast11 && (apiAtLeast12 || hasHostQueryReset) && hostQueryResetFeaturesAvailable.hostQueryReset == VK_TRUE;
         hostQueryResetFeatures.hostQueryReset = enableHostQueryReset ? VK_TRUE : VK_FALSE;
 
         void* featureChainHead = nullptr;
@@ -694,6 +711,9 @@ bool VulkanContext::initializeLocked()
         deviceCreateInfo.ppEnabledExtensionNames = enabledDeviceExtensions.data();
         deviceCreateInfo.pEnabledFeatures = &enabledFeatures;
 
+        bool actualIndependentBlend = enabledFeatures.independentBlend == VK_TRUE;
+        bool actualFragmentStoresAndAtomics = enabledFeatures.fragmentStoresAndAtomics == VK_TRUE;
+        bool actualHostQueryReset = enableHostQueryReset;
         VkResult createDeviceResult = vkCreateDevice(candidate, &deviceCreateInfo, nullptr, &Device);
         if (createDeviceResult != VK_SUCCESS)
         {
@@ -709,6 +729,7 @@ bool VulkanContext::initializeLocked()
             enableTimelineSemaphores = false;
             enableDescriptorIndexing = false;
             enableAhbInterop = false;
+            actualHostQueryReset = false;
             deviceCreateInfo.pNext = nullptr;
             deviceCreateInfo.enabledExtensionCount = static_cast<u32>(minimalExtensions.size());
             deviceCreateInfo.ppEnabledExtensionNames = minimalExtensions.data();
@@ -720,11 +741,23 @@ bool VulkanContext::initializeLocked()
                 minimalFeatures.fragmentStoresAndAtomics = deviceFeatures2.features.fragmentStoresAndAtomics;
                 deviceCreateInfo.pEnabledFeatures = &minimalFeatures;
                 createDeviceResult = vkCreateDevice(candidate, &deviceCreateInfo, nullptr, &Device);
+                if (createDeviceResult == VK_SUCCESS)
+                {
+                    enableDynamicTextureIndexing = false;
+                    actualIndependentBlend = minimalFeatures.independentBlend == VK_TRUE;
+                    actualFragmentStoresAndAtomics = minimalFeatures.fragmentStoresAndAtomics == VK_TRUE;
+                }
             }
             if (createDeviceResult != VK_SUCCESS)
             {
                 deviceCreateInfo.pEnabledFeatures = nullptr;
                 createDeviceResult = vkCreateDevice(candidate, &deviceCreateInfo, nullptr, &Device);
+                if (createDeviceResult == VK_SUCCESS)
+                {
+                    enableDynamicTextureIndexing = false;
+                    actualIndependentBlend = false;
+                    actualFragmentStoresAndAtomics = false;
+                }
             }
         }
         if (createDeviceResult != VK_SUCCESS)
@@ -746,7 +779,11 @@ bool VulkanContext::initializeLocked()
         TimestampQueriesSupported = queueSupportsTimestamps;
         TimelineSemaphoresSupported = enableTimelineSemaphores;
         DynamicTextureIndexingSupported = enableDynamicTextureIndexing;
+        IndependentBlendEnabled = actualIndependentBlend;
+        FragmentStoresAndAtomicsEnabled = actualFragmentStoresAndAtomics;
+        DeviceLimits = deviceProperties.limits;
         DeviceProfile = candidateProfile;
+        hostQueryResetRequested = actualHostQueryReset;
         // Keep Qualcomm/Adreno, ARM Mali, and PowerVR on the compatibility descriptor path
         // unless we have explicit proof that non-uniform indexing is stable there.
         const bool forceCompatTexturePath =
@@ -808,9 +845,10 @@ bool VulkanContext::initializeLocked()
         return false;
     }
 
-    AhbProperties = reinterpret_cast<PFN_vkGetAndroidHardwareBufferPropertiesANDROID>(
-        vkGetDeviceProcAddr(Device, "vkGetAndroidHardwareBufferPropertiesANDROID")
-    );
+    AhbProperties = ahbInteropRequested
+        ? reinterpret_cast<PFN_vkGetAndroidHardwareBufferPropertiesANDROID>(
+            vkGetDeviceProcAddr(Device, "vkGetAndroidHardwareBufferPropertiesANDROID"))
+        : nullptr;
     if (AhbProperties == nullptr && ahbInteropRequested)
     {
         Platform::Log(
@@ -819,34 +857,49 @@ bool VulkanContext::initializeLocked()
         );
     }
 
-    WaitSemaphores = reinterpret_cast<PFN_vkWaitSemaphoresKHR>(
-        vkGetDeviceProcAddr(Device, "vkWaitSemaphoresKHR")
-    );
-    if (WaitSemaphores == nullptr)
+    if (TimelineSemaphoresSupported)
     {
         WaitSemaphores = reinterpret_cast<PFN_vkWaitSemaphoresKHR>(
-            vkGetDeviceProcAddr(Device, "vkWaitSemaphores")
+            vkGetDeviceProcAddr(Device, "vkWaitSemaphoresKHR")
         );
-    }
+        if (WaitSemaphores == nullptr)
+        {
+            WaitSemaphores = reinterpret_cast<PFN_vkWaitSemaphoresKHR>(
+                vkGetDeviceProcAddr(Device, "vkWaitSemaphores")
+            );
+        }
 
-    GetSemaphoreCounterValueFn = reinterpret_cast<PFN_vkGetSemaphoreCounterValueKHR>(
-        vkGetDeviceProcAddr(Device, "vkGetSemaphoreCounterValueKHR")
-    );
-    if (GetSemaphoreCounterValueFn == nullptr)
-    {
         GetSemaphoreCounterValueFn = reinterpret_cast<PFN_vkGetSemaphoreCounterValueKHR>(
-            vkGetDeviceProcAddr(Device, "vkGetSemaphoreCounterValue")
+            vkGetDeviceProcAddr(Device, "vkGetSemaphoreCounterValueKHR")
         );
+        if (GetSemaphoreCounterValueFn == nullptr)
+        {
+            GetSemaphoreCounterValueFn = reinterpret_cast<PFN_vkGetSemaphoreCounterValueKHR>(
+                vkGetDeviceProcAddr(Device, "vkGetSemaphoreCounterValue")
+            );
+        }
+    }
+    else
+    {
+        WaitSemaphores = nullptr;
+        GetSemaphoreCounterValueFn = nullptr;
     }
 
-    ResetQueryPool = reinterpret_cast<PFN_vkResetQueryPoolEXT>(
-        vkGetDeviceProcAddr(Device, "vkResetQueryPoolEXT")
-    );
-    if (ResetQueryPool == nullptr)
+    if (hostQueryResetRequested)
     {
         ResetQueryPool = reinterpret_cast<PFN_vkResetQueryPoolEXT>(
-            vkGetDeviceProcAddr(Device, "vkResetQueryPool")
+            vkGetDeviceProcAddr(Device, "vkResetQueryPoolEXT")
         );
+        if (ResetQueryPool == nullptr)
+        {
+            ResetQueryPool = reinterpret_cast<PFN_vkResetQueryPoolEXT>(
+                vkGetDeviceProcAddr(Device, "vkResetQueryPool")
+            );
+        }
+    }
+    else
+    {
+        ResetQueryPool = nullptr;
     }
     if (ResetQueryPool == nullptr)
         TimestampQueriesSupported = false;
@@ -959,6 +1012,10 @@ void VulkanContext::shutdownLocked()
     NonUniformTextureIndexingSupported = false;
     ForceDisableTimelineSemaphores = false;
     ForceDisableDynamicTextureIndexing = false;
+    EffectiveInstanceApiVersion = VK_API_VERSION_1_0;
+    IndependentBlendEnabled = false;
+    FragmentStoresAndAtomicsEnabled = false;
+    DeviceLimits = VkPhysicalDeviceLimits{};
     DeviceProfile = VulkanDeviceProfile{};
 }
 
