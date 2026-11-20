@@ -21,7 +21,7 @@ class AboutPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.pref_about, rootKey)
 
-        val vName = (runCatching { requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName }.getOrNull() ?: "8.2.0")
+        val vName = (runCatching { requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName }.getOrNull() ?: "8.3.0")
             .removePrefix("v")
             .removePrefix("V")
         findPreference<Preference>("about_version")?.summary = vName
@@ -86,44 +86,37 @@ class AboutPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         }
 
         findPreference<Preference>("about_fork_info")?.setOnPreferenceClickListener {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/SapphireRhodonite/WatermelonDS"))
-            startActivity(intent)
+            openExternalUrl("https://github.com/SapphireRhodonite/WatermelonDS")
             true
         }
 
         findPreference<Preference>("about_github")?.setOnPreferenceClickListener {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/ReiKatari/STORM_DS"))
-            startActivity(intent)
+            openExternalUrl("https://github.com/ReiKatari/STORM_DS")
             true
         }
 
         findPreference<Preference>("credits_jpeacekeeper")?.setOnPreferenceClickListener {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://4pda.to/forum/index.php?showuser=5768740"))
-            startActivity(intent)
+            openExternalUrl("https://4pda.to/forum/index.php?showuser=5768740")
             true
         }
 
         findPreference<Preference>("credits_watermelonds")?.setOnPreferenceClickListener {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/SapphireRhodonite/WatermelonDS"))
-            startActivity(intent)
+            openExternalUrl("https://github.com/SapphireRhodonite/WatermelonDS")
             true
         }
 
         findPreference<Preference>("credits_melonds")?.setOnPreferenceClickListener {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://melonds.kuribo64.net/"))
-            startActivity(intent)
+            openExternalUrl("https://melonds.kuribo64.net/")
             true
         }
 
         findPreference<Preference>("credits_melonds_ds")?.setOnPreferenceClickListener {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/JesseTG/melonds-ds"))
-            startActivity(intent)
+            openExternalUrl("https://github.com/JesseTG/melonds-ds")
             true
         }
 
         findPreference<Preference>("credits_drastic")?.setOnPreferenceClickListener {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://drastic-ds.com/"))
-            startActivity(intent)
+            openExternalUrl("https://drastic-ds.com/")
             true
         }
 
@@ -144,6 +137,15 @@ class AboutPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                 .setPositiveButton(android.R.string.ok, null)
                 .show()
             true
+        }
+    }
+
+    private fun openExternalUrl(url: String) {
+        val ctx = context ?: return
+        runCatching {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        }.onFailure {
+            Toast.makeText(ctx, "No browser app installed", Toast.LENGTH_SHORT).show()
         }
     }
 

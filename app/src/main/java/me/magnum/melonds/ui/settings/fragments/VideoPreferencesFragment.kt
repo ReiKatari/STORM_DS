@@ -164,21 +164,41 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         }
         updateInternalResolutionSummary(internalResolutionPreference)
 
-        findPreference<Preference>("video_quick_profile")?.setOnPreferenceClickListener {
-            showVideoQuickProfileDialog()
-            true
+        findPreference<Preference>("video_quick_profile")?.apply {
+            isEnabled = !launchedInGame
+            if (launchedInGame) {
+                summary = "${getString(R.string.v794_video_quick_profile_summary)} (${getString(R.string.video_setting_cannot_change_ingame)})"
+            }
+            setOnPreferenceClickListener {
+                if (launchedInGame) {
+                    Toast.makeText(requireContext(), R.string.video_setting_cannot_change_ingame, Toast.LENGTH_SHORT).show()
+                    return@setOnPreferenceClickListener true
+                }
+                showVideoQuickProfileDialog()
+                true
+            }
         }
 
-        findPreference<Preference>("video_reset_enhancements")?.setOnPreferenceClickListener {
-            AlertDialog.Builder(requireContext())
-                .setTitle(R.string.v780_video_reset_enhancements_title)
-                .setMessage(R.string.v780_video_reset_enhancements_confirm_message)
-                .setPositiveButton(R.string.v780_video_reset_enhancements_action) { _, _ ->
-                    resetVideoEnhancements()
+        findPreference<Preference>("video_reset_enhancements")?.apply {
+            isEnabled = !launchedInGame
+            if (launchedInGame) {
+                summary = "${getString(R.string.v780_video_reset_enhancements_summary)} (${getString(R.string.video_setting_cannot_change_ingame)})"
+            }
+            setOnPreferenceClickListener {
+                if (launchedInGame) {
+                    Toast.makeText(requireContext(), R.string.video_setting_cannot_change_ingame, Toast.LENGTH_SHORT).show()
+                    return@setOnPreferenceClickListener true
                 }
-                .setNegativeButton(R.string.cancel, null)
-                .show()
-            true
+                AlertDialog.Builder(requireContext())
+                    .setTitle(R.string.v780_video_reset_enhancements_title)
+                    .setMessage(R.string.v780_video_reset_enhancements_confirm_message)
+                    .setPositiveButton(R.string.v780_video_reset_enhancements_action) { _, _ ->
+                        resetVideoEnhancements()
+                    }
+                    .setNegativeButton(R.string.cancel, null)
+                    .show()
+                true
+            }
         }
         val vulkanFastPathPreference =
             findPreference<InGameLockedSwitchPreference>("video_vulkan_fastpath_enabled")!!
@@ -721,12 +741,14 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             val result = withContext(Dispatchers.IO) {
                 runCatching { adrenoVulkanDriverManager.importDriver(uri) }
             }
+            if (!isAdded) return@launch
+            val ctx = context ?: return@launch
             result.onSuccess { importResult ->
                 val modePreference = findPreference<ListPreference>("video_vulkan_driver_mode") ?: return@onSuccess
                 val removePreference = findPreference<Preference>("video_vulkan_driver_remove") ?: return@onSuccess
                 updateVulkanDriverPreferenceSummaries(modePreference, removePreference)
                 Toast.makeText(
-                    requireContext(),
+                    ctx,
                     getString(R.string.video_vulkan_driver_import_success, importResult.displayName),
                     Toast.LENGTH_LONG,
                 ).show()
@@ -738,7 +760,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                     AdrenoVulkanDriverManager.ImportException.Reason.UnsupportedBuild -> R.string.video_vulkan_driver_unsupported
                     else -> R.string.video_vulkan_driver_import_failed
                 }
-                Toast.makeText(requireContext(), messageRes, Toast.LENGTH_LONG).show()
+                Toast.makeText(ctx, messageRes, Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -1506,32 +1528,36 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
     }
 
     private fun saveShaderCompatibilityLog(lines: List<String>) {
+        val initialCtx = context ?: return
         val romFolder = settingsRepository.getRomSearchDirectories().firstOrNull()
         if (romFolder == null) {
-            Toast.makeText(requireContext(), R.string.shader_compatibility_report_no_rom_folder, Toast.LENGTH_LONG).show()
+            Toast.makeText(initialCtx, R.string.shader_compatibility_report_no_rom_folder, Toast.LENGTH_LONG).show()
             return
         }
+        val appContext = initialCtx.applicationContext
 
         lifecycleScope.launch {
             val savedName = withContext(Dispatchers.IO) {
                 runCatching {
-                    val directory = DocumentFile.fromTreeUri(requireContext(), romFolder)
+                    val directory = DocumentFile.fromTreeUri(appContext, romFolder)
                         ?: return@runCatching null
                     directory.findFile(SHADER_LOG_FILE_NAME)?.delete()
                     val file = directory.createFile("*/*", SHADER_LOG_FILE_NAME)
                         ?: return@runCatching null
-                    requireContext().contentResolver.openOutputStream(file.uri)?.use { output ->
+                    appContext.contentResolver.openOutputStream(file.uri)?.use { output ->
                         output.write(lines.joinToString("\n", postfix = "\n").toByteArray())
                     } ?: return@runCatching null
                     file.name ?: SHADER_LOG_FILE_NAME
                 }.getOrNull()
             }
+            if (!isAdded) return@launch
+            val ctx = context ?: return@launch
 
             if (savedName == null) {
-                Toast.makeText(requireContext(), R.string.shader_compatibility_report_save_failed, Toast.LENGTH_LONG).show()
+                Toast.makeText(ctx, R.string.shader_compatibility_report_save_failed, Toast.LENGTH_LONG).show()
             } else {
                 Toast.makeText(
-                    requireContext(),
+                    ctx,
                     getString(R.string.shader_compatibility_report_saved, savedName),
                     Toast.LENGTH_LONG,
                 ).show()
@@ -1576,7 +1602,6 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
     }
 
     private fun scanAndImportRetroArchShaders() {
-        val context = requireContext()
         lifecycleScope.launch {
             val candidatePaths = listOf(
                 "/storage/emulated/0/RetroArch/shaders",
@@ -1593,18 +1618,21 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                     dir.exists() && dir.isDirectory && (dir.walkTopDown().maxDepth(3).any { it.extension.equals("slangp", ignoreCase = true) })
                 }
             }
+            if (!isAdded) return@launch
+            val ctx = context ?: return@launch
 
             if (foundDir == null) {
-                Toast.makeText(context, R.string.video_retroarch_shader_scan_not_found, Toast.LENGTH_LONG).show()
+                Toast.makeText(ctx, R.string.video_retroarch_shader_scan_not_found, Toast.LENGTH_LONG).show()
                 return@launch
             }
 
-            AlertDialog.Builder(context)
+            val appContext = ctx.applicationContext
+            AlertDialog.Builder(ctx)
                 .setTitle(R.string.video_retroarch_shader_scan_found_title)
                 .setMessage(getString(R.string.video_retroarch_shader_scan_found_msg, foundDir.absolutePath))
                 .setPositiveButton(R.string.ok) { _, _ ->
                     lifecycleScope.launch {
-                        val targetDir = shaderLibraryManager.libraryRoot ?: File(context.filesDir, "shaders/retroarch").apply { mkdirs() }
+                        val targetDir = shaderLibraryManager.libraryRoot ?: File(appContext.filesDir, "shaders/retroarch").apply { mkdirs() }
                         val importedCount = withContext(Dispatchers.IO) {
                             var count = 0
                             runCatching {
@@ -1613,11 +1641,13 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                             }
                             count
                         }
+                        if (!isAdded) return@launch
+                        val activeCtx = context ?: return@launch
 
                         persistShaderSource(RetroArchShaderSource.INTERNAL)
                         refreshShaderPreferenceVisibility()
                         Toast.makeText(
-                            context,
+                            activeCtx,
                             getString(R.string.video_retroarch_shader_scan_import_success, importedCount),
                             Toast.LENGTH_LONG,
                         ).show()
@@ -1651,24 +1681,27 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
     }
 
     private fun checkShaderUpdates() {
-        Toast.makeText(requireContext(), R.string.video_retroarch_shader_checking_updates, Toast.LENGTH_SHORT).show()
+        val initialCtx = context ?: return
+        Toast.makeText(initialCtx, R.string.video_retroarch_shader_checking_updates, Toast.LENGTH_SHORT).show()
         lifecycleScope.launch {
             val remote = withContext(Dispatchers.IO) {
                 runCatching { shaderLibraryManager.fetchRemoteInfo() }.getOrNull()
             }
+            if (!isAdded) return@launch
+            val ctx = context ?: return@launch
             if (remote == null) {
                 showShaderInstallError(RetroArchShaderLibraryManager.ShaderInstallException.Reason.NoNetwork, 0)
                 return@launch
             }
 
             if (shaderLibraryManager.isUpdateAvailable(remote)) {
-                AlertDialog.Builder(requireContext())
+                AlertDialog.Builder(ctx)
                     .setMessage(R.string.video_retroarch_shader_update_available)
                     .setPositiveButton(android.R.string.ok) { _, _ -> startShaderInstall() }
                     .setNegativeButton(android.R.string.cancel, null)
                     .show()
             } else {
-                Toast.makeText(requireContext(), R.string.video_retroarch_shader_up_to_date, Toast.LENGTH_LONG).show()
+                Toast.makeText(ctx, R.string.video_retroarch_shader_up_to_date, Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -2378,6 +2411,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             it.summary = getString(R.string.video_retroarch_shader_preset_summary)
         }
         findPreference<androidx.preference.TwoStatePreference>("video_ai_upscale_enabled")?.isChecked = false
+        updateAiUpscaleSummary()
         findPreference<androidx.preference.TwoStatePreference>("video_widescreen_3d")?.isChecked = false
         findPreference<androidx.preference.TwoStatePreference>("video_60fps_patch")?.isChecked = false
         findPreference<androidx.preference.TwoStatePreference>("video_drs_enabled")?.isChecked = false
@@ -2507,6 +2541,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             updateListPreferenceSummary(it)
         }
         findPreference<androidx.preference.TwoStatePreference>("video_ai_upscale_enabled")?.isChecked = false
+        updateAiUpscaleSummary()
         findPreference<androidx.preference.TwoStatePreference>("video_vulkan_ssao")?.isChecked = ssao
         findPreference<androidx.preference.TwoStatePreference>("video_vulkan_thick_edges")?.isChecked = thickEdges
         findPreference<ListPreference>("video_vulkan_3d_depth_mode")?.let {

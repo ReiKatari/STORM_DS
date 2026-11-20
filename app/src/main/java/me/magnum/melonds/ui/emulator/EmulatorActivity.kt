@@ -3709,6 +3709,7 @@ class EmulatorActivity : AppCompatActivity() {
 
     private fun handleBackPressed() {
         if (!bootRomReady.value) {
+            runCatching { viewModel.stopEmulator() }
             finish()
             return
         }

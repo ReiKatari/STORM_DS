@@ -46,7 +46,9 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
                 runCatching { settingsBackupManager.backup(uri) }
                     .onSuccess {
                         withContext(Dispatchers.Main) {
-                            AlertDialog.Builder(requireContext())
+                            if (!isAdded) return@withContext
+                            val ctx = context ?: return@withContext
+                            AlertDialog.Builder(ctx)
                                 .setMessage(R.string.settings_backup_success)
                                 .setPositiveButton(android.R.string.ok, null)
                                 .show()
@@ -54,7 +56,9 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
                     }
                     .onFailure {
                         withContext(Dispatchers.Main) {
-                            Toast.makeText(requireContext(), R.string.settings_backup_error, Toast.LENGTH_SHORT).show()
+                            if (!isAdded) return@withContext
+                            val ctx = context ?: return@withContext
+                            Toast.makeText(ctx, R.string.settings_backup_error, Toast.LENGTH_SHORT).show()
                         }
                     }
             }
@@ -67,7 +71,9 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
                 runCatching { settingsBackupManager.restore(uri) }
                     .onSuccess {
                         withContext(Dispatchers.Main) {
-                            AlertDialog.Builder(requireContext())
+                            if (!isAdded) return@withContext
+                            val ctx = context ?: return@withContext
+                            AlertDialog.Builder(ctx)
                                 .setMessage(R.string.settings_restore_success)
                                 .setPositiveButton(android.R.string.ok) { _, _ ->
                                     activity?.recreate()
@@ -77,7 +83,9 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
                     }
                     .onFailure {
                         withContext(Dispatchers.Main) {
-                            Toast.makeText(requireContext(), R.string.settings_restore_error, Toast.LENGTH_SHORT).show()
+                            if (!isAdded) return@withContext
+                            val ctx = context ?: return@withContext
+                            Toast.makeText(ctx, R.string.settings_restore_error, Toast.LENGTH_SHORT).show()
                         }
                     }
             }
@@ -200,15 +208,17 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
             lifecycleScope.launch(Dispatchers.IO) {
                 val imported = runCatching { settingsBackupManager.syncExternalSettingsIfModified(force = true) }.getOrDefault(false)
                 withContext(Dispatchers.Main) {
+                    if (!isAdded) return@withContext
+                    val ctx = context ?: return@withContext
                     if (imported) {
-                        AlertDialog.Builder(requireContext())
+                        AlertDialog.Builder(ctx)
                             .setMessage(R.string.settings_restore_success)
                             .setPositiveButton(android.R.string.ok) { _, _ ->
                                 activity?.recreate()
                             }
                             .show()
                     } else {
-                        Toast.makeText(requireContext(), R.string.settings_restore_error, Toast.LENGTH_SHORT).show()
+                        Toast.makeText(ctx, R.string.settings_restore_error, Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -344,24 +354,28 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
                     lifecycleScope.launch(Dispatchers.IO) {
                         val exported = settingsBackupManager.exportLayoutsToStormFolder()
                         withContext(Dispatchers.Main) {
+                            if (!isAdded) return@withContext
+                            val ctx = context ?: return@withContext
                             val msg = if (exported != null) {
                                 getString(R.string.v793_general_layouts_saved_fmt, exported.name)
                             } else {
                                 getString(R.string.settings_backup_error)
                             }
-                            Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
+                            Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
                         }
                     }
                 } else {
                     lifecycleScope.launch(Dispatchers.IO) {
                         val count = settingsBackupManager.importLayoutsFromStormFolder()
                         withContext(Dispatchers.Main) {
+                            if (!isAdded) return@withContext
+                            val ctx = context ?: return@withContext
                             if (count >= 0) {
                                 val msg = getString(R.string.v793_general_layouts_imported_fmt, count)
-                                Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
+                                Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
                                 activity?.recreate()
                             } else {
-                                Toast.makeText(requireContext(), R.string.settings_restore_error, Toast.LENGTH_SHORT).show()
+                                Toast.makeText(ctx, R.string.settings_restore_error, Toast.LENGTH_SHORT).show()
                             }
                         }
                     }
@@ -420,15 +434,16 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
         }
     }
     private fun exportSettingsToJson(uri: android.net.Uri) {
+        val appContext = context?.applicationContext ?: return
         lifecycleScope.launch(Dispatchers.IO) {
             val result = runCatching {
-                val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
+                val prefs = PreferenceManager.getDefaultSharedPreferences(appContext)
                 val all = prefs.all
                 val sensitiveKeys = listOf("token", "ra_token", "password", "cookie", "secret", "auth", "_key", "api_key")
 
                 val rootJson = org.json.JSONObject()
                 rootJson.put("app", "STORM DS")
-                val vName = (runCatching { requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName }.getOrNull() ?: "8.2.0").removePrefix("v").removePrefix("V")
+                val vName = (runCatching { appContext.packageManager.getPackageInfo(appContext.packageName, 0).versionName }.getOrNull() ?: "8.3.0").removePrefix("v").removePrefix("V")
                 rootJson.put("version", vName)
                 rootJson.put("timestamp", System.currentTimeMillis())
 
@@ -474,33 +489,36 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
                 }
                 rootJson.put("preferences", itemsJson)
 
-                requireContext().contentResolver.openOutputStream(uri)?.use { os ->
+                appContext.contentResolver.openOutputStream(uri)?.use { os ->
                     os.write(rootJson.toString(2).toByteArray(Charsets.UTF_8))
                 } ?: throw java.io.IOException("Cannot open output stream")
                 itemsJson.length()
             }
 
             withContext(Dispatchers.Main) {
+                if (!isAdded) return@withContext
+                val ctx = context ?: return@withContext
                 result.onSuccess {
-                    Toast.makeText(requireContext(), getString(R.string.v780_settings_export_success), Toast.LENGTH_SHORT).show()
+                    Toast.makeText(ctx, getString(R.string.v780_settings_export_success), Toast.LENGTH_SHORT).show()
                 }.onFailure {
-                    Toast.makeText(requireContext(), getString(R.string.v780_settings_export_error), Toast.LENGTH_SHORT).show()
+                    Toast.makeText(ctx, getString(R.string.v780_settings_export_error), Toast.LENGTH_SHORT).show()
                 }
             }
         }
     }
 
     private fun importSettingsFromJson(uri: android.net.Uri) {
+        val appContext = context?.applicationContext ?: return
         lifecycleScope.launch(Dispatchers.IO) {
             val result = runCatching {
-                val jsonText = requireContext().contentResolver.openInputStream(uri)?.use { ins ->
+                val jsonText = appContext.contentResolver.openInputStream(uri)?.use { ins ->
                     ins.bufferedReader(Charsets.UTF_8).readText()
                 } ?: throw java.io.IOException("Cannot open input stream")
 
                 val rootJson = org.json.JSONObject(jsonText)
                 val prefsJson = if (rootJson.has("preferences")) rootJson.getJSONObject("preferences") else rootJson
 
-                val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
+                val prefs = PreferenceManager.getDefaultSharedPreferences(appContext)
                 val editor = prefs.edit()
                 var appliedCount = 0
 
@@ -585,8 +603,10 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
             }
 
             withContext(Dispatchers.Main) {
+                if (!isAdded) return@withContext
+                val ctx = context ?: return@withContext
                 result.onSuccess { count ->
-                    AlertDialog.Builder(requireContext())
+                    AlertDialog.Builder(ctx)
                         .setTitle(R.string.v780_settings_maintenance_title)
                         .setMessage(getString(R.string.v780_settings_import_success, count))
                         .setPositiveButton(android.R.string.ok) { _, _ ->
@@ -594,7 +614,7 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
                         }
                         .show()
                 }.onFailure {
-                    Toast.makeText(requireContext(), getString(R.string.v780_settings_import_error), Toast.LENGTH_SHORT).show()
+                    Toast.makeText(ctx, getString(R.string.v780_settings_import_error), Toast.LENGTH_SHORT).show()
                 }
             }
         }

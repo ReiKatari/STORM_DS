@@ -295,7 +295,7 @@ namespace MelonDSAndroid
             outputCallback->reverbEnabled = audioSettings.reverbEnabled;
         }
 
-        if (audioSettings.soundEnabled && currentAudioSettings.volume > 0) {
+        if (audioSettings.soundEnabled && audioSettings.volume > 0) {
             if (!audioStream) {
                 setupAudioOutputStream(audioSettings.audioLatency, audioSettings.volume);
             } else if (currentAudioSettings.audioLatency != audioSettings.audioLatency || currentAudioSettings.volume != audioSettings.volume) {
@@ -334,6 +334,7 @@ namespace MelonDSAndroid
     {
         cleanupAudioOutputStream();
         cleanupMicInputStream();
+        activeInstance.reset();
     }
 
     void startAudio()

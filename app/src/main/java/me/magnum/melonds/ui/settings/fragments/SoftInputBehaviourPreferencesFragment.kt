@@ -83,7 +83,8 @@ private fun SoftInputBehaviourPreferencesScreen() {
     }
     var softInputBehaviour by remember(sharedPreferences) {
         val initialPreference = sharedPreferences.getString("soft_input_behaviour", "hide_system_buttons_when_controller_connected")
-        val initialBehaviour = SoftInputBehaviour.entries[behaviourValues.indexOf(initialPreference)]
+        val initialIndex = behaviourValues.indexOf(initialPreference).takeIf { it in SoftInputBehaviour.entries.indices } ?: 0
+        val initialBehaviour = SoftInputBehaviour.entries[initialIndex]
         mutableStateOf(initialBehaviour)
     }
 

@@ -395,7 +395,7 @@ namespace MelonDSAndroid
     }
     OpenGLContext *openGlContext;
     AndroidFileHandler* fileHandler;
-    AndroidCameraHandler* cameraHandler;
+    AndroidCameraHandler* cameraHandler = nullptr;
     std::string internalFilesDir;
     std::shared_ptr<MelonEventMessenger> eventMessenger;
     std::shared_ptr<EmulatorConfiguration> currentConfiguration;
@@ -1599,7 +1599,9 @@ namespace MelonDSAndroid
         cleanupAudio();
 
         ReplaceInstance(nullptr);
+        cameraHandler = nullptr;
         eventMessenger = nullptr;
+        RetroAchievements::RetroAchievementsManager::EventMessenger.reset();
     }
 
     bool setupOpenGlContext()

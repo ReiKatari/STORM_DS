@@ -69,6 +69,8 @@ class SettingsBackupManager @Inject constructor(
             "ra_profile_softcore_score",
             "generation",
             "quick_resume_last_played_timestamp",
+            "cheats_db_last_updated_ms",
+            "translator_cache_clear_epoch",
         )
 
         private fun isLongPrefKey(key: String): Boolean {
@@ -292,7 +294,7 @@ class SettingsBackupManager @Inject constructor(
     }
 
     fun isMirrorEnabled(): Boolean {
-        return preferences.getBoolean(SETTINGS_MIRROR_ENABLED, true)
+        return preferences.getBoolean(SETTINGS_MIRROR_ENABLED, false)
     }
 
     fun requestMirrorWrite() {
@@ -404,7 +406,7 @@ class SettingsBackupManager @Inject constructor(
     }
 
     private fun getConfiguredMirrorDirectory(): Uri? {
-        if (!preferences.getBoolean("use_rom_dir", true)) {
+        if (!preferences.getBoolean("use_rom_dir", false)) {
             preferences.getStringSet("sram_dir", null)?.firstOrNull()?.let { return it.toUri() }
         }
         preferences.getString(SETTINGS_MIRROR_FALLBACK_URI, null)?.let { return it.toUri() }

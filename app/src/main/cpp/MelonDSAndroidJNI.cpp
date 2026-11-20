@@ -63,8 +63,8 @@ void* emulate(void*);
 MelonDSAndroid::RomGbaSlotConfig* buildGbaSlotConfig(GbaSlotType slotType, const char* romPath, const char* savePath);
 
 pthread_t emuThread;
-pthread_mutex_t emuThreadMutex;
-pthread_cond_t emuThreadCond;
+pthread_mutex_t emuThreadMutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t emuThreadCond = PTHREAD_COND_INITIALIZER;
 
 std::atomic<bool> started{false};
 std::atomic<bool> stop{false};
@@ -79,8 +79,8 @@ std::atomic<float> frameLimitSpeedMultiplier{1.0f};
 std::atomic<bool> limitFps{true};
 std::atomic<bool> isFastForwardEnabled{false};
 
-jobject globalCameraManager;
-MelonDSAndroidCameraHandler* androidCameraHandler;
+jobject globalCameraManager = nullptr;
+MelonDSAndroidCameraHandler* androidCameraHandler = nullptr;
 jclass frameRenderCallbackClass = nullptr;
 jmethodID frameRenderMethodId = nullptr;
 std::mutex frameRenderCallbackLock;
@@ -650,7 +650,18 @@ Java_me_magnum_melonds_MelonEmulator_setupEmulator(JNIEnv* env, jobject thiz, jo
     fastForwardSpeedMultiplier = finalEmulatorConfiguration.fastForwardSpeedMultiplier;
     frameLimitSpeedMultiplier = sanitizeFrameLimitSpeedMultiplier(finalEmulatorConfiguration.frameLimitSpeedMultiplier);
 
-    globalCameraManager = env->NewGlobalRef(cameraManager);
+    if (globalCameraManager != nullptr)
+    {
+        env->DeleteGlobalRef(globalCameraManager);
+        globalCameraManager = nullptr;
+    }
+    if (androidCameraHandler != nullptr)
+    {
+        delete androidCameraHandler;
+        androidCameraHandler = nullptr;
+    }
+
+    globalCameraManager = cameraManager != nullptr ? env->NewGlobalRef(cameraManager) : nullptr;
 
     auto androidEventMessenger = std::make_shared<AndroidMelonEventMessenger>();
     androidCameraHandler = new MelonDSAndroidCameraHandler(jniEnvHandler, globalCameraManager);
@@ -1125,6 +1136,20 @@ Java_me_magnum_melonds_MelonEmulator_getDetailedEmulationDiagnostic(JNIEnv* env,
 JNIEXPORT void JNICALL
 Java_me_magnum_melonds_MelonEmulator_startEmulation(JNIEnv* env, jobject thiz, jboolean startPaused)
 {
+    if (started)
+    {
+        pthread_mutex_lock(&emuThreadMutex);
+        stop = true;
+        paused = false;
+        frameStepRequested = false;
+        started = false;
+        pthread_cond_broadcast(&emuThreadCond);
+        pthread_mutex_unlock(&emuThreadMutex);
+
+        pthread_join(emuThread, NULL);
+    }
+
+    pthread_mutex_lock(&emuThreadMutex);
     stop = false;
     frameStepRequested = false;
     isThreadReallyPaused = false;
@@ -1133,12 +1158,11 @@ Java_me_magnum_melonds_MelonEmulator_startEmulation(JNIEnv* env, jobject thiz, j
     isFastForwardEnabled = false;
     paused = startPaused == JNI_TRUE;
 
-    pthread_mutex_init(&emuThreadMutex, NULL);
-    pthread_cond_init(&emuThreadCond, NULL);
     pthread_create(&emuThread, NULL, emulate, NULL);
     pthread_setname_np(emuThread, "EmulatorThread");
 
     started = true;
+    pthread_mutex_unlock(&emuThreadMutex);
 }
 
 JNIEXPORT jboolean JNICALL
@@ -1987,18 +2011,15 @@ Java_me_magnum_melonds_MelonEmulator_getCurrentRenderer(JNIEnv* env, jobject thi
 JNIEXPORT void JNICALL
 Java_me_magnum_melonds_MelonEmulator_pauseEmulation(JNIEnv* env, jobject thiz)
 {
-    if (started) {
-        pthread_mutex_lock(&emuThreadMutex);
-    }
+    if (!started)
+        return;
 
+    pthread_mutex_lock(&emuThreadMutex);
     if (!stop) {
         frameStepRequested = false;
         paused = true;
     }
-
-    if (started) {
-        pthread_mutex_unlock(&emuThreadMutex);
-    }
+    pthread_mutex_unlock(&emuThreadMutex);
 
     MelonDSAndroid::pause();
 }
@@ -2006,21 +2027,16 @@ Java_me_magnum_melonds_MelonEmulator_pauseEmulation(JNIEnv* env, jobject thiz)
 JNIEXPORT void JNICALL
 Java_me_magnum_melonds_MelonEmulator_resumeEmulation(JNIEnv* env, jobject thiz)
 {
-    if (started) {
-        pthread_mutex_lock(&emuThreadMutex);
-    }
+    if (!started)
+        return;
 
+    pthread_mutex_lock(&emuThreadMutex);
     if (!stop) {
         frameStepRequested = false;
         paused = false;
-        if (started) {
-            pthread_cond_broadcast(&emuThreadCond);
-        }
+        pthread_cond_broadcast(&emuThreadCond);
     }
-
-    if (started) {
-        pthread_mutex_unlock(&emuThreadMutex);
-    }
+    pthread_mutex_unlock(&emuThreadMutex);
 
     MelonDSAndroid::resume();
 }
@@ -2067,6 +2083,9 @@ Java_me_magnum_melonds_MelonEmulator_debugStepFrame(JNIEnv* env, jobject thiz)
 
 JNIEXPORT void JNICALL
 Java_me_magnum_melonds_MelonEmulator_resetEmulation(JNIEnv* env, jobject thiz) {
+    if (!started)
+        return;
+
     pthread_mutex_lock(&emuThreadMutex);
     if (!stop) {
         if (paused) {
@@ -2110,6 +2129,9 @@ Java_me_magnum_melonds_MelonEmulator_loadStateInternal(JNIEnv* env, jobject thiz
 
 JNIEXPORT jboolean JNICALL
 Java_me_magnum_melonds_MelonEmulator_loadRewindState(JNIEnv* env, jobject thiz, jobject rewindSaveState) {
+    if (!started)
+        return JNI_FALSE;
+
     bool result = true;
 
     pthread_mutex_lock(&emuThreadMutex);
@@ -2200,13 +2222,15 @@ Java_me_magnum_melonds_MelonEmulator_stopEmulation(JNIEnv* env, jobject thiz)
         pthread_mutex_unlock(&emuThreadMutex);
 
         pthread_join(emuThread, NULL);
-        pthread_mutex_destroy(&emuThreadMutex);
-        pthread_cond_destroy(&emuThreadCond);
     }
 
     MelonDSAndroid::cleanup();
 
-    env->DeleteGlobalRef(globalCameraManager);
+    if (globalCameraManager != nullptr)
+    {
+        env->DeleteGlobalRef(globalCameraManager);
+        globalCameraManager = nullptr;
+    }
     if (frameRenderCallbackClass != nullptr)
     {
         env->DeleteGlobalRef(frameRenderCallbackClass);
@@ -2214,9 +2238,11 @@ Java_me_magnum_melonds_MelonEmulator_stopEmulation(JNIEnv* env, jobject thiz)
         frameRenderMethodId = nullptr;
     }
 
-    globalCameraManager = nullptr;
-
-    delete androidCameraHandler;
+    if (androidCameraHandler != nullptr)
+    {
+        delete androidCameraHandler;
+        androidCameraHandler = nullptr;
+    }
 }
 
 JNIEXPORT void JNICALL

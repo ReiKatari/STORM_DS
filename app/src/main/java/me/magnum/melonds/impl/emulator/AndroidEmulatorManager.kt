@@ -1563,7 +1563,7 @@ class AndroidEmulatorManager(
         return baseConfiguration.copy(
             useCustomBios = mustUseCustomBios,
             showBootScreen = if (consoleType == ConsoleType.DSi) false else baseConfiguration.showBootScreen && mustUseCustomBios,
-            fastForwardSpeedMultiplier = (rom.config.fastForwardSpeedMultiplier ?: baseConfiguration.fastForwardSpeedMultiplier).let { if (it <= 0f) 1.0f else it },
+            fastForwardSpeedMultiplier = (rom.config.fastForwardSpeedMultiplier ?: baseConfiguration.fastForwardSpeedMultiplier).let { if (it == 0f || it.isNaN()) 1.0f else it },
             frameLimitSpeedMultiplier = (if (emulatorSession.isRetroAchievementsHardcoreModeEnabled) 1.0f else baseConfiguration.frameLimitSpeedMultiplier).let { if (it <= 0f) 1.0f else it },
             arm9OverclockMultiplier = (rom.config.arm9Overclock ?: baseConfiguration.arm9OverclockMultiplier).coerceAtLeast(1),
             hgEngineFixEnabled = rom.config.useHgEngineFix,

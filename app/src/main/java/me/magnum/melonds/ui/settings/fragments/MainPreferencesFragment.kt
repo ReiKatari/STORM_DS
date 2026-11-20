@@ -32,11 +32,6 @@ class MainPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        findPreference<Preference>("manual_check_updates")?.setOnPreferenceClickListener {
-            me.magnum.melonds.ui.settings.ManualUpdateChecker.checkNow(requireContext())
-            true
-        }
-
         val menuHost: MenuHost = requireActivity()
         menuHost.addMenuProvider(object : MenuProvider {
             override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
@@ -136,9 +131,9 @@ class MainPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
         // 5. Video (renderer, resolution scale, filtering, console skin)
         findPreference<Preference>("settings_home_video")?.let { pref ->
             val renderer = prefs.getString("video_renderer", "opengl") ?: "opengl"
-            val resolution = prefs.getString("video_internal_resolution", "1") ?: "1"
+            val resolution = prefs.getString("video_internal_resolution", "2") ?: "2"
             val rendererName = getLocalizedEntry(renderer, R.array.video_renderer_values, R.array.video_renderer_options)
-            val filter = prefs.getString("video_filtering", "linear") ?: "linear"
+            val filter = prefs.getString("video_filtering", "quilez") ?: "quilez"
             val filterLocalized = getLocalizedEntry(filter, R.array.video_filtering_values, R.array.video_filtering_options)
             val filterName = if (filter.equals("none", ignoreCase = true)) {
                 "${getString(R.string.filter)}: $filterLocalized"
@@ -189,7 +184,7 @@ class MainPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
 
         // 8. RetroAchievements (account and Hardcore/Softcore status)
         findPreference<Preference>("settings_home_retroachievements")?.let { pref ->
-            val enabled = prefs.getBoolean("ra_enabled", false)
+            val enabled = prefs.getBoolean("ra_enabled", true)
             val username = prefs.getString("ra_username", "") ?: ""
             val hardcore = prefs.getBoolean("ra_hardcore_enabled", false)
             pref.summary = if (enabled && username.isNotEmpty()) {
@@ -214,8 +209,9 @@ class MainPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
         findPreference<Preference>("settings_home_translator")?.let { pref ->
             val enabled = prefs.getBoolean("translator_enabled", false)
             val targetLang = prefs.getString("translator_target_lang", "ru")?.uppercase() ?: "RU"
-            val engine = prefs.getString("translator_engine", "mlkit") ?: "mlkit"
+            val engine = prefs.getString("translator_engine", "google") ?: "google"
             val engineName = when (engine.lowercase()) {
+                "google" -> "Google Translate"
                 "deepl" -> "DeepL"
                 "custom_ai", "llm" -> "LLM / AI"
                 else -> "ML Kit"
@@ -229,9 +225,9 @@ class MainPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
             }
         }
 
-        // 11. About (STORM DS 8.0.3 • Android version • CPU ABI • Device model • RAM)
+        // 11. About (STORM DS 8.3.0 • Android version • CPU ABI • Device model • RAM)
         findPreference<Preference>("settings_home_about")?.let { pref ->
-            val vName = (runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "8.0.3")
+            val vName = (runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "8.3.0")
                 .removePrefix("v").removePrefix("V")
             val abi = android.os.Build.SUPPORTED_ABIS.firstOrNull() ?: "arm64-v8a"
             val model = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}".trim()

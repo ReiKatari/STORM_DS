@@ -704,17 +704,20 @@ namespace Platform
 
     void Camera_Start(int num, void* userdata)
     {
-        MelonDSAndroid::cameraHandler->startCamera(num);
+        if (MelonDSAndroid::cameraHandler != nullptr)
+            MelonDSAndroid::cameraHandler->startCamera(num);
     }
 
     void Camera_Stop(int num, void* userdata)
     {
-        MelonDSAndroid::cameraHandler->stopCamera(num);
+        if (MelonDSAndroid::cameraHandler != nullptr)
+            MelonDSAndroid::cameraHandler->stopCamera(num);
     }
 
     void Camera_CaptureFrame(int num, u32* frame, int width, int height, bool yuv, void* userdata)
     {
-        MelonDSAndroid::cameraHandler->captureFrame(num, frame, width, height, yuv);
+        if (MelonDSAndroid::cameraHandler != nullptr)
+            MelonDSAndroid::cameraHandler->captureFrame(num, frame, width, height, yuv);
     }
 
     bool Addon_KeyDown(KeyType type, void* userdata)

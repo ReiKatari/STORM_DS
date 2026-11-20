@@ -1,5 +1,6 @@
 #include <jni.h>
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -308,8 +309,12 @@ MelonDSAndroid::EmulatorConfiguration MelonDSAndroidConfiguration::buildEmulator
     finalEmulatorConfiguration.dsiFirmwarePath = dsiFirmwarePath;
     finalEmulatorConfiguration.dsiNandPath = dsiNandPath;
     finalEmulatorConfiguration.internalFilesDir = internalDir;
-    if (fastForwardMaxSpeed <= 0.0f) fastForwardMaxSpeed = 1.0f;
-    if (frameLimitSpeed <= 0.0f) frameLimitSpeed = 1.0f;
+    if (std::isnan(fastForwardMaxSpeed) || fastForwardMaxSpeed == 0.0f) {
+        fastForwardMaxSpeed = 1.0f;
+    } else if (fastForwardMaxSpeed < 0.0f) {
+        fastForwardMaxSpeed = -1.0f;
+    }
+    if (std::isnan(frameLimitSpeed) || frameLimitSpeed <= 0.0f) frameLimitSpeed = 1.0f;
     finalEmulatorConfiguration.fastForwardSpeedMultiplier = fastForwardMaxSpeed;
     finalEmulatorConfiguration.frameLimitSpeedMultiplier = frameLimitSpeed;
     finalEmulatorConfiguration.showBootScreen = showBootScreen;
