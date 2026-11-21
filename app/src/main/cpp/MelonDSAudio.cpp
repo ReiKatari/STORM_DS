@@ -368,12 +368,32 @@ namespace MelonDSAndroid
 
     void cleanupAudio()
     {
-        std::lock_guard<std::mutex> streamLock(audioStreamMutex);
-        cleanupAudioOutputStreamLocked();
-        cleanupMicInputStreamLocked();
         {
             std::lock_guard<std::mutex> instanceLock(activeInstanceMutex);
             activeInstance.reset();
+        }
+        std::shared_ptr<oboe::AudioStream> streamToClose;
+        std::shared_ptr<oboe::AudioStream> micToClose;
+        {
+            std::lock_guard<std::mutex> streamLock(audioStreamMutex);
+            streamToClose = std::move(audioStream);
+            audioStream = nullptr;
+            outputCallback = nullptr;
+            stabilizedOutputCallback = nullptr;
+
+            micToClose = std::move(micInputStream);
+            micInputStream = nullptr;
+            std::lock_guard<std::mutex> micLock(micBufferMutex);
+            micInputCallback = nullptr;
+            micBufferReadPos = 0;
+        }
+        if (streamToClose && streamToClose->getState() < oboe::StreamState::Closing) {
+            streamToClose->requestStop();
+            streamToClose->close();
+        }
+        if (micToClose && micToClose->getState() < oboe::StreamState::Closing) {
+            micToClose->requestStop();
+            micToClose->close();
         }
     }
 

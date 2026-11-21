@@ -403,6 +403,7 @@ namespace MelonDSAndroid
 
     std::shared_ptr<MelonInstance> instance;
     std::mutex instanceLifetimeMutex;
+    std::mutex openGlContextMutex;
 
     std::shared_ptr<MelonInstance> GetInstanceSnapshot()
     {
@@ -418,6 +419,7 @@ namespace MelonDSAndroid
 
     bool ensureOpenGlContext()
     {
+        std::lock_guard lock(openGlContextMutex);
         if (openGlContext != nullptr)
             return true;
 

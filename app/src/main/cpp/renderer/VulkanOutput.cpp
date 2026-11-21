@@ -14053,6 +14053,11 @@ bool VulkanOutput::waitForFrame(const Frame* frame, u64 timeoutNs)
             }
             fenceToWait = iterator->second.submitFence;
         }
+        if (fenceToWait == VK_NULL_HANDLE)
+        {
+            waitFailureResourceMissing++;
+            return false;
+        }
         waitSucceeded = vkWaitForFences(device, 1, &fenceToWait, VK_TRUE, timeoutNs) == VK_SUCCESS;
     }
 

@@ -2322,7 +2322,7 @@ MelonInstance::VulkanFrameTailResult MelonInstance::processFrameTail(
     }
     else if (!isRendererAccelerated)
     {
-        if (nds->GPU.Framebuffer[frontbuf][0] && nds->GPU.Framebuffer[frontbuf][1])
+        if (renderFrame != nullptr && nds->GPU.Framebuffer[frontbuf][0] && nds->GPU.Framebuffer[frontbuf][1])
         {
             glBindTexture(GL_TEXTURE_2D, renderFrame->frameTexture);
             glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 256, 192, GL_RGBA, GL_UNSIGNED_BYTE, nds->GPU.Framebuffer[frontbuf][0].get());
@@ -2441,7 +2441,6 @@ u32 MelonInstance::runFrame()
         updateRenderer();
         config = getConfigurationSnapshot();
     }
-    applyPendingThreadSafeUpdates();
     applyPendingThreadSafeUpdates();
 
     if (currentRenderer == Renderer::Vulkan)
@@ -2719,8 +2718,6 @@ u32 MelonInstance::runFrame()
     if (measuringVulkan)
         vulkanRaFrameCpuWindow.Add(PerfNowNs() - raFrameStartNs);
 
-    if (currentRenderer == Renderer::Vulkan)
-        joinPendingFrameTail();
     if (currentRenderer == Renderer::Vulkan)
         joinPendingFrameTail();
     if (currentRenderer == Renderer::Vulkan
@@ -5726,7 +5723,7 @@ void MelonInstance::setRetroAchievementsSubmissionTransportSuspended(bool suspen
 void MelonInstance::updateRenderer()
 {
     auto config = getConfigurationSnapshot();
-    if (!config)
+    if (!config || !config->renderSettings)
         return;
 
     std::lock_guard<std::recursive_mutex> presentationLock(vulkanPresentationMutex);
@@ -5905,6 +5902,18 @@ void MelonInstance::updateRenderer()
                 vulkanSessionProfile.set(VulkanPipelineProfile::Compatibility);
                 vulkanRenderSettings.pipelineProfile = VulkanPipelineProfile::Compatibility;
                 vulkanRenderSettings.useSimplePipeline = true;
+                if (dynamic_cast<const GPU2D::CompatibilitySoftRenderer*>(&nds->GPU.GetRenderer2D()) == nullptr)
+                {
+                    nds->GPU.SetRenderer2D(std::make_unique<GPU2D::CompatibilitySoftRenderer>(nds->GPU));
+                }
+                if (!vulkanOutput || vulkanOutput->getPipelineProfile() != VulkanPipelineProfile::Compatibility)
+                {
+                    vulkanOutput = std::make_unique<VulkanOutput>(VulkanPipelineProfile::Compatibility);
+                    if (!vulkanOutput->init())
+                    {
+                        Platform::Log(Platform::LogLevel::Error, "Failed to reinitialize VulkanOutput in Compatibility profile");
+                    }
+                }
             }
             renderer3d.SetBackendMode(getConfiguredVulkanBackendMode(vulkanRenderSettings));
             renderer3d.SetRenderSettings(

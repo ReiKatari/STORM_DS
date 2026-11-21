@@ -214,8 +214,6 @@ bool VulkanContext::initializeLocked()
     }
 
     std::vector<u32> candidateApiVersions;
-    if (isApiAtLeast(loaderApiVersion, 1, 3))
-        candidateApiVersions.push_back(VK_API_VERSION_1_3);
     if (isApiAtLeast(loaderApiVersion, 1, 2))
         candidateApiVersions.push_back(VK_API_VERSION_1_2);
     if (isApiAtLeast(loaderApiVersion, 1, 1))
@@ -367,6 +365,77 @@ bool VulkanContext::initializeLocked()
 
     std::vector<VkPhysicalDevice> physicalDevices(physicalDeviceCount);
     vkEnumeratePhysicalDevices(Instance, &physicalDeviceCount, physicalDevices.data());
+
+    if (effectiveInstanceApiVersion > VK_API_VERSION_1_1)
+    {
+        u32 maxDeviceApiVersion = 0;
+        for (VkPhysicalDevice pd : physicalDevices)
+        {
+            VkPhysicalDeviceProperties props{};
+            vkGetPhysicalDeviceProperties(pd, &props);
+            maxDeviceApiVersion = std::max(maxDeviceApiVersion, props.apiVersion);
+        }
+        if (maxDeviceApiVersion < VK_API_VERSION_1_2)
+        {
+            Platform::Log(
+                Platform::LogLevel::Info,
+                "VulkanContext: physical devices report max Vulkan API %u.%u; recreating pure 1.1 VkInstance for ICD compatibility",
+                VK_VERSION_MAJOR(maxDeviceApiVersion),
+                VK_VERSION_MINOR(maxDeviceApiVersion)
+            );
+            if (DebugMessenger != VK_NULL_HANDLE)
+            {
+                const auto destroyDebugUtilsMessenger = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
+                    vkGetInstanceProcAddr(Instance, "vkDestroyDebugUtilsMessengerEXT")
+                );
+                if (destroyDebugUtilsMessenger != nullptr)
+                    destroyDebugUtilsMessenger(Instance, DebugMessenger, nullptr);
+                DebugMessenger = VK_NULL_HANDLE;
+            }
+            vkDestroyInstance(Instance, nullptr);
+            Instance = VK_NULL_HANDLE;
+
+            u32 downgradedApiVersion = VK_API_VERSION_1_0;
+            for (u32 fallbackVersion : {VK_API_VERSION_1_1, VK_API_VERSION_1_0})
+            {
+                appInfo.apiVersion = fallbackVersion;
+                if (vkCreateInstance(&instanceCreateInfo, nullptr, &Instance) == VK_SUCCESS && Instance != VK_NULL_HANDLE)
+                {
+                    downgradedApiVersion = fallbackVersion;
+                    break;
+                }
+                Instance = VK_NULL_HANDLE;
+            }
+            if (Instance == VK_NULL_HANDLE)
+            {
+                Platform::Log(Platform::LogLevel::Error, "VulkanContext: downgraded vkCreateInstance failed");
+                shutdownLocked();
+                return false;
+            }
+            effectiveInstanceApiVersion = downgradedApiVersion;
+            EffectiveInstanceApiVersion = downgradedApiVersion;
+            VulkanDispatch::LoadInstance(Instance);
+
+            if (enableValidationLayers)
+            {
+                const auto createDebugUtilsMessenger = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(
+                    vkGetInstanceProcAddr(Instance, "vkCreateDebugUtilsMessengerEXT")
+                );
+                if (createDebugUtilsMessenger != nullptr)
+                    (void)createDebugUtilsMessenger(Instance, &debugMessengerCreateInfo, nullptr, &DebugMessenger);
+            }
+
+            physicalDeviceCount = 0;
+            if (vkEnumeratePhysicalDevices(Instance, &physicalDeviceCount, nullptr) != VK_SUCCESS || physicalDeviceCount == 0)
+            {
+                Platform::Log(Platform::LogLevel::Error, "VulkanContext: no physical devices after 1.1 instance downgrade");
+                shutdownLocked();
+                return false;
+            }
+            physicalDevices.resize(physicalDeviceCount);
+            vkEnumeratePhysicalDevices(Instance, &physicalDeviceCount, physicalDevices.data());
+        }
+    }
 
     bool ahbInteropRequested = false;
     bool hostQueryResetRequested = false;
@@ -523,6 +592,11 @@ bool VulkanContext::initializeLocked()
         {
             getPhysicalDeviceFeatures2 = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2>(
                 vkGetInstanceProcAddr(Instance, "vkGetPhysicalDeviceFeatures2"));
+        }
+        if (getPhysicalDeviceFeatures2 == nullptr)
+        {
+            getPhysicalDeviceFeatures2 = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2>(
+                vkGetInstanceProcAddr(Instance, "vkGetPhysicalDeviceFeatures2KHR"));
         }
 
         if (getPhysicalDeviceFeatures2 != nullptr)

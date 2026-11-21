@@ -30,7 +30,34 @@ static struct sigaction old_sa_bus;
 static struct sigaction old_sa_fpe;
 static struct sigaction old_sa_ill;
 static std::once_flag sCrashTrapOnceFlag;
-static std::atomic_flag sCrashHandlerActive = ATOMIC_FLAG_INIT;
+static constexpr size_t kMaxConcurrentCrashTids = 16;
+static std::atomic<pid_t> sActiveCrashTids[kMaxConcurrentCrashTids]{};
+
+static bool tryEnterCrashHandlerTid(pid_t tid)
+{
+    for (auto& slot : sActiveCrashTids)
+    {
+        if (slot.load(std::memory_order_relaxed) == tid)
+            return false;
+    }
+    for (auto& slot : sActiveCrashTids)
+    {
+        pid_t expected = 0;
+        if (slot.compare_exchange_strong(expected, tid, std::memory_order_acq_rel, std::memory_order_relaxed))
+            return true;
+    }
+    return true;
+}
+
+static void leaveCrashHandlerTid(pid_t tid)
+{
+    for (auto& slot : sActiveCrashTids)
+    {
+        pid_t expected = tid;
+        if (slot.compare_exchange_strong(expected, 0, std::memory_order_acq_rel, std::memory_order_relaxed))
+            return;
+    }
+}
 
 static void crashAppendCstr(char* buf, size_t cap, size_t& pos, const char* s)
 {
@@ -112,7 +139,8 @@ static void resetSignalDefaultAndRaise(int sig)
 
 static void stormNativeCrashHandler(int sig, siginfo_t* info, void* context)
 {
-    if (sCrashHandlerActive.test_and_set(std::memory_order_acq_rel))
+    const pid_t selfTid = gettid();
+    if (!tryEnterCrashHandlerTid(selfTid))
     {
         resetSignalDefaultAndRaise(sig);
         _exit(128 + sig);
@@ -129,7 +157,7 @@ static void stormNativeCrashHandler(int sig, siginfo_t* info, void* context)
         crashAppendCstr(buf, sizeof(buf), pos, "\n=== STORM DS NATIVE CRASH ===\nsig=");
         crashAppendSignedDec(buf, sizeof(buf), pos, static_cast<long>(sig));
         crashAppendCstr(buf, sizeof(buf), pos, " tid=");
-        crashAppendSignedDec(buf, sizeof(buf), pos, static_cast<long>(gettid()));
+        crashAppendSignedDec(buf, sizeof(buf), pos, static_cast<long>(selfTid));
         crashAppendCstr(buf, sizeof(buf), pos, " addr=");
         crashAppendHex(buf, sizeof(buf), pos, reinterpret_cast<uintptr_t>(info ? info->si_addr : nullptr));
         crashAppendCstr(buf, sizeof(buf), pos, "\n");
@@ -151,23 +179,23 @@ static void stormNativeCrashHandler(int sig, siginfo_t* info, void* context)
     if (old_sa != nullptr && (old_sa->sa_flags & SA_SIGINFO) != 0 && old_sa->sa_sigaction != nullptr)
     {
         old_sa->sa_sigaction(sig, info, context);
-        sCrashHandlerActive.clear(std::memory_order_release);
+        leaveCrashHandlerTid(selfTid);
         return;
     }
     if (old_sa != nullptr && (old_sa->sa_flags & SA_SIGINFO) == 0 &&
         old_sa->sa_handler != SIG_DFL && old_sa->sa_handler != SIG_IGN && old_sa->sa_handler != nullptr)
     {
         old_sa->sa_handler(sig);
-        sCrashHandlerActive.clear(std::memory_order_release);
+        leaveCrashHandlerTid(selfTid);
         return;
     }
     if (old_sa != nullptr && (old_sa->sa_flags & SA_SIGINFO) == 0 && old_sa->sa_handler == SIG_IGN)
     {
-        sCrashHandlerActive.clear(std::memory_order_release);
+        leaveCrashHandlerTid(selfTid);
         return;
     }
 
-    sCrashHandlerActive.clear(std::memory_order_release);
+    leaveCrashHandlerTid(selfTid);
     resetSignalDefaultAndRaise(sig);
 }
 

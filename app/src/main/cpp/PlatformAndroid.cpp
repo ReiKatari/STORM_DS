@@ -224,6 +224,7 @@ namespace Platform
 
     bool CloseFile(FileHandle* file)
     {
+        if (file == nullptr) return false;
         return fclose(reinterpret_cast<FILE *>(file)) == 0;
     }
 
@@ -480,6 +481,7 @@ namespace Platform
 
     void Semaphore_Free(Semaphore* sema)
     {
+        if (sema == nullptr) return;
         AndroidSemaphore* semaphore = (AndroidSemaphore*) sema;
         pthread_mutex_destroy(&semaphore->mutex);
         pthread_cond_destroy(&semaphore->cond);
@@ -568,11 +570,13 @@ namespace Platform
 
     Mutex* Mutex_Create() {
         AndroidMutex* mutex = (AndroidMutex*) malloc(sizeof(AndroidMutex));
+        if (mutex == nullptr) return nullptr;
         pthread_mutex_init(mutex, nullptr);
         return (Mutex*) mutex;
     }
 
     void Mutex_Free(Mutex* mutex) {
+        if (mutex == nullptr) return;
         pthread_mutex_destroy((AndroidMutex*) mutex);
         free((AndroidMutex*) mutex);
     }

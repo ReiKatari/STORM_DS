@@ -485,6 +485,7 @@ public:
     bool init();
     void shutdown();
     [[nodiscard]] bool isInitialized() const { return initialized; }
+    [[nodiscard]] melonDS::VulkanPipelineProfile getPipelineProfile() const { return pipelineProfile; }
 
     bool ensureFrameResources(Frame* frame, u32 width, u32 height);
     void invalidateTemporalHistory(melonDS::VulkanPipelineProfile pipelineProfile);

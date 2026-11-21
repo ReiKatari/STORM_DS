@@ -13,7 +13,7 @@ import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
 
 object GameCompatibilityManager {
-    private const val PREFS_NAME = "storm_game_compat_guard_v8"
+    private const val PREFS_NAME = "storm_game_compat_guard_v9"
     private const val KEY_LAST_MARKER_GAME_KEY = "last_launch_marker_key"
     private const val KEY_MARKER_PREFIX = "launch_marker_"
     private const val KEY_PROFILE_PREFIX = "safe_profile_"
@@ -333,7 +333,7 @@ object GameCompatibilityManager {
                 remove(KEY_LAST_MARKER_GAME_KEY)
             }
         }
-        if (marker == null || marker.crashCount < 2) {
+        if (marker == null || marker.crashCount < 1) {
             return null
         }
 

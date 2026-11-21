@@ -1570,12 +1570,18 @@ class AndroidEmulatorManager(
         )
         val baseConfiguration = settingsRepository.getEmulatorConfiguration(rom.config)
         val isDsiWare = rom.isDsiWareTitle || isRealDsiWareTitle(rom)
-        val consoleType = if (isDsiWare) {
+        val dsiBiosValid = configurationDirectoryVerifier.checkConsoleConfigurationDirectory(ConsoleType.DSi).status == ConfigurationDirResult.Status.VALID
+        val candidateConsoleType = if (isDsiWare) {
             ConsoleType.DSi
         } else if (rom.config.runtimeConsoleType != RuntimeConsoleType.DEFAULT) {
             getRomOptionOrDefault(rom.config.runtimeConsoleType, baseConfiguration.consoleType)
         } else {
             baseConfiguration.consoleType
+        }
+        val consoleType = if (candidateConsoleType == ConsoleType.DSi && !dsiBiosValid && !isDsiWare) {
+            ConsoleType.DS
+        } else {
+            candidateConsoleType
         }
         val mustUseCustomBios = baseConfiguration.useCustomBios || (consoleType == ConsoleType.DSi) || (rom.config.runtimeConsoleType != RuntimeConsoleType.DEFAULT)
 

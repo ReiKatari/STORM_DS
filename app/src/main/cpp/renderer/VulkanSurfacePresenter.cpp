@@ -2675,14 +2675,18 @@ bool VulkanSurfacePresenter::ensureSwapchain(
 
     if (!surfaceState.swapchainDirty && surfaceState.swapchain != VK_NULL_HANDLE)
     {
+        const VkPipeline activeProfilePipeline = effectiveFastPathProfile
+            ? surfaceState.pipeline
+            : surfaceState.compatibilityPipeline;
         const u32 liveWinW = surfaceState.window != nullptr
             ? static_cast<u32>(std::max(0, ANativeWindow_getWidth(surfaceState.window)))
             : 0u;
         const u32 liveWinH = surfaceState.window != nullptr
             ? static_cast<u32>(std::max(0, ANativeWindow_getHeight(surfaceState.window)))
             : 0u;
-        if (liveWinW > 0u && liveWinH > 0u &&
-            (surfaceState.extent.width != liveWinW || surfaceState.extent.height != liveWinH))
+        if (activeProfilePipeline == VK_NULL_HANDLE ||
+            (liveWinW > 0u && liveWinH > 0u &&
+             (surfaceState.extent.width != liveWinW || surfaceState.extent.height != liveWinH)))
         {
             surfaceState.swapchainDirty = true;
             surfaceState.vertexBufferDirty = true;
@@ -3463,7 +3467,7 @@ void VulkanSurfacePresenter::ensureSurfacePipelineCache()
     std::snprintf(
         cacheFileName,
         sizeof(cacheFileName),
-        "vulkan_presenter_pipeline_cache_v6_%08x_%08x_%08x.bin",
+        "vulkan_presenter_pipeline_cache_v7_%08x_%08x_%08x.bin",
         deviceProperties.vendorID,
         deviceProperties.deviceID,
         deviceProperties.driverVersion

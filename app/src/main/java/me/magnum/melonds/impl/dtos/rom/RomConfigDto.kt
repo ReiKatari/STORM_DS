@@ -12,13 +12,13 @@ import java.util.UUID
 
 data class RomConfigDto(
     @SerializedName("runtimeConsoleType")
-    val runtimeConsoleType: RuntimeConsoleType,
+    val runtimeConsoleType: RuntimeConsoleType? = null,
     @SerializedName("runtimeMicSource")
-    val runtimeMicSource: RuntimeMicSource,
+    val runtimeMicSource: RuntimeMicSource? = null,
     @SerializedName("layoutId")
-    val layoutId: String?,
+    val layoutId: String? = null,
     @SerializedName("gbaSlotConfig")
-    val gbaSlotConfig: RomGbaSlotConfigDto,
+    val gbaSlotConfig: RomGbaSlotConfigDto? = null,
     @SerializedName("customName")
     val customName: String? = null,
     @SerializedName(value = "useHgEngineFix", alternate = ["useHgInputWorkaround"])
@@ -88,10 +88,10 @@ data class RomConfigDto(
 
     fun toModel(): RomConfig {
         return RomConfig(
-            runtimeConsoleType,
-            runtimeMicSource,
-            layoutId?.let { UUID.fromString(it) },
-            gbaSlotConfig.toModel(),
+            runtimeConsoleType = runtimeConsoleType ?: RuntimeConsoleType.DEFAULT,
+            runtimeMicSource = runtimeMicSource ?: RuntimeMicSource.DEFAULT,
+            layoutId = layoutId?.let { runCatching { UUID.fromString(it) }.getOrNull() },
+            gbaSlotConfig = gbaSlotConfig?.toModel() ?: me.magnum.melonds.domain.model.rom.config.RomGbaSlotConfig.None,
             customName = customName,
             useHgEngineFix = useHgEngineFix ?: false,
             inputMode = inputMode ?: RomInputMode.GLOBAL,

@@ -682,7 +682,7 @@ Java_me_magnum_melonds_MelonEmulator_setupEmulator(JNIEnv* env, jobject thiz, jo
 
     auto androidEventMessenger = std::make_shared<AndroidMelonEventMessenger>();
     androidCameraHandler = new MelonDSAndroidCameraHandler(jniEnvHandler, globalCameraManager);
-    u32* screenshotBufferPointer = (u32*) env->GetDirectBufferAddress(screenshotBuffer);
+    u32* screenshotBufferPointer = screenshotBuffer != nullptr ? (u32*) env->GetDirectBufferAddress(screenshotBuffer) : nullptr;
 
     MelonDSAndroid::setConfiguration(std::move(finalEmulatorConfiguration));
     MelonDSAndroid::setup(androidCameraHandler, std::move(androidEventMessenger), screenshotBufferPointer, 0);
@@ -1213,10 +1213,16 @@ Java_me_magnum_melonds_MelonEmulator_startEmulation(JNIEnv* env, jobject thiz, j
     isFastForwardEnabled = false;
     paused = startPaused == JNI_TRUE;
 
-    pthread_create(&emuThread, NULL, emulate, NULL);
-    pthread_setname_np(emuThread, "EmulatorThread");
-
-    started = true;
+    if (pthread_create(&emuThread, NULL, emulate, NULL) == 0)
+    {
+        pthread_setname_np(emuThread, "EmulatorThread");
+        started = true;
+    }
+    else
+    {
+        melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "Failed to create EmulatorThread");
+        started = false;
+    }
     pthread_mutex_unlock(&emuThreadMutex);
 }
 
@@ -2754,7 +2760,11 @@ extern "C" {
 JNIEXPORT jint JNICALL
 Java_me_magnum_melonds_MelonRomDecryptor_checkEncryptionNative(JNIEnv* env, jobject thiz, jstring romPath)
 {
+    if (romPath == nullptr)
+        return 0;
     const char* path = env->GetStringUTFChars(romPath, nullptr);
+    if (path == nullptr)
+        return 0;
     auto result = MelonDSAndroid::RomDecryptor::CheckEncryption(path);
     env->ReleaseStringUTFChars(romPath, path);
     return static_cast<jint>(result);
@@ -2898,30 +2908,43 @@ JNIEXPORT jobjectArray JNICALL
 Java_me_magnum_melonds_MelonEmulator_getLanDiscoveredSessions(JNIEnv* env, jobject thiz)
 {
     jclass stringClass = env->FindClass("java/lang/String");
+    if (stringClass == nullptr)
+    {
+        return nullptr;
+    }
     if (melonDS::MPInterface::GetType() != melonDS::MPInterface_LAN)
     {
-        return env->NewObjectArray(0, stringClass, nullptr);
+        jobjectArray empty = env->NewObjectArray(0, stringClass, nullptr);
+        env->DeleteLocalRef(stringClass);
+        return empty;
     }
     auto& lan = static_cast<melonDS::LAN&>(melonDS::MPInterface::Get());
     lan.Process();
     auto list = lan.GetDiscoveryList();
     jobjectArray result = env->NewObjectArray(static_cast<jsize>(list.size()), stringClass, nullptr);
-    jsize idx = 0;
-    for (const auto& [addr, data] : list)
+    if (result != nullptr)
     {
-        struct in_addr inAddr{};
-        inAddr.s_addr = addr;
-        char ipBuf[INET_ADDRSTRLEN] = {0};
-        inet_ntop(AF_INET, &inAddr, ipBuf, sizeof(ipBuf));
-        char sessionName[65] = {0};
-        std::memcpy(sessionName, data.SessionName, 64);
-        std::ostringstream ss;
-        ss << ipBuf << "|" << sessionName << "|" << static_cast<int>(data.NumPlayers)
-           << "|" << static_cast<int>(data.MaxPlayers) << "|" << static_cast<int>(data.Status);
-        jstring item = env->NewStringUTF(ss.str().c_str());
-        env->SetObjectArrayElement(result, idx++, item);
-        env->DeleteLocalRef(item);
+        jsize idx = 0;
+        for (const auto& [addr, data] : list)
+        {
+            struct in_addr inAddr{};
+            inAddr.s_addr = addr;
+            char ipBuf[INET_ADDRSTRLEN] = {0};
+            inet_ntop(AF_INET, &inAddr, ipBuf, sizeof(ipBuf));
+            char sessionName[65] = {0};
+            std::memcpy(sessionName, data.SessionName, 64);
+            std::ostringstream ss;
+            ss << ipBuf << "|" << sessionName << "|" << static_cast<int>(data.NumPlayers)
+               << "|" << static_cast<int>(data.MaxPlayers) << "|" << static_cast<int>(data.Status);
+            jstring item = env->NewStringUTF(ss.str().c_str());
+            if (item != nullptr)
+            {
+                env->SetObjectArrayElement(result, idx++, item);
+                env->DeleteLocalRef(item);
+            }
+        }
     }
+    env->DeleteLocalRef(stringClass);
     return result;
 }
 

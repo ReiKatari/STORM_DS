@@ -32,6 +32,7 @@ import me.magnum.melonds.translator.model.TranslatedTextBlock
 import java.io.File
 import java.io.FileOutputStream
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 import kotlin.math.abs
 
@@ -364,8 +365,11 @@ class GameTtsManager(private val context: Context) {
     )
 
     private val preferences: SharedPreferences = PreferenceManager.getDefaultSharedPreferences(context)
+    @Volatile
     private var tts: TextToSpeech? = null
+    @Volatile
     private var isReady = false
+    private val ttsSetupDone = AtomicBoolean(false)
     private var availableVoices: List<Voice> = emptyList()
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var studioQueueJob: Job? = null
@@ -374,10 +378,8 @@ class GameTtsManager(private val context: Context) {
     private var activeReverb: PresetReverb? = null
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
     private var audioFocusRequest: android.media.AudioFocusRequest? = null
-
-    init {
-        initTts()
-    }
+    private val pendingNativeSpeechActionsLock = Any()
+    private val pendingNativeSpeechActions = mutableListOf<() -> Unit>()
 
     private fun requestAudioDucking() {
         try {
@@ -430,47 +432,81 @@ class GameTtsManager(private val context: Context) {
         activeReverb = null
     }
 
-    @Volatile
-    private var pendingNativeSpeechActions = mutableListOf<() -> Unit>()
+    private fun configureReadyTts(activeTts: TextToSpeech) {
+        if (!ttsSetupDone.compareAndSet(false, true)) return
+        applyLanguage(getSelectedLanguage())
+        try {
+            availableVoices = activeTts.voices?.toList() ?: emptyList()
+            Log.i(TAG, "TTS initialized. Available system voices: ${availableVoices.size}")
+        } catch (e: Throwable) {
+            Log.w(TAG, "Cannot query voices: ${e.message}")
+        }
+        try {
+            activeTts.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
+                override fun onStart(utteranceId: String?) {
+                    requestAudioDucking()
+                }
+                override fun onDone(utteranceId: String?) {
+                    abandonAudioDucking()
+                }
+                override fun onError(utteranceId: String?) {
+                    abandonAudioDucking()
+                }
+            })
+        } catch (e: Throwable) {
+            Log.w(TAG, "Cannot attach TTS utterance listener: ${e.message}")
+        }
+        val actionsToRun = synchronized(pendingNativeSpeechActionsLock) {
+            val copy = pendingNativeSpeechActions.toList()
+            pendingNativeSpeechActions.clear()
+            copy
+        }
+        if (actionsToRun.isNotEmpty()) {
+            scope.launch(Dispatchers.Main) {
+                actionsToRun.forEach { it.invoke() }
+            }
+        }
+    }
 
     private fun initTts() {
         if (tts != null) return
-        tts = TextToSpeech(context.applicationContext) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                isReady = true
-                applyLanguage(getSelectedLanguage())
+        isReady = false
+        ttsSetupDone.set(false)
+        try {
+            val created = TextToSpeech(context.applicationContext) { status ->
                 try {
-                    availableVoices = tts?.voices?.toList() ?: emptyList()
-                    Log.i(TAG, "TTS initialized. Available system voices: ${availableVoices.size}")
+                    if (status == TextToSpeech.SUCCESS) {
+                        isReady = true
+                        val activeTts = tts
+                        if (activeTts != null) {
+                            configureReadyTts(activeTts)
+                        }
+                    } else {
+                        isReady = false
+                        Log.w(TAG, "TextToSpeech init failed with code: $status")
+                        synchronized(pendingNativeSpeechActionsLock) {
+                            pendingNativeSpeechActions.clear()
+                        }
+                    }
                 } catch (e: Throwable) {
-                    Log.w(TAG, "Cannot query voices: ${e.message}")
-                }
-                tts?.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
-                    override fun onStart(utteranceId: String?) {
-                        requestAudioDucking()
-                    }
-                    override fun onDone(utteranceId: String?) {
-                        abandonAudioDucking()
-                    }
-                    override fun onError(utteranceId: String?) {
-                        abandonAudioDucking()
-                    }
-                })
-                val actionsToRun = synchronized(pendingNativeSpeechActions) {
-                    val copy = pendingNativeSpeechActions.toList()
-                    pendingNativeSpeechActions.clear()
-                    copy
-                }
-                if (actionsToRun.isNotEmpty()) {
-                    scope.launch(Dispatchers.Main) {
-                        actionsToRun.forEach { it.invoke() }
+                    isReady = false
+                    Log.w(TAG, "TextToSpeech onInit error: ${e.message}")
+                    synchronized(pendingNativeSpeechActionsLock) {
+                        pendingNativeSpeechActions.clear()
                     }
                 }
-            } else {
-                Log.w(TAG, "TextToSpeech init failed with code: $status")
-                synchronized(pendingNativeSpeechActions) {
-                    pendingNativeSpeechActions.clear()
-                }
+            }
+            tts = created
+            if (isReady) {
+                configureReadyTts(created)
+            }
+        } catch (e: Throwable) {
+            tts = null
+            isReady = false
+            ttsSetupDone.set(false)
+            Log.w(TAG, "TextToSpeech creation failed: ${e.message}")
+            synchronized(pendingNativeSpeechActionsLock) {
+                pendingNativeSpeechActions.clear()
             }
         }
     }
@@ -1338,7 +1374,7 @@ class GameTtsManager(private val context: Context) {
             Unit
         }
         if (tts == null || !isReady) {
-            synchronized(pendingNativeSpeechActions) {
+            synchronized(pendingNativeSpeechActionsLock) {
                 if (!queueAdd) pendingNativeSpeechActions.clear()
                 pendingNativeSpeechActions.add(action)
             }
@@ -1515,6 +1551,9 @@ class GameTtsManager(private val context: Context) {
         try {
             studioQueueJob?.cancel()
             studioQueueJob = null
+            synchronized(pendingNativeSpeechActionsLock) {
+                pendingNativeSpeechActions.clear()
+            }
             abandonAudioDucking()
             stopMediaPlayerOnly()
             tts?.stop()
@@ -1525,6 +1564,11 @@ class GameTtsManager(private val context: Context) {
         try {
             studioQueueJob?.cancel()
             studioQueueJob = null
+            isReady = false
+            ttsSetupDone.set(false)
+            synchronized(pendingNativeSpeechActionsLock) {
+                pendingNativeSpeechActions.clear()
+            }
             abandonAudioDucking()
             stopMediaPlayerOnly()
             tts?.stop()

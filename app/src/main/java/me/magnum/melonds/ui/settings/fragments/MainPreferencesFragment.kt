@@ -225,9 +225,9 @@ class MainPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
             }
         }
 
-        // 11. About (STORM DS 8.4.0 • Android version • CPU ABI • Device model • RAM)
+        // 11. About (STORM DS 8.4.1 • Android version • CPU ABI • Device model • RAM)
         findPreference<Preference>("settings_home_about")?.let { pref ->
-            val vName = (runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "8.4.0")
+            val vName = (runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "8.4.1")
                 .removePrefix("v").removePrefix("V")
             val abi = android.os.Build.SUPPORTED_ABIS.firstOrNull() ?: "arm64-v8a"
             val model = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}".trim()
