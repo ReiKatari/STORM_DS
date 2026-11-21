@@ -6720,6 +6720,8 @@ class EmulatorViewModel @Inject constructor(
         }
     }
 
+    fun isEmulatorPaused(): Boolean = emulatorManager.isEmulatorPaused()
+
     fun canResumeEmulatorFromLifecycle(): Boolean {
         return settingsReconciliationsInFlight.get() == 0 &&
             !pendingRaModalController.blocksLifecycleResume() &&

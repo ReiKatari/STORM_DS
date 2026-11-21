@@ -31,7 +31,7 @@ fun BootInfoOverlay(
     }
     // Safety watchdog: prevent infinite loading animation under any circumstances
     LaunchedEffect(Unit) {
-        kotlinx.coroutines.delay(3500L)
+        kotlinx.coroutines.delay(20_000L)
         if (!romReady) {
             exit.animateTo(1f, tween(durationMillis = 180, easing = FastOutSlowInEasing))
             onFinished()

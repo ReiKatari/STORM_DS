@@ -35,6 +35,8 @@ interface EmulatorManager {
 
     suspend fun resumeEmulator()
 
+    fun isEmulatorPaused(): Boolean = false
+
     suspend fun debugStepFrame(): Boolean
 
     suspend fun resetEmulator()

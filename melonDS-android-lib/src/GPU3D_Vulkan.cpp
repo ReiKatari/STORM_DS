@@ -10009,7 +10009,7 @@ bool VulkanRenderer3D::createFallbackTexture()
         return false;
     }
 
-    *reinterpret_cast<u32*>(mappedMemory) = 0x1F3F3F3Fu;
+    *reinterpret_cast<u32*>(mappedMemory) = 0x00000000u;
     vkUnmapMemory(Device, FallbackTextureStagingMemory);
 
     if (vkWaitForFences(Device, 1, &FrameFence, VK_TRUE, kFenceWaitTimeoutNs) != VK_SUCCESS
@@ -18736,9 +18736,10 @@ void VulkanRenderer3D::buildGraphicsTriangleList(GPU& gpu)
                     bool hasResolvedDescriptorSlot = false;
                     if (resolvedTextureValid)
                     {
-                        const u64 descriptorSlotKey =
-                            (resolvedTexture.Handle << 8u)
-                            | static_cast<u64>(textureSamplerIndexForTexParam(polygon->TexParam));
+                        const u64 descriptorSlotKey = texturePolicy.UsesNormalizedTextureDescriptors
+                            ? ((resolvedTexture.Handle << 8u)
+                                | static_cast<u64>(textureSamplerIndexForTexParam(polygon->TexParam)))
+                            : resolvedTexture.Handle;
                         const auto slotIt = descriptorSlotLookup.find(descriptorSlotKey);
                         if (slotIt != descriptorSlotLookup.end())
                         {

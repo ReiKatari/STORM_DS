@@ -112,6 +112,7 @@ class SharedPreferencesSettingsRepository(
         private const val KEY_DUAL_SCREEN_INTERNAL_VERTICAL_ALIGNMENT = "dual_screen_internal_vertical_alignment"
         private const val KEY_DUAL_SCREEN_EXTERNAL_VERTICAL_ALIGNMENT = "dual_screen_external_vertical_alignment"
         private const val GLES_3_2 = 0x30002
+        private const val BIOS_INDEX_CACHE_TTL_MS = 10_000L
         private val EmptyRetroArchShaderConfiguration = RetroArchShaderConfiguration(
             presetPath = null,
             sourceResolution = RetroArchShaderSourceResolution.VULKAN_IR,
@@ -156,58 +157,85 @@ class SharedPreferencesSettingsRepository(
             .getOrNull()
     }
 
-    private fun resolveBiosFileUri(dirUri: Uri?, treeDoc: DocumentFile?, vararg names: String): Uri? {
-        // 1. Direct file URI / custom directory
+    private val biosDirectoryIndexCache = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, Map<String, Uri>>>()
+
+    private fun getBiosDirectoryFileIndex(dirUri: Uri?, treeDoc: DocumentFile?): Map<String, Uri> {
+        val now = android.os.SystemClock.elapsedRealtime()
+        val cacheKey = when {
+            dirUri != null -> dirUri.toString()
+            treeDoc != null -> treeDoc.uri.toString()
+            else -> return emptyMap()
+        }
+        biosDirectoryIndexCache[cacheKey]?.let { (ts, cached) ->
+            if (now - ts < BIOS_INDEX_CACHE_TTL_MS) {
+                return cached
+            }
+        }
+
+        val index = LinkedHashMap<String, Uri>()
         if (dirUri != null && (dirUri.scheme == "file" || dirUri.scheme == null)) {
             val path = dirUri.path ?: dirUri.toString().removePrefix("file://")
             val dir = File(path)
             if (dir.exists() && dir.isDirectory) {
-                for (name in names) {
-                    val f = File(dir, name)
-                    if (f.exists() && f.length() > 0) return Uri.fromFile(f)
+                dir.listFiles()?.forEach { f ->
+                    if (f.isFile && f.length() > 0) {
+                        index.putIfAbsent(f.name.lowercase(), Uri.fromFile(f))
+                    }
                 }
-                val matched = dir.listFiles()?.firstOrNull { f ->
-                    names.any { name -> f.name.equals(name, ignoreCase = true) }
+            }
+        } else if (treeDoc != null && treeDoc.isDirectory) {
+            runCatching { treeDoc.listFiles() }.getOrNull()?.forEach { doc ->
+                val name = doc.name
+                if (!name.isNullOrBlank() && doc.isFile) {
+                    index.putIfAbsent(name.lowercase(), doc.uri)
                 }
-                if (matched != null && matched.exists() && matched.length() > 0) return Uri.fromFile(matched)
             }
         }
 
-        // 2. Tree document file
-        if (treeDoc != null && treeDoc.isDirectory) {
-            for (name in names) {
-                val fromTree = getFileUri(treeDoc, name)
-                if (fromTree != null) return fromTree
-            }
-            val matchedDoc = treeDoc.listFiles().firstOrNull { f ->
-                val fName = f.name ?: ""
-                names.any { name -> fName.equals(name, ignoreCase = true) }
-            }
-            if (matchedDoc != null && matchedDoc.exists()) return matchedDoc.uri
-        }
+        biosDirectoryIndexCache[cacheKey] = now to index
+        return index
+    }
 
-        // 3. Known fallback directories
+    private fun lookupBiosInIndex(index: Map<String, Uri>, vararg names: String): Uri? {
+        for (name in names) {
+            index[name.lowercase()]?.let { return it }
+        }
+        return null
+    }
+
+    private fun getFallbackBiosFilesIndex(): Map<String, Uri> {
+        val cacheKey = "__fallback_bios__"
+        val now = android.os.SystemClock.elapsedRealtime()
+        biosDirectoryIndexCache[cacheKey]?.let { (ts, cached) ->
+            if (now - ts < BIOS_INDEX_CACHE_TTL_MS) {
+                return cached
+            }
+        }
+        val index = LinkedHashMap<String, Uri>()
         val extStorage = android.os.Environment.getExternalStorageDirectory()
-        val candidateDirs = listOf(
+        listOf(
             File(extStorage, "STORM DS/bios/dsi"),
             File(extStorage, "STORM DS/bios/ds"),
             File(extStorage, "STORM DS/bios"),
-        )
-
-        for (dir in candidateDirs) {
+        ).forEach { dir ->
             if (dir.exists() && dir.isDirectory) {
-                for (name in names) {
-                    val f = File(dir, name)
-                    if (f.exists() && f.length() > 0) return Uri.fromFile(f)
+                dir.listFiles()?.forEach { f ->
+                    if (f.isFile && f.length() > 0) {
+                        index.putIfAbsent(f.name.lowercase(), Uri.fromFile(f))
+                    }
                 }
-                val matched = dir.listFiles()?.firstOrNull { f ->
-                    names.any { name -> f.name.equals(name, ignoreCase = true) }
-                }
-                if (matched != null && matched.exists() && matched.length() > 0) return Uri.fromFile(matched)
             }
         }
+        biosDirectoryIndexCache[cacheKey] = now to index
+        return index
+    }
 
-        return null
+    private fun resolveBiosFileUri(dirUri: Uri?, treeDoc: DocumentFile?, vararg names: String): Uri? {
+        val primaryIndex = getBiosDirectoryFileIndex(dirUri, treeDoc)
+        lookupBiosInIndex(primaryIndex, *names)?.let { return it }
+
+        val fallbackIndex = getFallbackBiosFilesIndex()
+        return lookupBiosInIndex(fallbackIndex, *names)
     }
 
     @OptIn(ExperimentalSerializationApi::class)
@@ -1018,7 +1046,20 @@ class SharedPreferencesSettingsRepository(
         return getSelectedVulkanDriver()?.displayName
     }
 
-    override fun setCustomVulkanDriver(id: String, driverDir: String, driverName: String, displayName: String) {
+    override fun setCustomVulkanDriver(
+        id: String,
+        driverDir: String,
+        driverName: String,
+        displayName: String,
+        author: String?,
+        vendor: String?,
+        driverVersion: String?,
+        description: String?,
+        minApi: Int?,
+        sourceRepo: String?,
+        assetFileName: String?,
+        installedAtEpochMs: Long,
+    ) {
         val drivers = getInstalledVulkanDrivers()
             .filterNot { it.id == id }
             .plus(
@@ -1027,6 +1068,14 @@ class SharedPreferencesSettingsRepository(
                     displayName = displayName,
                     driverDir = driverDir,
                     driverName = driverName,
+                    author = author,
+                    vendor = vendor,
+                    driverVersion = driverVersion,
+                    description = description,
+                    minApi = minApi,
+                    sourceRepo = sourceRepo,
+                    assetFileName = assetFileName,
+                    installedAtEpochMs = installedAtEpochMs,
                 )
             )
         preferences.edit(commit = true) {
@@ -1092,7 +1141,22 @@ class SharedPreferencesSettingsRepository(
                     val displayName = item.optString("displayName").takeIf { it.isNotBlank() } ?: continue
                     val driverDir = item.optString("driverDir").takeIf { it.isNotBlank() } ?: continue
                     val driverName = item.optString("driverName").takeIf { it.isNotBlank() } ?: continue
-                    add(VulkanDriverInfo(id, displayName, driverDir, driverName))
+                    add(
+                        VulkanDriverInfo(
+                            id = id,
+                            displayName = displayName,
+                            driverDir = driverDir,
+                            driverName = driverName,
+                            author = item.optString("author").takeIf { it.isNotBlank() },
+                            vendor = item.optString("vendor").takeIf { it.isNotBlank() },
+                            driverVersion = item.optString("driverVersion").takeIf { it.isNotBlank() },
+                            description = item.optString("description").takeIf { it.isNotBlank() },
+                            minApi = if (item.has("minApi") && !item.isNull("minApi")) item.optInt("minApi") else null,
+                            sourceRepo = item.optString("sourceRepo").takeIf { it.isNotBlank() },
+                            assetFileName = item.optString("assetFileName").takeIf { it.isNotBlank() },
+                            installedAtEpochMs = item.optLong("installedAtEpochMs", 0L),
+                        )
+                    )
                 }
             }
         }.getOrDefault(emptyList())
@@ -1107,6 +1171,16 @@ class SharedPreferencesSettingsRepository(
                     put("displayName", driver.displayName)
                     put("driverDir", driver.driverDir)
                     put("driverName", driver.driverName)
+                    driver.author?.let { put("author", it) }
+                    driver.vendor?.let { put("vendor", it) }
+                    driver.driverVersion?.let { put("driverVersion", it) }
+                    driver.description?.let { put("description", it) }
+                    driver.minApi?.let { put("minApi", it) }
+                    driver.sourceRepo?.let { put("sourceRepo", it) }
+                    driver.assetFileName?.let { put("assetFileName", it) }
+                    if (driver.installedAtEpochMs > 0L) {
+                        put("installedAtEpochMs", driver.installedAtEpochMs)
+                    }
                 }
             )
         }

@@ -674,7 +674,7 @@ void CartRetail::ReadROM_B7(u32 addr, u32 len, u8* data, u32 offset) const
     if (readLogCount < 30)
     {
         readLogCount++;
-        Log(LogLevel::Warn, "ReadROM_B7: raw_addr=%08X len=%08X IsDSi=%d DSiMode=%d DSiBase=%08X ROMLength=%08X\n",
+        Log(LogLevel::Debug, "ReadROM_B7: raw_addr=%08X len=%08X IsDSi=%d DSiMode=%d DSiBase=%08X ROMLength=%08X\n",
             addr, len, IsDSi, DSiMode, DSiBase, ROMLength);
     }
 
@@ -2018,7 +2018,7 @@ void NDSCartSlot::WriteROMCnt(u32 val) noexcept
     if (romcntLogCount < 20)
     {
         romcntLogCount++;
-        Log(LogLevel::Warn, "NDSCartSlot::WriteROMCnt val=%08X xferstart=%d SPICnt=%04X cmd=%02X %02X %02X %02X %02X %02X %02X %02X\n",
+        Log(LogLevel::Debug, "NDSCartSlot::WriteROMCnt val=%08X xferstart=%d SPICnt=%04X cmd=%02X %02X %02X %02X %02X %02X %02X %02X\n",
             val, xferstart, SPICnt,
             ROMCommand[0], ROMCommand[1], ROMCommand[2], ROMCommand[3],
             ROMCommand[4], ROMCommand[5], ROMCommand[6], ROMCommand[7]);

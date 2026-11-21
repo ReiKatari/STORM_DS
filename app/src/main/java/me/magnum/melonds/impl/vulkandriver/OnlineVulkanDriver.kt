@@ -1,25 +1,47 @@
 package me.magnum.melonds.impl.vulkandriver
 
-import me.magnum.melonds.impl.AdrenoVulkanDriverSupport
-
-data class OnlineVulkanDriver(
-    val id: String,
-    val name: String,
-    val version: String,
-    val releaseDate: String,
-    val supportedGpuSeries: Set<AdrenoVulkanDriverSupport.GpuSeries>,
-    val description: String,
-    val downloadUrl: String,
-    val fileSizeMb: Double,
-    val isRecommended: Boolean = false,
-) {
-    val formattedReleaseDate: String
-        get() {
-            val parts = releaseDate.split("-")
-            return if (parts.size == 3) {
-                "${parts[2]}.${parts[1]}.${parts[0]}"
-            } else {
-                releaseDate
-            }
-        }
+enum class DriverRepoCategory {
+    ALL,
+    STORM,
+    TURNIP,
+    QUALCOMM_8XX,
+    ADRENO_710,
 }
+
+data class VulkanDriverRepoSpec(
+    val id: String,
+    val displayName: String,
+    val repoPath: String,
+    val category: DriverRepoCategory,
+    val useTagName: Boolean,
+    val sortByPublishTime: Boolean,
+)
+
+data class VulkanDriverAsset(
+    val name: String,
+    val downloadUrl: String,
+    val sizeBytes: Long,
+    val mirrorUrls: List<String> = emptyList(),
+) {
+    fun allUrls(): List<String> = (listOf(downloadUrl) + mirrorUrls).filter { it.isNotBlank() }.distinct()
+}
+
+data class VulkanDriverRelease(
+    val id: String,
+    val repoId: String,
+    val repoDisplayName: String,
+    val title: String,
+    val tagName: String,
+    val publishedAt: String,
+    val releaseNotes: String,
+    val assets: List<VulkanDriverAsset>,
+    val isFromOfflineFallback: Boolean = false,
+)
+
+data class VulkanDriverRepoGroup(
+    val spec: VulkanDriverRepoSpec,
+    val releases: List<VulkanDriverRelease> = emptyList(),
+    val isLoading: Boolean = false,
+    val fromCache: Boolean = false,
+    val error: String? = null,
+)

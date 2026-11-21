@@ -1,344 +1,438 @@
 package me.magnum.melonds.impl.vulkandriver
 
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import me.magnum.melonds.common.network.SharedOkHttpClient
 import me.magnum.melonds.impl.AdrenoVulkanDriverSupport
+import okhttp3.Request
 import org.json.JSONArray
-import java.net.HttpURLConnection
-import java.net.URL
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.TimeZone
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class OnlineVulkanDriverRepository @Inject constructor() {
-
+class OnlineVulkanDriverRepository @Inject constructor(
+    @ApplicationContext private val context: Context,
+) {
     companion object {
-        const val REMOTE_CATALOG_URL = "https://raw.githubusercontent.com/K11MCH1/AdrenoToolsDrivers/main/drivers_catalog_v2.json"
-    }
+        private const val CACHE_TTL_MS = 30L * 60L * 1000L
+        private const val RELEASES_PER_PAGE = 12
+        private const val MAX_CONCURRENT_REQUESTS = 4
+        private const val USER_AGENT =
+            "Mozilla/5.0 (Linux; Android 14; STORM DS) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
 
-    private val staticDrivers = listOf(
-        // --- 2026 RELEASES: The412Banner, MrPurple, whitebelyash, Qualcomm Adreno, Upstream Turnip ---
-
-        OnlineVulkanDriver(
-            id = "turnip-banner-26-3-0-r17",
-            name = "Turnip Mesa (The412Banner Build v26.3.0 R17 — 18.08.2026)",
-            version = "26.3.0-r17-Banner",
-            releaseDate = "2026-08-18",
-            supportedGpuSeries = setOf(
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_8XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_7XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_6XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
-            ),
-            description = "👑 Новейшая сборка от The412Banner (18 августа 2026) на базе Mesa 26.3 с поддержкой Vulkan 1.4, расширенными лимитами дескрипторов и нулевым инпут-лагом для Adreno 6xx/7xx/8xx.",
-            downloadUrl = "https://github.com/The412Banner/Banners-Turnip/releases/download/v26.3.0-20260818-r17/Turnip-v26.3.0-20260818-r17.zip",
-            fileSizeMb = 2.55,
-            isRecommended = true
-        ),
-        OnlineVulkanDriver(
-            id = "turnip-banner-26-3-0-r17-a8xx",
-            name = "Turnip Mesa (The412Banner v26.3.0 R17 for Adreno 8xx / Snapdragon 8 Elite)",
-            version = "26.3.0-r17-A8xx",
-            releaseDate = "2026-08-18",
-            supportedGpuSeries = setOf(
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_8XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
-            ),
-            description = "⚡ Специализированная сборка The412Banner для новейших GPU Adreno 830 / 840 (Snapdragon 8 Elite / 8 Gen 4) с максимальным FPS.",
-            downloadUrl = "https://github.com/The412Banner/Banners-Turnip/releases/download/v26.3.0-20260818-r17/Turnip-v26.3.0-20260818-r17-A8xx.zip",
-            fileSizeMb = 2.55,
-            isRecommended = true
-        ),
-        OnlineVulkanDriver(
-            id = "turnip-mrpurple-26-3-0-t30",
-            name = "Turnip Mesa (MrPurple Build v26.3.0-devel T-30 — 18.08.2026)",
-            version = "26.3.0-devel-T30",
-            releaseDate = "2026-08-18",
-            supportedGpuSeries = setOf(
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_8XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_7XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_6XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
-            ),
-            description = "🔥 Популярная сборка от автора MrPurple на базе ветки Mesa 26.3 с поддержкой Vulkan 1.4.359 и высокой стабильностью.",
-            downloadUrl = "https://github.com/The412Banner/Banners-Turnip/releases/download/v26.3.0-20260818-r17/Turnip-v26.3.0-20260818-r17.zip",
-            fileSizeMb = 2.55,
-            isRecommended = true
-        ),
-        OnlineVulkanDriver(
-            id = "turnip-whitebelyash-v31",
-            name = "Turnip Mesa (whitebelyash Build v31 / Mainline — 17.08.2026)",
-            version = "v31-wb",
-            releaseDate = "2026-08-17",
-            supportedGpuSeries = setOf(
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_8XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_7XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_6XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
-            ),
-            description = "⚡ Экстремально оптимизированная сборка от whitebelyash (17 августа 2026) с тонкой настройкой кэширования пайплайнов и увеличенным FPS.",
-            downloadUrl = "https://github.com/whitebelyash/AdrenoToolsDrivers/releases/download/tu_v31/mainline-turnip-V31.zip",
-            fileSizeMb = 2.55,
-            isRecommended = true
-        ),
-        OnlineVulkanDriver(
-            id = "turnip-whitebelyash-v31-sync",
-            name = "Turnip Mesa (whitebelyash Build v31 Sync — 17.08.2026)",
-            version = "v31-sync-wb",
-            releaseDate = "2026-08-17",
-            supportedGpuSeries = setOf(
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_8XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_7XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_6XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
-            ),
-            description = "Сборка от whitebelyash с синхронизацией командного буфера GPU для стабильной частоты кадров без разрывов.",
-            downloadUrl = "https://github.com/whitebelyash/AdrenoToolsDrivers/releases/download/tu_v31/mainline-turnip-sync-V31.zip",
-            fileSizeMb = 2.55,
-            isRecommended = false
-        ),
-        OnlineVulkanDriver(
-            id = "turnip-mrpurple-26-2-0-r28",
-            name = "Turnip Mesa (MrPurple Build v26.2.0-r28 — Август 2026)",
-            version = "26.2.0-r28-MrP",
-            releaseDate = "2026-08-16",
-            supportedGpuSeries = setOf(
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_8XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_7XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_6XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
-            ),
-            description = "Ревизия от MrPurple с агрессивным компилятором SPIR-V шейдеров и стабильным фреймрейтом.",
-            downloadUrl = "https://github.com/The412Banner/Banners-Turnip/releases/download/v26.3.0-20260818-r17/Turnip-v26.3.0-20260818-r17.zip",
-            fileSizeMb = 2.55,
-            isRecommended = false
-        ),
-        OnlineVulkanDriver(
-            id = "turnip-whitebelyash-v30",
-            name = "Turnip Mesa (whitebelyash Build v30 — 10.08.2026)",
-            version = "v30-wb",
-            releaseDate = "2026-08-10",
-            supportedGpuSeries = setOf(
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_7XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_6XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_8XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
-            ),
-            description = "Сборка от whitebelyash с оптимизацией тайлинга текстур и консервативной растеризации.",
-            downloadUrl = "https://github.com/whitebelyash/AdrenoToolsDrivers/releases/download/tu_v30/mainline-turnip-V30.zip",
-            fileSizeMb = 2.55,
-            isRecommended = false
-        ),
-        OnlineVulkanDriver(
-            id = "qualcomm-v849",
-            name = "Qualcomm Adreno Driver v849 (Июль 2026)",
-            version = "v849",
-            releaseDate = "2026-07-25",
-            supportedGpuSeries = setOf(
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_8XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_7XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
-            ),
-            description = "Официальный проприетарный пакет Qualcomm (Июль 2026) с нативной поддержкой Vulkan 1.3/1.4 и Snapdragon 8 Elite / 8 Gen 3.",
-            downloadUrl = "https://github.com/K11MCH1/AdrenoToolsDrivers/releases/download/v849/Qualcomm_849_adpkg.zip",
-            fileSizeMb = 22.58,
-            isRecommended = true
-        ),
-        OnlineVulkanDriver(
-            id = "qualcomm-v842-6",
-            name = "Qualcomm Adreno Driver v842.6 (Июнь 2026)",
-            version = "v842.6",
-            releaseDate = "2026-06-20",
-            supportedGpuSeries = setOf(
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_8XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_7XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
-            ),
-            description = "Официальный драйвер Qualcomm для чипсетов Snapdragon 8 Gen 2 / 8 Gen 3 / 8 Elite.",
-            downloadUrl = "https://github.com/K11MCH1/AdrenoToolsDrivers/releases/download/v842.6/8Elite2-842.6.zip",
-            fileSizeMb = 23.4,
-            isRecommended = false
-        ),
-        OnlineVulkanDriver(
-            id = "turnip-v26-0-0-rc6-gmem",
-            name = "Turnip Mesa v26.0.0 RC6 (GMEM — Май 2026)",
-            version = "v26.0.0-rc06-gmem",
-            releaseDate = "2026-05-15",
-            supportedGpuSeries = setOf(
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_7XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_6XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_8XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
-            ),
-            description = "Сборка Turnip Mesa с оптимизацией скоростной локальной памяти GMEM для Adreno 6xx/7xx.",
-            downloadUrl = "https://github.com/K11MCH1/AdrenoToolsDrivers/releases/download/v26.0.0-rc06/Turnip_v26.0.0_R6_Gmem.zip",
-            fileSizeMb = 3.38,
-            isRecommended = false
-        ),
-        OnlineVulkanDriver(
-            id = "turnip-v26-0-0-rc6-sysmem",
-            name = "Turnip Mesa v26.0.0 RC6 (Sysmem — Май 2026)",
-            version = "v26.0.0-rc06-sysmem",
-            releaseDate = "2026-05-15",
-            supportedGpuSeries = setOf(
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_7XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_6XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_8XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
-            ),
-            description = "Сборка Turnip Mesa с прямой адресацией системной памяти Sysmem для максимальной стабильности.",
-            downloadUrl = "https://github.com/K11MCH1/AdrenoToolsDrivers/releases/download/v26.0.0-rc06/Turnip_v26.0.0_R6_Sysmem.zip",
-            fileSizeMb = 3.38,
-            isRecommended = false
-        ),
-        OnlineVulkanDriver(
-            id = "turnip-v26-0-0-rc5",
-            name = "Turnip Mesa v26.0.0 RC5 (Апрель 2026)",
-            version = "v26.0.0-rc05",
-            releaseDate = "2026-04-10",
-            supportedGpuSeries = setOf(
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_7XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_6XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
-            ),
-            description = "Стабильный релиз Turnip Mesa с поддержкой динамического рендеринга и исправлением артефактов текстур.",
-            downloadUrl = "https://github.com/K11MCH1/AdrenoToolsDrivers/releases/download/v26.0.0-rc05/Turnip_v26.0.0_R5.zip",
-            fileSizeMb = 3.35,
-            isRecommended = false
-        ),
-        OnlineVulkanDriver(
-            id = "turnip-v25-3-0-rc11",
-            name = "Turnip Mesa v25.3.0 R11 (Февраль 2026)",
-            version = "v25.3.0-rc11",
-            releaseDate = "2026-02-18",
-            supportedGpuSeries = setOf(
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_7XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_6XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
-            ),
-            description = "Популярный релиз Turnip Mesa с оптимизацией тепловыделения на Snapdragon 8 Gen 1/2/3.",
-            downloadUrl = "https://github.com/K11MCH1/AdrenoToolsDrivers/releases/download/v25.3.0-rc.11/Turnip_v25.3.0_R11.zip",
-            fileSizeMb = 3.30,
-            isRecommended = false
-        ),
-        OnlineVulkanDriver(
-            id = "qualcomm-v819-2",
-            name = "Qualcomm Adreno Driver v819.2 (Январь 2026)",
-            version = "v819.2",
-            releaseDate = "2026-01-20",
-            supportedGpuSeries = setOf(
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_8XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_7XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_6XX,
-                AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER
-            ),
-            description = "Проприетарный пакет Qualcomm для стабильной работы на Adreno 6xx/7xx/8xx.",
-            downloadUrl = "https://github.com/K11MCH1/AdrenoToolsDrivers/releases/download/v819.2/Qualcomm_819.2_adpkg.zip",
-            fileSizeMb = 21.8,
-            isRecommended = false
+        val STORM_DRIVER_MIRRORS: List<String> = listOf(
+            "https://stormgamesworld.ru/uploads/programs/STORM_DRIVER/STORM_DRIVER_12.0.0.zip",
+            "https://github.com/ReiKatari/STORM_DRIVER/releases/download/12.0.0/STORM_DRIVER_12.0.0.zip",
+            "https://media.githubusercontent.com/media/ReiKatari/STORM_GAMES_WORLD/main/Files/STORM_DRIVER_12.0.0.zip",
+            "https://github.com/ReiKatari/STORM_GAMES_WORLD/raw/main/Files/STORM_DRIVER_12.0.0.zip",
         )
-    )
 
-    private var cachedRemoteDrivers: List<OnlineVulkanDriver>? = null
+        val ALL_REPOSITORIES: List<VulkanDriverRepoSpec> = listOf(
+            VulkanDriverRepoSpec(
+                id = "storm_driver",
+                displayName = "STORM DRIVER",
+                repoPath = "ReiKatari/STORM_DRIVER",
+                category = DriverRepoCategory.STORM,
+                useTagName = true,
+                sortByPublishTime = true,
+            ),
+            VulkanDriverRepoSpec(
+                id = "kimchi",
+                displayName = "KIMCHI Turnip Drivers",
+                repoPath = "K11MCH1/AdrenoToolsDrivers",
+                category = DriverRepoCategory.TURNIP,
+                useTagName = true,
+                sortByPublishTime = true,
+            ),
+            VulkanDriverRepoSpec(
+                id = "balemuni",
+                displayName = "Balemuni Turnip (Apex)",
+                repoPath = "Balemuni/Balemunis-Aurora",
+                category = DriverRepoCategory.TURNIP,
+                useTagName = false,
+                sortByPublishTime = false,
+            ),
+            VulkanDriverRepoSpec(
+                id = "mrpurple",
+                displayName = "Mr. Purple Turnip",
+                repoPath = "MrPurple666/purple-turnip",
+                category = DriverRepoCategory.TURNIP,
+                useTagName = false,
+                sortByPublishTime = false,
+            ),
+            VulkanDriverRepoSpec(
+                id = "weabchan",
+                displayName = "Weab-Chan Freedreno CI",
+                repoPath = "Weab-chan/freedreno_turnip-CI",
+                category = DriverRepoCategory.TURNIP,
+                useTagName = false,
+                sortByPublishTime = false,
+            ),
+            VulkanDriverRepoSpec(
+                id = "whitebelyash",
+                displayName = "Whitebelyash Turnip Hub",
+                repoPath = "whitebelyash/freedreno_turnip-CI",
+                category = DriverRepoCategory.TURNIP,
+                useTagName = false,
+                sortByPublishTime = true,
+            ),
+            VulkanDriverRepoSpec(
+                id = "crueter_8elite",
+                displayName = "GameHub Adreno 8xx",
+                repoPath = "crueter/GameHub-8Elite-Drivers",
+                category = DriverRepoCategory.QUALCOMM_8XX,
+                useTagName = false,
+                sortByPublishTime = false,
+            ),
+            VulkanDriverRepoSpec(
+                id = "amaral",
+                displayName = "Amaral Adreno Tools",
+                repoPath = "rickamaral94/Amaral-Adreno-Tools",
+                category = DriverRepoCategory.TURNIP,
+                useTagName = true,
+                sortByPublishTime = true,
+            ),
+            VulkanDriverRepoSpec(
+                id = "winnative",
+                displayName = "WinNative Drivers",
+                repoPath = "WinNative-Emu/Drivers",
+                category = DriverRepoCategory.TURNIP,
+                useTagName = true,
+                sortByPublishTime = true,
+            ),
+            VulkanDriverRepoSpec(
+                id = "ak_turnip",
+                displayName = "AK-Turnip (Mesa Unified)",
+                repoPath = "aydar-kamaltdinov/mesa-unified",
+                category = DriverRepoCategory.TURNIP,
+                useTagName = true,
+                sortByPublishTime = true,
+            ),
+            VulkanDriverRepoSpec(
+                id = "stevenmx_ci",
+                displayName = "StevenMX Turnip CI",
+                repoPath = "StevenMXZ/freedreno_turnip-CI",
+                category = DriverRepoCategory.TURNIP,
+                useTagName = true,
+                sortByPublishTime = true,
+            ),
+            VulkanDriverRepoSpec(
+                id = "the412banner",
+                displayName = "The412Banner Nightly Turnip",
+                repoPath = "The412Banner/Banners-Turnip",
+                category = DriverRepoCategory.TURNIP,
+                useTagName = true,
+                sortByPublishTime = true,
+            ),
+            VulkanDriverRepoSpec(
+                id = "vauzi_710",
+                displayName = "Vauzi-17 Adreno 710 / 720 / 722 Turnip",
+                repoPath = "Vauzi-17/710",
+                category = DriverRepoCategory.ADRENO_710,
+                useTagName = true,
+                sortByPublishTime = true,
+            ),
+            VulkanDriverRepoSpec(
+                id = "stevenmx_tools",
+                displayName = "StevenMXZ Adreno Tools",
+                repoPath = "StevenMXZ/Adreno-Tools-Drivers",
+                category = DriverRepoCategory.TURNIP,
+                useTagName = true,
+                sortByPublishTime = true,
+            ),
+        )
 
-    suspend fun refreshCatalog(): List<OnlineVulkanDriver> = withContext(Dispatchers.IO) {
-        try {
-            val url = URL(REMOTE_CATALOG_URL)
-            val connection = url.openConnection() as HttpURLConnection
-            connection.connectTimeout = 8000
-            connection.readTimeout = 10000
-            connection.connect()
-
-            if (connection.responseCode in 200..299) {
-                val jsonText = connection.inputStream.bufferedReader().use { it.readText() }
-                val parsed = parseDriversJson(jsonText)
-                if (parsed.isNotEmpty()) {
-                    cachedRemoteDrivers = parsed
-                    return@withContext parsed
-                }
+        fun getRecommendedDriverDisplayTitle(subFamily: AdrenoVulkanDriverSupport.AdrenoSubFamily): String? {
+            return when (subFamily) {
+                AdrenoVulkanDriverSupport.AdrenoSubFamily.ADRENO_840_PLUS -> "STORM DRIVER 12.0.0 / GameHub 8xx"
+                AdrenoVulkanDriverSupport.AdrenoSubFamily.ADRENO_8XX_ELITE -> "STORM DRIVER 12.0.0 / GameHub 8xx"
+                AdrenoVulkanDriverSupport.AdrenoSubFamily.ADRENO_710_720 -> "STORM DRIVER 12.0.0 / Vauzi-17 Turnip"
+                AdrenoVulkanDriverSupport.AdrenoSubFamily.ADRENO_7XX_MODERN,
+                AdrenoVulkanDriverSupport.AdrenoSubFamily.ADRENO_6XX,
+                -> "STORM DRIVER 12.0.0 / KIMCHI Turnip"
+                AdrenoVulkanDriverSupport.AdrenoSubFamily.ADRENO_LEGACY_OR_UNKNOWN,
+                AdrenoVulkanDriverSupport.AdrenoSubFamily.NON_ADRENO,
+                -> null
             }
-        } catch (_: Throwable) {}
-
-        staticDrivers
+        }
     }
 
-    private fun parseDriversJson(jsonText: String): List<OnlineVulkanDriver> {
-        val list = mutableListOf<OnlineVulkanDriver>()
-        val jsonArray = JSONArray(jsonText)
-        for (i in 0 until jsonArray.length()) {
-            val obj = jsonArray.getJSONObject(i)
-            val id = obj.getString("id")
-            val name = obj.getString("name")
-            val version = obj.getString("version")
-            val releaseDate = obj.getString("releaseDate")
-            val description = obj.optString("description", "")
-            val downloadUrl = obj.getString("downloadUrl")
-            val fileSizeMb = obj.optDouble("fileSizeMb", 4.5)
-            val isRecommended = obj.optBoolean("isRecommended", false)
+    private val cacheRoot: File
+        get() = File(context.cacheDir, "vulkan_driver_repos").apply { mkdirs() }
 
-            val seriesArray = obj.optJSONArray("supportedGpuSeries")
-            val supportedSeries = mutableSetOf<AdrenoVulkanDriverSupport.GpuSeries>()
-            if (seriesArray != null) {
-                for (j in 0 until seriesArray.length()) {
-                    val sName = seriesArray.getString(j)
-                    val match = AdrenoVulkanDriverSupport.GpuSeries.entries.find { it.name.equals(sName, ignoreCase = true) }
-                    if (match != null) supportedSeries.add(match)
+    private fun cacheJsonFile(repoId: String): File = File(cacheRoot, "$repoId.json")
+    private fun cacheEtagFile(repoId: String): File = File(cacheRoot, "$repoId.etag")
+
+    fun getCachedRepositoryGroups(): List<VulkanDriverRepoGroup> {
+        return ALL_REPOSITORIES.map { spec ->
+            val file = cacheJsonFile(spec.id)
+            if (file.isFile && file.length() > 2L) {
+                val parsed = runCatching { parseReleasesJson(spec, file.readText(Charsets.UTF_8), isOfflineFallback = false) }
+                    .getOrNull()
+                if (!parsed.isNullOrEmpty()) {
+                    return@map VulkanDriverRepoGroup(
+                        spec = spec,
+                        releases = parsed,
+                        isLoading = false,
+                        fromCache = true,
+                    )
                 }
             }
-            if (supportedSeries.isEmpty()) {
-                supportedSeries.add(AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER)
+            VulkanDriverRepoGroup(
+                spec = spec,
+                releases = getOfflineFallbackForRepo(spec),
+                isLoading = true,
+                fromCache = false,
+            )
+        }
+    }
+
+    suspend fun fetchAllRepositories(forceRefresh: Boolean = false): List<VulkanDriverRepoGroup> = withContext(Dispatchers.IO) {
+        val semaphore = Semaphore(MAX_CONCURRENT_REQUESTS)
+        coroutineScope {
+            ALL_REPOSITORIES.map { spec ->
+                async {
+                    semaphore.withPermit {
+                        fetchSingleRepository(spec, forceRefresh)
+                    }
+                }
+            }.awaitAll()
+        }
+    }
+
+    suspend fun fetchSingleRepository(
+        spec: VulkanDriverRepoSpec,
+        forceRefresh: Boolean = false,
+    ): VulkanDriverRepoGroup = withContext(Dispatchers.IO) {
+        val jsonFile = cacheJsonFile(spec.id)
+        val etagFile = cacheEtagFile(spec.id)
+        val now = System.currentTimeMillis()
+
+        if (!forceRefresh && jsonFile.isFile && (now - jsonFile.lastModified() < CACHE_TTL_MS)) {
+            val cached = runCatching { parseReleasesJson(spec, jsonFile.readText(Charsets.UTF_8), isOfflineFallback = false) }
+                .getOrNull()
+            if (!cached.isNullOrEmpty()) {
+                return@withContext VulkanDriverRepoGroup(
+                    spec = spec,
+                    releases = cached,
+                    isLoading = false,
+                    fromCache = true,
+                )
+            }
+        }
+
+        val apiUrl = "https://api.github.com/repos/${spec.repoPath}/releases?per_page=$RELEASES_PER_PAGE"
+        val requestBuilder = Request.Builder()
+            .url(apiUrl)
+            .header("Accept", "application/vnd.github.v3+json")
+            .header("User-Agent", USER_AGENT)
+
+        if (!forceRefresh && etagFile.isFile && jsonFile.isFile) {
+            val etag = etagFile.readText(Charsets.UTF_8).trim()
+            if (etag.isNotEmpty()) {
+                requestBuilder.header("If-None-Match", etag)
+            }
+        }
+
+        val networkAttempt = runCatching {
+            SharedOkHttpClient.instance.newCall(requestBuilder.build()).execute().use { response ->
+                if (response.code == 304 && jsonFile.isFile) {
+                    jsonFile.setLastModified(now)
+                    val cached = parseReleasesJson(spec, jsonFile.readText(Charsets.UTF_8), isOfflineFallback = false)
+                    return@use VulkanDriverRepoGroup(
+                        spec = spec,
+                        releases = if (cached.isNotEmpty()) cached else getOfflineFallbackForRepo(spec),
+                        isLoading = false,
+                        fromCache = true,
+                    )
+                }
+
+                if (!response.isSuccessful) {
+                    throw IllegalStateException("HTTP ${response.code}")
+                }
+
+                val bodyText = response.body?.string().orEmpty()
+                if (bodyText.isBlank()) {
+                    throw IllegalStateException("Empty JSON")
+                }
+
+                val parsed = parseReleasesJson(spec, bodyText, isOfflineFallback = false)
+                jsonFile.writeText(bodyText, Charsets.UTF_8)
+                response.header("ETag")?.takeIf { it.isNotBlank() }?.let { etag ->
+                    etagFile.writeText(etag, Charsets.UTF_8)
+                }
+                VulkanDriverRepoGroup(
+                    spec = spec,
+                    releases = parsed,
+                    isLoading = false,
+                    fromCache = false,
+                )
+            }
+        }
+
+        networkAttempt.getOrElse { err ->
+            // Fall back to stale cache if present, else curated offline release entry
+            val staleCached = if (jsonFile.isFile) {
+                runCatching { parseReleasesJson(spec, jsonFile.readText(Charsets.UTF_8), isOfflineFallback = false) }
+                    .getOrNull()
+                    ?.takeIf { it.isNotEmpty() }
+            } else {
+                null
+            }
+            val fallbackReleases = staleCached ?: getOfflineFallbackForRepo(spec)
+            VulkanDriverRepoGroup(
+                spec = spec,
+                releases = fallbackReleases,
+                isLoading = false,
+                fromCache = staleCached != null,
+                error = if (fallbackReleases.isEmpty()) err.message else null,
+            )
+        }
+    }
+
+    fun getRecommendedRepoIds(subFamily: AdrenoVulkanDriverSupport.AdrenoSubFamily): List<String> {
+        return when (subFamily) {
+            AdrenoVulkanDriverSupport.AdrenoSubFamily.ADRENO_840_PLUS ->
+                listOf("storm_driver", "crueter_8elite", "balemuni")
+            AdrenoVulkanDriverSupport.AdrenoSubFamily.ADRENO_8XX_ELITE ->
+                listOf("storm_driver", "crueter_8elite", "kimchi", "balemuni")
+            AdrenoVulkanDriverSupport.AdrenoSubFamily.ADRENO_710_720 ->
+                listOf("storm_driver", "vauzi_710", "kimchi", "mrpurple")
+            AdrenoVulkanDriverSupport.AdrenoSubFamily.ADRENO_7XX_MODERN ->
+                listOf("storm_driver", "kimchi", "mrpurple", "weabchan", "whitebelyash")
+            AdrenoVulkanDriverSupport.AdrenoSubFamily.ADRENO_6XX ->
+                listOf("storm_driver", "kimchi", "mrpurple", "stevenmx_tools", "weabchan")
+            AdrenoVulkanDriverSupport.AdrenoSubFamily.ADRENO_LEGACY_OR_UNKNOWN,
+            AdrenoVulkanDriverSupport.AdrenoSubFamily.NON_ADRENO,
+            -> emptyList()
+        }
+    }
+
+    private fun parseReleasesJson(
+        spec: VulkanDriverRepoSpec,
+        jsonText: String,
+        isOfflineFallback: Boolean,
+    ): List<VulkanDriverRelease> {
+        val array = JSONArray(jsonText)
+        val rawList = mutableListOf<Pair<Long, VulkanDriverRelease>>()
+
+        for (i in 0 until array.length()) {
+            val obj = array.optJSONObject(i) ?: continue
+            if (obj.optBoolean("draft", false)) continue
+
+            val tagName = obj.optString("tag_name").trim()
+            val releaseName = obj.optString("name").trim()
+            val title = if (spec.useTagName) {
+                tagName.ifEmpty { releaseName }
+            } else {
+                releaseName.ifEmpty { tagName }
+            }.ifEmpty { spec.displayName }
+
+            val publishedRaw = obj.optString("published_at").trim()
+            val publishedEpoch = parseIsoDateEpoch(publishedRaw)
+            val publishedDate = publishedRaw.take(10)
+            val notes = obj.optString("body").trim()
+
+            val assetsJson = obj.optJSONArray("assets") ?: continue
+            val assets = mutableListOf<VulkanDriverAsset>()
+            for (j in 0 until assetsJson.length()) {
+                val assetObj = assetsJson.optJSONObject(j) ?: continue
+                val assetName = assetObj.optString("name").trim()
+                val downloadUrl = assetObj.optString("browser_download_url").trim()
+                val sizeBytes = assetObj.optLong("size", 0L)
+                if (assetName.isEmpty() || downloadUrl.isEmpty()) continue
+                if (!isSupportedDriverArchiveName(assetName)) continue
+
+                val extraMirrors = if (spec.id == "storm_driver" && assetName.contains("STORM_DRIVER_12.0.0", ignoreCase = true)) {
+                    STORM_DRIVER_MIRRORS
+                } else {
+                    emptyList()
+                }
+                assets.add(
+                    VulkanDriverAsset(
+                        name = assetName,
+                        downloadUrl = downloadUrl,
+                        sizeBytes = sizeBytes,
+                        mirrorUrls = extraMirrors,
+                    )
+                )
             }
 
-            list.add(
-                OnlineVulkanDriver(
-                    id = id,
-                    name = name,
-                    version = version,
-                    releaseDate = releaseDate,
-                    supportedGpuSeries = supportedSeries,
-                    description = description,
-                    downloadUrl = downloadUrl,
-                    fileSizeMb = fileSizeMb,
-                    isRecommended = isRecommended
+            if (assets.isEmpty()) continue
+
+            rawList.add(
+                publishedEpoch to VulkanDriverRelease(
+                    id = "${spec.id}:${obj.optLong("id", i.toLong())}",
+                    repoId = spec.id,
+                    repoDisplayName = spec.displayName,
+                    title = title,
+                    tagName = tagName,
+                    publishedAt = publishedDate,
+                    releaseNotes = notes,
+                    assets = assets,
+                    isFromOfflineFallback = isOfflineFallback,
                 )
             )
         }
-        return list
-    }
 
-    fun getDriversForGpu(gpuSeries: AdrenoVulkanDriverSupport.GpuSeries): List<OnlineVulkanDriver> {
-        val source = cachedRemoteDrivers ?: staticDrivers
-        return source
-            .filter { it.supportedGpuSeries.contains(gpuSeries) || it.supportedGpuSeries.contains(AdrenoVulkanDriverSupport.GpuSeries.ADRENO_OTHER) }
-            .sortedByDescending { it.releaseDate }
-    }
-
-    fun getRecommendedDriver(gpuSeries: AdrenoVulkanDriverSupport.GpuSeries): OnlineVulkanDriver? {
-        val compatible = getDriversForGpu(gpuSeries)
-        return when (gpuSeries) {
-            AdrenoVulkanDriverSupport.GpuSeries.ADRENO_8XX -> {
-                compatible.firstOrNull { it.id == "qualcomm-v830-0" || it.id == "turnip-mrpurple-26-3-0-t30" || it.id == "turnip-whitebelyash-26-3-0-v14359" } ?: compatible.firstOrNull()
-            }
-            else -> {
-                compatible.firstOrNull { it.id == "turnip-mrpurple-26-3-0-t30" }
-                    ?: compatible.firstOrNull { it.id == "turnip-whitebelyash-26-3-0-v14359" }
-                    ?: compatible.firstOrNull { it.id == "turnip-mrpurple-26-2-0-r28" }
-                    ?: compatible.firstOrNull()
-            }
+        return if (spec.sortByPublishTime) {
+            rawList.sortedByDescending { it.first }.map { it.second }
+        } else {
+            rawList.map { it.second }
         }
     }
 
-    fun checkForNewerDriver(
-        currentInstalledDriverDisplayName: String?,
-        gpuSeries: AdrenoVulkanDriverSupport.GpuSeries
-    ): OnlineVulkanDriver? {
-        val recommended = getRecommendedDriver(gpuSeries) ?: return null
-        if (currentInstalledDriverDisplayName == null) {
-            return recommended
+    private fun isSupportedDriverArchiveName(name: String): Boolean {
+        val lower = name.lowercase(Locale.ROOT)
+        if (!lower.endsWith(".zip") && !lower.endsWith(".adpkg.zip") && !lower.endsWith(".adpkg")) {
+            return false
         }
-        if (!currentInstalledDriverDisplayName.contains(recommended.version, ignoreCase = true)) {
-            return recommended
+        return !lower.endsWith(".sha256.zip") && !lower.contains("source")
+    }
+
+    private fun parseIsoDateEpoch(isoDate: String): Long {
+        if (isoDate.isBlank()) return 0L
+        return runCatching {
+            val fmt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
+            fmt.timeZone = TimeZone.getTimeZone("UTC")
+            fmt.parse(isoDate)?.time ?: 0L
+        }.getOrDefault(0L)
+    }
+
+    private fun getOfflineFallbackForRepo(spec: VulkanDriverRepoSpec): List<VulkanDriverRelease> {
+        return when (spec.id) {
+            "storm_driver" -> listOf(
+                VulkanDriverRelease(
+                    id = "offline:storm_driver:12.0.0",
+                    repoId = spec.id,
+                    repoDisplayName = spec.displayName,
+                    title = "STORM DRIVER 12.0.0",
+                    tagName = "12.0.0",
+                    publishedAt = "2026",
+                    releaseNotes = "Qualcomm Adreno 6xx/7xx/8xx unified multi-SO package (STORM GAMES WORLD + GitHub mirrors).",
+                    assets = listOf(
+                        VulkanDriverAsset(
+                            name = "STORM_DRIVER_12.0.0.zip",
+                            downloadUrl = STORM_DRIVER_MIRRORS.first(),
+                            sizeBytes = 0L,
+                            mirrorUrls = STORM_DRIVER_MIRRORS.drop(1),
+                        )
+                    ),
+                    isFromOfflineFallback = true,
+                )
+            )
+            else -> emptyList()
         }
-        return null
     }
 }

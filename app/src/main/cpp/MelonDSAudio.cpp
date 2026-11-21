@@ -206,7 +206,9 @@ namespace MelonDSAndroid
             isMicInputEnabled.load(std::memory_order_relaxed) &&
             isMicOn.load(std::memory_order_relaxed))
         {
-            micInputStream->requestStart();
+            const auto micState = micInputStream->getState();
+            if (micState != oboe::StreamState::Started && micState != oboe::StreamState::Starting)
+                micInputStream->requestStart();
         }
     }
 
@@ -401,7 +403,11 @@ namespace MelonDSAndroid
     {
         std::lock_guard<std::mutex> streamLock(audioStreamMutex);
         if (audioStream)
-            audioStream->requestStart();
+        {
+            const auto outState = audioStream->getState();
+            if (outState != oboe::StreamState::Started && outState != oboe::StreamState::Starting)
+                audioStream->requestStart();
+        }
 
         startMicStreamIfAllowedLocked();
     }

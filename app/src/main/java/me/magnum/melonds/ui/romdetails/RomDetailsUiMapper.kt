@@ -33,6 +33,7 @@ class RomDetailsUiMapper(
         globalFastForwardSpeedMultiplier: Float = 2f,
         globalVulkanDriverDisplayName: String = "System GPU",
         availableVulkanDrivers: List<Pair<String?, String>> = emptyList(),
+        isCustomVulkanDriverSupported: Boolean = true,
     ): RomConfigUiModel {
         return RomConfigUiModel(
             runtimeConsoleType = romConfig.runtimeConsoleType,
@@ -72,6 +73,7 @@ class RomDetailsUiMapper(
             customVulkanDriverName = romConfig.customVulkanDriverName,
             globalVulkanDriverDisplayName = globalVulkanDriverDisplayName,
             availableVulkanDrivers = availableVulkanDrivers,
+            isCustomVulkanDriverSupported = isCustomVulkanDriverSupported,
         )
     }
 

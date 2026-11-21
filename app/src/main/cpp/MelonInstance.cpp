@@ -1510,12 +1510,18 @@ MelonInstance::MelonInstance(int instanceId, std::shared_ptr<EmulatorConfigurati
 MelonInstance::~MelonInstance()
 {
     stopFrameTailWorker();
+    std::shared_ptr<VulkanSurfacePresenter> oldPresenter;
+    std::shared_ptr<VulkanOutput> oldOutput;
     {
         std::lock_guard<std::recursive_mutex> presentationLock(vulkanPresentationMutex);
         VulkanSurfacePresenter::clearPrewarmedRetroArchFilters();
-        vulkanOutput = nullptr;
-        vulkanSurfacePresenter = nullptr;
+        oldPresenter = std::move(vulkanSurfacePresenter);
+        oldOutput = std::move(vulkanOutput);
     }
+    if (oldPresenter)
+        oldPresenter->shutdown();
+    oldPresenter.reset();
+    oldOutput.reset();
     net->UnregisterInstance(instanceId);
     delete nds;
 }
@@ -1814,7 +1820,7 @@ bool MelonInstance::precompileVulkanPipelines(const VulkanSurfaceConfig& retroAr
         {
             nds->GPU.SetRenderer2D(std::make_unique<GPU2D::CompatibilitySoftRenderer>(nds->GPU));
         }
-        vulkanOutput = std::make_unique<VulkanOutput>(VulkanPipelineProfile::Compatibility);
+        vulkanOutput = std::make_shared<VulkanOutput>(VulkanPipelineProfile::Compatibility);
         renderer3D.SetRenderSettings(
             vulkanRenderSettings.threadedRendering,
             vulkanRenderSettings.betterPolygons,
@@ -1854,7 +1860,7 @@ bool MelonInstance::precompileVulkanPipelines(const VulkanSurfaceConfig& retroAr
         {
             nds->GPU.SetRenderer2D(std::make_unique<GPU2D::CompatibilitySoftRenderer>(nds->GPU));
         }
-        vulkanOutput = std::make_unique<VulkanOutput>(activeProfile);
+        vulkanOutput = std::make_shared<VulkanOutput>(activeProfile);
     }
 
     emitProgress(kVulkanCompileStageInitOutput, 2);
@@ -2539,99 +2545,98 @@ u32 MelonInstance::runFrame()
     const int maxRenderFrameAcquireAttempts = currentRenderer == Renderer::Vulkan
         ? static_cast<int>(FRAME_QUEUE_SIZE)
         : 1;
-    for (int attempt = 0; attempt < maxRenderFrameAcquireAttempts; attempt++)
+    if (currentRenderer == Renderer::Vulkan)
     {
-        Frame* candidateFrame = frameQueue.getRenderFrame(frameQueuePolicy);
-        if (candidateFrame == nullptr)
-            break;
-
-        bool readyForReuse = true;
-        if (currentRenderer == Renderer::Vulkan)
+        std::shared_ptr<VulkanOutput> localOutput;
+        std::shared_ptr<VulkanSurfacePresenter> localPresenter;
         {
             std::lock_guard<std::recursive_mutex> presentationLock(vulkanPresentationMutex);
-            if (vulkanSurfacePresenter != nullptr
-                && !vulkanSurfacePresenter->waitForFrameConsumption(candidateFrame))
+            localOutput = vulkanOutput;
+            localPresenter = vulkanSurfacePresenter;
+        }
+        for (int attempt = 0; attempt < maxRenderFrameAcquireAttempts; attempt++)
+        {
+            Frame* candidateFrame = frameQueue.getRenderFrame(frameQueuePolicy);
+            if (candidateFrame == nullptr)
+                break;
+
+            bool readyForReuse = true;
+            if (localPresenter != nullptr
+                && !localPresenter->waitForFrameConsumption(candidateFrame))
             {
                 readyForReuse = false;
             }
 
             if (readyForReuse
-                && vulkanOutput != nullptr
-                && vulkanOutput->isFrameReferencedAsPendingPreviousSource(candidateFrame))
+                && localOutput != nullptr
+                && localOutput->isFrameReferencedAsPendingPreviousSource(candidateFrame))
             {
                 readyForReuse = false;
             }
-        }
 
-        if (readyForReuse)
-        {
-            renderFrame = candidateFrame;
-            break;
-        }
-
-        frameQueue.recycleRenderFrame(candidateFrame);
-    }
-    if (renderFrame == nullptr && currentRenderer == Renderer::Vulkan)
-    {
-        bool hasVulkanOutput = false;
-        {
-            std::lock_guard<std::recursive_mutex> presentationLock(vulkanPresentationMutex);
-            hasVulkanOutput = vulkanOutput != nullptr;
-            if (hasVulkanOutput && !UsesVulkanFastPath(vulkanSessionProfile.get()))
-                vulkanOutput->releaseCompatibilityTemporalFrameReferences();
-        }
-        if (hasVulkanOutput && !UsesVulkanFastPath(vulkanSessionProfile.get()))
-        {
-            Frame* candidateFrame = frameQueue.getRenderFrame(frameQueuePolicy);
-            if (candidateFrame != nullptr)
+            if (readyForReuse)
             {
-                bool readyForReuse = false;
-                {
-                    std::lock_guard<std::recursive_mutex> presentationLock(vulkanPresentationMutex);
-                    readyForReuse = vulkanSurfacePresenter == nullptr
-                        || vulkanSurfacePresenter->waitForFrameConsumption(candidateFrame);
-                }
-                if (readyForReuse)
-                {
-                    renderFrame = candidateFrame;
-                }
-                else
-                {
-                    frameQueue.recycleRenderFrame(candidateFrame);
-                }
+                renderFrame = candidateFrame;
+                break;
             }
+
+            frameQueue.recycleRenderFrame(candidateFrame);
         }
-        else if (hasVulkanOutput)
+        if (renderFrame == nullptr && localOutput != nullptr)
         {
-            for (int attempt = 0; attempt < maxRenderFrameAcquireAttempts; attempt++)
+            if (!UsesVulkanFastPath(vulkanSessionProfile.get()))
             {
+                localOutput->releaseCompatibilityTemporalFrameReferences();
                 Frame* candidateFrame = frameQueue.getRenderFrame(frameQueuePolicy);
-                if (candidateFrame == nullptr)
-                    break;
-                bool temporalReleased = false;
-                bool readyForReuse = false;
+                if (candidateFrame != nullptr)
                 {
-                    std::lock_guard<std::recursive_mutex> presentationLock(vulkanPresentationMutex);
-                    temporalReleased = vulkanOutput != nullptr
-                        && vulkanOutput->releaseTemporalFrameReferencesFor(candidateFrame);
-                    if (temporalReleased)
+                    const bool readyForReuse = localPresenter == nullptr
+                        || localPresenter->waitForFrameConsumption(candidateFrame);
+                    if (readyForReuse)
                     {
-                        readyForReuse = vulkanSurfacePresenter == nullptr
-                            || vulkanSurfacePresenter->waitForFrameConsumption(candidateFrame);
+                        renderFrame = candidateFrame;
+                    }
+                    else
+                    {
+                        frameQueue.recycleRenderFrame(candidateFrame);
                     }
                 }
-                if (!temporalReleased)
-                {
-                    frameQueue.recycleRenderFrame(candidateFrame);
-                    continue;
-                }
-                if (readyForReuse)
-                {
-                    renderFrame = candidateFrame;
-                    break;
-                }
-                frameQueue.recycleRenderFrame(candidateFrame);
             }
+            else
+            {
+                for (int attempt = 0; attempt < maxRenderFrameAcquireAttempts; attempt++)
+                {
+                    Frame* candidateFrame = frameQueue.getRenderFrame(frameQueuePolicy);
+                    if (candidateFrame == nullptr)
+                        break;
+                    const bool temporalReleased = localOutput->releaseTemporalFrameReferencesFor(candidateFrame);
+                    if (!temporalReleased)
+                    {
+                        frameQueue.recycleRenderFrame(candidateFrame);
+                        continue;
+                    }
+                    const bool readyForReuse = localPresenter == nullptr
+                        || localPresenter->waitForFrameConsumption(candidateFrame);
+                    if (readyForReuse)
+                    {
+                        renderFrame = candidateFrame;
+                        break;
+                    }
+                    frameQueue.recycleRenderFrame(candidateFrame);
+                }
+            }
+        }
+    }
+    else
+    {
+        for (int attempt = 0; attempt < maxRenderFrameAcquireAttempts; attempt++)
+        {
+            Frame* candidateFrame = frameQueue.getRenderFrame(frameQueuePolicy);
+            if (candidateFrame == nullptr)
+                break;
+
+            renderFrame = candidateFrame;
+            break;
         }
     }
     recordSetupPhase(vulkanSetupAcquireCpuWindow);
@@ -2876,15 +2881,21 @@ void MelonInstance::stop()
         firmwareSave->CheckFlush();
         firmwareSave = nullptr;
     }
+    std::shared_ptr<VulkanSurfacePresenter> oldPresenter;
+    std::shared_ptr<VulkanOutput> oldOutput;
     {
         std::lock_guard<std::recursive_mutex> presentationLock(vulkanPresentationMutex);
         VulkanSurfacePresenter::clearPrewarmedRetroArchFilters();
-        vulkanOutput = nullptr;
-        vulkanSurfacePresenter = nullptr;
+        oldPresenter = std::move(vulkanSurfacePresenter);
+        oldOutput = std::move(vulkanOutput);
         vulkanReadbackFrame.clear();
         lastCompletedVulkanFrame = nullptr;
         lastCompletedVulkanScale = 1;
     }
+    if (oldPresenter)
+        oldPresenter->shutdown();
+    oldPresenter.reset();
+    oldOutput.reset();
     frameQueue.clear();
     screenshotRenderer->cleanup();
     vulkanRuntimeFailureHandled = false;
@@ -3220,11 +3231,15 @@ bool MelonInstance::waitForPresentationFrame(Frame* frame, u64 timeoutNs)
     if (frame->backend != FrameBackend::VulkanImage)
         return true;
 
-    std::lock_guard<std::recursive_mutex> presentationLock(vulkanPresentationMutex);
-    if (!vulkanOutput)
+    std::shared_ptr<VulkanOutput> localOutput;
+    {
+        std::lock_guard<std::recursive_mutex> presentationLock(vulkanPresentationMutex);
+        localOutput = vulkanOutput;
+    }
+    if (!localOutput)
         return false;
 
-    return vulkanOutput->waitForFrame(frame, timeoutNs);
+    return localOutput->waitForFrame(frame, timeoutNs);
 }
 
 int MelonInstance::attachVulkanSurface(ANativeWindow* window, u32 width, u32 height)
@@ -3232,20 +3247,27 @@ int MelonInstance::attachVulkanSurface(ANativeWindow* window, u32 width, u32 hei
     if (window == nullptr)
         return 0;
 
-    int surfaceId = 0;
+    std::shared_ptr<VulkanSurfacePresenter> localPresenter;
     {
         std::lock_guard<std::recursive_mutex> presentationLock(vulkanPresentationMutex);
         if (!vulkanSurfacePresenter)
-            vulkanSurfacePresenter = std::make_unique<VulkanSurfacePresenter>();
-
-        if (!vulkanSurfacePresenter->init())
-        {
-            ANativeWindow_release(window);
-            return 0;
-        }
-
-        surfaceId = vulkanSurfacePresenter->attachSurface(window, width, height);
+            vulkanSurfacePresenter = std::make_shared<VulkanSurfacePresenter>();
+        localPresenter = vulkanSurfacePresenter;
     }
+
+    if (!localPresenter || !localPresenter->init())
+    {
+        if (localPresenter)
+        {
+            std::lock_guard<std::recursive_mutex> presentationLock(vulkanPresentationMutex);
+            if (vulkanSurfacePresenter == localPresenter)
+                vulkanSurfacePresenter = nullptr;
+        }
+        ANativeWindow_release(window);
+        return 0;
+    }
+
+    const int surfaceId = localPresenter->attachSurface(window, width, height);
     if (surfaceId != 0)
         requestVulkanPresentationResync();
     return surfaceId;
@@ -3253,14 +3275,15 @@ int MelonInstance::attachVulkanSurface(ANativeWindow* window, u32 width, u32 hei
 
 bool MelonInstance::resizeVulkanSurface(int surfaceId, u32 width, u32 height)
 {
-    bool resized = false;
+    std::shared_ptr<VulkanSurfacePresenter> localPresenter;
     {
         std::lock_guard<std::recursive_mutex> presentationLock(vulkanPresentationMutex);
-        if (!vulkanSurfacePresenter)
-            return false;
-
-        resized = vulkanSurfacePresenter->resizeSurface(surfaceId, width, height);
+        localPresenter = vulkanSurfacePresenter;
     }
+    if (!localPresenter)
+        return false;
+
+    const bool resized = localPresenter->resizeSurface(surfaceId, width, height);
     if (resized)
         requestVulkanPresentationResync();
     return resized;
@@ -3271,20 +3294,28 @@ bool MelonInstance::configureVulkanSurface(
     const VulkanSurfaceConfig& config,
     const VulkanBackgroundImage& backgroundImage)
 {
-    std::lock_guard<std::recursive_mutex> presentationLock(vulkanPresentationMutex);
-    if (!vulkanSurfacePresenter)
+    std::shared_ptr<VulkanSurfacePresenter> localPresenter;
+    {
+        std::lock_guard<std::recursive_mutex> presentationLock(vulkanPresentationMutex);
+        localPresenter = vulkanSurfacePresenter;
+    }
+    if (!localPresenter)
         return false;
 
-    return vulkanSurfacePresenter->configureSurface(surfaceId, config, backgroundImage);
+    return localPresenter->configureSurface(surfaceId, config, backgroundImage);
 }
 
 void MelonInstance::detachVulkanSurface(int surfaceId)
 {
-    std::lock_guard<std::recursive_mutex> presentationLock(vulkanPresentationMutex);
-    if (!vulkanSurfacePresenter)
+    std::shared_ptr<VulkanSurfacePresenter> localPresenter;
+    {
+        std::lock_guard<std::recursive_mutex> presentationLock(vulkanPresentationMutex);
+        localPresenter = vulkanSurfacePresenter;
+    }
+    if (!localPresenter)
         return;
 
-    vulkanSurfacePresenter->detachSurface(surfaceId);
+    localPresenter->detachSurface(surfaceId);
 }
 
 bool MelonInstance::presentVulkanFrame(
@@ -3424,10 +3455,12 @@ bool MelonInstance::presentVulkanFrame(
             frameQueue.deferPresentedFrame(frame, deferFrameQueuePolicy);
             return false;
         }
+        std::shared_ptr<VulkanOutput> localOutput = vulkanOutput;
+        std::shared_ptr<VulkanSurfacePresenter> localPresenter = vulkanSurfacePresenter;
 
         const bool shouldContinueRealtimeProbe = shouldProbeRealtimeBacklog
             && attempt + 1 < maxPresentAttempts
-            && !vulkanOutput->isFrameReady(frame);
+            && !localOutput->isFrameReady(frame);
         if (shouldContinueRealtimeProbe)
         {
             presentationLock.unlock();
@@ -3435,7 +3468,7 @@ bool MelonInstance::presentVulkanFrame(
             continue;
         }
 
-        const bool frameReady = vulkanOutput->isFrameReady(frame);
+        const bool frameReady = localOutput->isFrameReady(frame);
         if (shouldUseAdaptiveTemporalBlocking && !frameReady)
             vulkanTemporal3dNotReadyFrames =
                 std::min(vulkanTemporal3dNotReadyFrames + 1, kVulkanTemporal3dNotReadyBlockingFrames);
@@ -3471,6 +3504,8 @@ bool MelonInstance::presentVulkanFrame(
                 frameQueue.deferPresentedFrame(frame, deferFrameQueuePolicy);
                 return false;
             }
+            localOutput = vulkanOutput;
+            localPresenter = vulkanSurfacePresenter;
         }
         constexpr u64 kMaxPresenterWaitTimeoutNs = 200'000'000ull;
         const bool hasWaitTimeoutBudget =
@@ -3505,7 +3540,7 @@ bool MelonInstance::presentVulkanFrame(
             ? std::max<int>(1, static_cast<int>(frame->width / 256u))
             : renderScale;
         VulkanCompositionInputs compositionInputs{};
-        if (!vulkanOutput->buildCompositionInputs(
+        if (!localOutput->buildCompositionInputs(
                 frame,
                 renderer3D,
                 framePresentationScale,
@@ -3546,17 +3581,19 @@ bool MelonInstance::presentVulkanFrame(
             return std::max(waitTimeoutNs, kVulkanHighResolutionRealtimePresenterBudgetFloorNs);
         }();
 
-        const bool presented = vulkanSurfacePresenter->presentFrame(frame, *vulkanOutput, compositionInputs, presenterTimeoutNs);
+        // Release vulkanPresentationMutex before blocking on swapchain acquire/present
+        // so the emulation thread is never stalled by VSync / SurfaceFlinger.
+        presentationLock.unlock();
+
+        const bool presented = localPresenter->presentFrame(frame, *localOutput, compositionInputs, presenterTimeoutNs);
         if (presented)
         {
             if (UsesVulkanFastPath(vulkanSessionProfile.get()))
-                vulkanOutput->markFramePreviousSourcesSubmitted(frame);
-            presentationLock.unlock();
+                localOutput->markFramePreviousSourcesSubmitted(frame);
             frameQueue.commitPresentedFrame(frame, shouldProbeRealtimeBacklog ? candidateQueuePolicy : frameQueuePolicy);
             return true;
         }
 
-        presentationLock.unlock();
         frameQueue.deferPresentedFrame(frame, deferFrameQueuePolicy);
         if (!frameQueuePolicy.AllowDropForDeadline || frameQueuePolicy.PreferOldestFrame)
             return false;
@@ -3568,31 +3605,35 @@ bool MelonInstance::presentVulkanFrame(
 void MelonInstance::requestVulkanPresentationResync()
 {
     joinPendingFrameTail();
-    std::lock_guard<std::recursive_mutex> presentationLock(vulkanPresentationMutex);
-    vulkanMissingRegularCaptureSourceFailureCount = 0;
-    if (currentRenderer != Renderer::Vulkan)
-        return;
-
-    frameQueue.requestPresentationResync();
-    if (vulkanOutput)
-        vulkanOutput->invalidateTemporalHistory(vulkanSessionProfile.get());
-    if (vulkanSurfacePresenter)
-        vulkanSurfacePresenter->invalidateDescriptorCaches();
-    auto& renderer3D = static_cast<VulkanRenderer3D&>(nds->GPU.GetRenderer3D());
-    renderer3D.requestPostFastForwardDrain();
-    renderer3D.InvalidatePresentationState(true);
-    lastCompletedVulkanFrame = nullptr;
-    lastCompletedVulkanScale = 1;
-    lastVulkanFastForwardPresentationState = isFastForwardActive();
-    vulkanFastForwardPreviousFrameFallbackFrames = 0;
-    clearLatchedSoftPackedFrameSnapshot();
-    if (nds != nullptr)
+    std::shared_ptr<VulkanSurfacePresenter> localPresenter;
     {
-        if (auto* renderer2D = dynamic_cast<GPU2D::SoftRenderer*>(&nds->GPU.GetRenderer2D()))
-            renderer2D->ClearStructuredVulkan2DState();
+        std::lock_guard<std::recursive_mutex> presentationLock(vulkanPresentationMutex);
+        vulkanMissingRegularCaptureSourceFailureCount = 0;
+        if (currentRenderer != Renderer::Vulkan)
+            return;
+
+        frameQueue.requestPresentationResync();
+        if (vulkanOutput)
+            vulkanOutput->invalidateTemporalHistory(vulkanSessionProfile.get());
+        localPresenter = vulkanSurfacePresenter;
+        auto& renderer3D = static_cast<VulkanRenderer3D&>(nds->GPU.GetRenderer3D());
+        renderer3D.requestPostFastForwardDrain();
+        renderer3D.InvalidatePresentationState(true);
+        lastCompletedVulkanFrame = nullptr;
+        lastCompletedVulkanScale = 1;
+        lastVulkanFastForwardPresentationState = isFastForwardActive();
+        vulkanFastForwardPreviousFrameFallbackFrames = 0;
+        clearLatchedSoftPackedFrameSnapshot();
+        if (nds != nullptr)
+        {
+            if (auto* renderer2D = dynamic_cast<GPU2D::SoftRenderer*>(&nds->GPU.GetRenderer2D()))
+                renderer2D->ClearStructuredVulkan2DState();
+        }
+        vulkanReadbackFrame.clear();
+        clearPreparedVulkanDebugSnapshot();
     }
-    vulkanReadbackFrame.clear();
-    clearPreparedVulkanDebugSnapshot();
+    if (localPresenter)
+        localPresenter->invalidateDescriptorCaches();
 }
 
 void MelonInstance::requestVulkanFastForwardPresentationTransition()
@@ -4836,9 +4877,13 @@ void MelonInstance::dumpDebugSnapshot()
         (void)ensurePreparedVulkanDebugSnapshot(lastCompletedVulkanFrame, const_cast<VulkanRenderer3D&>(renderer3D));
     VulkanPresenterPacingStats presenterStats{};
     {
-        std::lock_guard<std::recursive_mutex> presentationLock(vulkanPresentationMutex);
-        if (vulkanSurfacePresenter)
-            presenterStats = vulkanSurfacePresenter->takePacingStatsSnapshotAndReset();
+        std::shared_ptr<VulkanSurfacePresenter> localPresenter;
+        {
+            std::lock_guard<std::recursive_mutex> presentationLock(vulkanPresentationMutex);
+            localPresenter = vulkanSurfacePresenter;
+        }
+        if (localPresenter)
+            presenterStats = localPresenter->takePacingStatsSnapshotAndReset();
     }
     const auto& deviceProfile = VulkanContext::Get().GetDeviceProfile();
     SoftPackedScreenStats topPackedStats{};
@@ -5726,7 +5771,7 @@ void MelonInstance::updateRenderer()
     if (!config || !config->renderSettings)
         return;
 
-    std::lock_guard<std::recursive_mutex> presentationLock(vulkanPresentationMutex);
+    std::unique_lock<std::recursive_mutex> presentationLock(vulkanPresentationMutex);
     Renderer newRenderer = config->renderer;
 
     if (newRenderer != currentRenderer)
@@ -5739,7 +5784,7 @@ void MelonInstance::updateRenderer()
         if (newRenderer == Renderer::Vulkan)
         {
             if (!vulkanOutput)
-                vulkanOutput = std::make_unique<VulkanOutput>(
+                vulkanOutput = std::make_shared<VulkanOutput>(
                     vulkanSessionProfile.get());
 
             if (!vulkanOutput->isInitialized() && !vulkanOutput->init())
@@ -5762,7 +5807,7 @@ void MelonInstance::updateRenderer()
                     {
                         nds->GPU.SetRenderer2D(std::make_unique<GPU2D::CompatibilitySoftRenderer>(nds->GPU));
                     }
-                    vulkanOutput = std::make_unique<VulkanOutput>(
+                    vulkanOutput = std::make_shared<VulkanOutput>(
                         VulkanPipelineProfile::Compatibility);
                 }
             }
@@ -5791,8 +5836,14 @@ void MelonInstance::updateRenderer()
         else if (vulkanOutput || vulkanSurfacePresenter)
         {
             VulkanSurfacePresenter::clearPrewarmedRetroArchFilters();
-            vulkanOutput = nullptr;
-            vulkanSurfacePresenter = nullptr;
+            std::shared_ptr<VulkanSurfacePresenter> oldPresenter = std::move(vulkanSurfacePresenter);
+            std::shared_ptr<VulkanOutput> oldOutput = std::move(vulkanOutput);
+            presentationLock.unlock();
+            if (oldPresenter)
+                oldPresenter->shutdown();
+            oldPresenter.reset();
+            oldOutput.reset();
+            presentationLock.lock();
         }
 
         std::unique_ptr<Renderer3D> nextRenderer = nullptr;
@@ -5908,7 +5959,7 @@ void MelonInstance::updateRenderer()
                 }
                 if (!vulkanOutput || vulkanOutput->getPipelineProfile() != VulkanPipelineProfile::Compatibility)
                 {
-                    vulkanOutput = std::make_unique<VulkanOutput>(VulkanPipelineProfile::Compatibility);
+                    vulkanOutput = std::make_shared<VulkanOutput>(VulkanPipelineProfile::Compatibility);
                     if (!vulkanOutput->init())
                     {
                         Platform::Log(Platform::LogLevel::Error, "Failed to reinitialize VulkanOutput in Compatibility profile");
@@ -6189,11 +6240,15 @@ void MelonInstance::logVulkanPerformanceIfNeeded()
     VulkanPresenterPacingStats presenterStats{};
     VulkanOutputTemporalStats temporalStats{};
     {
-        std::lock_guard<std::recursive_mutex> presentationLock(vulkanPresentationMutex);
-        if (vulkanSurfacePresenter)
-            presenterStats = vulkanSurfacePresenter->takePacingStatsSnapshotAndReset();
-        if (vulkanOutput)
-            temporalStats = vulkanOutput->takeTemporalStatsSnapshotAndReset();
+        std::shared_ptr<VulkanSurfacePresenter> localPresenter;
+        {
+            std::lock_guard<std::recursive_mutex> presentationLock(vulkanPresentationMutex);
+            localPresenter = vulkanSurfacePresenter;
+            if (vulkanOutput)
+                temporalStats = vulkanOutput->takeTemporalStatsSnapshotAndReset();
+        }
+        if (localPresenter)
+            presenterStats = localPresenter->takePacingStatsSnapshotAndReset();
     }
     const u64 softPackedMissingWindow = vulkanSoftPackedMissingWindow;
     const u64 heldPreviousFrameWindow = vulkanHeldPreviousFrameWindow;

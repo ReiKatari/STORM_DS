@@ -1774,7 +1774,7 @@ bool VulkanOutput::createCompositorResources()
 
         const VkResult pipelineResult = vkCreateComputePipelines(
             device,
-            VK_NULL_HANDLE,
+            melonDS::VulkanContext::Get().GetPipelineCache(),
             1,
             &computePipelineCreateInfo,
             nullptr,
@@ -1976,7 +1976,7 @@ bool VulkanOutput::createAccumulateResources()
 
         const VkResult result = vkCreateComputePipelines(
             device,
-            VK_NULL_HANDLE,
+            melonDS::VulkanContext::Get().GetPipelineCache(),
             1,
             &computePipelineCreateInfo,
             nullptr,

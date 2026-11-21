@@ -480,21 +480,23 @@ VulkanSurfacePresenter::~VulkanSurfacePresenter()
 
 bool VulkanSurfacePresenter::init()
 {
-    if (initialized)
+    std::lock_guard<std::recursive_mutex> surfaceLock(surfaceMutex);
+    if (initialized.load(std::memory_order_acquire))
         return true;
 
     if (!melonDS::VulkanContext::Get().Acquire())
         return false;
 
     contextAcquired = true;
-    deviceLost = false;
+    deviceLost.store(false, std::memory_order_release);
     instance = melonDS::VulkanContext::Get().GetInstance();
     physicalDevice = melonDS::VulkanContext::Get().GetPhysicalDevice();
     device = melonDS::VulkanContext::Get().GetDevice();
     queue = melonDS::VulkanContext::Get().GetQueue();
     queueFamilyIndex = melonDS::VulkanContext::Get().GetQueueFamilyIndex();
-    useTimelineSemaphores = melonDS::VulkanContext::Get().SupportsTimelineSemaphores();
-    waitSemaphores = useTimelineSemaphores ? melonDS::VulkanContext::Get().GetWaitSemaphores() : nullptr;
+    const bool timelineSupported = melonDS::VulkanContext::Get().SupportsTimelineSemaphores();
+    useTimelineSemaphores.store(timelineSupported, std::memory_order_release);
+    waitSemaphores = timelineSupported ? melonDS::VulkanContext::Get().GetWaitSemaphores() : nullptr;
     resetQueryPool = melonDS::VulkanContext::Get().GetResetQueryPool();
     timestampPeriodNs = melonDS::VulkanContext::Get().GetTimestampPeriod();
     timestampQueriesSupported = melonDS::VulkanContext::Get().SupportsTimestamps();
@@ -534,12 +536,14 @@ bool VulkanSurfacePresenter::init()
         return false;
     }
 
-    initialized = true;
+    initialized.store(true, std::memory_order_release);
     return true;
 }
 
 void VulkanSurfacePresenter::shutdown()
 {
+    std::lock_guard<std::recursive_mutex> surfaceLock(surfaceMutex);
+    initialized.store(false, std::memory_order_release);
     if (device != VK_NULL_HANDLE)
     {
         std::scoped_lock queueLock(melonDS::VulkanContext::Get().GetQueueLock());
@@ -563,8 +567,8 @@ void VulkanSurfacePresenter::shutdown()
         contextAcquired = false;
     }
 
-    initialized = false;
-    deviceLost = false;
+    initialized.store(false, std::memory_order_release);
+    deviceLost.store(false, std::memory_order_release);
     fastPathHardwareSupported = false;
     lastSavedPipelineCacheSize = 0;
     nextSurfaceId = 1;
@@ -573,7 +577,7 @@ void VulkanSurfacePresenter::shutdown()
     device = VK_NULL_HANDLE;
     queue = VK_NULL_HANDLE;
     queueFamilyIndex = 0;
-    useTimelineSemaphores = false;
+    useTimelineSemaphores.store(false, std::memory_order_release);
     timelineValue = 0;
     timelineSemaphore = VK_NULL_HANDLE;
     waitSemaphores = nullptr;
@@ -681,12 +685,12 @@ void VulkanSurfacePresenter::clearPrewarmedRetroArchFilters()
 
 bool VulkanSurfacePresenter::createSyncObjects()
 {
-    if (!useTimelineSemaphores)
+    if (!useTimelineSemaphores.load(std::memory_order_acquire))
         return true;
 
     if (waitSemaphores == nullptr)
     {
-        useTimelineSemaphores = false;
+        useTimelineSemaphores.store(false, std::memory_order_release);
         return true;
     }
 
@@ -701,7 +705,7 @@ bool VulkanSurfacePresenter::createSyncObjects()
 
     if (vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &timelineSemaphore) != VK_SUCCESS)
     {
-        useTimelineSemaphores = false;
+        useTimelineSemaphores.store(false, std::memory_order_release);
         timelineSemaphore = VK_NULL_HANDLE;
         return true;
     }
@@ -1035,7 +1039,8 @@ void VulkanSurfacePresenter::destroyTimestampQueryPool(VkQueryPool& queryPool)
 
 int VulkanSurfacePresenter::attachSurface(ANativeWindow* window, u32 width, u32 height)
 {
-    if (!initialized || window == nullptr)
+    std::lock_guard<std::recursive_mutex> surfaceLock(surfaceMutex);
+    if (!initialized.load(std::memory_order_acquire) || window == nullptr)
         return 0;
 
     SurfaceState surfaceState{};
@@ -1085,6 +1090,7 @@ int VulkanSurfacePresenter::attachSurface(ANativeWindow* window, u32 width, u32 
 
 bool VulkanSurfacePresenter::resizeSurface(int surfaceId, u32 width, u32 height)
 {
+    std::lock_guard<std::recursive_mutex> surfaceLock(surfaceMutex);
     auto iterator = surfaces.find(surfaceId);
     if (iterator == surfaces.end())
         return false;
@@ -1117,6 +1123,7 @@ bool VulkanSurfacePresenter::resizeSurface(int surfaceId, u32 width, u32 height)
 
 bool VulkanSurfacePresenter::configureSurface(int surfaceId, const VulkanSurfaceConfig& config, const VulkanBackgroundImage& backgroundImage)
 {
+    std::lock_guard<std::recursive_mutex> surfaceLock(surfaceMutex);
     auto iterator = surfaces.find(surfaceId);
     if (iterator == surfaces.end())
         return false;
@@ -1175,6 +1182,7 @@ bool VulkanSurfacePresenter::configureSurface(int surfaceId, const VulkanSurface
 
 void VulkanSurfacePresenter::detachSurface(int surfaceId)
 {
+    std::lock_guard<std::recursive_mutex> surfaceLock(surfaceMutex);
     auto iterator = surfaces.find(surfaceId);
     if (iterator == surfaces.end())
         return;
@@ -1188,7 +1196,8 @@ void VulkanSurfacePresenter::detachSurface(int surfaceId)
 
 bool VulkanSurfacePresenter::presentFrame(Frame* frame, VulkanOutput& output, const VulkanCompositionInputs& inputs, u64 timeoutNs)
 {
-    if (!initialized || deviceLost)
+    std::lock_guard<std::recursive_mutex> surfaceLock(surfaceMutex);
+    if (!initialized.load(std::memory_order_acquire) || deviceLost.load(std::memory_order_acquire))
         return false;
 
     if (surfaces.empty())
@@ -2106,14 +2115,16 @@ bool VulkanSurfacePresenter::presentFrame(Frame* frame, VulkanOutput& output, co
 
 bool VulkanSurfacePresenter::waitForFrameConsumption(Frame* frame, u64 timeoutNs)
 {
-    if (!initialized || deviceLost || frame == nullptr || frame->presentTimelineValue == 0)
+    const bool isInitialized = initialized.load(std::memory_order_acquire);
+    const bool isDeviceLost = deviceLost.load(std::memory_order_acquire);
+    if (!isInitialized || isDeviceLost || frame == nullptr || frame->presentTimelineValue == 0)
     {
-        if (frame != nullptr && deviceLost)
+        if (frame != nullptr && isDeviceLost)
             frame->presentTimelineValue = 0;
         return true;
     }
 
-    if (!useTimelineSemaphores || waitSemaphores == nullptr || timelineSemaphore == VK_NULL_HANDLE)
+    if (!useTimelineSemaphores.load(std::memory_order_acquire) || waitSemaphores == nullptr || timelineSemaphore == VK_NULL_HANDLE)
     {
         frame->presentTimelineValue = 0;
         return true;
@@ -2133,6 +2144,7 @@ bool VulkanSurfacePresenter::waitForFrameConsumption(Frame* frame, u64 timeoutNs
 
 VulkanPresenterPacingStats VulkanSurfacePresenter::takePacingStatsSnapshotAndReset()
 {
+    std::lock_guard<std::recursive_mutex> surfaceLock(surfaceMutex);
     VulkanPresenterPacingStats stats{};
     stats.AcquireTimeouts = acquireTimeouts;
     stats.PresentSkippedForDeadline = presentSkippedForDeadline;
@@ -2181,6 +2193,7 @@ VulkanPresenterPacingStats VulkanSurfacePresenter::takePacingStatsSnapshotAndRes
 
 void VulkanSurfacePresenter::invalidateDescriptorCaches()
 {
+    std::lock_guard<std::recursive_mutex> surfaceLock(surfaceMutex);
     for (auto& [surfaceId, surfaceState] : surfaces)
     {
         (void)surfaceId;
@@ -2746,49 +2759,6 @@ bool VulkanSurfacePresenter::ensureSwapchain(
         return false;
     }
 
-    u32 formatCount = 0;
-    const VkResult formatCountResult = vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surfaceState.surface, &formatCount, nullptr);
-    if (formatCountResult == VK_ERROR_DEVICE_LOST)
-    {
-        markDeviceLost("vkGetPhysicalDeviceSurfaceFormatsKHR");
-        return false;
-    }
-    if (formatCountResult == VK_ERROR_SURFACE_LOST_KHR)
-    {
-        (void)recoverLostSurface(surfaceState, "vkGetPhysicalDeviceSurfaceFormatsKHR");
-        return false;
-    }
-    if (formatCountResult != VK_SUCCESS || formatCount == 0)
-        return false;
-
-    std::vector<VkSurfaceFormatKHR> formats(formatCount);
-    if (vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surfaceState.surface, &formatCount, formats.data()) != VK_SUCCESS)
-        return false;
-
-    u32 presentModeCount = 0;
-    const VkResult presentModeCountResult = vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surfaceState.surface, &presentModeCount, nullptr);
-    if (presentModeCountResult == VK_ERROR_DEVICE_LOST)
-    {
-        markDeviceLost("vkGetPhysicalDeviceSurfacePresentModesKHR");
-        return false;
-    }
-    if (presentModeCountResult == VK_ERROR_SURFACE_LOST_KHR)
-    {
-        (void)recoverLostSurface(surfaceState, "vkGetPhysicalDeviceSurfacePresentModesKHR");
-        return false;
-    }
-    if (presentModeCountResult != VK_SUCCESS || presentModeCount == 0)
-        return false;
-
-    std::vector<VkPresentModeKHR> presentModes(presentModeCount);
-    if (vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surfaceState.surface, &presentModeCount, presentModes.data()) != VK_SUCCESS)
-        return false;
-
-    logSlowSegment("surfaceQueries", queryStartNs);
-    std::vector<VkSurfaceFormatKHR> rankedFormats = rankSurfaceFormats(formats);
-    std::vector<VkPresentModeKHR> rankedPresentModes = rankPresentModes(presentModes);
-    const u64 createLoopStartNs = PerfNowNs();
-
     const u32 winWidth = surfaceState.window != nullptr ? static_cast<u32>(std::max(1, ANativeWindow_getWidth(surfaceState.window))) : 1u;
     const u32 winHeight = surfaceState.window != nullptr ? static_cast<u32>(std::max(1, ANativeWindow_getHeight(surfaceState.window))) : 1u;
     u32 width = surfaceState.requestedWidth > 0 ? surfaceState.requestedWidth : winWidth;
@@ -2851,40 +2821,12 @@ bool VulkanSurfacePresenter::ensureSwapchain(
         }
     };
 
-    if (surfaceState.hasCachedSwapchainSelection)
-    {
-        auto cachedFormat = std::find_if(
-            rankedFormats.begin(),
-            rankedFormats.end(),
-            [&](const VkSurfaceFormatKHR& format) {
-                return format.format == surfaceState.cachedSurfaceFormat.format
-                    && format.colorSpace == surfaceState.cachedSurfaceFormat.colorSpace;
-            });
-        if (cachedFormat != rankedFormats.end() && cachedFormat != rankedFormats.begin())
-        {
-            VkSurfaceFormatKHR cached = *cachedFormat;
-            rankedFormats.erase(cachedFormat);
-            rankedFormats.insert(rankedFormats.begin(), cached);
-        }
-
-        auto cachedPresentMode = std::find(
-            rankedPresentModes.begin(),
-            rankedPresentModes.end(),
-            surfaceState.cachedPresentMode);
-        if (cachedPresentMode != rankedPresentModes.end() && cachedPresentMode != rankedPresentModes.begin())
-        {
-            VkPresentModeKHR cached = *cachedPresentMode;
-            rankedPresentModes.erase(cachedPresentMode);
-            rankedPresentModes.insert(rankedPresentModes.begin(), cached);
-        }
-    }
-
     u32 imageCount = capabilities.minImageCount + 1;
     if (capabilities.maxImageCount > 0)
         imageCount = std::min(imageCount, capabilities.maxImageCount);
 
-    VkSurfaceFormatKHR surfaceFormat = chooseSurfaceFormat(formats);
-    VkPresentModeKHR presentMode = choosePresentMode(presentModes);
+    VkSurfaceFormatKHR surfaceFormat{};
+    VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
     auto failSwapchainConfig = [&](const char* stage, VkResult result) -> bool {
         if (result == VK_ERROR_DEVICE_LOST)
         {
@@ -2928,73 +2870,157 @@ bool VulkanSurfacePresenter::ensureSwapchain(
             ? VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR
             : capabilities.currentTransform;
     bool swapchainCreated = false;
+    const u64 createLoopStartNs = PerfNowNs();
 
-    for (const VkPresentModeKHR candidatePresentMode : rankedPresentModes)
-    {
-        for (const VkSurfaceFormatKHR candidateFormat : rankedFormats)
+    auto tryCreateSwapchainFromCandidates = [&](const std::vector<VkSurfaceFormatKHR>& rankedFormats,
+                                                  const std::vector<VkPresentModeKHR>& rankedPresentModes,
+                                                  bool& fatalErrorOut) -> bool {
+        fatalErrorOut = false;
+        for (const VkPresentModeKHR candidatePresentMode : rankedPresentModes)
         {
-            const u64 configKey = makeSwapchainConfigKey(
-                surfaceState.id,
-                candidateFormat.format,
-                candidateFormat.colorSpace,
-                candidatePresentMode
-            );
-            if (failedSwapchainConfigs.find(configKey) != failedSwapchainConfigs.end())
-                continue;
-
-            VkSwapchainCreateInfoKHR swapchainInfo{};
-            swapchainInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-            swapchainInfo.surface = surfaceState.surface;
-            swapchainInfo.minImageCount = imageCount;
-            swapchainInfo.imageFormat = candidateFormat.format;
-            swapchainInfo.imageColorSpace = candidateFormat.colorSpace;
-            swapchainInfo.imageExtent = extent;
-            swapchainInfo.imageArrayLayers = 1;
-            swapchainInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-            swapchainInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-            swapchainInfo.preTransform = preTransform;
-            swapchainInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-            swapchainInfo.presentMode = candidatePresentMode;
-            swapchainInfo.clipped = VK_TRUE;
-            swapchainInfo.oldSwapchain = retiredSwapchain;
-
-            const VkResult swapchainResult = vkCreateSwapchainKHR(device, &swapchainInfo, nullptr, &surfaceState.swapchain);
-            destroyRetiredSwapchain();
-            if (swapchainResult == VK_SUCCESS)
+            for (const VkSurfaceFormatKHR candidateFormat : rankedFormats)
             {
-                surfaceFormat = candidateFormat;
-                presentMode = candidatePresentMode;
-                swapchainCreated = true;
-                break;
-            }
-            if (swapchainResult == VK_ERROR_DEVICE_LOST)
-            {
-                markDeviceLost("vkCreateSwapchainKHR");
-                return false;
-            }
-            if (swapchainResult == VK_ERROR_SURFACE_LOST_KHR)
-            {
-                (void)recoverLostSurface(surfaceState, "vkCreateSwapchainKHR");
-                return false;
-            }
-
-            failedSwapchainConfigs.insert(configKey);
-            if (loggedFailedSwapchainConfigs.insert(configKey).second)
-            {
-                melonDS::Platform::Log(
-                    melonDS::Platform::LogLevel::Warn,
-                    "VulkanSurfacePresenter: rejected swapchain config surface=%d format=%d colorspace=%d presentMode=%d result=%d",
+                const u64 configKey = makeSwapchainConfigKey(
                     surfaceState.id,
-                    static_cast<int>(candidateFormat.format),
-                    static_cast<int>(candidateFormat.colorSpace),
-                    static_cast<int>(candidatePresentMode),
-                    static_cast<int>(swapchainResult)
+                    candidateFormat.format,
+                    candidateFormat.colorSpace,
+                    candidatePresentMode
                 );
+                if (failedSwapchainConfigs.find(configKey) != failedSwapchainConfigs.end())
+                    continue;
+
+                VkSwapchainCreateInfoKHR swapchainInfo{};
+                swapchainInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+                swapchainInfo.surface = surfaceState.surface;
+                swapchainInfo.minImageCount = imageCount;
+                swapchainInfo.imageFormat = candidateFormat.format;
+                swapchainInfo.imageColorSpace = candidateFormat.colorSpace;
+                swapchainInfo.imageExtent = extent;
+                swapchainInfo.imageArrayLayers = 1;
+                swapchainInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+                swapchainInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+                swapchainInfo.preTransform = preTransform;
+                swapchainInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+                swapchainInfo.presentMode = candidatePresentMode;
+                swapchainInfo.clipped = VK_TRUE;
+                swapchainInfo.oldSwapchain = retiredSwapchain;
+
+                const VkResult swapchainResult = vkCreateSwapchainKHR(device, &swapchainInfo, nullptr, &surfaceState.swapchain);
+                destroyRetiredSwapchain();
+                if (swapchainResult == VK_SUCCESS)
+                {
+                    surfaceFormat = candidateFormat;
+                    presentMode = candidatePresentMode;
+                    return true;
+                }
+                if (swapchainResult == VK_ERROR_DEVICE_LOST)
+                {
+                    markDeviceLost("vkCreateSwapchainKHR");
+                    fatalErrorOut = true;
+                    return false;
+                }
+                if (swapchainResult == VK_ERROR_SURFACE_LOST_KHR)
+                {
+                    (void)recoverLostSurface(surfaceState, "vkCreateSwapchainKHR");
+                    fatalErrorOut = true;
+                    return false;
+                }
+
+                failedSwapchainConfigs.insert(configKey);
+                if (loggedFailedSwapchainConfigs.insert(configKey).second)
+                {
+                    melonDS::Platform::Log(
+                        melonDS::Platform::LogLevel::Warn,
+                        "VulkanSurfacePresenter: rejected swapchain config surface=%d format=%d colorspace=%d presentMode=%d result=%d",
+                        surfaceState.id,
+                        static_cast<int>(candidateFormat.format),
+                        static_cast<int>(candidateFormat.colorSpace),
+                        static_cast<int>(candidatePresentMode),
+                        static_cast<int>(swapchainResult)
+                    );
+                }
             }
         }
+        return false;
+    };
 
-        if (swapchainCreated)
-            break;
+    if (surfaceState.hasCachedSwapchainSelection)
+    {
+        bool fatalError = false;
+        swapchainCreated = tryCreateSwapchainFromCandidates(
+            {surfaceState.cachedSurfaceFormat},
+            {surfaceState.cachedPresentMode},
+            fatalError);
+        if (fatalError)
+            return false;
+        if (!swapchainCreated)
+            surfaceState.hasCachedSwapchainSelection = false;
+    }
+
+    if (!swapchainCreated)
+    {
+        u32 formatCount = 0;
+        const VkResult formatCountResult = vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surfaceState.surface, &formatCount, nullptr);
+        if (formatCountResult == VK_ERROR_DEVICE_LOST)
+        {
+            markDeviceLost("vkGetPhysicalDeviceSurfaceFormatsKHR");
+            destroyRetiredSwapchain();
+            return false;
+        }
+        if (formatCountResult == VK_ERROR_SURFACE_LOST_KHR)
+        {
+            (void)recoverLostSurface(surfaceState, "vkGetPhysicalDeviceSurfaceFormatsKHR");
+            destroyRetiredSwapchain();
+            return false;
+        }
+        if (formatCountResult != VK_SUCCESS || formatCount == 0)
+        {
+            destroyRetiredSwapchain();
+            return false;
+        }
+
+        std::vector<VkSurfaceFormatKHR> formats(formatCount);
+        if (vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surfaceState.surface, &formatCount, formats.data()) != VK_SUCCESS)
+        {
+            destroyRetiredSwapchain();
+            return false;
+        }
+
+        u32 presentModeCount = 0;
+        const VkResult presentModeCountResult = vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surfaceState.surface, &presentModeCount, nullptr);
+        if (presentModeCountResult == VK_ERROR_DEVICE_LOST)
+        {
+            markDeviceLost("vkGetPhysicalDeviceSurfacePresentModesKHR");
+            destroyRetiredSwapchain();
+            return false;
+        }
+        if (presentModeCountResult == VK_ERROR_SURFACE_LOST_KHR)
+        {
+            (void)recoverLostSurface(surfaceState, "vkGetPhysicalDeviceSurfacePresentModesKHR");
+            destroyRetiredSwapchain();
+            return false;
+        }
+        if (presentModeCountResult != VK_SUCCESS || presentModeCount == 0)
+        {
+            destroyRetiredSwapchain();
+            return false;
+        }
+
+        std::vector<VkPresentModeKHR> presentModes(presentModeCount);
+        if (vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surfaceState.surface, &presentModeCount, presentModes.data()) != VK_SUCCESS)
+        {
+            destroyRetiredSwapchain();
+            return false;
+        }
+
+        logSlowSegment("surfaceQueries", queryStartNs);
+        std::vector<VkSurfaceFormatKHR> rankedFormats = rankSurfaceFormats(formats);
+        std::vector<VkPresentModeKHR> rankedPresentModes = rankPresentModes(presentModes);
+
+        bool fatalError = false;
+        swapchainCreated = tryCreateSwapchainFromCandidates(rankedFormats, rankedPresentModes, fatalError);
+        if (fatalError)
+            return false;
     }
 
     logSlowSegment("createLoop", createLoopStartNs);
@@ -3354,9 +3380,8 @@ void VulkanSurfacePresenter::recoverSwapchain(SurfaceState& surfaceState, const 
 
 void VulkanSurfacePresenter::markDeviceLost(const char* context)
 {
-    if (!deviceLost)
+    if (!deviceLost.exchange(true, std::memory_order_acq_rel))
     {
-        deviceLost = true;
         melonDS::Platform::Log(
             melonDS::Platform::LogLevel::Error,
             "VulkanSurfacePresenter: VK_ERROR_DEVICE_LOST in %s; halting Vulkan presentation",

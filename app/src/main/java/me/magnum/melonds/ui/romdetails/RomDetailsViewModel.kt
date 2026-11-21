@@ -1,9 +1,11 @@
 package me.magnum.melonds.ui.romdetails
 
+import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,6 +31,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class RomDetailsViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val romDetailsUiMapper: RomDetailsUiMapper,
     private val romsRepository: RomsRepository,
     private val settingsRepository: SettingsRepository,
@@ -95,6 +98,22 @@ class RomDetailsViewModel @Inject constructor(
                 globalShaderConfig,
                 settingsRepository.observeRetroAchievementsEnabled(),
             ) { romConfig, globalRuntimeConfig, globalVideoConfig, shaderConfig, globalRetroAchievementsEnabled ->
+                val customVulkanSupported = me.magnum.melonds.impl.AdrenoVulkanDriverSupport.isSupported(context)
+                val systemLabel = context.getString(me.magnum.melonds.R.string.rom_config_vulkan_driver_system)
+                val globalLabel = context.getString(me.magnum.melonds.R.string.rom_config_vulkan_driver_global)
+                val activeDriverLabel = if (customVulkanSupported &&
+                    settingsRepository.getVulkanDriverMode() == me.magnum.melonds.domain.model.VulkanDriverMode.CUSTOM
+                ) {
+                    settingsRepository.getCustomVulkanDriverDisplayName() ?: systemLabel
+                } else {
+                    systemLabel
+                }
+                val driverOptions = if (customVulkanSupported) {
+                    listOf(Pair(null, globalLabel), Pair("__SYSTEM__", systemLabel)) +
+                        settingsRepository.getInstalledVulkanDrivers().map { Pair(it.id, it.displayName) }
+                } else {
+                    listOf(Pair(null, systemLabel))
+                }
                 romDetailsUiMapper.mapRomConfigToUi(
                     romConfig = romConfig,
                     globalRuntimeConsoleType = globalRuntimeConfig.first,
@@ -109,8 +128,9 @@ class RomDetailsViewModel @Inject constructor(
                     globalRetroAchievementsEnabled = globalRetroAchievementsEnabled,
                     globalArm9Overclock = settingsRepository.getArm9Overclock(),
                     globalFastForwardSpeedMultiplier = settingsRepository.getFastForwardSpeedMultiplier(),
-                    globalVulkanDriverDisplayName = settingsRepository.getCustomVulkanDriverDisplayName() ?: "System GPU",
-                    availableVulkanDrivers = listOf(Pair(null, "Global driver"), Pair("__SYSTEM__", "System GPU driver")) + settingsRepository.getInstalledVulkanDrivers().map { Pair(it.id, it.displayName) },
+                    globalVulkanDriverDisplayName = activeDriverLabel,
+                    availableVulkanDrivers = driverOptions,
+                    isCustomVulkanDriverSupported = customVulkanSupported,
                 )
             }.collect {
                 uiStateFlow.value = RomConfigUiState.Ready(it)

@@ -333,7 +333,7 @@ object GameCompatibilityManager {
                 remove(KEY_LAST_MARKER_GAME_KEY)
             }
         }
-        if (marker == null || marker.crashCount < 1) {
+        if (marker == null || marker.crashCount < 2) {
             return null
         }
 

@@ -34,6 +34,7 @@ constexpr const char* kOptionalDebugUtilsExtension = VK_EXT_DEBUG_UTILS_EXTENSIO
 constexpr const char* kValidationLayerName = "VK_LAYER_KHRONOS_validation";
 std::atomic<bool> gForceDisableTimelineSemaphores{false};
 std::atomic<bool> gForceDisableDynamicTextureIndexing{false};
+std::atomic<u32> gKnownMaxDeviceApiVersion{0};
 
 bool hasExtension(const char* extensionName, const std::vector<VkExtensionProperties>& extensions)
 {
@@ -213,8 +214,10 @@ bool VulkanContext::initializeLocked()
         }
     }
 
+    const u32 knownDeviceApi = gKnownMaxDeviceApiVersion.load(std::memory_order_relaxed);
     std::vector<u32> candidateApiVersions;
-    if (isApiAtLeast(loaderApiVersion, 1, 2))
+    if (isApiAtLeast(loaderApiVersion, 1, 2)
+        && (knownDeviceApi == 0u || isApiAtLeast(knownDeviceApi, 1, 2)))
         candidateApiVersions.push_back(VK_API_VERSION_1_2);
     if (isApiAtLeast(loaderApiVersion, 1, 1))
         candidateApiVersions.push_back(VK_API_VERSION_1_1);
@@ -375,6 +378,8 @@ bool VulkanContext::initializeLocked()
             vkGetPhysicalDeviceProperties(pd, &props);
             maxDeviceApiVersion = std::max(maxDeviceApiVersion, props.apiVersion);
         }
+        if (maxDeviceApiVersion > 0u)
+            gKnownMaxDeviceApiVersion.store(maxDeviceApiVersion, std::memory_order_relaxed);
         if (maxDeviceApiVersion < VK_API_VERSION_1_2)
         {
             Platform::Log(
@@ -670,7 +675,9 @@ bool VulkanContext::initializeLocked()
             {
                 Platform::Log(
                     Platform::LogLevel::Warn,
-                    "VulkanContext: forcing dynamic-indexing fallback on '%s' to keep graphics_hw stable on Mali/PowerVR devices",
+                    isOlderAdrenoVulkan11
+                        ? "VulkanContext: forcing single-descriptor fallback on Adreno Vulkan 1.1 device '%s' for shader stability"
+                        : "VulkanContext: forcing dynamic-indexing fallback on '%s' to keep graphics_hw stable on Mali/PowerVR devices",
                     deviceProperties.deviceName
                 );
             }
@@ -1117,6 +1124,11 @@ void VulkanContext::SetCompatibilityOverrides(bool disableTimelineSemaphores, bo
 {
     gForceDisableTimelineSemaphores.store(disableTimelineSemaphores, std::memory_order_relaxed);
     gForceDisableDynamicTextureIndexing.store(disableDynamicTextureIndexing, std::memory_order_relaxed);
+}
+
+void VulkanContext::InvalidateCachedDeviceApiVersion()
+{
+    gKnownMaxDeviceApiVersion.store(0u, std::memory_order_relaxed);
 }
 
 static std::mutex gPipelineCachePathMutex;

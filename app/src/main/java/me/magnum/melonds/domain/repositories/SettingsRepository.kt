@@ -72,7 +72,20 @@ interface SettingsRepository {
     fun getSelectedVulkanDriverId(): String?
     fun setSelectedVulkanDriver(id: String)
     fun getCustomVulkanDriverDisplayName(): String?
-    fun setCustomVulkanDriver(id: String, driverDir: String, driverName: String, displayName: String)
+    fun setCustomVulkanDriver(
+        id: String,
+        driverDir: String,
+        driverName: String,
+        displayName: String,
+        author: String? = null,
+        vendor: String? = null,
+        driverVersion: String? = null,
+        description: String? = null,
+        minApi: Int? = null,
+        sourceRepo: String? = null,
+        assetFileName: String? = null,
+        installedAtEpochMs: Long = System.currentTimeMillis(),
+    )
     fun removeCustomVulkanDriver(id: String)
     fun clearCustomVulkanDrivers()
     fun getVideoInternalResolutionScaling(): Flow<Int>

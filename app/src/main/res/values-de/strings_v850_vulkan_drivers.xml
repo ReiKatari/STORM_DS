@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="video_vulkan_driver_mode_options">
+        <item>System</item>
+        <item>Benutzerdefiniert</item>
+    </string-array>
+    <string name="vulkan_driver_hub_title">Vulkan-Treiber-Hub</string>
+    <string name="vulkan_driver_tab_installed">Installiert (%1$d)</string>
+    <string name="vulkan_driver_tab_repositories">Repositories (%1$d)</string>
+    <string name="vulkan_driver_tab_recommended">Für Ihre GPU</string>
+    <string name="vulkan_driver_gpu_chip_label">GPU</string>
+    <string name="vulkan_driver_api_label">Vulkan API</string>
+    <string name="vulkan_driver_active_label">Aktiver Treiber</string>
+    <string name="vulkan_driver_custom_tag">Benutzerdefiniert</string>
+    <string name="vulkan_driver_system_tag">System</string>
+    <string name="vulkan_driver_blocked_title">Benutzerdefinierte Vulkan-Treiber blockiert</string>
+    <string name="vulkan_driver_blocked_gpu_reason">Erkannte GPU: %1$s. Benutzerdefinierte Turnip- und Adrenotools-Treiber unterstützen nur Qualcomm Adreno 6xx, 7xx und 8xx. Ihr Gerät ist auf den sicheren Android-Systemtreiber beschränkt.</string>
+    <string name="vulkan_driver_blocked_legacy_reason">Benutzerdefinierte Vulkan-Treiber sind im LEGACY-Build ohne Adrenotools deaktiviert. Nutzen Sie den GitHub-arm64-Build auf einem Adreno-Gerät.</string>
+    <string name="vulkan_driver_blocked_abi_reason">Benutzerdefinierte Vulkan-Treiber erfordern 64-Bit-arm64-v8a und Android 9 oder neuer.</string>
+    <string name="vulkan_driver_prefs_blocked_summary">Blockiert für %1$s - nur Systemtreiber</string>
+    <string name="vulkan_driver_prefs_blocked_legacy_summary">Im LEGACY-Build blockiert - nur Systemtreiber</string>
+    <string name="vulkan_driver_prefs_blocked_abi_summary">Blockiert (arm64 und Android 9+ erforderlich)</string>
+    <string name="vulkan_driver_storm_quick_title">STORM DRIVER (All-in-One)</string>
+    <string name="vulkan_driver_storm_quick_subtitle">Wählt automatisch Adreno 6xx/7xx oder Gen8 über 4 schnelle Mirrors</string>
+    <string name="vulkan_driver_install_storm">STORM DRIVER installieren</string>
+    <string name="vulkan_driver_reinstall_storm">STORM DRIVER neu installieren</string>
+    <string name="vulkan_driver_system_title">System-GPU-Treiber</string>
+    <string name="vulkan_driver_system_subtitle">Integrierter Android-Vulkan-Treiber der Firmware</string>
+    <string name="vulkan_driver_import_zip">ZIP importieren</string>
+    <string name="vulkan_driver_clear_caches">Shader-Cache leeren</string>
+    <string name="vulkan_driver_caches_cleared">%1$d Vulkan-Cache-Dateien gelöscht</string>
+    <string name="vulkan_driver_status_active">Aktiv</string>
+    <string name="vulkan_driver_status_installed">Installiert</string>
+    <string name="vulkan_driver_activate">Aktivieren</string>
+    <string name="vulkan_driver_install">Installieren</string>
+    <string name="vulkan_driver_reinstall">Neu installieren</string>
+    <string name="vulkan_driver_delete">Löschen</string>
+    <string name="vulkan_driver_offline_fallback_badge">Offline-Mirror</string>
+    <string name="vulkan_driver_cache_badge">Zwischengespeichert</string>
+    <string name="vulkan_driver_search_hint">Repositories, Treiber oder Versionen suchen...</string>
+    <string name="vulkan_driver_cat_all">Alle (14)</string>
+    <string name="vulkan_driver_cat_storm">STORM</string>
+    <string name="vulkan_driver_cat_turnip">Turnip</string>
+    <string name="vulkan_driver_cat_8xx">Adreno 8xx</string>
+    <string name="vulkan_driver_cat_710">Adreno 710/720</string>
+    <string name="vulkan_driver_refresh">Repositories aktualisieren</string>
+    <string name="vulkan_driver_loading_repos">Synchronisiere 14 GitHub-Repositories...</string>
+    <string name="vulkan_driver_no_matches">Keine Treffer für "%1$s"</string>
+    <string name="vulkan_driver_repo_releases_count">%1$d Releases</string>
+    <string name="vulkan_driver_show_notes">Versionshinweise</string>
+    <string name="vulkan_driver_hide_notes">Hinweise ausblenden</string>
+    <string name="vulkan_driver_repo_error">Netzwerkfehler oder GitHub-Limit: %1$s</string>
+    <string name="vulkan_driver_series_840_desc">Snapdragon 8 Elite Gen 5 (Adreno 840+): Nur STORM DRIVER oder Gen5/840-kompatible Builds verwenden.</string>
+    <string name="vulkan_driver_series_8xx_desc">Snapdragon 8 Elite (Adreno 825/830): STORM DRIVER, GameHub 8xx oder Balemuni Aurora Gen8 nutzen.</string>
+    <string name="vulkan_driver_series_710_desc">Adreno 710 / 720 / 722 / 810: STORM DRIVER oder Vauzi-17 710 Turnip empfohlen.</string>
+    <string name="vulkan_driver_series_7xx_desc">Adreno 7xx (8 Gen 1/2/3, 7+ Gen 2): STORM DRIVER, KIMCHI Turnip und Mr. Purple bieten beste Stabilität.</string>
+    <string name="vulkan_driver_series_6xx_desc">Adreno 6xx (619 / 650 / 660 / 865 / 870 / 888): STORM DRIVER, KIMCHI Turnip oder Systemtreiber.</string>
+    <string name="vulkan_driver_no_installed">Noch keine benutzerdefinierten Treiber installiert</string>
+    <string name="vulkan_driver_downloading_progress">Lade %1$s herunter (%2$s)...</string>
+    <string name="vulkan_driver_installing">Installiere %1$s...</string>
+    <string name="vulkan_driver_import_min_api">Treiber erfordert mindestens Android API %1$d.</string>
+    <string name="vulkan_driver_import_invalid_archive">Beschädigtes oder ungültiges Treiberarchiv.</string>
+    <string name="vulkan_driver_download_error">Download fehlgeschlagen: %1$s</string>
+    <string name="vulkan_driver_meta_author">Autor: %1$s</string>
+    <string name="vulkan_driver_meta_version">Version: %1$s</string>
+    <string name="vulkan_driver_delete_confirm_title">Vulkan-Treiber löschen?</string>
+    <string name="vulkan_driver_delete_confirm_message">%1$s vom Gerät entfernen?</string>
+    <string name="vulkan_driver_adreno8xx_warn_title">Adreno 8xx Kompatibilitätswarnung</string>
+    <string name="vulkan_driver_adreno8xx_warn_message">%1$s scheint nicht für Adreno 830/840 (Gen8) gedacht zu sein. Standard-Turnip-Treiber können abstürzen. Trotzdem installieren?</string>
+    <string name="vulkan_driver_install_anyway">Trotzdem installieren</string>
+    <string name="rom_config_vulkan_driver_blocked_value">System (für GPU blockiert)</string>
+</resources>

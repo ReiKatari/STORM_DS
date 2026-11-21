@@ -4,6 +4,18 @@ import me.magnum.melonds.common.UriFileHandler
 import me.magnum.melonds.domain.model.VulkanDriverConfiguration
 import me.magnum.melonds.domain.model.VulkanDriverMode
 import me.magnum.melonds.domain.model.VulkanPipelineProfile
+import org.json.JSONObject
+
+data class VulkanGpuHardwareInfo(
+    val deviceName: String = "",
+    val vendorId: Int = 0,
+    val deviceId: Int = 0,
+    val apiVersion: String = "",
+    val driverVersionRaw: Long = 0L,
+    val driverName: String = "",
+    val driverInfo: String = "",
+    val isCustomDriver: Boolean = false,
+)
 
 object MelonDSAndroidInterface {
     const val RENDERER_CAP_OPENGL = 1 shl 0
@@ -35,6 +47,7 @@ object MelonDSAndroidInterface {
         disableTimelineSemaphores: Boolean,
         disableDynamicTextureIndexing: Boolean,
     )
+    private external fun getVulkanGpuInfoNative(): String?
     external fun cleanup()
 
     fun setup(uriFileHandler: UriFileHandler, vulkanDriverConfiguration: VulkanDriverConfiguration) {
@@ -82,5 +95,23 @@ object MelonDSAndroidInterface {
                 disableDynamicTextureIndexing,
             )
         }
+    }
+
+    fun getVulkanGpuInfo(): VulkanGpuHardwareInfo? {
+        val raw = runCatching { getVulkanGpuInfoNative() }.getOrNull() ?: return null
+        if (raw.isBlank()) return null
+        return runCatching {
+            val json = JSONObject(raw)
+            VulkanGpuHardwareInfo(
+                deviceName = json.optString("deviceName", ""),
+                vendorId = json.optInt("vendorId", 0),
+                deviceId = json.optInt("deviceId", 0),
+                apiVersion = json.optString("apiVersion", ""),
+                driverVersionRaw = json.optLong("driverVersion", 0L),
+                driverName = json.optString("driverName", ""),
+                driverInfo = json.optString("driverInfo", ""),
+                isCustomDriver = json.optBoolean("isCustomDriver", false),
+            )
+        }.getOrNull()
     }
 }

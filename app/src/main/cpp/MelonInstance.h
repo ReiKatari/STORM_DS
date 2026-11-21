@@ -345,8 +345,8 @@ private:
     std::shared_ptr<EmulatorConfiguration> currentConfiguration;
     FrameQueue frameQueue;
     mutable std::recursive_mutex vulkanPresentationMutex;
-    std::unique_ptr<VulkanOutput> vulkanOutput;
-    std::unique_ptr<VulkanSurfacePresenter> vulkanSurfacePresenter;
+    std::shared_ptr<VulkanOutput> vulkanOutput;
+    std::shared_ptr<VulkanSurfacePresenter> vulkanSurfacePresenter;
     std::vector<u32> vulkanReadbackFrame;
     Frame* lastCompletedVulkanFrame;
     int lastCompletedVulkanScale;

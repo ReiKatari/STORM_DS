@@ -622,6 +622,26 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         }
     }
 
+    private fun getVulkanBlockedSummary(): String {
+        val status = me.magnum.melonds.impl.AdrenoVulkanDriverSupport.getSupportStatus(requireContext())
+        return when (status) {
+            me.magnum.melonds.impl.AdrenoVulkanDriverSupport.SupportStatus.UNSUPPORTED_LEGACY_BUILD ->
+                getString(R.string.vulkan_driver_prefs_blocked_legacy_summary)
+            me.magnum.melonds.impl.AdrenoVulkanDriverSupport.SupportStatus.UNSUPPORTED_ANDROID_OR_ABI ->
+                getString(R.string.vulkan_driver_prefs_blocked_abi_summary)
+            me.magnum.melonds.impl.AdrenoVulkanDriverSupport.SupportStatus.UNSUPPORTED_GPU,
+            me.magnum.melonds.impl.AdrenoVulkanDriverSupport.SupportStatus.SUPPORTED,
+            -> getString(
+                R.string.vulkan_driver_prefs_blocked_summary,
+                me.magnum.melonds.impl.AdrenoVulkanDriverSupport.getDeviceGpuDescription(),
+            )
+        }
+    }
+
+    private fun showVulkanDriverBlockedToast() {
+        Toast.makeText(requireContext(), getVulkanBlockedSummary(), Toast.LENGTH_LONG).show()
+    }
+
     private fun setupVulkanDriverPreferences(
         renderer: VideoRenderer,
         category: PreferenceCategory,
@@ -632,6 +652,10 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         launchedInGame: Boolean,
     ) {
         managerPreference?.setOnPreferenceClickListener {
+            if (!adrenoVulkanDriverManager.isSupported) {
+                showVulkanDriverBlockedToast()
+                return@setOnPreferenceClickListener true
+            }
             val intent = android.content.Intent(
                 requireContext(),
                 me.magnum.melonds.ui.settings.vulkandriver.VulkanDriverManagerActivity::class.java
@@ -642,11 +666,19 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
 
         modePreference.isPersistent = false
         modePreference.setOnPreferenceClickListener {
+            if (!adrenoVulkanDriverManager.isSupported) {
+                showVulkanDriverBlockedToast()
+                return@setOnPreferenceClickListener true
+            }
             showVulkanDriverSelectionDialog(modePreference, removePreference)
             true
         }
 
         importPreference.setOnPreferenceClickListener {
+            if (!adrenoVulkanDriverManager.isSupported) {
+                showVulkanDriverBlockedToast()
+                return@setOnPreferenceClickListener true
+            }
             vulkanDriverImportLauncher.launch(
                 arrayOf(
                     "application/zip",
@@ -659,6 +691,10 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         }
 
         removePreference.setOnPreferenceClickListener {
+            if (!adrenoVulkanDriverManager.isSupported) {
+                showVulkanDriverBlockedToast()
+                return@setOnPreferenceClickListener true
+            }
             showRemoveVulkanDriverDialog(modePreference, removePreference)
             true
         }
@@ -683,25 +719,41 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         removePreference: Preference,
         launchedInGame: Boolean,
     ) {
-        val visible = renderer == VideoRenderer.VULKAN && adrenoVulkanDriverManager.isSupported && !launchedInGame
+        val visible = renderer == VideoRenderer.VULKAN && !launchedInGame
         category.isVisible = visible
         if (!visible) {
             return
         }
 
+        val supportStatus = me.magnum.melonds.impl.AdrenoVulkanDriverSupport.getSupportStatus(requireContext())
+        if (supportStatus != me.magnum.melonds.impl.AdrenoVulkanDriverSupport.SupportStatus.SUPPORTED) {
+            val blockedSummary = getVulkanBlockedSummary()
+            category.summary = blockedSummary
+            managerPreference?.isEnabled = false
+            managerPreference?.summary = blockedSummary
+            modePreference.isEnabled = false
+            modePreference.value = VULKAN_SYSTEM_DRIVER_VALUE
+            modePreference.summary = blockedSummary
+            importPreference.isEnabled = false
+            removePreference.isEnabled = false
+            removePreference.isVisible = false
+            return
+        }
+
         category.summary = null
+        managerPreference?.isEnabled = true
+        modePreference.isEnabled = true
+        importPreference.isEnabled = true
+        removePreference.isEnabled = true
 
-        val series = me.magnum.melonds.impl.AdrenoVulkanDriverSupport.getGpuSeries()
-        val repo = me.magnum.melonds.impl.vulkandriver.OnlineVulkanDriverRepository()
-        val recommended = repo.getRecommendedDriver(series)
-        val driverDisplayName = settingsRepository.getCustomVulkanDriverDisplayName()
-        val isRecommendedActive = settingsRepository.getVulkanDriverMode() == VulkanDriverMode.CUSTOM &&
-            driverDisplayName != null &&
-            recommended != null &&
-            driverDisplayName.contains(recommended.version, ignoreCase = true)
+        val subFamily = me.magnum.melonds.impl.AdrenoVulkanDriverSupport.getSubFamily()
+        val recommendedLabel = me.magnum.melonds.impl.vulkandriver.OnlineVulkanDriverRepository
+            .getRecommendedDriverDisplayTitle(subFamily)
+        val hasCustomActive = settingsRepository.getVulkanDriverMode() == VulkanDriverMode.CUSTOM &&
+            !settingsRepository.getCustomVulkanDriverDisplayName().isNullOrBlank()
 
-        if (recommended != null && !isRecommendedActive) {
-            managerPreference?.summary = getString(R.string.video_prefs_recommended_driver_available, recommended.name)
+        if (recommendedLabel != null && !hasCustomActive) {
+            managerPreference?.summary = getString(R.string.video_prefs_recommended_driver_available, recommendedLabel)
         } else {
             managerPreference?.summary = getString(R.string.video_vulkan_driver_manager_summary)
         }
@@ -753,14 +805,24 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                     Toast.LENGTH_LONG,
                 ).show()
             }.onFailure { throwable ->
-                val messageRes = when ((throwable as? AdrenoVulkanDriverManager.ImportException)?.reason) {
-                    AdrenoVulkanDriverManager.ImportException.Reason.NotZip -> R.string.video_vulkan_driver_import_not_zip
-                    AdrenoVulkanDriverManager.ImportException.Reason.NoDriver -> R.string.video_vulkan_driver_import_no_driver
-                    AdrenoVulkanDriverManager.ImportException.Reason.AmbiguousDriver -> R.string.video_vulkan_driver_import_ambiguous
-                    AdrenoVulkanDriverManager.ImportException.Reason.UnsupportedBuild -> R.string.video_vulkan_driver_unsupported
-                    else -> R.string.video_vulkan_driver_import_failed
+                val importException = throwable as? AdrenoVulkanDriverManager.ImportException
+                val messageText = when (importException?.reason) {
+                    AdrenoVulkanDriverManager.ImportException.Reason.ApiTooLow ->
+                        getString(R.string.vulkan_driver_import_min_api, importException.detailInt)
+                    AdrenoVulkanDriverManager.ImportException.Reason.InvalidArchive ->
+                        getString(R.string.vulkan_driver_import_invalid_archive)
+                    AdrenoVulkanDriverManager.ImportException.Reason.NotZip ->
+                        getString(R.string.video_vulkan_driver_import_not_zip)
+                    AdrenoVulkanDriverManager.ImportException.Reason.NoDriver ->
+                        getString(R.string.video_vulkan_driver_import_no_driver)
+                    AdrenoVulkanDriverManager.ImportException.Reason.AmbiguousDriver ->
+                        getString(R.string.video_vulkan_driver_import_ambiguous)
+                    AdrenoVulkanDriverManager.ImportException.Reason.UnsupportedBuild ->
+                        getString(R.string.video_vulkan_driver_unsupported)
+                    else ->
+                        getString(R.string.video_vulkan_driver_import_failed)
                 }
-                Toast.makeText(ctx, messageRes, Toast.LENGTH_LONG).show()
+                Toast.makeText(ctx, messageText, Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -1937,25 +1999,28 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             updateRetroArchPresetEntries(shaderPresetPreference, resetSelection = false)
             refreshShaderPreferenceVisibility()
         }
+        val vulkanCategory = findPreference<PreferenceCategory>("video_vulkan_driver_category")
         val modePreference = findPreference<ListPreference>("video_vulkan_driver_mode")
+        val importPreference = findPreference<Preference>("video_vulkan_driver_import")
         val removePreference = findPreference<Preference>("video_vulkan_driver_remove")
         val managerPreference = findPreference<Preference>("video_vulkan_driver_manager")
-        if (modePreference != null && removePreference != null) {
-            updateVulkanDriverPreferenceSummaries(modePreference, removePreference)
-            val series = me.magnum.melonds.impl.AdrenoVulkanDriverSupport.getGpuSeries()
-            val repo = me.magnum.melonds.impl.vulkandriver.OnlineVulkanDriverRepository()
-            val recommended = repo.getRecommendedDriver(series)
-            val driverDisplayName = settingsRepository.getCustomVulkanDriverDisplayName()
-            val isRecommendedActive = settingsRepository.getVulkanDriverMode() == VulkanDriverMode.CUSTOM &&
-                driverDisplayName != null &&
-                recommended != null &&
-                driverDisplayName.contains(recommended.version, ignoreCase = true)
-
-            if (recommended != null && !isRecommendedActive) {
-                managerPreference?.summary = getString(R.string.video_prefs_recommended_driver_available, recommended.name)
+        if (vulkanCategory != null && modePreference != null && importPreference != null && removePreference != null) {
+            val rendererValue = findPreference<ListPreference>("video_renderer")?.value
+            val currentRenderer = if (!rendererValue.isNullOrBlank()) {
+                enumValueOfIgnoreCase<VideoRenderer>(rendererValue)
             } else {
-                managerPreference?.summary = getString(R.string.video_vulkan_driver_manager_summary)
+                settingsRepository.getCurrentVideoRenderer()
             }
+            val launchedInGame = requireActivity().intent.getBooleanExtra(SettingsActivity.KEY_IN_GAME, false)
+            updateVulkanDriverPreferenceState(
+                renderer = currentRenderer,
+                category = vulkanCategory,
+                managerPreference = managerPreference,
+                modePreference = modePreference,
+                importPreference = importPreference,
+                removePreference = removePreference,
+                launchedInGame = launchedInGame,
+            )
         }
     }
 

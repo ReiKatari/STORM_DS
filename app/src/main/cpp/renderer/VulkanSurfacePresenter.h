@@ -3,7 +3,9 @@
 
 #include <android/native_window.h>
 #include <array>
+#include <atomic>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <utility>
 #include <unordered_map>
@@ -461,18 +463,19 @@ private:
     u32 findMemoryType(u32 typeBits, VkMemoryPropertyFlags properties) const;
 
 private:
-    bool initialized = false;
+    std::atomic<bool> initialized{false};
     bool contextAcquired = false;
-    bool deviceLost = false;
+    std::atomic<bool> deviceLost{false};
     bool fastPathHardwareSupported = false;
     int nextSurfaceId = 1;
+    mutable std::recursive_mutex surfaceMutex;
 
     VkInstance instance = VK_NULL_HANDLE;
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
     VkDevice device = VK_NULL_HANDLE;
     VkQueue queue = VK_NULL_HANDLE;
     u32 queueFamilyIndex = 0;
-    bool useTimelineSemaphores = false;
+    std::atomic<bool> useTimelineSemaphores{false};
     VkSemaphore timelineSemaphore = VK_NULL_HANDLE;
     u64 timelineValue = 0;
     PFN_vkWaitSemaphoresKHR waitSemaphores = nullptr;

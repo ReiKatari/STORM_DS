@@ -33,9 +33,11 @@ class ChoreographerVSyncFrameRenderer(
             return
         }
 
-        val frameDeadline = data.preferredFrameTimeline.deadlineNanos
-        val frameDelta = frameDeadline - data.frameTimeNanos
-        val shouldRender = if (frameDelta <= ChoreographerFrameRenderer.DEADLINE_FRAME_TIME_THRESHOLD) {
+        val rawDeadline = data.preferredFrameTimeline.deadlineNanos
+        val frameDelta = rawDeadline - data.frameTimeNanos
+        val isHighRefresh = frameDelta <= ChoreographerFrameRenderer.DEADLINE_FRAME_TIME_THRESHOLD
+        val frameDeadline = if (isHighRefresh) null else rawDeadline
+        val shouldRender = if (isHighRefresh) {
             lastRenderedFrameTimeNanos == 0L ||
                 data.frameTimeNanos < lastRenderedFrameTimeNanos ||
                 (data.frameTimeNanos - lastRenderedFrameTimeNanos) >= HIGH_REFRESH_PACING_INTERVAL_NS

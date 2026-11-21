@@ -10,6 +10,8 @@ import me.magnum.melonds.domain.repositories.SettingsRepository
 import me.magnum.melonds.domain.services.ConfigurationDirectoryVerifier
 
 class FileSystemConfigurationDirectoryVerifier(private val context: Context, settingsRepository: SettingsRepository) : ConfigurationDirectoryVerifier(settingsRepository) {
+    private val validResultCache = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, ConfigurationDirResult>>()
+
     override fun checkDsConfigurationDirectory(directory: Uri?): ConfigurationDirResult {
         return checkConfigurationDirectory(ConsoleType.DS, directory)
     }
@@ -19,6 +21,14 @@ class FileSystemConfigurationDirectoryVerifier(private val context: Context, set
     }
 
     private fun checkConfigurationDirectory(consoleType: ConsoleType, directory: Uri?): ConfigurationDirResult {
+        val now = android.os.SystemClock.elapsedRealtime()
+        val cacheKey = "${consoleType.name}:${directory?.toString().orEmpty()}"
+        validResultCache[cacheKey]?.let { (ts, cached) ->
+            if (now - ts < VALID_CACHE_TTL_MS && cached.status == ConfigurationDirResult.Status.VALID) {
+                return cached
+            }
+        }
+
         val candidateUris = mutableListOf<Uri>()
         if (directory != null) {
             candidateUris.add(directory)
@@ -53,8 +63,39 @@ class FileSystemConfigurationDirectoryVerifier(private val context: Context, set
             return ConfigurationDirResult(consoleType, ConfigurationDirResult.Status.UNSET, requiredFiles.keys.toTypedArray(), missingResults.toTypedArray())
         }
 
+        // Index each candidate directory ONCE instead of running repeated SAF findFile/listFiles queries per BIOS file
+        val indexedDocuments = validDocuments.map { dir ->
+            val filesByLowerName = LinkedHashMap<String, DocumentFile>()
+            if (dir.uri.scheme == "file") {
+                val decodedDirPath = Uri.decode(dir.uri.path ?: "")
+                val dirFile = java.io.File(decodedDirPath)
+                if (dirFile.exists() && dirFile.isDirectory) {
+                    dirFile.listFiles()?.forEach { f ->
+                        if (f.isFile && f.length() > 0) {
+                            filesByLowerName.putIfAbsent(f.name.lowercase(), DocumentFile.fromFile(f))
+                        }
+                    }
+                }
+            } else {
+                runCatching { dir.listFiles() }.getOrNull()?.forEach { doc ->
+                    val docName = doc.name
+                    if (!docName.isNullOrBlank() && doc.isFile) {
+                        filesByLowerName.putIfAbsent(docName.lowercase(), doc)
+                    }
+                }
+            }
+            dir to filesByLowerName
+        }
+
         val fileResults = requiredFiles.map { (key, verifier) ->
-            val statuses = validDocuments.map { doc -> verifier.invoke(doc) }
+            val statuses = indexedDocuments.map { (doc, index) ->
+                activeDirectoryIndex.set(index)
+                try {
+                    verifier.invoke(doc)
+                } finally {
+                    activeDirectoryIndex.remove()
+                }
+            }
             val status = when {
                 statuses.contains(ConfigurationDirResult.FileStatus.PRESENT) -> ConfigurationDirResult.FileStatus.PRESENT
                 statuses.contains(ConfigurationDirResult.FileStatus.INVALID) -> ConfigurationDirResult.FileStatus.INVALID
@@ -65,7 +106,11 @@ class FileSystemConfigurationDirectoryVerifier(private val context: Context, set
 
         val isValid = fileResults.all { it.second == ConfigurationDirResult.FileStatus.PRESENT }
         val overallStatus = if (isValid) ConfigurationDirResult.Status.VALID else ConfigurationDirResult.Status.INVALID
-        return ConfigurationDirResult(consoleType, overallStatus, requiredFiles.keys.toTypedArray(), fileResults.toTypedArray())
+        val result = ConfigurationDirResult(consoleType, overallStatus, requiredFiles.keys.toTypedArray(), fileResults.toTypedArray())
+        if (overallStatus == ConfigurationDirResult.Status.VALID) {
+            validResultCache[cacheKey] = now to result
+        }
+        return result
     }
 
     private fun getDSBios7Status(configurationDir: DocumentFile): ConfigurationDirResult.FileStatus {
@@ -99,7 +144,15 @@ class FileSystemConfigurationDirectoryVerifier(private val context: Context, set
         }.getOrDefault(ConfigurationDirResult.FileStatus.MISSING)
     }
 
+    private val activeDirectoryIndex = ThreadLocal<Map<String, DocumentFile>>()
+
     private fun findBiosDocument(configurationDir: DocumentFile, vararg names: String): DocumentFile? {
+        activeDirectoryIndex.get()?.let { indexed ->
+            for (name in names) {
+                indexed[name.lowercase()]?.let { return it }
+            }
+            return null
+        }
         for (name in names) {
             val doc = configurationDir.findFile(name)
             if (doc != null && doc.exists() && doc.length() > 0) return doc
@@ -238,5 +291,9 @@ class FileSystemConfigurationDirectoryVerifier(private val context: Context, set
                     "nand.bin" to this::getDSiNandStatus
             )
         }
+    }
+
+    private companion object {
+        const val VALID_CACHE_TTL_MS = 10_000L
     }
 }

@@ -2,6 +2,7 @@
 #include <cstring>
 #include <cerrno>
 #include <cstdint>
+#include <cstdio>
 #include <atomic>
 #include <mutex>
 #include <string>
@@ -242,12 +243,18 @@ std::atomic<bool> gForceDisableDynamicTextureIndexing{false};
 std::atomic<int> gCachedVulkanSupported{-1};
 std::atomic<int> gCachedCanInitFastPath{-1};
 std::atomic<int> gCachedCanInitCompatibility{-1};
+std::mutex gCachedGpuInfoMutex;
+std::string gCachedGpuInfoSummary;
+bool gHasCachedGpuInfoSummary = false;
 
 void invalidateVulkanValidationCache()
 {
     gCachedVulkanSupported.store(-1, std::memory_order_relaxed);
     gCachedCanInitFastPath.store(-1, std::memory_order_relaxed);
     gCachedCanInitCompatibility.store(-1, std::memory_order_relaxed);
+    std::lock_guard<std::mutex> lock(gCachedGpuInfoMutex);
+    gCachedGpuInfoSummary.clear();
+    gHasCachedGpuInfoSummary = false;
 }
 
 std::string jStringToString(JNIEnv* env, jstring value)
@@ -306,6 +313,7 @@ void configureVulkanDriver(
 
     MelonDSAndroid::VulkanSurfacePresenter::clearPrewarmedRetroArchFilters();
     invalidateVulkanValidationCache();
+    melonDS::VulkanContext::InvalidateCachedDeviceApiVersion();
 
     melonDS::VulkanDispatch::ConfigureDriver(vulkanDriverConfiguration);
 }
@@ -865,6 +873,162 @@ void setVulkanCompatibilityOverrides(bool disableTimelineSemaphores, bool disabl
     );
 }
 
+std::string jsonEscape(const char* input, size_t maxLen)
+{
+    if (input == nullptr)
+        return {};
+
+    std::string out;
+    size_t len = 0;
+    while (len < maxLen && input[len] != '\0')
+        ++len;
+
+    out.reserve(len + 8);
+    for (size_t i = 0; i < len; ++i)
+    {
+        const unsigned char c = static_cast<unsigned char>(input[i]);
+        switch (c)
+        {
+            case '\\': out += "\\\\"; break;
+            case '"': out += "\\\""; break;
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            default:
+                if (c >= 0x20 && c < 0x7F)
+                    out.push_back(static_cast<char>(c));
+                break;
+        }
+    }
+    return out;
+}
+
+std::string queryVulkanGpuInfoSummary()
+{
+    {
+        std::lock_guard<std::mutex> lock(gCachedGpuInfoMutex);
+        if (gHasCachedGpuInfoSummary)
+            return gCachedGpuInfoSummary;
+    }
+
+    VkInstance instance = VK_NULL_HANDLE;
+    VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+    bool ownsInstance = false;
+
+    if (melonDS::VulkanContext::Get().IsReady())
+    {
+        instance = melonDS::VulkanContext::Get().GetInstance();
+        physicalDevice = melonDS::VulkanContext::Get().GetPhysicalDevice();
+    }
+    else if (createVulkanInstance(&instance))
+    {
+        ownsInstance = true;
+        uint32_t queueFamilyIndex = 0;
+        if (!pickGraphicsDevice(instance, &physicalDevice, &queueFamilyIndex))
+        {
+            uint32_t deviceCount = 0;
+            if (vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr) == VK_SUCCESS && deviceCount > 0)
+            {
+                std::vector<VkPhysicalDevice> devices(deviceCount);
+                if (vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data()) == VK_SUCCESS && !devices.empty())
+                {
+                    physicalDevice = devices[0];
+                }
+            }
+        }
+    }
+
+    std::string resultJson;
+    if (physicalDevice != VK_NULL_HANDLE)
+    {
+        VkPhysicalDeviceProperties props{};
+        vkGetPhysicalDeviceProperties(physicalDevice, &props);
+
+        std::string driverName;
+        std::string driverInfo;
+
+#ifdef VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES
+        auto getProps2 = reinterpret_cast<PFN_vkGetPhysicalDeviceProperties2>(
+            vkGetInstanceProcAddr(instance, "vkGetPhysicalDeviceProperties2")
+        );
+        if (getProps2 == nullptr)
+        {
+            getProps2 = reinterpret_cast<PFN_vkGetPhysicalDeviceProperties2>(
+                vkGetInstanceProcAddr(instance, "vkGetPhysicalDeviceProperties2KHR")
+            );
+        }
+
+        if (getProps2 != nullptr)
+        {
+            bool supportsDriverProps = props.apiVersion >= VK_API_VERSION_1_2;
+            if (!supportsDriverProps && vkEnumerateDeviceExtensionProperties != nullptr)
+            {
+                uint32_t extCount = 0;
+                if (vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &extCount, nullptr) == VK_SUCCESS && extCount > 0)
+                {
+                    std::vector<VkExtensionProperties> deviceExts(extCount);
+                    if (vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &extCount, deviceExts.data()) == VK_SUCCESS)
+                    {
+                        supportsDriverProps = hasExtension(VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME, deviceExts);
+                    }
+                }
+            }
+
+            if (supportsDriverProps)
+            {
+                VkPhysicalDeviceProperties2 props2{};
+                props2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+                VkPhysicalDeviceDriverProperties driverProps{};
+                driverProps.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES;
+                props2.pNext = &driverProps;
+                getProps2(physicalDevice, &props2);
+
+                driverName = jsonEscape(driverProps.driverName, VK_MAX_DRIVER_NAME_SIZE);
+                driverInfo = jsonEscape(driverProps.driverInfo, VK_MAX_DRIVER_INFO_SIZE);
+            }
+        }
+#endif
+
+        const uint32_t major = VK_API_VERSION_MAJOR(props.apiVersion);
+        const uint32_t minor = VK_API_VERSION_MINOR(props.apiVersion);
+        const uint32_t patch = VK_API_VERSION_PATCH(props.apiVersion);
+        char apiVerBuf[32];
+        std::snprintf(apiVerBuf, sizeof(apiVerBuf), "%u.%u.%u", major, minor, patch);
+
+        const std::string escapedDeviceName = jsonEscape(props.deviceName, VK_MAX_PHYSICAL_DEVICE_NAME_SIZE);
+        const bool usingCustom = melonDS::VulkanDispatch::IsUsingCustomDriver();
+
+        char headerBuf[512];
+        std::snprintf(
+            headerBuf,
+            sizeof(headerBuf),
+            "{\"deviceName\":\"%s\",\"vendorId\":%u,\"deviceId\":%u,\"apiVersion\":\"%s\",\"driverVersion\":%u,\"isCustomDriver\":%s,",
+            escapedDeviceName.c_str(),
+            props.vendorID,
+            props.deviceID,
+            apiVerBuf,
+            props.driverVersion,
+            usingCustom ? "true" : "false"
+        );
+        resultJson = headerBuf;
+        resultJson += "\"driverName\":\"" + driverName + "\",\"driverInfo\":\"" + driverInfo + "\"}";
+    }
+
+    if (ownsInstance && instance != VK_NULL_HANDLE)
+    {
+        vkDestroyInstance(instance, nullptr);
+    }
+
+    if (!resultJson.empty())
+    {
+        std::lock_guard<std::mutex> lock(gCachedGpuInfoMutex);
+        gCachedGpuInfoSummary = resultJson;
+        gHasCachedGpuInfoSummary = true;
+    }
+
+    return resultJson;
+}
+
 }
 
 extern "C"
@@ -967,6 +1131,16 @@ Java_me_magnum_melonds_MelonDSAndroidInterface_setVulkanCompatibilityOverridesNa
         disableTimelineSemaphores == JNI_TRUE,
         disableDynamicTextureIndexing == JNI_TRUE
     );
+}
+
+JNIEXPORT jstring JNICALL
+Java_me_magnum_melonds_MelonDSAndroidInterface_getVulkanGpuInfoNative(JNIEnv* env, jobject thiz)
+{
+    const std::string info = queryVulkanGpuInfoSummary();
+    if (info.empty())
+        return nullptr;
+
+    return env->NewStringUTF(info.c_str());
 }
 
 JNIEXPORT void JNICALL

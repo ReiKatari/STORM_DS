@@ -100,6 +100,17 @@ class AndroidEmulatorManager(
     @Volatile
     private var activeDsiWareSession: ActiveDsiWareSession? = null
     @Volatile private var leaderboardDiagnosticsEnabled = false
+    @Volatile private var isEmulationPaused = false
+
+    private fun startNativeEmulation(startPaused: Boolean) {
+        isEmulationPaused = startPaused
+        MelonEmulator.startEmulation(startPaused = startPaused)
+    }
+
+    private fun stopNativeEmulation() {
+        isEmulationPaused = false
+        MelonEmulator.stopEmulation()
+    }
     private val leaderboardTrackerUpdateLogLimiter = LeaderboardTrackerUpdateLogLimiter()
 
     private val messageQueue = EmulatorMessageQueue { type, data ->
@@ -370,7 +381,11 @@ class AndroidEmulatorManager(
                     return@withContext RomLaunchResult.LaunchFailedSramProblem(exception)
                 }
 
-                val emulatorConfiguration = getRomEmulatorConfiguration(rom)
+                val emulatorConfiguration = getRomEmulatorConfiguration(
+                    rom = rom,
+                    precheckedIsDsiWare = isDsiWare,
+                    precheckedDsiBiosValid = dsiBiosResult.status == ConfigurationDirResult.Status.VALID,
+                )
                     .withPreparedDldiConfiguration()
                 setupEmulator(emulatorConfiguration, rom.config.customVulkanDriverName)
 
@@ -455,7 +470,7 @@ class AndroidEmulatorManager(
                             return@withContext RomLaunchResult.LaunchFailed(vulkanFailedResult)
                         }
                         MelonEmulator.setupCheats(cheats.toTypedArray())
-                        MelonEmulator.startEmulation(startPaused = true)
+                        startNativeEmulation(startPaused = true)
                         delay(10)
                         val nativeDiag = MelonEmulator.stopAndGetBootDiagnostic()
                         val cpuDiag = MelonEmulator.getDetailedEmulationDiagnostic()
@@ -470,7 +485,7 @@ class AndroidEmulatorManager(
                     val cpuDiag = MelonEmulator.getDetailedEmulationDiagnostic()
                     val fullDiag = "--- Native Boot Diagnostic ---\n$nativeDiag\n--- Emulation CPU and Hardware Diagnostic ---\n$cpuDiag"
                     cameraManager.stopCurrentCameraSource()
-                    MelonEmulator.stopEmulation()
+                    stopNativeEmulation()
                     writeGameExecutionLog(rom, rom.fileName, false, "loadRom returned terminal error: $loadResult\n$fullDiag", "loadRom")
                     RomLaunchResult.LaunchFailed(loadResult)
                 } else {
@@ -494,7 +509,7 @@ class AndroidEmulatorManager(
                         return@withContext RomLaunchResult.LaunchFailed(vulkanFailedResult)
                     }
                     MelonEmulator.setupCheats(cheats.toTypedArray())
-                    MelonEmulator.startEmulation(startPaused = true)
+                    startNativeEmulation(startPaused = true)
                     delay(10)
                     val nativeDiag = MelonEmulator.stopAndGetBootDiagnostic()
                     val initialCpuDiag = MelonEmulator.getDetailedEmulationDiagnostic()
@@ -515,7 +530,7 @@ class AndroidEmulatorManager(
                 }
                 Log.e(TAG, "Failed to load ROM '${rom.name}'", exception)
                 cameraManager.stopCurrentCameraSource()
-                MelonEmulator.stopEmulation()
+                stopNativeEmulation()
                 messageQueue.stop()
                 writeGameExecutionLog(rom, rom.fileName, false, "Exception during launch: ${exception.message}", "loadRom Exception")
                 RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
@@ -689,7 +704,7 @@ class AndroidEmulatorManager(
                     }
                     MelonEmulator.setupCheats(cheats.toTypedArray())
                     activeDsiWareSession = null
-                    MelonEmulator.startEmulation(startPaused = true)
+                    startNativeEmulation(startPaused = true)
                     delay(10)
                     val nativeDiag = MelonEmulator.stopAndGetBootDiagnostic()
                     val cpuDiag = MelonEmulator.getDetailedEmulationDiagnostic()
@@ -700,7 +715,7 @@ class AndroidEmulatorManager(
 
                 val diag = MelonEmulator.stopAndGetBootDiagnostic()
                 cameraManager.stopCurrentCameraSource()
-                MelonEmulator.stopEmulation()
+                stopNativeEmulation()
                 writeGameExecutionLog(rom, titleIdHex, false, "loadRom returned terminal error: $loadResult\n--- Native Boot Diagnostic ---\n$diag", "loadDsiWare")
                 return@withContext RomLaunchResult.LaunchFailed(loadResult)
             }
@@ -735,7 +750,7 @@ class AndroidEmulatorManager(
                 isTemporaryInjected = false,
                 fileType = DSiWareTitleFileType.PUBLIC_SAV,
             )
-            MelonEmulator.startEmulation(startPaused = true)
+            startNativeEmulation(startPaused = true)
             delay(10)
             val nativeDiag = MelonEmulator.stopAndGetBootDiagnostic()
             writeGameExecutionLog(rom, titleIdHex, true, "DSiWare direct boot successful in DSi mode (NAND-synced)\n--- Native Boot Diagnostic ---\n$nativeDiag", "loadDsiWare")
@@ -888,7 +903,7 @@ class AndroidEmulatorManager(
                     return@withContext RomLaunchResult.LaunchFailed(vulkanFailedResult)
                 }
                 MelonEmulator.setupCheats(cheats.toTypedArray())
-                MelonEmulator.startEmulation(startPaused = true)
+                startNativeEmulation(startPaused = true)
                 delay(10)
                 val nativeDiag = MelonEmulator.stopAndGetBootDiagnostic()
                 val cpuDiag = MelonEmulator.getDetailedEmulationDiagnostic()
@@ -899,7 +914,7 @@ class AndroidEmulatorManager(
 
             val diag = MelonEmulator.stopAndGetBootDiagnostic()
             cameraManager.stopCurrentCameraSource()
-            MelonEmulator.stopEmulation()
+            stopNativeEmulation()
             writeGameExecutionLog(rom, titleIdHex, false, "loadRom/bootFirmware returned terminal error: $loadResult\n--- Native Boot Diagnostic ---\n$diag", "loadDsiWare")
             return@withContext RomLaunchResult.LaunchFailed(loadResult)
         }
@@ -934,7 +949,7 @@ class AndroidEmulatorManager(
             isTemporaryInjected = false,
             fileType = primaryFileType ?: DSiWareTitleFileType.PUBLIC_SAV,
         )
-        MelonEmulator.startEmulation(startPaused = true)
+        startNativeEmulation(startPaused = true)
         delay(10)
         val nativeDiag = MelonEmulator.stopAndGetBootDiagnostic()
         writeGameExecutionLog(rom, titleIdHex, true, "DSiWare direct boot successful in DSi mode (NAND-synced)\n--- Native Boot Diagnostic ---\n$nativeDiag", "loadDsiWare")
@@ -1168,14 +1183,14 @@ class AndroidEmulatorManager(
                 val result = MelonEmulator.bootFirmware()
                 if (result != MelonEmulator.FirmwareLoadResult.SUCCESS) {
                     cameraManager.stopCurrentCameraSource()
-                    MelonEmulator.stopEmulation()
+                    stopNativeEmulation()
                     FirmwareLaunchResult.LaunchFailed(result)
                 } else {
                     messageQueue.start()
                     if (!precompileVulkanPipelines(emulatorConfiguration)) {
                         val fallbackRenderer = GameCompatibilityManager.resolveSupportedFallbackRenderer(context)
                         messageQueue.stop()
-                        MelonEmulator.stopEmulation()
+                        stopNativeEmulation()
                         val glConfig = emulatorConfiguration.copy(
                             rendererConfiguration = emulatorConfiguration.rendererConfiguration.copy(renderer = fallbackRenderer)
                         )
@@ -1183,14 +1198,14 @@ class AndroidEmulatorManager(
                         val glResult = MelonEmulator.bootFirmware()
                         if (glResult != MelonEmulator.FirmwareLoadResult.SUCCESS) {
                             cameraManager.stopCurrentCameraSource()
-                            MelonEmulator.stopEmulation()
+                            stopNativeEmulation()
                             _emulatorEvents.tryEmit(EmulatorEvent.RendererInitFailed(fallbackRenderer))
                             return@withContext FirmwareLaunchResult.LaunchFailed(glResult)
                         }
                         messageQueue.start()
                         _emulatorEvents.tryEmit(EmulatorEvent.RendererInitFailed(VideoRenderer.VULKAN))
                     }
-                    MelonEmulator.startEmulation(startPaused = true)
+                    startNativeEmulation(startPaused = true)
                     FirmwareLaunchResult.LaunchSuccessful
                 }
             } catch (exception: Throwable) {
@@ -1199,7 +1214,7 @@ class AndroidEmulatorManager(
                 }
                 Log.e(TAG, "Failed to load firmware", exception)
                 cameraManager.stopCurrentCameraSource()
-                MelonEmulator.stopEmulation()
+                stopNativeEmulation()
                 messageQueue.stop()
                 FirmwareLaunchResult.LaunchFailed(MelonEmulator.FirmwareLoadResult.FIRMWARE_BAD)
             }
@@ -1255,7 +1270,7 @@ class AndroidEmulatorManager(
         writeGameExecutionLog(rom, logTarget, true, logDetails, logContext)
 
         messageQueue.stop()
-        MelonEmulator.stopEmulation()
+        stopNativeEmulation()
 
         val glConfig = currentConfig.copy(
             rendererConfiguration = currentConfig.rendererConfiguration.copy(renderer = fallbackRenderer)
@@ -1264,7 +1279,7 @@ class AndroidEmulatorManager(
         val glRetryResult = reloadAction()
         if (glRetryResult.isTerminal || !kotlin.coroutines.coroutineContext.isActive) {
             cameraManager.stopCurrentCameraSource()
-            MelonEmulator.stopEmulation()
+            stopNativeEmulation()
             _emulatorEvents.tryEmit(EmulatorEvent.RendererInitFailed(fallbackRenderer))
             return glRetryResult
         }
@@ -1313,12 +1328,16 @@ class AndroidEmulatorManager(
     }
 
     override suspend fun pauseEmulator() {
+        isEmulationPaused = true
         MelonEmulator.pauseEmulation()
     }
 
     override suspend fun resumeEmulator() {
+        isEmulationPaused = false
         MelonEmulator.resumeEmulation()
     }
+
+    override fun isEmulatorPaused(): Boolean = isEmulationPaused
 
     override suspend fun debugStepFrame(): Boolean = withContext(Dispatchers.Default) {
         MelonEmulator.debugStepFrame()
@@ -1411,7 +1430,7 @@ class AndroidEmulatorManager(
     }
 
     override fun stopEmulator() {
-        MelonEmulator.stopEmulation()
+        stopNativeEmulation()
         val session = takeActiveDsiWareSession()
         if (session != null) {
             coroutineScope.launch(Dispatchers.IO) {
@@ -1424,7 +1443,7 @@ class AndroidEmulatorManager(
 
     suspend fun stopEmulatorSuspend() {
         withContext(Dispatchers.IO) {
-            MelonEmulator.stopEmulation()
+            stopNativeEmulation()
             val session = takeActiveDsiWareSession()
             if (session != null) {
                 syncDsiWareSessionSaveAndCleanup(session)
@@ -1548,12 +1567,14 @@ class AndroidEmulatorManager(
     }
 
     private fun setupEmulator(emulatorConfiguration: EmulatorConfiguration, customVulkanDriverName: String? = null) {
-        runCatching { MelonEmulator.stopEmulation() }
+        runCatching { stopNativeEmulation() }
         if (emulatorConfiguration.rendererConfiguration.renderer == VideoRenderer.VULKAN) {
-            runCatching { me.magnum.melonds.impl.AdrenoVulkanDriverManager(context, settingsRepository).updateActiveDriverPipelineCachePath() }
-            MelonDSAndroidInterface.configureVulkanDriver(
-                getVulkanDriverConfigurationForRom(customVulkanDriverName)
-            )
+            val driverConfig = getVulkanDriverConfigurationForRom(customVulkanDriverName)
+            runCatching {
+                me.magnum.melonds.impl.AdrenoVulkanDriverManager(context, settingsRepository)
+                    .updatePipelineCachePathForConfig(driverConfig)
+            }
+            MelonDSAndroidInterface.configureVulkanDriver(driverConfig)
         }
         MelonEmulator.setupEmulator(
             emulatorConfiguration = emulatorConfiguration,
@@ -1562,15 +1583,20 @@ class AndroidEmulatorManager(
         )
     }
 
-    private suspend fun getRomEmulatorConfiguration(rom: Rom): EmulatorConfiguration {
+    private suspend fun getRomEmulatorConfiguration(
+        rom: Rom,
+        precheckedIsDsiWare: Boolean? = null,
+        precheckedDsiBiosValid: Boolean? = null,
+    ): EmulatorConfiguration {
         settingsRepository.setActiveRomContext(
             gameCode = rom.gameCode,
             romName = rom.config.customName ?: rom.name,
             fileName = rom.fileName,
         )
         val baseConfiguration = settingsRepository.getEmulatorConfiguration(rom.config)
-        val isDsiWare = rom.isDsiWareTitle || isRealDsiWareTitle(rom)
-        val dsiBiosValid = configurationDirectoryVerifier.checkConsoleConfigurationDirectory(ConsoleType.DSi).status == ConfigurationDirResult.Status.VALID
+        val isDsiWare = precheckedIsDsiWare ?: (rom.isDsiWareTitle || isRealDsiWareTitle(rom))
+        val dsiBiosValid = precheckedDsiBiosValid
+            ?: (configurationDirectoryVerifier.checkConsoleConfigurationDirectory(ConsoleType.DSi).status == ConfigurationDirResult.Status.VALID)
         val candidateConsoleType = if (isDsiWare) {
             ConsoleType.DSi
         } else if (rom.config.runtimeConsoleType != RuntimeConsoleType.DEFAULT) {

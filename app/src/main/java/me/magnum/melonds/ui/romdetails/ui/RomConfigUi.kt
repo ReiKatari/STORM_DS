@@ -523,17 +523,23 @@ private fun Content(
 
         if (showGraphics) {
         ConfigSection(title = stringResource(R.string.label_rom_config_video)) {
-            val vulkanDriverLabel = when (romConfig.customVulkanDriverName) {
-                null -> useGlobalWithValue(romConfig.globalVulkanDriverDisplayName)
-                "__SYSTEM__" -> stringResource(R.string.rom_config_vulkan_driver_system)
-                else -> romConfig.availableVulkanDrivers.firstOrNull { it.first == romConfig.customVulkanDriverName }?.second
-                    ?: romConfig.customVulkanDriverName.orEmpty()
+            val vulkanDriverLabel = if (!romConfig.isCustomVulkanDriverSupported) {
+                stringResource(R.string.rom_config_vulkan_driver_blocked_value)
+            } else {
+                when (romConfig.customVulkanDriverName) {
+                    null -> useGlobalWithValue(romConfig.globalVulkanDriverDisplayName)
+                    "__SYSTEM__" -> stringResource(R.string.rom_config_vulkan_driver_system)
+                    else -> romConfig.availableVulkanDrivers.firstOrNull { it.first == romConfig.customVulkanDriverName }?.second
+                        ?: romConfig.customVulkanDriverName.orEmpty()
+                }
             }
             ConfigRow(
                 title = stringResource(R.string.rom_config_vulkan_driver),
                 value = vulkanDriverLabel,
+                enabled = romConfig.isCustomVulkanDriverSupported,
                 showDivider = true,
                 onClick = {
+                    if (!romConfig.isCustomVulkanDriverSupported) return@ConfigRow
                     customVulkanDriverDialogState.show(
                         title = context.getString(R.string.rom_config_vulkan_driver),
                         items = romConfig.availableVulkanDrivers.map { it.first },

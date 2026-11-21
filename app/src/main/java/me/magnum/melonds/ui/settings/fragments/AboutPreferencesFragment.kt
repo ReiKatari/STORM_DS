@@ -21,7 +21,7 @@ class AboutPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.pref_about, rootKey)
 
-        val vName = (runCatching { requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName }.getOrNull() ?: "8.4.1")
+        val vName = (runCatching { requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName }.getOrNull() ?: "8.5.0")
             .removePrefix("v")
             .removePrefix("V")
         findPreference<Preference>("about_version")?.summary = vName
@@ -126,7 +126,7 @@ class AboutPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                 .setMessage(
                     "• melonDS Core (Arisotura and melonDS team)\n" +
                     "• DraStic Open-Source Replacement BIOS\n" +
-                    "• Librashader (SnowflakePowered — RetroArch Slang Shaders)\n" +
+                    "• Librashader (SnowflakePowered - RetroArch Slang Shaders)\n" +
                     "• rcheevos (RetroAchievements C Library)\n" +
                     "• Google ML Kit Text Recognition and Translation\n" +
                     "• Jetpack Compose, Material 3 and AndroidX\n" +

@@ -628,6 +628,8 @@ class EmulatorActivity : AppCompatActivity() {
     private val rewindOverlayState = mutableStateOf<me.magnum.melonds.ui.emulator.rewind.model.RewindWindow?>(null)
     private val bootStatus = mutableStateOf<String?>(null)
     private var romLoadingTimeoutJob: kotlinx.coroutines.Job? = null
+    private var lastVulkanCompileProgress: VulkanCompileProgress? = null
+    private var lastRaLoadStage: RetroAchievementsLoadStage? = null
 
     private data class SaveStatesOverlayData(
         val slots: List<SaveStateSlot>,
@@ -834,7 +836,12 @@ class EmulatorActivity : AppCompatActivity() {
                 isLidClosedState.value = isClosed
             },
             onStartPressed = {
-                if (viewModel.canResumeEmulatorFromLifecycle()) {
+                if (
+                    viewModel.isEmulatorPaused() &&
+                    !activeOverlays.hasActiveOverlays() &&
+                    pauseMenuState.value == null &&
+                    viewModel.canResumeEmulatorFromLifecycle()
+                ) {
                     viewModel.resumeEmulator()
                 }
             }
@@ -1389,7 +1396,13 @@ class EmulatorActivity : AppCompatActivity() {
                             boxArtUrl = bootBoxArtUrl.value,
                             statusText = bootStatus.value,
                             romReady = bootRomReady.value,
-                            onFinished = { showBootAnimation.value = false },
+                            onFinished = {
+                                showBootAnimation.value = false
+                                if (!bootRomReady.value) {
+                                    showLoadingState()
+                                    renderLoadingState(lastVulkanCompileProgress, lastRaLoadStage)
+                                }
+                            },
                         )
                     } else {
                         me.magnum.melonds.ui.emulator.ui.DsBootOverlay(
@@ -1398,7 +1411,13 @@ class EmulatorActivity : AppCompatActivity() {
                             romTitle = bootRomTitle.value,
                             isDsi = bootIsDsi.value,
                             statusText = bootStatus.value,
-                            onFinished = { showBootAnimation.value = false },
+                            onFinished = {
+                                showBootAnimation.value = false
+                                if (!bootRomReady.value) {
+                                    showLoadingState()
+                                    renderLoadingState(lastVulkanCompileProgress, lastRaLoadStage)
+                                }
+                            },
                         )
                     }
                 }
@@ -1832,7 +1851,9 @@ class EmulatorActivity : AppCompatActivity() {
                             binding.textLoading.isGone = true
                             binding.progressLoading.isGone = true
                             binding.textLoadingDetail.isGone = true
-                            showBootAnimation.value = false
+                            if (bootRomReady.value) {
+                                showBootAnimation.value = false
+                            }
                             presentation?.setInfoOverlayContent(null)
                         }
                         is EmulatorState.ValidatingFirmware -> {
@@ -1986,7 +2007,27 @@ class EmulatorActivity : AppCompatActivity() {
     }
 
     private fun renderLoadingState(progress: VulkanCompileProgress?, raLoadStage: RetroAchievementsLoadStage? = null) {
-        if (bootRomReady.value || showBootAnimation.value || viewModel.emulatorState.value is EmulatorState.RunningRom || viewModel.emulatorState.value is EmulatorState.RunningFirmware) {
+        lastVulkanCompileProgress = progress
+        lastRaLoadStage = raLoadStage
+
+        if (bootRomReady.value || viewModel.emulatorState.value is EmulatorState.RunningRom || viewModel.emulatorState.value is EmulatorState.RunningFirmware) {
+            binding.textLoading.isGone = true
+            binding.progressLoading.isGone = true
+            binding.textLoadingDetail.isGone = true
+            return
+        }
+
+        val liveStatusText = when {
+            raLoadStage == RetroAchievementsLoadStage.FETCHING_LATEST_DATA ->
+                getString(R.string.info_refreshing_retroachievements_title)
+            progress != null && progress.total > 0 ->
+                getVulkanCompileStageLabel(progress.stageId)
+            else ->
+                getString(R.string.info_loading)
+        }
+        bootStatus.value = liveStatusText
+
+        if (showBootAnimation.value) {
             binding.textLoading.isGone = true
             binding.progressLoading.isGone = true
             binding.textLoadingDetail.isGone = true
@@ -1999,7 +2040,6 @@ class EmulatorActivity : AppCompatActivity() {
             binding.progressLoading.isIndeterminate = true
             binding.textLoadingDetail.isVisible = true
             binding.textLoadingDetail.setText(R.string.info_refreshing_retroachievements_detail)
-            bootStatus.value = getString(R.string.info_refreshing_retroachievements_title)
             return
         }
 
@@ -2008,7 +2048,6 @@ class EmulatorActivity : AppCompatActivity() {
             binding.progressLoading.isVisible = true
             binding.progressLoading.isIndeterminate = true
             binding.textLoadingDetail.isGone = true
-            bootStatus.value = getString(R.string.info_loading)
             return
         }
 
@@ -2023,9 +2062,6 @@ class EmulatorActivity : AppCompatActivity() {
         binding.progressLoading.isIndeterminate = true
         binding.textLoadingDetail.isVisible = true
         binding.textLoadingDetail.text = getVulkanCompileStageLabel(progress.stageId)
-        bootStatus.value = getString(
-            if (progress.stageId == 5) R.string.info_retroarch_compiling_title else R.string.info_vulkan_compiling_title,
-        )
     }
 
     private fun getVulkanCompileStageLabel(stageId: Int): String {

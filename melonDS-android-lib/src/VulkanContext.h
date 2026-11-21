@@ -63,6 +63,7 @@ public:
 
     u32 FindMemoryType(u32 typeBits, VkMemoryPropertyFlags properties) const;
     static void SetCompatibilityOverrides(bool disableTimelineSemaphores, bool disableDynamicTextureIndexing);
+    static void InvalidateCachedDeviceApiVersion();
 
 private:
     VulkanContext() = default;

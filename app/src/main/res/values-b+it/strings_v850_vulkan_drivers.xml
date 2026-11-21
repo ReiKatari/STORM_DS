@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="video_vulkan_driver_mode_options">
+        <item>Sistema</item>
+        <item>Personalizzato</item>
+    </string-array>
+    <string name="vulkan_driver_hub_title">Hub driver Vulkan</string>
+    <string name="vulkan_driver_tab_installed">Installati (%1$d)</string>
+    <string name="vulkan_driver_tab_repositories">Repository (%1$d)</string>
+    <string name="vulkan_driver_tab_recommended">Per la tua GPU</string>
+    <string name="vulkan_driver_gpu_chip_label">GPU</string>
+    <string name="vulkan_driver_api_label">API Vulkan</string>
+    <string name="vulkan_driver_active_label">Driver attivo</string>
+    <string name="vulkan_driver_custom_tag">Personalizzato</string>
+    <string name="vulkan_driver_system_tag">Sistema</string>
+    <string name="vulkan_driver_blocked_title">Driver Vulkan personalizzati bloccati</string>
+    <string name="vulkan_driver_blocked_gpu_reason">GPU rilevata: %1$s. I driver Turnip e Adrenotools supportano solo Qualcomm Adreno 6xx, 7xx e 8xx. Il dispositivo è limitato al driver di sistema Android.</string>
+    <string name="vulkan_driver_blocked_legacy_reason">I driver personalizzati sono disabilitati nella build LEGACY senza Adrenotools.</string>
+    <string name="vulkan_driver_blocked_abi_reason">I driver personalizzati richiedono arm64-v8a a 64 bit e Android 9 o successivo.</string>
+    <string name="vulkan_driver_prefs_blocked_summary">Bloccato per %1$s - solo driver di sistema</string>
+    <string name="vulkan_driver_prefs_blocked_legacy_summary">Bloccato nella build LEGACY - solo driver di sistema</string>
+    <string name="vulkan_driver_prefs_blocked_abi_summary">Bloccato (richiede arm64 e Android 9+)</string>
+    <string name="vulkan_driver_storm_quick_title">STORM DRIVER (Tutto in uno)</string>
+    <string name="vulkan_driver_storm_quick_subtitle">Selezione automatica Adreno 6xx/7xx o Gen8 da 4 mirror veloci</string>
+    <string name="vulkan_driver_install_storm">Installa STORM DRIVER</string>
+    <string name="vulkan_driver_reinstall_storm">Reinstalla STORM DRIVER</string>
+    <string name="vulkan_driver_system_title">Driver GPU di sistema</string>
+    <string name="vulkan_driver_system_subtitle">Driver Vulkan integrato nel firmware Android</string>
+    <string name="vulkan_driver_import_zip">Importa ZIP</string>
+    <string name="vulkan_driver_clear_caches">Svuota cache shader</string>
+    <string name="vulkan_driver_caches_cleared">Rimossi %1$d file cache Vulkan</string>
+    <string name="vulkan_driver_status_active">Attivo</string>
+    <string name="vulkan_driver_status_installed">Installato</string>
+    <string name="vulkan_driver_activate">Attiva</string>
+    <string name="vulkan_driver_install">Installa</string>
+    <string name="vulkan_driver_reinstall">Reinstalla</string>
+    <string name="vulkan_driver_delete">Elimina</string>
+    <string name="vulkan_driver_offline_fallback_badge">Mirror offline</string>
+    <string name="vulkan_driver_cache_badge">In cache</string>
+    <string name="vulkan_driver_search_hint">Cerca repository, driver o versioni...</string>
+    <string name="vulkan_driver_cat_all">Tutti (14)</string>
+    <string name="vulkan_driver_cat_storm">STORM</string>
+    <string name="vulkan_driver_cat_turnip">Turnip</string>
+    <string name="vulkan_driver_cat_8xx">Adreno 8xx</string>
+    <string name="vulkan_driver_cat_710">Adreno 710/720</string>
+    <string name="vulkan_driver_refresh">Aggiorna repository</string>
+    <string name="vulkan_driver_loading_repos">Sincronizzazione di 14 repository GitHub...</string>
+    <string name="vulkan_driver_no_matches">Nessun risultato per "%1$s"</string>
+    <string name="vulkan_driver_repo_releases_count">%1$d release</string>
+    <string name="vulkan_driver_show_notes">Note di rilascio</string>
+    <string name="vulkan_driver_hide_notes">Nascondi note</string>
+    <string name="vulkan_driver_repo_error">Rete non disponibile o limite GitHub: %1$s</string>
+    <string name="vulkan_driver_series_840_desc">Snapdragon 8 Elite Gen 5 (Adreno 840+): usa solo STORM DRIVER o build Gen5/840.</string>
+    <string name="vulkan_driver_series_8xx_desc">Snapdragon 8 Elite (Adreno 825/830): usa STORM DRIVER, GameHub 8xx o Balemuni Aurora Gen8.</string>
+    <string name="vulkan_driver_series_710_desc">Adreno 710 / 720 / 722 / 810: usa STORM DRIVER o Vauzi-17 710 Turnip.</string>
+    <string name="vulkan_driver_series_7xx_desc">Adreno 7xx (8 Gen 1/2/3, 7+ Gen 2): STORM DRIVER, KIMCHI Turnip e Mr. Purple offrono la massima stabilità.</string>
+    <string name="vulkan_driver_series_6xx_desc">Adreno 6xx (619 / 650 / 660 / 865 / 870 / 888): scegli STORM DRIVER, KIMCHI Turnip o driver di sistema.</string>
+    <string name="vulkan_driver_no_installed">Nessun driver personalizzato installato</string>
+    <string name="vulkan_driver_downloading_progress">Download %1$s (%2$s)...</string>
+    <string name="vulkan_driver_installing">Installazione %1$s...</string>
+    <string name="vulkan_driver_import_min_api">Il driver richiede Android API %1$d o superiore.</string>
+    <string name="vulkan_driver_import_invalid_archive">Archivio driver danneggiato o non valido.</string>
+    <string name="vulkan_driver_download_error">Download non riuscito: %1$s</string>
+    <string name="vulkan_driver_meta_author">Autore: %1$s</string>
+    <string name="vulkan_driver_meta_version">Versione: %1$s</string>
+    <string name="vulkan_driver_delete_confirm_title">Eliminare il driver Vulkan?</string>
+    <string name="vulkan_driver_delete_confirm_message">Rimuovere %1$s dal dispositivo?</string>
+    <string name="vulkan_driver_adreno8xx_warn_title">Avviso compatibilità Adreno 8xx</string>
+    <string name="vulkan_driver_adreno8xx_warn_message">%1$s non sembra compatibile con Adreno 830/840 (Gen8). Può causare crash o schermo nero. Installare comunque?</string>
+    <string name="vulkan_driver_install_anyway">Installa comunque</string>
+    <string name="rom_config_vulkan_driver_blocked_value">Sistema (bloccato per GPU)</string>
+</resources>

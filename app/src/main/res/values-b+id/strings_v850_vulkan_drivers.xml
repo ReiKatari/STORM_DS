@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="video_vulkan_driver_mode_options">
+        <item>Sistem</item>
+        <item>Kustom</item>
+    </string-array>
+    <string name="vulkan_driver_hub_title">Pusat driver Vulkan</string>
+    <string name="vulkan_driver_tab_installed">Terpasang (%1$d)</string>
+    <string name="vulkan_driver_tab_repositories">Repositori (%1$d)</string>
+    <string name="vulkan_driver_tab_recommended">Untuk GPU Anda</string>
+    <string name="vulkan_driver_gpu_chip_label">GPU</string>
+    <string name="vulkan_driver_api_label">Vulkan API</string>
+    <string name="vulkan_driver_active_label">Driver aktif</string>
+    <string name="vulkan_driver_custom_tag">Kustom</string>
+    <string name="vulkan_driver_system_tag">Sistem</string>
+    <string name="vulkan_driver_blocked_title">Driver Vulkan kustom diblokir</string>
+    <string name="vulkan_driver_blocked_gpu_reason">GPU terdeteksi: %1$s. Driver Turnip dan Adrenotools hanya mendukung Qualcomm Adreno 6xx, 7xx, dan 8xx. Perangkat dikunci ke driver sistem Android.</string>
+    <string name="vulkan_driver_blocked_legacy_reason">Driver kustom dinonaktifkan pada build LEGACY tanpa dukungan Adrenotools.</string>
+    <string name="vulkan_driver_blocked_abi_reason">Driver kustom memerlukan arsitektur arm64-v8a 64-bit dan Android 9 atau lebih baru.</string>
+    <string name="vulkan_driver_prefs_blocked_summary">Diblokir untuk %1$s - hanya driver sistem</string>
+    <string name="vulkan_driver_prefs_blocked_legacy_summary">Diblokir di build LEGACY - hanya driver sistem</string>
+    <string name="vulkan_driver_prefs_blocked_abi_summary">Diblokir (perlu arm64 dan Android 9+)</string>
+    <string name="vulkan_driver_storm_quick_title">STORM DRIVER (Semua dalam Satu)</string>
+    <string name="vulkan_driver_storm_quick_subtitle">Otomatis memilih biner Adreno 6xx/7xx atau Gen8 dari 4 mirror cepat</string>
+    <string name="vulkan_driver_install_storm">Pasang STORM DRIVER</string>
+    <string name="vulkan_driver_reinstall_storm">Pasang ulang STORM DRIVER</string>
+    <string name="vulkan_driver_system_title">Driver GPU sistem</string>
+    <string name="vulkan_driver_system_subtitle">Driver Vulkan bawaan dari firmware Android</string>
+    <string name="vulkan_driver_import_zip">Impor ZIP</string>
+    <string name="vulkan_driver_clear_caches">Hapus cache shader</string>
+    <string name="vulkan_driver_caches_cleared">%1$d file cache Vulkan dihapus</string>
+    <string name="vulkan_driver_status_active">Aktif</string>
+    <string name="vulkan_driver_status_installed">Terpasang</string>
+    <string name="vulkan_driver_activate">Aktifkan</string>
+    <string name="vulkan_driver_install">Pasang</string>
+    <string name="vulkan_driver_reinstall">Pasang ulang</string>
+    <string name="vulkan_driver_delete">Hapus</string>
+    <string name="vulkan_driver_offline_fallback_badge">Mirror offline</string>
+    <string name="vulkan_driver_cache_badge">Cache</string>
+    <string name="vulkan_driver_search_hint">Cari repositori, driver, atau versi...</string>
+    <string name="vulkan_driver_cat_all">Semua (14)</string>
+    <string name="vulkan_driver_cat_storm">STORM</string>
+    <string name="vulkan_driver_cat_turnip">Turnip</string>
+    <string name="vulkan_driver_cat_8xx">Adreno 8xx</string>
+    <string name="vulkan_driver_cat_710">Adreno 710/720</string>
+    <string name="vulkan_driver_refresh">Muat ulang repositori</string>
+    <string name="vulkan_driver_loading_repos">Menyinkronkan 14 repositori GitHub...</string>
+    <string name="vulkan_driver_no_matches">Tidak ada hasil untuk "%1$s"</string>
+    <string name="vulkan_driver_repo_releases_count">%1$d rilis</string>
+    <string name="vulkan_driver_show_notes">Catatan rilis</string>
+    <string name="vulkan_driver_hide_notes">Sembunyikan catatan</string>
+    <string name="vulkan_driver_repo_error">Jaringan tidak tersedia atau batas GitHub: %1$s</string>
+    <string name="vulkan_driver_series_840_desc">Snapdragon 8 Elite Gen 5 (Adreno 840+): Gunakan hanya STORM DRIVER atau build Gen5/840.</string>
+    <string name="vulkan_driver_series_8xx_desc">Snapdragon 8 Elite (Adreno 825/830): Gunakan STORM DRIVER, GameHub 8xx, atau Balemuni Aurora Gen8.</string>
+    <string name="vulkan_driver_series_710_desc">Adreno 710 / 720 / 722 / 810: Gunakan STORM DRIVER atau Vauzi-17 710 Turnip.</string>
+    <string name="vulkan_driver_series_7xx_desc">Adreno 7xx (8 Gen 1/2/3, 7+ Gen 2): STORM DRIVER, KIMCHI Turnip, dan Mr. Purple paling stabil.</string>
+    <string name="vulkan_driver_series_6xx_desc">Adreno 6xx (619 / 650 / 660 / 865 / 870 / 888): Pilih STORM DRIVER, KIMCHI Turnip, atau driver sistem.</string>
+    <string name="vulkan_driver_no_installed">Belum ada driver kustom terpasang</string>
+    <string name="vulkan_driver_downloading_progress">Mengunduh %1$s (%2$s)...</string>
+    <string name="vulkan_driver_installing">Memasang %1$s...</string>
+    <string name="vulkan_driver_import_min_api">Driver memerlukan minimal Android API %1$d.</string>
+    <string name="vulkan_driver_import_invalid_archive">Arsip driver rusak atau tidak valid.</string>
+    <string name="vulkan_driver_download_error">Gagal mengunduh: %1$s</string>
+    <string name="vulkan_driver_meta_author">Pembuat: %1$s</string>
+    <string name="vulkan_driver_meta_version">Versi: %1$s</string>
+    <string name="vulkan_driver_delete_confirm_title">Hapus driver Vulkan?</string>
+    <string name="vulkan_driver_delete_confirm_message">Hapus %1$s dari penyimpanan perangkat?</string>
+    <string name="vulkan_driver_adreno8xx_warn_title">Peringatan kompatibilitas Adreno 8xx</string>
+    <string name="vulkan_driver_adreno8xx_warn_message">%1$s tidak ditandai kompatibel dengan Adreno 830/840 (Gen8). Dapat menyebabkan crash atau layar hitam. Tetap pasang?</string>
+    <string name="vulkan_driver_install_anyway">Tetap pasang</string>
+    <string name="rom_config_vulkan_driver_blocked_value">Sistem (diblokir untuk GPU)</string>
+</resources>

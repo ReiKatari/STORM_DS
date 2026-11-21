@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="video_vulkan_driver_mode_options">
+        <item>系统</item>
+        <item>自定义</item>
+    </string-array>
+    <string name="vulkan_driver_hub_title">Vulkan 驱动中心</string>
+    <string name="vulkan_driver_tab_installed">已安装 (%1$d)</string>
+    <string name="vulkan_driver_tab_repositories">仓库 (%1$d)</string>
+    <string name="vulkan_driver_tab_recommended">适配当前 GPU</string>
+    <string name="vulkan_driver_gpu_chip_label">GPU</string>
+    <string name="vulkan_driver_api_label">Vulkan API</string>
+    <string name="vulkan_driver_active_label">当前驱动</string>
+    <string name="vulkan_driver_custom_tag">自定义</string>
+    <string name="vulkan_driver_system_tag">系统</string>
+    <string name="vulkan_driver_blocked_title">已屏蔽自定义 Vulkan 驱动</string>
+    <string name="vulkan_driver_blocked_gpu_reason">检测到 GPU: %1$s。自定义 Turnip 与 Adrenotools 驱动仅支持高通 Adreno 6xx、7xx 与 8xx 图形处理器，当前设备已锁定为安全的 Android 系统驱动。</string>
+    <string name="vulkan_driver_blocked_legacy_reason">LEGACY 版本未包含 Adrenotools 支持，已禁用自定义驱动。请在高通 Adreno 设备上使用 GitHub arm64 版本。</string>
+    <string name="vulkan_driver_blocked_abi_reason">自定义 Vulkan 驱动需要 64 位 arm64-v8a 架构与 Android 9 或更高版本。</string>
+    <string name="vulkan_driver_prefs_blocked_summary">已对 %1$s 屏蔽 - 仅使用系统驱动</string>
+    <string name="vulkan_driver_prefs_blocked_legacy_summary">LEGACY 版已屏蔽 - 仅使用系统驱动</string>
+    <string name="vulkan_driver_prefs_blocked_abi_summary">已屏蔽（需要 arm64 与 Android 9+）</string>
+    <string name="vulkan_driver_storm_quick_title">STORM DRIVER (全合一一键包)</string>
+    <string name="vulkan_driver_storm_quick_subtitle">从 4 个高速镜像自动匹配 Adreno 6xx/7xx 或 Gen8 二进制文件</string>
+    <string name="vulkan_driver_install_storm">安装 STORM DRIVER</string>
+    <string name="vulkan_driver_reinstall_storm">重新安装 STORM DRIVER</string>
+    <string name="vulkan_driver_system_title">系统 GPU 驱动</string>
+    <string name="vulkan_driver_system_subtitle">Android 系统固件自带的 Vulkan 驱动</string>
+    <string name="vulkan_driver_import_zip">导入 ZIP</string>
+    <string name="vulkan_driver_clear_caches">清理着色器缓存</string>
+    <string name="vulkan_driver_caches_cleared">已清理 %1$d 个 Vulkan 缓存文件</string>
+    <string name="vulkan_driver_status_active">启用中</string>
+    <string name="vulkan_driver_status_installed">已安装</string>
+    <string name="vulkan_driver_activate">启用</string>
+    <string name="vulkan_driver_install">安装</string>
+    <string name="vulkan_driver_reinstall">重装</string>
+    <string name="vulkan_driver_delete">删除</string>
+    <string name="vulkan_driver_offline_fallback_badge">离线镜像</string>
+    <string name="vulkan_driver_cache_badge">已缓存</string>
+    <string name="vulkan_driver_search_hint">搜索仓库、驱动或版本...</string>
+    <string name="vulkan_driver_cat_all">全部 (14)</string>
+    <string name="vulkan_driver_cat_storm">STORM</string>
+    <string name="vulkan_driver_cat_turnip">Turnip</string>
+    <string name="vulkan_driver_cat_8xx">Adreno 8xx</string>
+    <string name="vulkan_driver_cat_710">Adreno 710/720</string>
+    <string name="vulkan_driver_refresh">刷新仓库列表</string>
+    <string name="vulkan_driver_loading_repos">正在同步 14 个 GitHub 仓库...</string>
+    <string name="vulkan_driver_no_matches">未找到匹配 "%1$s" 的结果</string>
+    <string name="vulkan_driver_repo_releases_count">%1$d 个版本</string>
+    <string name="vulkan_driver_show_notes">更新说明</string>
+    <string name="vulkan_driver_hide_notes">收起说明</string>
+    <string name="vulkan_driver_repo_error">网络不可用或触发 GitHub 限流: %1$s</string>
+    <string name="vulkan_driver_series_840_desc">骁龙 8 Elite Gen 5 (Adreno 840+): 请仅使用 STORM DRIVER 或支持 Gen5/840 的 Turnip 版本。</string>
+    <string name="vulkan_driver_series_8xx_desc">骁龙 8 Elite (Adreno 825/830): 建议使用 STORM DRIVER、GameHub 8xx 或 Balemuni Aurora Gen8。</string>
+    <string name="vulkan_driver_series_710_desc">Adreno 710 / 720 / 722 / 810: 建议使用 STORM DRIVER 或 Vauzi-17 710 Turnip。</string>
+    <string name="vulkan_driver_series_7xx_desc">Adreno 7xx (8 Gen 1/2/3, 7+ Gen 2): STORM DRIVER、KIMCHI Turnip 与 Mr. Purple 稳定性最佳。</string>
+    <string name="vulkan_driver_series_6xx_desc">Adreno 6xx (619 / 650 / 660 / 865 / 870 / 888): 推荐 STORM DRIVER、KIMCHI Turnip 或系统驱动。</string>
+    <string name="vulkan_driver_no_installed">尚未安装自定义驱动</string>
+    <string name="vulkan_driver_downloading_progress">正在下载 %1$s (%2$s)...</string>
+    <string name="vulkan_driver_installing">正在安装 %1$s...</string>
+    <string name="vulkan_driver_import_min_api">该驱动需要 Android API %1$d 或更高版本。</string>
+    <string name="vulkan_driver_import_invalid_archive">驱动压缩包已损坏或格式无效。</string>
+    <string name="vulkan_driver_download_error">下载失败: %1$s</string>
+    <string name="vulkan_driver_meta_author">作者: %1$s</string>
+    <string name="vulkan_driver_meta_version">版本: %1$s</string>
+    <string name="vulkan_driver_delete_confirm_title">删除 Vulkan 驱动？</string>
+    <string name="vulkan_driver_delete_confirm_message">要从设备存储中移除 %1$s 吗？</string>
+    <string name="vulkan_driver_adreno8xx_warn_title">Adreno 8xx 兼容性警告</string>
+    <string name="vulkan_driver_adreno8xx_warn_message">%1$s 未明确标注支持 Adreno 830/840 (Gen8)，普通 Turnip 可能黑屏或闪退。仍要安装吗？</string>
+    <string name="vulkan_driver_install_anyway">仍然安装</string>
+    <string name="rom_config_vulkan_driver_blocked_value">系统驱动（此 GPU 已禁用）</string>
+</resources>
