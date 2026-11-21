@@ -47,8 +47,10 @@ class UserGlossaryManager(
     private val fallbackBaseDir by lazy { File(context.filesDir, "translator/dictionaries") }
 
     init {
-        ensureDirectories()
-        loadDictionaries()
+        scope.launch {
+            ensureDirectories()
+            loadDictionariesInternal()
+        }
     }
 
     private fun ensureDirectories() {
@@ -87,9 +89,17 @@ class UserGlossaryManager(
         if (sanitized != activeGameKey) {
             activeGameKey = sanitized
             gameEntries.clear()
-            if (activeGameKey != "global") {
-                val file = getDictionaryFile(activeGameKey)
-                loadEntriesFromFile(file, gameEntries)
+            if (sanitized != "global") {
+                scope.launch {
+                    ensureDirectories()
+                    val loaded = HashMap<String, GlossaryEntry>()
+                    loadEntriesFromFile(getDictionaryFile(sanitized), loaded)
+                    if (activeGameKey == sanitized) {
+                        for ((k, v) in loaded) {
+                            gameEntries.putIfAbsent(k, v)
+                        }
+                    }
+                }
             }
         }
     }
@@ -97,15 +107,28 @@ class UserGlossaryManager(
     fun getActiveGameKey(): String = activeGameKey
 
     fun loadDictionaries() {
-        globalEntries.clear()
-        gameEntries.clear()
+        scope.launch {
+            ensureDirectories()
+            loadDictionariesInternal()
+        }
+    }
 
-        val globalFile = getDictionaryFile("global")
-        loadEntriesFromFile(globalFile, globalEntries)
+    private fun loadDictionariesInternal() {
+        val currentKey = activeGameKey
+        val loadedGlobal = HashMap<String, GlossaryEntry>()
+        loadEntriesFromFile(getDictionaryFile("global"), loadedGlobal)
+        for ((k, v) in loadedGlobal) {
+            globalEntries.putIfAbsent(k, v)
+        }
 
-        if (activeGameKey != "global") {
-            val gameFile = getDictionaryFile(activeGameKey)
-            loadEntriesFromFile(gameFile, gameEntries)
+        if (currentKey != "global") {
+            val loadedGame = HashMap<String, GlossaryEntry>()
+            loadEntriesFromFile(getDictionaryFile(currentKey), loadedGame)
+            if (activeGameKey == currentKey) {
+                for ((k, v) in loadedGame) {
+                    gameEntries.putIfAbsent(k, v)
+                }
+            }
         }
     }
 
@@ -199,12 +222,19 @@ class UserGlossaryManager(
         if (cleanSource.isEmpty() || cleanTarget.isEmpty()) return
 
         val normalizedKey = normalizeTermKey(cleanSource, entry.caseSensitive)
+        val oppositeKey = normalizeTermKey(cleanSource, !entry.caseSensitive)
         val validEntry = entry.copy(sourceTerm = cleanSource, targetTerm = cleanTarget)
 
         if (isGameSpecific && activeGameKey != "global") {
+            if (oppositeKey != normalizedKey && gameEntries[oppositeKey]?.sourceTerm?.equals(cleanSource, ignoreCase = true) == true) {
+                gameEntries.remove(oppositeKey)
+            }
             gameEntries[normalizedKey] = validEntry
             saveToFileAsync(getDictionaryFile(activeGameKey), gameEntries.values.toList(), activeGameKey)
         } else {
+            if (oppositeKey != normalizedKey && globalEntries[oppositeKey]?.sourceTerm?.equals(cleanSource, ignoreCase = true) == true) {
+                globalEntries.remove(oppositeKey)
+            }
             globalEntries[normalizedKey] = validEntry
             saveToFileAsync(getDictionaryFile("global"), globalEntries.values.toList(), "global")
         }
@@ -212,6 +242,33 @@ class UserGlossaryManager(
         // Evict affected cached translations immediately
         onCacheInvalidate?.invoke(cleanSource)
         onCacheInvalidate?.invoke(cleanTarget)
+    }
+
+    fun replaceEntry(
+        oldSourceTerm: String,
+        oldCaseSensitive: Boolean,
+        oldGameSpecific: Boolean,
+        newEntry: GlossaryEntry,
+        newGameSpecific: Boolean
+    ) {
+        val cleanOld = oldSourceTerm.trim()
+        if (cleanOld.isNotEmpty()) {
+            val oldKey = normalizeTermKey(cleanOld, oldCaseSensitive)
+            val oldLowerKey = normalizeTermKey(cleanOld, false)
+            val oldExactKey = normalizeTermKey(cleanOld, true)
+            val oldTargetGame = oldGameSpecific && activeGameKey != "global"
+            val newTargetGame = newGameSpecific && activeGameKey != "global"
+            val oldMap = if (oldTargetGame) gameEntries else globalEntries
+            val removed = oldMap.remove(oldKey) ?: oldMap.remove(oldExactKey) ?: oldMap.remove(oldLowerKey)
+            if (removed != null) {
+                if (oldTargetGame != newTargetGame) {
+                    val oldScopeKey = if (oldTargetGame) activeGameKey else "global"
+                    saveToFileAsync(getDictionaryFile(oldScopeKey), oldMap.values.toList(), oldScopeKey)
+                }
+                onCacheInvalidate?.invoke(cleanOld)
+            }
+        }
+        addOrUpdateEntry(newEntry, isGameSpecific = newGameSpecific)
     }
 
     fun deleteEntry(

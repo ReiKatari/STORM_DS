@@ -173,7 +173,9 @@ fun formatCheatCode(cheatCodeState: TextFieldValue): TextFieldValue {
     }
 
     return if (isTextModified) {
-        TextFieldValue(stringBuilder.toString(), selection = TextRange(cheatCodeState.selection.start + cursorOffset))
+        val formattedText = stringBuilder.toString()
+        val coercedCursor = (cheatCodeState.selection.start + cursorOffset).coerceIn(0, formattedText.length)
+        TextFieldValue(formattedText, selection = TextRange(coercedCursor))
     } else {
         cheatCodeState
     }

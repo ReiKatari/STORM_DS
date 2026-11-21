@@ -514,11 +514,18 @@ class CustomAiEngine(
             })
             put("temperature", 0.2)
         }
-        val request = Request.Builder()
-            .url(endpoint)
-            .header("Authorization", "Bearer $apiKey")
-            .post(json.toString().toRequestBody("application/json".toMediaType()))
-            .build()
+        val request = try {
+            Request.Builder()
+                .url(endpoint)
+                .header("Authorization", "Bearer $apiKey")
+                .post(json.toString().toRequestBody("application/json".toMediaType()))
+                .build()
+        } catch (e: IllegalArgumentException) {
+            throw TranslationException(
+                context?.getString(R.string.translator_error_network) ?: "Invalid endpoint URL",
+                e
+            )
+        }
         val response = try {
             client.executeAsync(request)
         } catch (e: IOException) {

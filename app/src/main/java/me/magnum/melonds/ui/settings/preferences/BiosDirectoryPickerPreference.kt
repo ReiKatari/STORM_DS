@@ -55,6 +55,9 @@ class BiosDirectoryPickerPreference(context: Context, attrs: AttributeSet?) : St
 
     fun setBiosDirectoryValidator(validator: BiosDirectoryValidator) {
         biosDirectoryValidator = validator
+        if (consoleType != null) {
+            validateDirectory(getPersistedStringSet(emptySet()).firstOrNull()?.toUri())
+        }
     }
 
     private fun validateDirectory(uri: Uri?) {

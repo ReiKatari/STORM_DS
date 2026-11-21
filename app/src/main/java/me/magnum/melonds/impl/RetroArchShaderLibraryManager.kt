@@ -177,6 +177,63 @@ class RetroArchShaderLibraryManager @Inject constructor(
         }
     }
 
+    fun importLocalDirectory(sourceDir: File): Int {
+        if (!sourceDir.exists() || !sourceDir.isDirectory) {
+            return 0
+        }
+
+        val pendingRoot = File(shaderRoot, "pending-${UUID.randomUUID()}")
+        return try {
+            pendingRoot.mkdirs()
+            if (!sourceDir.copyRecursively(pendingRoot, overwrite = true)) {
+                pendingRoot.deleteRecursively()
+                return 0
+            }
+
+            val rootSubdirectory = RetroArchShaderArchive.detectRootSubdirectory(pendingRoot)
+            installedRoot.deleteRecursively()
+            installedRoot.parentFile?.mkdirs()
+            if (!pendingRoot.renameTo(installedRoot)) {
+                installedRoot.mkdirs()
+                pendingRoot.copyRecursively(installedRoot, overwrite = true)
+                pendingRoot.deleteRecursively()
+            }
+
+            val effectiveRoot = if (rootSubdirectory.isNullOrBlank()) {
+                installedRoot
+            } else {
+                File(installedRoot, rootSubdirectory)
+            }
+            val presetCount = effectiveRoot.walkTopDown()
+                .count { it.isFile && it.extension.equals("slangp", ignoreCase = true) }
+
+            var installedBytes = 0L
+            var fileCount = 0
+            installedRoot.walkTopDown().forEach {
+                if (it.isFile) {
+                    installedBytes += it.length()
+                    fileCount++
+                }
+            }
+
+            val json = JSONObject().apply {
+                put("sourceUrl", sourceDir.absolutePath)
+                put("remoteContentLength", installedBytes)
+                put("installedAtMillis", System.currentTimeMillis())
+                put("installedBytes", installedBytes)
+                put("fileCount", fileCount)
+                rootSubdirectory?.let { put("rootSubdirectory", it) }
+            }
+            manifestFile.parentFile?.mkdirs()
+            manifestFile.writeText(json.toString())
+            bumpLibraryVersion()
+            presetCount
+        } catch (e: Throwable) {
+            pendingRoot.deleteRecursively()
+            throw e
+        }
+    }
+
     fun uninstall() {
         installedRoot.deleteRecursively()
         manifestFile.delete()

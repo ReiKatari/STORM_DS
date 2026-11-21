@@ -1,21 +1,28 @@
 package me.magnum.melonds.ui.romlist
 
+import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -24,49 +31,45 @@ import kotlinx.coroutines.flow.stateIn
 import me.magnum.melonds.common.DirectoryAccessValidator
 import me.magnum.melonds.common.Permission
 import me.magnum.melonds.common.UriPermissionManager
-import me.magnum.melonds.domain.model.DSiWareTitle
 import me.magnum.melonds.domain.model.RomFilter
 import me.magnum.melonds.domain.model.RomViewMode
 import me.magnum.melonds.domain.model.SortingMode
 import me.magnum.melonds.domain.model.SortingOrder
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.domain.model.rom.RomDirectoryScanStatus
-import me.magnum.melonds.domain.model.rom.config.RomConfig
-import me.magnum.melonds.domain.model.dsinand.ImportDSiWareTitleResult
 import me.magnum.melonds.domain.repositories.RetroAchievementsRepository
 import me.magnum.melonds.domain.repositories.RomsRepository
 import me.magnum.melonds.domain.repositories.SettingsRepository
-import me.magnum.melonds.domain.services.DSiNandManager
 import me.magnum.melonds.impl.RomIconProvider
+import me.magnum.melonds.ui.quickresume.QuickResumeStore
 import me.magnum.melonds.utils.EventSharedFlow
 import me.magnum.melonds.utils.SubjectSharedFlow
-import me.magnum.melonds.ui.romlist.RomBrowserEntry
-import me.magnum.melonds.ui.romlist.RomBrowserUiState
 import java.text.Normalizer
 import java.util.Calendar
 import javax.inject.Inject
 
 @HiltViewModel
 class RomListViewModel @Inject constructor(
+    @param:ApplicationContext private val context: Context,
     private val romsRepository: RomsRepository,
     private val settingsRepository: SettingsRepository,
     private val romIconProvider: RomIconProvider,
     private val uriPermissionManager: UriPermissionManager,
     private val directoryAccessValidator: DirectoryAccessValidator,
-    private val dsiNandManager: DSiNandManager,
     private val retroAchievementsRepository: RetroAchievementsRepository,
     private val boxArtRepository: me.magnum.melonds.ui.romlist.boxart.BoxArtRepository,
-    private val dsiWareTitlesMetadataStore: me.magnum.melonds.impl.DSiWareTitlesMetadataStore,
     private val dsiStorageTitlesScanner: me.magnum.melonds.impl.dsinand.DsiStorageTitlesScanner,
     private val saveStatesRepository: me.magnum.melonds.domain.repositories.SaveStatesRepository,
     private val romSaveFileManager: me.magnum.melonds.impl.RomSaveFileManager,
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
     private val _boxArtByUri = MutableStateFlow<Map<String, String>>(emptyMap())
 
     init {
+        QuickResumeStore.ensureQuickSavesLoaded(context)
         viewModelScope.launch(Dispatchers.IO) {
             val cached = runCatching { boxArtRepository.getAllCachedMatches() }.getOrDefault(emptyMap())
             if (cached.isNotEmpty()) {
@@ -88,7 +91,7 @@ class RomListViewModel @Inject constructor(
     private val boxArtRequestsInFlight = mutableSetOf<String>()
     private val raCoverRequestsInFlight = mutableSetOf<String>()
     private val raCoverAttemptedHashes = mutableSetOf<String>()
-    private val boxArtSemaphore = kotlinx.coroutines.sync.Semaphore(12)
+    private val boxArtSemaphore = Semaphore(12)
 
     fun requestBoxArt(rom: Rom) {
         val isRaEnabled = settingsRepository.isRaCoverEnabled()
@@ -153,31 +156,7 @@ class RomListViewModel @Inject constructor(
         }
     }
 
-    private fun DSiWareTitle.toInstalledDsiWareRom(): Rom {
-        val titleIdHex = (titleId and 0xFFFFFFFFL).toString(16).padStart(8, '0').lowercase()
-        val originalFileName = dsiWareTitlesMetadataStore.getOriginalFileName(titleIdHex)
-        val customName = dsiWareTitlesMetadataStore.getCustomName(titleIdHex)
-        val cleanName = when {
-            !customName.isNullOrBlank() -> customName
-            !originalFileName.isNullOrBlank() -> originalFileName
-            name.isNotBlank() && !name.equals(titleIdHex, ignoreCase = true) -> name.substringBeforeLast('\n').replace("\n", " ").trim()
-            else -> "DSiWare ($titleIdHex)"
-        }
-        val savedRaHash = dsiWareTitlesMetadataStore.getRaHash(titleIdHex) ?: ""
-        return Rom(
-            name = cleanName,
-            developerName = producer,
-            fileName = "$cleanName.nds",
-            uri = Rom.installedDsiWareUri(titleId),
-            parentTreeUri = null,
-            config = RomConfig.forDsiWareTitle().copy(customName = cleanName),
-            lastPlayed = null,
-            isDsiWareTitle = true,
-            retroAchievementsHash = savedRaHash,
-            installedDsiWareTitleId = titleId and 0xFFFFFFFFL,
-            installedDsiWareIcon = icon,
-        )
-    }    private val _sortingMode = MutableStateFlow(settingsRepository.getRomSortingMode())
+    private val _sortingMode = MutableStateFlow(settingsRepository.getRomSortingMode())
     private val _sortingOrder = MutableStateFlow(settingsRepository.getRomSortingOrder())
     private val _filter = MutableStateFlow(RomFilter.ALL)
 
@@ -198,21 +177,13 @@ class RomListViewModel @Inject constructor(
         }
     }
 
-    private val _dsiWareBootMode = MutableStateFlow(settingsRepository.getDsiWareBootMode())
-    val dsiWareBootMode: StateFlow<me.magnum.melonds.domain.model.dsinand.DSiWareBootMode> = _dsiWareBootMode.asStateFlow()
-
-    fun setDsiWareBootMode(mode: me.magnum.melonds.domain.model.dsinand.DSiWareBootMode) {
-        settingsRepository.setDsiWareBootMode(mode)
-        _dsiWareBootMode.value = mode
-    }
-
     init {
         refreshAuthenticationState()
     }
 
     /**
-     * (rom.retroAchievementsHash → RA badge URL) for every game whose RA data is cached locally.
-     * Returns an empty map when the user has disabled RA covers in settings — that way every ROM
+     * (rom.retroAchievementsHash -> RA badge URL) for every game whose RA data is cached locally.
+     * Returns an empty map when the user has disabled RA covers in settings - that way every ROM
      * falls back to its embedded cartridge icon without further plumbing.
      */
     val raCoverByHash: StateFlow<Map<String, String>> = combine(
@@ -227,17 +198,15 @@ class RomListViewModel @Inject constructor(
 
     private val _invalidDirectoryAccessEvent = EventSharedFlow<Unit>()
     val invalidDirectoryAccessEvent: Flow<Unit> = _invalidDirectoryAccessEvent
-    private val _romDirectoryPermissionMissingEvent = EventSharedFlow<Unit>()
-    val romDirectoryPermissionMissingEvent: Flow<Unit> = _romDirectoryPermissionMissingEvent
 
     val onRomIconFilteringChanged = settingsRepository.observeRomIconFiltering()
 
     val romScanningStatus = romsRepository.getRomScanningStatus()
 
     private val romsWithParents = MutableStateFlow<List<RomWithParent>>(emptyList())
-    private val installedDsiWareShortcuts = MutableStateFlow<List<RomWithParent>>(emptyList())
+    private val _romsWithSavesUris = MutableStateFlow<Set<String>>(emptySet())
+    private val savesRefreshTrigger = MutableStateFlow(0)
     private val rootDirectories = MutableStateFlow<List<RootDirectory>>(emptyList())
-    private val navigationStack = MutableStateFlow<List<BrowserLocation>>(listOf(BrowserLocation.VirtualRoot))
     private val _browserState = MutableStateFlow(
         RomBrowserUiState(
             entries = emptyList(),
@@ -250,31 +219,40 @@ class RomListViewModel @Inject constructor(
     val browserState = _browserState.asStateFlow()
     private val _directoryStatusUi = MutableStateFlow<List<DirectoryCacheStatusUi>>(emptyList())
     val directoryStatusUi = _directoryStatusUi.asStateFlow()
-    private val reportedUnavailableDirectories = mutableSetOf<String>()
 
     init {
-        refreshInstalledDsiWareShortcuts()
-
         viewModelScope.launch {
             settingsRepository.observeRomSearchDirectories()
                 .distinctUntilChanged()
                 .collect { directories ->
-                    _hasSearchDirectories.tryEmit(directories.isNotEmpty())
-
-                    val roots = directories.mapNotNull { directory ->
-                        runCatching {
-                            val docId = DocumentsContract.getTreeDocumentId(directory)
-                            RootDirectory(
-                                uri = directory,
-                                docId = docId,
-                                displayName = extractDirectoryDisplayName(docId),
-                                relativePath = extractRelativePath(docId)
-                            )
-                        }.getOrNull()
+                    val roots = directories.map { directory ->
+                        val treeDocId = runCatching { DocumentsContract.getTreeDocumentId(directory) }.getOrNull()
+                        val docId = treeDocId
+                            ?: runCatching { DocumentsContract.getDocumentId(directory) }.getOrNull()
+                            ?: directory.path
+                            ?: directory.toString()
+                        val displayName = if (treeDocId != null) {
+                            extractDirectoryDisplayName(treeDocId)
+                        } else {
+                            directory.lastPathSegment?.substringAfterLast('/')?.ifBlank { null }
+                                ?: directory.path?.substringAfterLast('/')?.ifBlank { null }
+                                ?: docId
+                        }
+                        val relativePath = if (treeDocId != null) {
+                            extractRelativePath(treeDocId)
+                        } else {
+                            directory.path ?: displayName
+                        }
+                        RootDirectory(
+                            uri = directory,
+                            docId = docId,
+                            displayName = displayName,
+                            relativePath = relativePath,
+                        )
                     }
 
                     rootDirectories.value = roots
-                    ensureNavigationStackForRoots(roots)
+                    _hasSearchDirectories.tryEmit(roots.isNotEmpty())
                 }
         }
 
@@ -295,6 +273,16 @@ class RomListViewModel @Inject constructor(
                     }
                 }
                 romsWithParents.value = romsWithDocIds
+            }
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            combine(romsWithParents, _filter, savesRefreshTrigger) { roms, filter, _ ->
+                roms to filter
+            }.collectLatest { (roms, filter) ->
+                if (filter == RomFilter.HAS_SAVES) {
+                    _romsWithSavesUris.value = computeRomsWithSaves(roms.map { it.rom })
+                }
             }
         }
 
@@ -319,23 +307,31 @@ class RomListViewModel @Inject constructor(
             combine(
                 sortedRomsFlow,
                 debouncedQuery,
-                navigationStack,
                 rootDirectories,
                 _filter,
                 viewMode,
                 _sortingOrder,
+                _romsWithSavesUris,
+                QuickResumeStore.quickSaveTimestampsFlow,
             ) { values: Array<Any?> ->
                 @Suppress("UNCHECKED_CAST")
                 val sortedTriple = values[0] as Triple<List<RomWithParent>, SortingMode, SortingOrder>
+                @Suppress("UNCHECKED_CAST")
+                val roots = values[2] as List<RootDirectory>
+                @Suppress("UNCHECKED_CAST")
+                val romsWithSaves = values[6] as Set<String>
+                @Suppress("UNCHECKED_CAST")
+                val quickSaveTimestamps = values[7] as Map<String, Long>
                 buildBrowserState(
-                    sortedTriple.first,
-                    values[1] as String,
-                    values[2] as List<BrowserLocation>,
-                    values[3] as List<RootDirectory>,
-                    sortedTriple.second,
-                    values[6] as SortingOrder,
-                    values[4] as RomFilter,
-                    values[5] as RomViewMode,
+                    sortedRoms = sortedTriple.first,
+                    query = values[1] as String,
+                    roots = roots,
+                    sortingMode = sortedTriple.second,
+                    sortingOrder = values[5] as SortingOrder,
+                    filter = values[3] as RomFilter,
+                    viewMode = values[4] as RomViewMode,
+                    romsWithSavesUris = romsWithSaves,
+                    quickSaveTimestamps = quickSaveTimestamps,
                 )
             }.collect { state ->
                 _browserState.value = state
@@ -358,8 +354,12 @@ class RomListViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             dsiStorageTitlesScanner.refreshStorageTitles()
         }
-        refreshInstalledDsiWareShortcuts()
+        refreshSavesStatus()
         romsRepository.rescanRoms()
+    }
+
+    fun refreshSavesStatus() {
+        savesRefreshTrigger.value++
     }
 
     fun setRomLastPlayedNow(rom: Rom) {
@@ -368,24 +368,6 @@ class RomListViewModel @Inject constructor(
 
     fun setRomSearchQuery(query: String?) {
         _searchQuery.value = query.orEmpty()
-    }
-
-    fun openFolder(docId: String) {
-        val stack = navigationStack.value.toMutableList()
-        val lastLocation = stack.lastOrNull()
-        if (lastLocation is BrowserLocation.Directory && lastLocation.docId == docId) {
-            return
-        }
-        stack.add(BrowserLocation.Directory(docId))
-        navigationStack.value = stack
-    }
-
-    fun navigateUp() {
-        val stack = navigationStack.value
-        if (stack.size <= 1) {
-            return
-        }
-        navigationStack.value = stack.dropLast(1)
     }
 
     fun setRomSorting(sortingMode: SortingMode) {
@@ -449,20 +431,21 @@ class RomListViewModel @Inject constructor(
     private suspend fun buildBrowserState(
         sortedRoms: List<RomWithParent>,
         query: String,
-        navigationStack: List<BrowserLocation>,
         roots: List<RootDirectory>,
         sortingMode: SortingMode,
         sortingOrder: SortingOrder,
         filter: RomFilter,
         viewMode: RomViewMode,
-    ): RomBrowserUiState = withContext(Dispatchers.IO) {
+        romsWithSavesUris: Set<String>,
+        quickSaveTimestamps: Map<String, Long>,
+    ): RomBrowserUiState = withContext(Dispatchers.Default) {
         val continuePlaying = sortedRoms
             .mapNotNull { it.rom.takeIf { rom -> rom.lastPlayed != null } }
             .sortedByDescending { it.lastPlayed }
             .take(10)
 
         val quickResumeTimestamp = continuePlaying.firstOrNull()?.let { topRom ->
-            me.magnum.melonds.ui.quickresume.QuickResumeStore.getQuickSaveTimestamp(topRom.uri.toString())
+            quickSaveTimestamps[topRom.uri.toString()]?.takeIf { it > 0L }
         }
         val quickResumeHasSave = quickResumeTimestamp != null && quickResumeTimestamp > 0L
 
@@ -473,6 +456,7 @@ class RomListViewModel @Inject constructor(
                 canNavigateUp = false,
                 isSearchActive = query.isNotEmpty(),
                 isAtVirtualRoot = true,
+                searchQuery = query,
                 viewMode = viewMode,
                 filter = filter,
                 sortingMode = sortingMode,
@@ -485,7 +469,7 @@ class RomListViewModel @Inject constructor(
         }
 
         if (query.isNotEmpty()) {
-            val filtered = filterRoms(sortedRoms, query).filter { matchesFilter(it.rom, filter) }
+            val filtered = filterRoms(sortedRoms, query).filter { matchesFilter(it.rom, filter, romsWithSavesUris) }
             val romEntries = filtered.map { RomBrowserEntry.RomItem(it.rom) }
             return@withContext RomBrowserUiState(
                 entries = romEntries,
@@ -493,6 +477,7 @@ class RomListViewModel @Inject constructor(
                 canNavigateUp = false,
                 isSearchActive = true,
                 isAtVirtualRoot = false,
+                searchQuery = query,
                 viewMode = viewMode,
                 filter = filter,
                 sortingMode = sortingMode,
@@ -504,13 +489,8 @@ class RomListViewModel @Inject constructor(
             )
         }
 
-        val baseLocation = defaultLocationForRoots(roots)
-        val effectiveStack = if (navigationStack.isEmpty()) listOf(baseLocation) else navigationStack
-        val currentLocation = effectiveStack.lastOrNull() ?: baseLocation
-        val isVirtualRoot = currentLocation is BrowserLocation.VirtualRoot
-
         val entries = sortedRoms
-            .filter { matchesFilter(it.rom, filter) }
+            .filter { matchesFilter(it.rom, filter, romsWithSavesUris) }
             .map { RomBrowserEntry.RomItem(it.rom) }
 
         RomBrowserUiState(
@@ -519,6 +499,7 @@ class RomListViewModel @Inject constructor(
             canNavigateUp = false,
             isSearchActive = false,
             isAtVirtualRoot = true,
+            searchQuery = query,
             viewMode = viewMode,
             filter = filter,
             sortingMode = sortingMode,
@@ -530,12 +511,29 @@ class RomListViewModel @Inject constructor(
         )
     }
 
+    private suspend fun computeRomsWithSaves(roms: List<Rom>): Set<String> = withContext(Dispatchers.IO) {
+        val semaphore = Semaphore(8)
+        coroutineScope {
+            roms.map { rom ->
+                async {
+                    semaphore.withPermit {
+                        val hasSaves = romSaveFileManager.hasSaveFile(rom) ||
+                            runCatching { saveStatesRepository.getRomQuickSaveStateSlot(rom).exists }.getOrDefault(false) ||
+                            runCatching { saveStatesRepository.getPeriodicAutoSaveSlot(rom).exists }.getOrDefault(false) ||
+                            runCatching { saveStatesRepository.getRomSaveStates(rom).any { it.exists } }.getOrDefault(false)
+                        if (hasSaves) rom.uri.toString() else null
+                    }
+                }
+            }.awaitAll().filterNotNullTo(HashSet())
+        }
+    }
+
     private fun isRomAllowedByDsiStorage(rom: Rom): Boolean {
         // Universal visibility: All ROMs placed by user in their folders must be fully visible and accessible
         return true
     }
 
-    private fun matchesFilter(rom: Rom, filter: RomFilter): Boolean {
+    private fun matchesFilter(rom: Rom, filter: RomFilter, romsWithSavesUris: Set<String> = _romsWithSavesUris.value): Boolean {
         if (!isRomAllowedByDsiStorage(rom)) {
             return false
         }
@@ -548,12 +546,7 @@ class RomListViewModel @Inject constructor(
             RomFilter.WITH_RETRO_ACHIEVEMENTS -> rom.retroAchievementsHash.isNotEmpty()
             RomFilter.RECENTLY_PLAYED -> rom.lastPlayed != null
             RomFilter.UNPLAYED -> rom.lastPlayed == null && rom.totalPlayTime.inWholeSeconds <= 0L
-            RomFilter.HAS_SAVES -> {
-                romSaveFileManager.hasSaveFile(rom) ||
-                    runCatching { saveStatesRepository.getRomQuickSaveStateSlot(rom).exists }.getOrDefault(false) ||
-                    runCatching { saveStatesRepository.getPeriodicAutoSaveSlot(rom).exists }.getOrDefault(false) ||
-                    runCatching { saveStatesRepository.getRomSaveStates(rom).any { it.exists } }.getOrDefault(false)
-            }
+            RomFilter.HAS_SAVES -> rom.uri.toString() in romsWithSavesUris
         }
     }
 
@@ -613,17 +606,6 @@ class RomListViewModel @Inject constructor(
         return roms.filter { it.searchKey.contains(normalizedQuery) }
     }
 
-    fun refreshInstalledDsiWareShortcuts() {
-        viewModelScope.launch {
-            installedDsiWareShortcuts.value = loadInstalledDsiWareShortcuts()
-        }
-    }
-
-    private suspend fun loadInstalledDsiWareShortcuts(): List<RomWithParent> = withContext(Dispatchers.IO) {
-        // Only show ROMs that exist in the user's selected search directories; do not pull titles from NAND
-        emptyList()
-    }
-
     private fun buildRomWithParent(rom: Rom, parentDocId: String?): RomWithParent {
         val searchKey = normalizeForSearch(me.magnum.melonds.ui.romlist.composables.romDisplayName(rom)) +
             "\u0000" + normalizeForSearch(rom.name) +
@@ -634,135 +616,6 @@ class RomListViewModel @Inject constructor(
         return RomWithParent(rom, parentDocId, searchKey)
     }
 
-    private fun buildDirectoryNodes(roms: List<RomWithParent>, roots: List<RootDirectory>): Map<String, DirectoryNode> {
-        val nodes = mutableMapOf<String, DirectoryNode>()
-
-        roots.forEach { root ->
-            nodes[root.docId] = DirectoryNode(
-                root = root,
-                docId = root.docId,
-                parentDocId = null,
-                displayName = root.displayName,
-                relativePath = root.relativePath,
-                childDirectories = mutableSetOf()
-            )
-        }
-
-        roms.forEach { rom ->
-            val parentDocId = rom.parentDocId ?: roots.firstOrNull()?.docId ?: return@forEach
-            val root = findRootForDocId(parentDocId, roots) ?: roots.firstOrNull() ?: return@forEach
-
-            var currentDocId: String? = parentDocId
-            while (currentDocId != null) {
-                val parentOfCurrent = getParentDocId(currentDocId, root.docId)
-                nodes.getOrPut(currentDocId) {
-                    DirectoryNode(
-                        root = root,
-                        docId = currentDocId,
-                        parentDocId = parentOfCurrent,
-                        displayName = extractDirectoryDisplayName(currentDocId),
-                        relativePath = buildRelativePath(root, currentDocId),
-                        childDirectories = mutableSetOf()
-                    )
-                }
-
-                if (parentOfCurrent != null) {
-                    val parentNode = nodes.getOrPut(parentOfCurrent) {
-                        DirectoryNode(
-                            root = root,
-                            docId = parentOfCurrent,
-                            parentDocId = getParentDocId(parentOfCurrent, root.docId),
-                            displayName = extractDirectoryDisplayName(parentOfCurrent),
-                            relativePath = buildRelativePath(root, parentOfCurrent),
-                            childDirectories = mutableSetOf()
-                        )
-                    }
-                    parentNode.childDirectories.add(currentDocId)
-                }
-
-                currentDocId = parentOfCurrent
-            }
-        }
-
-        return nodes
-    }
-
-    private fun ensureNavigationStackForRoots(roots: List<RootDirectory>) {
-        val currentStack = navigationStack.value
-        val preservedLocations = currentStack.filterIsInstance<BrowserLocation.Directory>()
-            .map { it.docId }
-            .filter { docId -> roots.any { matchesRoot(docId, it.docId) } }
-
-        val newStack = mutableListOf<BrowserLocation>()
-        when {
-            roots.isEmpty() -> newStack.add(BrowserLocation.VirtualRoot)
-            roots.size == 1 -> {
-                if (preservedLocations.isEmpty()) {
-                    newStack.add(BrowserLocation.Directory(roots.first().docId))
-                } else {
-                    preservedLocations.forEach { newStack.add(BrowserLocation.Directory(it)) }
-                }
-            }
-            else -> {
-                newStack.add(BrowserLocation.VirtualRoot)
-                preservedLocations.forEach { newStack.add(BrowserLocation.Directory(it)) }
-            }
-        }
-
-        if (newStack.isEmpty()) {
-            newStack.add(BrowserLocation.VirtualRoot)
-        }
-
-        if (newStack != currentStack) {
-            this.navigationStack.value = newStack
-        }
-    }
-
-    private fun defaultLocationForRoots(roots: List<RootDirectory>): BrowserLocation {
-        return if (roots.size == 1) {
-            BrowserLocation.Directory(roots.first().docId)
-        } else {
-            BrowserLocation.VirtualRoot
-        }
-    }
-
-    private fun createPlaceholderNode(docId: String, roots: List<RootDirectory>): DirectoryNode {
-        val root = findRootForDocId(docId, roots) ?: roots.first()
-        return DirectoryNode(
-            root = root,
-            docId = docId,
-            parentDocId = getParentDocId(docId, root.docId),
-            displayName = extractDirectoryDisplayName(docId),
-            relativePath = buildRelativePath(root, docId),
-            childDirectories = mutableSetOf()
-        )
-    }
-
-    private fun buildBreadcrumbs(docId: String, nodes: Map<String, DirectoryNode>, roots: List<RootDirectory>): List<String> {
-        val names = mutableListOf<String>()
-        val root = findRootForDocId(docId, roots)
-        var currentDocId: String? = docId
-        while (currentDocId != null) {
-            val node = nodes[currentDocId]
-            if (node != null) {
-                names.add(node.displayName)
-                currentDocId = node.parentDocId
-            } else {
-                names.add(extractDirectoryDisplayName(currentDocId))
-                currentDocId = if (root != null) getParentDocId(currentDocId, root.docId) else null
-            }
-        }
-        return names.reversed()
-    }
-
-    private fun matchesRoot(docId: String, rootDocId: String): Boolean {
-        return docId == rootDocId || docId.startsWith("$rootDocId/")
-    }
-
-    private fun findRootForDocId(docId: String, roots: List<RootDirectory>): RootDirectory? {
-        return roots.firstOrNull { matchesRoot(docId, it.docId) }
-    }
-
     private fun extractDirectoryDisplayName(docId: String): String {
         val path = extractRelativePath(docId)
         val segment = path.substringAfterLast('/', path)
@@ -771,35 +624,6 @@ class RomListViewModel @Inject constructor(
 
     private fun extractRelativePath(docId: String): String {
         return Uri.decode(docId.substringAfter(':', docId))
-    }
-
-    private fun buildRelativePath(root: RootDirectory, docId: String): String {
-        val rootPath = extractRelativePath(root.docId)
-        val docPath = extractRelativePath(docId)
-        if (docId == root.docId) {
-            return docPath
-        }
-        return if (rootPath.isNotEmpty() && docPath.startsWith("$rootPath/")) {
-            docPath.removePrefix("$rootPath/")
-        } else {
-            docPath
-        }
-    }
-
-    private fun getParentDocId(docId: String, rootDocId: String): String? {
-        if (docId == rootDocId) {
-            return null
-        }
-        val separatorIndex = docId.lastIndexOf('/')
-        if (separatorIndex == -1) {
-            return rootDocId
-        }
-        val parentDocId = docId.substring(0, separatorIndex)
-        return if (parentDocId.length < rootDocId.length) {
-            rootDocId
-        } else {
-            parentDocId
-        }
     }
 
     private fun buildAlphabeticalRomComparator(sortingOrder: SortingOrder): Comparator<Rom> {
@@ -894,20 +718,6 @@ class RomListViewModel @Inject constructor(
 
     suspend fun getRomAtUri(uri: Uri): Rom? {
         return romsRepository.getRomAtUri(uri)
-    }
-
-    private data class DirectoryNode(
-        val root: RootDirectory,
-        val docId: String,
-        val parentDocId: String?,
-        val displayName: String,
-        val relativePath: String,
-        val childDirectories: MutableSet<String>
-    )
-
-    private sealed interface BrowserLocation {
-        data object VirtualRoot : BrowserLocation
-        data class Directory(val docId: String) : BrowserLocation
     }
 
     data class DirectoryCacheStatusUi(

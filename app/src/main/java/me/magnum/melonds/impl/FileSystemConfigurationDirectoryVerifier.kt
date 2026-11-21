@@ -125,23 +125,7 @@ class FileSystemConfigurationDirectoryVerifier(private val context: Context, set
 
     private fun getDSFirmwareStatus(configurationDir: DocumentFile): ConfigurationDirResult.FileStatus {
         val firmwareDocument = findBiosDocument(configurationDir, "firmware.bin", "ds_firmware.bin", "firmware_ds.bin") ?: return ConfigurationDirResult.FileStatus.MISSING
-        return runCatching {
-            val length = if (firmwareDocument.uri.scheme == "file") {
-                val decodedPath = Uri.decode(firmwareDocument.uri.path ?: "")
-                java.io.File(decodedPath).length()
-            } else {
-                context.contentResolver.openAssetFileDescriptor(firmwareDocument.uri, "r")?.use {
-                    it.length
-                } ?: AssetFileDescriptor.UNKNOWN_LENGTH
-            }
-            if (length >= 0x10000L) {
-                ConfigurationDirResult.FileStatus.PRESENT
-            } else if (length > 0) {
-                ConfigurationDirResult.FileStatus.INVALID
-            } else {
-                ConfigurationDirResult.FileStatus.MISSING
-            }
-        }.getOrDefault(ConfigurationDirResult.FileStatus.MISSING)
+        return getDocumentSizeStatus(firmwareDocument, 0x20000L, 0x40000L, 0x80000L)
     }
 
     private val activeDirectoryIndex = ThreadLocal<Map<String, DocumentFile>>()
@@ -183,49 +167,17 @@ class FileSystemConfigurationDirectoryVerifier(private val context: Context, set
 
     private fun getDSiBios7Status(configurationDir: DocumentFile): ConfigurationDirResult.FileStatus {
         val doc = findBiosDocument(configurationDir, "bios7i.bin", "dsi_bios7.bin", "bios7.bin", "arm7i.bin", "dsi_arm7.bin") ?: return ConfigurationDirResult.FileStatus.MISSING
-        return runCatching {
-            val length = if (doc.uri.scheme == "file") {
-                val decodedPath = Uri.decode(doc.uri.path ?: "")
-                java.io.File(decodedPath).length()
-            } else {
-                context.contentResolver.openAssetFileDescriptor(doc.uri, "r")?.use { it.length } ?: AssetFileDescriptor.UNKNOWN_LENGTH
-            }
-            if (length >= 0x1000L) ConfigurationDirResult.FileStatus.PRESENT else ConfigurationDirResult.FileStatus.INVALID
-        }.getOrDefault(ConfigurationDirResult.FileStatus.MISSING)
+        return getDocumentSizeStatus(doc, 0x10000L)
     }
 
     private fun getDSiBios9Status(configurationDir: DocumentFile): ConfigurationDirResult.FileStatus {
         val doc = findBiosDocument(configurationDir, "bios9i.bin", "dsi_bios9.bin", "bios9.bin", "arm9i.bin", "dsi_arm9.bin") ?: return ConfigurationDirResult.FileStatus.MISSING
-        return runCatching {
-            val length = if (doc.uri.scheme == "file") {
-                val decodedPath = Uri.decode(doc.uri.path ?: "")
-                java.io.File(decodedPath).length()
-            } else {
-                context.contentResolver.openAssetFileDescriptor(doc.uri, "r")?.use { it.length } ?: AssetFileDescriptor.UNKNOWN_LENGTH
-            }
-            if (length >= 0x1000L) ConfigurationDirResult.FileStatus.PRESENT else ConfigurationDirResult.FileStatus.INVALID
-        }.getOrDefault(ConfigurationDirResult.FileStatus.MISSING)
+        return getDocumentSizeStatus(doc, 0x10000L)
     }
 
     private fun getDSiFirmwareStatus(configurationDir: DocumentFile): ConfigurationDirResult.FileStatus {
         val firmwareDocument = findBiosDocument(configurationDir, "dsi_firmware.bin", "firmware.bin", "firmware_dsi.bin", "dsi_bios.bin") ?: return ConfigurationDirResult.FileStatus.MISSING
-        return runCatching {
-            val length = if (firmwareDocument.uri.scheme == "file") {
-                val decodedPath = Uri.decode(firmwareDocument.uri.path ?: "")
-                java.io.File(decodedPath).length()
-            } else {
-                context.contentResolver.openAssetFileDescriptor(firmwareDocument.uri, "r")?.use {
-                    it.length
-                } ?: AssetFileDescriptor.UNKNOWN_LENGTH
-            }
-            if (length >= 0x10000L) {
-                ConfigurationDirResult.FileStatus.PRESENT
-            } else if (length > 0) {
-                ConfigurationDirResult.FileStatus.INVALID
-            } else {
-                ConfigurationDirResult.FileStatus.MISSING
-            }
-        }.getOrDefault(ConfigurationDirResult.FileStatus.MISSING)
+        return getDocumentSizeStatus(firmwareDocument, 0x20000L, 0x40000L, 0x80000L)
     }
 
     private fun getDSiNandStatus(configurationDir: DocumentFile): ConfigurationDirResult.FileStatus {
@@ -250,7 +202,7 @@ class FileSystemConfigurationDirectoryVerifier(private val context: Context, set
         }.getOrDefault(ConfigurationDirResult.FileStatus.MISSING)
     }
 
-    private fun getDocumentSizeStatus(document: DocumentFile, requiredSize: Long): ConfigurationDirResult.FileStatus {
+    private fun getDocumentSizeStatus(document: DocumentFile, vararg requiredSizes: Long): ConfigurationDirResult.FileStatus {
         return runCatching {
             val length = if (document.uri.scheme == "file") {
                 val decodedPath = Uri.decode(document.uri.path ?: "")
@@ -260,9 +212,7 @@ class FileSystemConfigurationDirectoryVerifier(private val context: Context, set
                     it.length
                 } ?: AssetFileDescriptor.UNKNOWN_LENGTH
             }
-            if (length >= 0x1000L && length <= 0x20000L) {
-                ConfigurationDirResult.FileStatus.PRESENT
-            } else if (length == requiredSize) {
+            if (requiredSizes.any { it == length }) {
                 ConfigurationDirResult.FileStatus.PRESENT
             } else if (length > 0) {
                 ConfigurationDirResult.FileStatus.INVALID

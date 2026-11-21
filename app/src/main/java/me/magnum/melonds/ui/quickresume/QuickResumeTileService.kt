@@ -19,6 +19,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import me.magnum.melonds.R
 import me.magnum.melonds.domain.repositories.RomsRepository
+import me.magnum.melonds.ui.romlist.RomListActivity
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -74,7 +75,11 @@ class QuickResumeTileService : TileService() {
         super.onClick()
         val launchAction = Runnable {
             val lastEntry = QuickResumeStore.getLastRomEntry(this)
-            val intent = QuickResumeActivity.createIntent(this, lastEntry?.uriString?.toUri()).apply {
+            val intent = if (lastEntry != null) {
+                QuickResumeActivity.createIntent(this, lastEntry.uriString.toUri())
+            } else {
+                Intent(this, RomListActivity::class.java)
+            }.apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {

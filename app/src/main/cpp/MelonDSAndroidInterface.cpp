@@ -1146,6 +1146,7 @@ Java_me_magnum_melonds_MelonDSAndroidInterface_getVulkanGpuInfoNative(JNIEnv* en
 JNIEXPORT void JNICALL
 Java_me_magnum_melonds_MelonDSAndroidInterface_cleanup(JNIEnv* env, jobject thiz)
 {
+    MelonDSAndroid::flushPendingSaveStateWrites();
     MelonDSAndroid::RetroAchievements::RetroAchievementsManager::SetJavaVm(nullptr);
     if (androidUriFileHandler != nullptr)
     {
@@ -1154,11 +1155,14 @@ Java_me_magnum_melonds_MelonDSAndroidInterface_cleanup(JNIEnv* env, jobject thiz
     }
     vm = nullptr;
 
-    if (MelonDSAndroid::openGlContext != nullptr)
     {
-        MelonDSAndroid::openGlContext->DeInit();
-        delete MelonDSAndroid::openGlContext;
-        MelonDSAndroid::openGlContext = nullptr;
+        std::lock_guard<std::mutex> lock(MelonDSAndroid::openGlContextMutex);
+        if (MelonDSAndroid::openGlContext != nullptr)
+        {
+            MelonDSAndroid::openGlContext->DeInit();
+            delete MelonDSAndroid::openGlContext;
+            MelonDSAndroid::openGlContext = nullptr;
+        }
     }
     delete fileHandler;
     fileHandler = nullptr;

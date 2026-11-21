@@ -18,6 +18,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -94,6 +95,12 @@ class GameTtsManager(private val context: Context) {
             "piper_ru_angelic" -> "edge_multi_ava"
             else -> rawModel
         }
+    }
+
+    private fun sha256Hex(input: String): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(input.toByteArray(Charsets.UTF_8))
+        return digest.joinToString("") { "%02x".format(it) }
     }
 
     private fun cleanOldDiskCache() {
@@ -691,8 +698,8 @@ class GameTtsManager(private val context: Context) {
     }
 
     private fun resolveBestSpeakerName(originalName: String, translatedName: String): String {
-        val origClean = originalName.trim().trim(':', '-', '—', '[', ']', '【', '】', '«', '»')
-        val transClean = translatedName.trim().trim(':', '-', '—', '[', ']', '【', '】', '«', '»')
+        val origClean = originalName.trim().trim(':', '-', '\u2014', '[', ']', '【', '】', '«', '»')
+        val transClean = translatedName.trim().trim(':', '-', '\u2014', '[', ']', '【', '】', '«', '»')
         val entity = OcrContextGraph.findEntity(origClean) ?: OcrContextGraph.findEntity(transClean)
         if (entity != null) return entity.name
         return transClean.ifBlank { origClean }
@@ -709,7 +716,7 @@ class GameTtsManager(private val context: Context) {
 
     /**
      * Parses a block of text into one or more sequential `DialogueTurn` items,
-     * splitting multi-speaker exchanges (`"Бэтмен: ... Джокер: ..."` or `"— Реплика 1\n— Реплика 2"`).
+     * splitting multi-speaker exchanges (`"Бэтмен: ... Джокер: ..."` or `"- Реплика 1\n- Реплика 2"`).
      */
     private fun buildDialogueTurnsFromText(
         rawText: String,
@@ -754,7 +761,7 @@ class GameTtsManager(private val context: Context) {
 
     /**
      * Splits text containing multiple speaker prefixes (`Speaker A: ... Speaker B: ...`)
-     * or multi-line dialogue dashes (`— Line 1\n— Line 2`) into `(speakerName, dialogueText)` pairs.
+     * or multi-line dialogue dashes (`- Line 1\n- Line 2`) into `(speakerName, dialogueText)` pairs.
      */
     private fun splitMultiSpeakerSegments(rawText: String, explicitSpeaker: String): List<Pair<String, String>> {
         val trimmed = rawText.trim()
@@ -780,13 +787,13 @@ class GameTtsManager(private val context: Context) {
             if (result.isNotEmpty()) return result
         }
 
-        // 2. Check for multi-line dialogue turns starting with "—" or "-"
+        // 2. Check for multi-line dialogue turns starting with em-dash, en-dash, or "-"
         val lines = trimmed.lines().map { it.trim() }.filter { it.isNotEmpty() }
-        if (lines.size >= 2 && lines.count { it.startsWith("—") || it.startsWith("- ") || it.startsWith("–") } >= 2) {
+        if (lines.size >= 2 && lines.count { it.startsWith("\u2014") || it.startsWith("- ") || it.startsWith("\u2013") } >= 2) {
             val result = mutableListOf<Pair<String, String>>()
             var currentTurn = StringBuilder()
             for (line in lines) {
-                val isNewDashTurn = line.startsWith("—") || line.startsWith("- ") || line.startsWith("–")
+                val isNewDashTurn = line.startsWith("\u2014") || line.startsWith("- ") || line.startsWith("\u2013")
                 if (isNewDashTurn && currentTurn.isNotEmpty()) {
                     val (spk, txt) = extractSpeakerAndDialogue(currentTurn.toString())
                     result.add(spk to txt)
@@ -1016,7 +1023,7 @@ class GameTtsManager(private val context: Context) {
             if (mem != null) return mem
         }
 
-        val diskFile = File(diskCacheDir, "${cacheKey.hashCode()}.mp3")
+        val diskFile = File(diskCacheDir, "${sha256Hex(cacheKey)}.mp3")
         if (diskFile.exists() && diskFile.length() > 0) {
             try {
                 val bytes = diskFile.readBytes()
@@ -1207,7 +1214,9 @@ class GameTtsManager(private val context: Context) {
                             true
                         }
                         cont.invokeOnCancellation {
-                            stopMediaPlayerOnly()
+                            CoroutineScope(Dispatchers.Main.immediate).launch {
+                                stopMediaPlayerOnly()
+                            }
                             tempFile.delete()
                         }
                         player.start()
@@ -1217,6 +1226,9 @@ class GameTtsManager(private val context: Context) {
                     }
                 }
             }
+        } catch (e: CancellationException) {
+            tempFile.delete()
+            throw e
         } catch (_: Throwable) {
             tempFile.delete()
         }
@@ -1394,16 +1406,16 @@ class GameTtsManager(private val context: Context) {
         val candidateSpeaker = when {
             firstLower.contains(":") && first.substringBefore(":").trim().length in 2..24 ->
                 first.substringBefore(":").trim()
-            firstLower.contains("—") && first.substringBefore("—").trim().length in 2..22 && !first.startsWith("—") ->
-                first.substringBefore("—").trim()
+            firstLower.contains("\u2014") && first.substringBefore("\u2014").trim().length in 2..22 && !first.startsWith("\u2014") ->
+                first.substringBefore("\u2014").trim()
             firstLower.startsWith("【") && firstLower.contains("】") ->
                 first.substringAfter("【").substringBefore("】").trim()
             firstLower.startsWith("[") && firstLower.contains("]") ->
                 first.substringAfter("[").substringBefore("]").trim()
-            firstLower.startsWith("«") && firstLower.contains("»") && firstLower.indexOf("»") <= 22 && first.substringAfter("»").trim().startsWith("—") ->
+            firstLower.startsWith("«") && firstLower.contains("»") && firstLower.indexOf("»") <= 22 && first.substringAfter("»").trim().startsWith("\u2014") ->
                 first.substringAfter("«").substringBefore("»").trim()
             lines.size >= 2 && first.length in 2..22 && first.split(Regex("\\s+")).size <= 3 &&
-                    !first.endsWith(".") && !first.endsWith("?") && !first.endsWith("!") && !first.startsWith("—") ->
+                    !first.endsWith(".") && !first.endsWith("?") && !first.endsWith("!") && !first.startsWith("\u2014") ->
                 first
             else -> ""
         }.trim()
@@ -1411,15 +1423,15 @@ class GameTtsManager(private val context: Context) {
         val dialogueText = when {
             candidateSpeaker.isNotEmpty() && first.contains(":") ->
                 rawText.substringAfter(":", "").trim().ifBlank { rawText }
-            candidateSpeaker.isNotEmpty() && first.contains("—") && !first.startsWith("—") ->
-                rawText.substringAfter("—", "").trim().ifBlank { rawText }
+            candidateSpeaker.isNotEmpty() && first.contains("\u2014") && !first.startsWith("\u2014") ->
+                rawText.substringAfter("\u2014", "").trim().ifBlank { rawText }
             candidateSpeaker.isNotEmpty() && first.startsWith("【") ->
                 rawText.substringAfter("】", "").trim().ifBlank { rawText }
             candidateSpeaker.isNotEmpty() && first.startsWith("[") ->
                 rawText.substringAfter("]", "").trim().ifBlank { rawText }
             candidateSpeaker.isNotEmpty() && lines.size >= 2 && first == candidateSpeaker ->
                 lines.drop(1).joinToString("\n")
-            else -> rawText.removePrefix("—").removePrefix("- ").removePrefix("–").trim().ifBlank { rawText }
+            else -> rawText.removePrefix("\u2014").removePrefix("- ").removePrefix("\u2013").trim().ifBlank { rawText }
         }
 
         return candidateSpeaker to dialogueText
@@ -1564,6 +1576,7 @@ class GameTtsManager(private val context: Context) {
         try {
             studioQueueJob?.cancel()
             studioQueueJob = null
+            scope.cancel()
             isReady = false
             ttsSetupDone.set(false)
             synchronized(pendingNativeSpeechActionsLock) {

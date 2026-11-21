@@ -5785,19 +5785,28 @@ void VulkanRenderer3D::savePipelineCache()
     if (vkGetPipelineCacheData(Device, ComputePipelineCache, &cacheSize, cacheData.data()) != VK_SUCCESS || cacheSize == 0)
         return;
 
-    Platform::FileHandle* cacheFile = Platform::OpenLocalFile(ComputePipelineCacheFile, Platform::FileMode::ReadWrite);
+    const std::string targetPath = Platform::GetLocalFilePath(ComputePipelineCacheFile);
+    if (targetPath.empty())
+    {
+        Log(LogLevel::Warn, "VulkanRenderer3D: failed to resolve pipeline cache path (%s)", ComputePipelineCacheFile.c_str());
+        return;
+    }
+
+    const std::string tmpPath = targetPath + ".tmp";
+    Platform::FileHandle* cacheFile = Platform::OpenFile(tmpPath, Platform::FileMode::Write);
     if (cacheFile == nullptr)
     {
-        Log(LogLevel::Warn, "VulkanRenderer3D: failed to open pipeline cache for writing (%s)", ComputePipelineCacheFile.c_str());
+        Log(LogLevel::Warn, "VulkanRenderer3D: failed to open pipeline cache for writing (%s)", tmpPath.c_str());
         return;
     }
 
     const u64 written = Platform::FileWrite(cacheData.data(), 1, cacheSize, cacheFile);
-    Platform::FileFlush(cacheFile);
-    Platform::CloseFile(cacheFile);
+    const bool flushed = Platform::FileFlush(cacheFile);
+    const bool closed = Platform::CloseFile(cacheFile);
 
-    if (written != cacheSize)
+    if (written != cacheSize || !flushed || !closed || std::rename(tmpPath.c_str(), targetPath.c_str()) != 0)
     {
+        std::remove(tmpPath.c_str());
         Log(
             LogLevel::Warn,
             "VulkanRenderer3D: incomplete pipeline cache write (%s %llu/%llu)",

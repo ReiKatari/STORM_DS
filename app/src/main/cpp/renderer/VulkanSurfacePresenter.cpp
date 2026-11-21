@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdio>
 #include <cstring>
 #include <mutex>
 #include <vector>
@@ -1922,6 +1923,7 @@ bool VulkanSurfacePresenter::presentFrame(Frame* frame, VulkanOutput& output, co
                 bottomClass4OneShotCarryConsumer))
         {
             recordFailures++;
+            drainOrRecreateImageAvailableSemaphore(surfaceState, true);
             recoverSwapchain(surfaceState, "recordSurfaceCommands");
             continue;
         }
@@ -3355,6 +3357,7 @@ void VulkanSurfacePresenter::recoverSwapchain(SurfaceState& surfaceState, const 
     );
 
     (void)waitForSurfaceIdle(surfaceState);
+    drainOrRecreateImageAvailableSemaphore(surfaceState, false);
 
     surfaceState.bottomComp2OneShotCarryValid = false;
     surfaceState.bottomComp2OneShotCarryClass4Valid = false;
@@ -3420,6 +3423,7 @@ bool VulkanSurfacePresenter::recoverLostSurface(SurfaceState& surfaceState, cons
     );
 
     (void)waitForSurfaceIdle(surfaceState);
+    drainOrRecreateImageAvailableSemaphore(surfaceState, false);
 
     surfaceState.bottomComp2OneShotCarryValid = false;
     surfaceState.bottomComp2OneShotCarryClass4Valid = false;
@@ -3567,15 +3571,20 @@ void VulkanSurfacePresenter::saveSurfacePipelineCache(bool onlyIfSizeChanged)
     if (vkGetPipelineCacheData(device, surfacePipelineCache, &cacheSize, cacheData.data()) != VK_SUCCESS || cacheSize == 0)
         return;
 
+    const std::string targetPath = melonDS::Platform::GetLocalFilePath(surfacePipelineCacheFile);
+    if (targetPath.empty())
+        return;
+
+    const std::string tmpPath = targetPath + ".tmp";
     melonDS::Platform::FileHandle* cacheFile =
-        melonDS::Platform::OpenLocalFile(surfacePipelineCacheFile, melonDS::Platform::FileMode::ReadWrite);
+        melonDS::Platform::OpenFile(tmpPath, melonDS::Platform::FileMode::Write);
     if (cacheFile == nullptr)
         return;
 
     const u64 written = melonDS::Platform::FileWrite(cacheData.data(), 1, cacheSize, cacheFile);
-    melonDS::Platform::FileFlush(cacheFile);
-    melonDS::Platform::CloseFile(cacheFile);
-    if (written == cacheSize)
+    const bool flushed = melonDS::Platform::FileFlush(cacheFile);
+    const bool closed = melonDS::Platform::CloseFile(cacheFile);
+    if (written == cacheSize && flushed && closed && std::rename(tmpPath.c_str(), targetPath.c_str()) == 0)
     {
         lastSavedPipelineCacheSize = cacheSize;
         melonDS::Platform::Log(
@@ -3584,6 +3593,10 @@ void VulkanSurfacePresenter::saveSurfacePipelineCache(bool onlyIfSizeChanged)
             surfacePipelineCacheFile.c_str(),
             static_cast<unsigned long long>(cacheSize)
         );
+    }
+    else
+    {
+        std::remove(tmpPath.c_str());
     }
 }
 
@@ -3632,6 +3645,66 @@ VkResult VulkanSurfacePresenter::waitForSurfaceIdle(SurfaceState& surfaceState, 
     }
 
     return waitResult;
+}
+
+bool VulkanSurfacePresenter::recreateRetroArchFence(RetroArchResources& retro, bool signaled)
+{
+    if (device == VK_NULL_HANDLE)
+        return false;
+    if (retro.fence != VK_NULL_HANDLE)
+    {
+        vkDestroyFence(device, retro.fence, nullptr);
+        retro.fence = VK_NULL_HANDLE;
+    }
+    VkFenceCreateInfo fenceInfo{};
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fenceInfo.flags = signaled ? VK_FENCE_CREATE_SIGNALED_BIT : 0;
+    return vkCreateFence(device, &fenceInfo, nullptr, &retro.fence) == VK_SUCCESS;
+}
+
+void VulkanSurfacePresenter::drainOrRecreateImageAvailableSemaphore(SurfaceState& surfaceState, bool imageAcquired)
+{
+    if (device == VK_NULL_HANDLE || deviceLost)
+        return;
+
+    if (imageAcquired && surfaceState.imageAvailableSemaphore != VK_NULL_HANDLE && queue != VK_NULL_HANDLE)
+    {
+        const VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        VkSubmitInfo drainInfo{};
+        drainInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        drainInfo.waitSemaphoreCount = 1;
+        drainInfo.pWaitSemaphores = &surfaceState.imageAvailableSemaphore;
+        drainInfo.pWaitDstStageMask = &waitStage;
+        VkResult drainResult = VK_SUCCESS;
+        {
+            std::scoped_lock queueLock(melonDS::VulkanContext::Get().GetQueueLock());
+            drainResult = vkQueueSubmit(queue, 1, &drainInfo, VK_NULL_HANDLE);
+            if (drainResult == VK_SUCCESS)
+                (void)vkQueueWaitIdle(queue);
+        }
+        if (drainResult == VK_ERROR_DEVICE_LOST)
+        {
+            markDeviceLost("drainImageAvailableSemaphore");
+            return;
+        }
+        if (drainResult == VK_SUCCESS)
+            return;
+    }
+
+    if (queue != VK_NULL_HANDLE)
+    {
+        std::scoped_lock queueLock(melonDS::VulkanContext::Get().GetQueueLock());
+        (void)vkQueueWaitIdle(queue);
+    }
+
+    if (surfaceState.imageAvailableSemaphore != VK_NULL_HANDLE)
+    {
+        vkDestroySemaphore(device, surfaceState.imageAvailableSemaphore, nullptr);
+        surfaceState.imageAvailableSemaphore = VK_NULL_HANDLE;
+    }
+    VkSemaphoreCreateInfo semaphoreInfo{};
+    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    (void)vkCreateSemaphore(device, &semaphoreInfo, nullptr, &surfaceState.imageAvailableSemaphore);
 }
 
 bool VulkanSurfacePresenter::resetSurfaceInFlightFence(SurfaceState& surfaceState)
@@ -4248,16 +4321,30 @@ bool VulkanSurfacePresenter::runRetroArchFilter(
         if (vkEndCommandBuffer(retro.commandBuffer) != VK_SUCCESS)
             return false;
 
+        if (vkResetFences(device, 1, &retro.fence) != VK_SUCCESS)
+        {
+            (void)recreateRetroArchFence(retro, true);
+            return false;
+        }
+
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &retro.commandBuffer;
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores = &retro.filterFinishedSemaphore;
+        VkResult submitRes = VK_SUCCESS;
         {
             std::scoped_lock queueLock(melonDS::VulkanContext::Get().GetQueueLock());
-            if (vkQueueSubmit(queue, 1, &submitInfo, retro.fence) != VK_SUCCESS)
-                return false;
+            submitRes = vkQueueSubmit(queue, 1, &submitInfo, retro.fence);
+        }
+        if (submitRes != VK_SUCCESS)
+        {
+            if (submitRes == VK_ERROR_DEVICE_LOST)
+                markDeviceLost("runRetroArchFilter.vkQueueSubmit");
+            else
+                (void)recreateRetroArchFence(retro, true);
+            return false;
         }
         retro.filterSignalPending = true;
         return true;
@@ -4282,7 +4369,6 @@ bool VulkanSurfacePresenter::runRetroArchFilter(
             retro.filterSignalPending = false;
         }
 
-        vkResetFences(device, 1, &retro.fence);
         if (vkResetCommandBuffer(retro.commandBuffer, 0) != VK_SUCCESS)
             return false;
         VkCommandBufferBeginInfo beginInfo{};
@@ -5433,15 +5519,15 @@ bool VulkanSurfacePresenter::updateVertexBuffer(
             underScreens.push_back(PendingScreen{rect, topScreen, alpha});
     };
 
-    if (config.bottomOnTop)
+    if (config.bottomOnTop && !config.topOnTop)
     {
         enqueueScreen(config.topScreen, true, config.topAlpha, false);
         enqueueScreen(config.bottomScreen, false, config.bottomAlpha, true);
     }
     else
     {
-        enqueueScreen(config.bottomScreen, false, config.bottomAlpha, false);
-        enqueueScreen(config.topScreen, true, config.topAlpha, true);
+        enqueueScreen(config.bottomScreen, false, config.bottomAlpha, config.bottomOnTop);
+        enqueueScreen(config.topScreen, true, config.topAlpha, config.topOnTop);
     }
     enqueueScreen(config.hybridTopScreen, true, config.hybridAlpha, config.hybridOnTop);
     enqueueScreen(config.hybridBottomScreen, false, config.hybridAlpha, config.hybridOnTop);
@@ -6169,7 +6255,10 @@ bool VulkanSurfacePresenter::submitSurfaceCommands(
     VkResult presentResult = VK_SUCCESS;
 
     if (!resetSurfaceInFlightFence(surfaceState))
+    {
+        drainOrRecreateImageAvailableSemaphore(surfaceState, true);
         return false;
+    }
 
     {
         std::scoped_lock queueLock(melonDS::VulkanContext::Get().GetQueueLock());
@@ -6190,6 +6279,7 @@ bool VulkanSurfacePresenter::submitSurfaceCommands(
             markDeviceLost("vkQueueSubmit");
             return false;
         }
+        drainOrRecreateImageAvailableSemaphore(surfaceState, true);
         (void)createInFlightFence(surfaceState, true);
         melonDS::Platform::Log(
             melonDS::Platform::LogLevel::Error,

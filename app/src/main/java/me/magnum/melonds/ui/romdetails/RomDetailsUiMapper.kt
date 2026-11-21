@@ -2,6 +2,8 @@ package me.magnum.melonds.ui.romdetails
 
 import android.content.Context
 import androidx.documentfile.provider.DocumentFile
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import me.magnum.melonds.domain.model.ConsoleType
 import me.magnum.melonds.domain.model.MicSource
 import me.magnum.melonds.domain.model.VideoFiltering
@@ -77,14 +79,16 @@ class RomDetailsUiMapper(
         )
     }
 
-    private fun mapGbaSlotConfigToUi(gbaSlotConfig: RomGbaSlotConfig): RomGbaSlotConfigUiModel {
+    private suspend fun mapGbaSlotConfigToUi(gbaSlotConfig: RomGbaSlotConfig): RomGbaSlotConfigUiModel {
         return when (gbaSlotConfig) {
             is RomGbaSlotConfig.None -> RomGbaSlotConfigUiModel(type = RomGbaSlotConfigUiModel.Type.None)
-            is RomGbaSlotConfig.GbaRom -> RomGbaSlotConfigUiModel(
-                type = RomGbaSlotConfigUiModel.Type.GbaRom,
-                gbaRomPath = gbaSlotConfig.romPath?.let { DocumentFile.fromSingleUri(context, it)?.name },
-                gbaSavePath = gbaSlotConfig.savePath?.let { DocumentFile.fromSingleUri(context, it)?.name },
-            )
+            is RomGbaSlotConfig.GbaRom -> withContext(Dispatchers.IO) {
+                RomGbaSlotConfigUiModel(
+                    type = RomGbaSlotConfigUiModel.Type.GbaRom,
+                    gbaRomPath = gbaSlotConfig.romPath?.let { DocumentFile.fromSingleUri(context, it)?.name },
+                    gbaSavePath = gbaSlotConfig.savePath?.let { DocumentFile.fromSingleUri(context, it)?.name },
+                )
+            }
             RomGbaSlotConfig.RumblePak -> RomGbaSlotConfigUiModel(type = RomGbaSlotConfigUiModel.Type.RumblePak)
             RomGbaSlotConfig.MemoryExpansion -> RomGbaSlotConfigUiModel(type = RomGbaSlotConfigUiModel.Type.MemoryExpansion)
             RomGbaSlotConfig.AnalogInput -> RomGbaSlotConfigUiModel(type = RomGbaSlotConfigUiModel.Type.AnalogInput)

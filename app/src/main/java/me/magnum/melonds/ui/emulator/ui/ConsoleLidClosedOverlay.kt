@@ -1,5 +1,6 @@
 package me.magnum.melonds.ui.emulator.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -17,11 +18,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import me.magnum.melonds.ui.common.RequestInitialFocus
 import me.magnum.melonds.ui.theme.SpaceGrotesk
 import me.magnum.melonds.ui.theme.WatermelonMono
 import me.magnum.melonds.ui.theme.watermelon
@@ -31,11 +40,30 @@ fun ConsoleLidClosedOverlay(
     onOpenLid: () -> Unit,
 ) {
     val colors = watermelon
+    val openButtonFocusRequester = remember { FocusRequester() }
+
+    BackHandler(onBack = onOpenLid)
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black.copy(alpha = 0.88f))
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown && (
+                        event.key == Key.Back ||
+                            event.key == Key.Escape ||
+                            event.key == Key.ButtonB ||
+                            event.key == Key.ButtonA ||
+                            event.key == Key.Enter ||
+                            event.key == Key.DirectionCenter
+                        )
+                ) {
+                    onOpenLid()
+                    true
+                } else {
+                    false
+                }
+            }
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -111,6 +139,7 @@ fun ConsoleLidClosedOverlay(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .focusRequester(openButtonFocusRequester)
                     .clip(RoundedCornerShape(14.dp))
                     .background(colors.surface2)
                     .border(1.5.dp, colors.green, RoundedCornerShape(14.dp))
@@ -146,5 +175,7 @@ fun ConsoleLidClosedOverlay(
                 textAlign = TextAlign.Center,
             )
         }
+
+        RequestInitialFocus(openButtonFocusRequester)
     }
 }

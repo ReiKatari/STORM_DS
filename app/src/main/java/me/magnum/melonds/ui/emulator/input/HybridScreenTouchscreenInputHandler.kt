@@ -41,7 +41,16 @@ class HybridScreenTouchscreenInputHandler(inputListener: IInputListener) : BaseI
             MotionEvent.ACTION_MOVE -> {
                 v.parent?.requestDisallowInterceptTouchEvent(true)
                 if (touchActive) {
-                    val pointerIndex = getBestPointerIndex(event, bottomScreenTop)
+                    val pointerIndex = if (activePointerId != MotionEvent.INVALID_POINTER_ID) {
+                        val existingIdx = event.findPointerIndex(activePointerId)
+                        if (existingIdx in 0 until event.pointerCount) {
+                            existingIdx
+                        } else {
+                            getBestPointerIndex(event, bottomScreenTop)
+                        }
+                    } else {
+                        getBestPointerIndex(event, bottomScreenTop)
+                    }
                     if (pointerIndex != -1) {
                         activePointerId = event.getPointerId(pointerIndex)
 

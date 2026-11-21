@@ -20,7 +20,7 @@ class MediaProjectionCapturer(private val activity: Activity) {
     private val mediaProjectionManager = activity.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
 
     val hasPermission: Boolean
-        get() = permissionGranted || ScreenCaptureService.isReady
+        get() = permissionGranted && ScreenCaptureService.isReady
 
     fun createCaptureIntent(): Intent {
         return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {

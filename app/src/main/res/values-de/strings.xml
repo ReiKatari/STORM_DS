@@ -1055,7 +1055,7 @@
     <string name="translator_enabled">Automatische Übersetzung aktivieren</string>
     <string name="translator_enabled_summary">Spieldialoge auf dem Bildschirm erkennen und übersetzen</string>
     <string name="translator_engine">Übersetzungs-Engine</string>
-    <string name="translator_engine_offline">Offline Hybrid (auf dem Gerät / kein Internet erforderlich)</string>
+    <string name="translator_engine_offline" formatted="false">Offline Hybrid (auf dem Gerät / kein Internet erforderlich)</string>
     <string name="translator_engine_yandex">Yandex Translate (kostenlos / bestes Russisch)</string>
     <string name="translator_engine_google">Google Translate (kostenlos / schnell)</string>
     <string name="translator_engine_lingva">Lingva Neural (kostenlos / keine Limits)</string>
@@ -1299,7 +1299,7 @@
     <string name="label_rom_config_translator_section">Auto-Übersetzer</string>
     <string name="label_rom_config_translator_source_lang">Originalsprache des Spiels</string>
     <string name="label_rom_config_dual_screen_preset">Dual-Screen-Layout-Vorlage</string>
-    <string name="video_ai_upscale_sharpness_title">AI-Upscale- und CAS-Schärfe (%)</string>
+    <string name="video_ai_upscale_sharpness_title" formatted="false">AI-Upscale- und CAS-Schärfe (%)</string>
     <string name="video_ai_upscale_sharpness_summary">Intensität der kontrastadaptiven Kanten- und Textschärfung</string>
     <string name="video_vulkan_compositor_mode_title">2D/3D-Compositor-Modus (Vulkan)</string>
     <string name="video_vulkan_compositor_mode_precise">Präzise (Ebenenprioritäten und Überblendung)</string>
@@ -1396,9 +1396,9 @@
     <string name="video_ds_lcd_grid_off">Aus</string>
     <string name="video_ds_lcd_grid_ds_lite">DS Lite Pixelmatrix</string>
     <string name="video_ds_lcd_grid_dsi_xl">DSi XL RGB-Subpixel-LCD</string>
-    <string name="video_low_battery_saver_title">Auto-Energiesparmodus (&lt; 20%)</string>
-    <string name="video_low_battery_saver_summary">Auflösung automatisch auf 1x-2x reduzieren und SSAO unter 20% Akku deaktivieren</string>
-    <string name="video_low_battery_activated_toast">Schwacher Akku (&lt; 20%): Auflösung reduziert, SSAO pausiert</string>
+    <string name="video_low_battery_saver_title" formatted="false">Auto-Energiesparmodus (&lt; 20%)</string>
+    <string name="video_low_battery_saver_summary" formatted="false">Auflösung automatisch auf 1x-2x reduzieren und SSAO unter 20% Akku deaktivieren</string>
+    <string name="video_low_battery_activated_toast" formatted="false">Schwacher Akku (&lt; 20%): Auflösung reduziert, SSAO pausiert</string>
     <string name="video_low_battery_restored_toast">Akku wiederhergestellt: Grafikeinstellungen aktiv</string>
     <string name="mic_vu_meter_title">Live-Mikrofonpegel-Test</string>
     <string name="mic_vu_meter_idle">Tippen zum Testen von Mikrofon und Noise-Gate</string>
@@ -1425,7 +1425,7 @@
     <string name="input_gyro_activation_hold_r">R gedrückt halten</string>
     <string name="button_theme_picker_title">Farbthema der Tasten</string>
     <string name="button_theme_picker_subtitle">Vorschau der Tastenfarben</string>
-    <string name="translator_tts_speed_title">Sprechgeschwindigkeit (%)</string>
+    <string name="translator_tts_speed_title" formatted="false">Sprechgeschwindigkeit (%)</string>
     <string name="translator_tts_speed_summary">%1$d%% - Sprechtempo für übersetzte Dialoge (100%% ist Standard)</string>
     <string name="translator_regions_reset_title">OCR-Bereiche und Tastenposition zurücksetzen</string>
     <string name="translator_regions_reset_summary">Gespeicherte Erfassungsbereiche löschen und TR-Taste zurücksetzen</string>
@@ -1442,4 +1442,5 @@
     <string name="cheats_download_fallback_embedded">Online-Server nicht erreichbar - %1$d integrierte Spiele geladen</string>
     <string name="cheats_import_finished">Cheat-Datenbank erfolgreich importiert</string>
     <string name="cheats_import_failed">Import der Cheat-Datenbank fehlgeschlagen</string>
+    <string name="rom_search_dir_saf_fallback_hint">Zugriff auf das Verzeichnis fehlgeschlagen, bitte erneut auswählen</string>
 </resources>

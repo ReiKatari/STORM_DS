@@ -742,6 +742,12 @@ Java_me_magnum_melonds_MelonEmulator_setupCheats(JNIEnv* env, jobject thiz, jobj
             continue;
         }
         std::string codeString = codeStringPtr;
+        while (!codeString.empty() &&
+               (codeString.back() == ' ' || codeString.back() == '\t' ||
+                codeString.back() == '\r' || codeString.back() == '\n'))
+        {
+            codeString.pop_back();
+        }
         // Since each part of a cheat code has 8 characters (4 bytes), we can add 1 to the length (to ensure that each part has a matching space separator) and divide by 9
         // (part length + space separator) to calculate the total number of parts in the cheat
         size_t codeLength = (codeString.size() + 1) / 9;
@@ -775,9 +781,9 @@ Java_me_magnum_melonds_MelonEmulator_setupCheats(JNIEnv* env, jobject thiz, jobj
             start = end + 1;
         }
 
-        if (!isBad && end != start) {
+        if (!isBad && start < codeString.size()) {
             char* endPointer;
-            std::string sectionString = codeString.substr(start, end - start);
+            std::string sectionString = codeString.substr(start);
             if (sectionString.size() != 8) {
                 isBad = true;
             } else {
@@ -3130,9 +3136,66 @@ Java_me_magnum_melonds_MelonEmulator_dumpVulkanDebugReport(JNIEnv* env, jclass, 
 }
 
 
+namespace {
+std::mutex gMainRamAccessMutex;
+
+class ScopedEmulatorRamPauseGuard
+{
+public:
+    ScopedEmulatorRamPauseGuard()
+        : accessLock(gMainRamAccessMutex)
+    {
+        pthread_mutex_lock(&emuThreadMutex);
+        emuMutexLocked = true;
+        if (!started.load(std::memory_order_acquire) || stop.load(std::memory_order_acquire))
+            return;
+
+        wasPaused = paused.load(std::memory_order_acquire);
+        if (!wasPaused)
+            paused.store(true, std::memory_order_release);
+
+        while (started.load(std::memory_order_acquire)
+            && !stop.load(std::memory_order_acquire)
+            && !isThreadReallyPaused.load(std::memory_order_acquire))
+        {
+            pthread_cond_wait(&emuThreadCond, &emuThreadMutex);
+        }
+
+        active = started.load(std::memory_order_acquire)
+            && !stop.load(std::memory_order_acquire)
+            && isThreadReallyPaused.load(std::memory_order_acquire);
+    }
+
+    ~ScopedEmulatorRamPauseGuard()
+    {
+        if (emuMutexLocked)
+        {
+            if (!wasPaused && started.load(std::memory_order_acquire) && !stop.load(std::memory_order_acquire))
+            {
+                paused.store(false, std::memory_order_release);
+                pthread_cond_broadcast(&emuThreadCond);
+            }
+            pthread_mutex_unlock(&emuThreadMutex);
+        }
+    }
+
+    bool isEmulationSafe() const noexcept { return active; }
+
+private:
+    std::lock_guard<std::mutex> accessLock;
+    bool emuMutexLocked = false;
+    bool wasPaused = false;
+    bool active = false;
+};
+} // namespace
+
 JNIEXPORT jbyteArray JNICALL
 Java_me_magnum_melonds_MelonEmulator_readMainRamSnapshot(JNIEnv* env, jclass)
 {
+    ScopedEmulatorRamPauseGuard pauseGuard;
+    if (!pauseGuard.isEmulationSafe())
+        return nullptr;
+
     auto currentInstance = MelonDSAndroid::GetInstanceSnapshot();
     if (!currentInstance)
         return nullptr;
@@ -3147,6 +3210,12 @@ Java_me_magnum_melonds_MelonEmulator_readMainRamSnapshot(JNIEnv* env, jclass)
         return nullptr;
 
     env->SetByteArrayRegion(byteArray, 0, ramSize, reinterpret_cast<const jbyte*>(nds->MainRAM));
+    if (env->ExceptionCheck())
+    {
+        env->ExceptionClear();
+        env->DeleteLocalRef(byteArray);
+        return nullptr;
+    }
     return byteArray;
 }
 
@@ -3154,6 +3223,10 @@ JNIEXPORT jboolean JNICALL
 Java_me_magnum_melonds_MelonEmulator_writeMainRamValue(JNIEnv*, jclass, jint offset, jint byteSize, jlong value)
 {
     if (offset < 0 || byteSize <= 0 || (byteSize != 1 && byteSize != 2 && byteSize != 4))
+        return JNI_FALSE;
+
+    ScopedEmulatorRamPauseGuard pauseGuard;
+    if (!pauseGuard.isEmulationSafe())
         return JNI_FALSE;
 
     auto currentInstance = MelonDSAndroid::GetInstanceSnapshot();
@@ -3168,7 +3241,7 @@ Java_me_magnum_melonds_MelonEmulator_writeMainRamValue(JNIEnv*, jclass, jint off
     const uint32_t uOffset = static_cast<uint32_t>(offset);
     const uint32_t uSize = static_cast<uint32_t>(byteSize);
 
-    if (uOffset + uSize > ramSize)
+    if (static_cast<uint64_t>(uOffset) + static_cast<uint64_t>(uSize) > static_cast<uint64_t>(ramSize))
         return JNI_FALSE;
 
     if (uSize == 1)
@@ -3188,6 +3261,13 @@ Java_me_magnum_melonds_MelonEmulator_writeMainRamValue(JNIEnv*, jclass, jint off
     else
     {
         return JNI_FALSE;
+    }
+
+    const melonDS::u32 emuAddr = 0x02000000u + uOffset;
+    nds->JIT.CheckAndInvalidate<0, melonDS::ARMJIT_Memory::memregion_MainRAM>(emuAddr);
+    if ((uOffset & ~15u) != ((uOffset + uSize - 1u) & ~15u))
+    {
+        nds->JIT.CheckAndInvalidate<0, melonDS::ARMJIT_Memory::memregion_MainRAM>(emuAddr + uSize - 1u);
     }
 
     return JNI_TRUE;

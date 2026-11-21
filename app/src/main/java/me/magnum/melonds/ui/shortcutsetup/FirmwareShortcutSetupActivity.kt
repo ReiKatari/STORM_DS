@@ -18,6 +18,7 @@ abstract class FirmwareShortcutSetupActivity : AppCompatActivity() {
 
         val console = getConsoleType()
         val intent = Intent("${packageName}.LAUNCH_FIRMWARE").apply {
+            setPackage(packageName)
             putExtra(EmulatorActivity.KEY_BOOT_FIRMWARE_ONLY, true)
             putExtra(EmulatorActivity.KEY_BOOT_FIRMWARE_CONSOLE, console.ordinal)
         }

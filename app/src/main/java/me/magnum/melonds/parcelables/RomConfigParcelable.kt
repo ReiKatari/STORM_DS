@@ -2,6 +2,7 @@ package me.magnum.melonds.parcelables
 
 import android.os.Parcel
 import android.os.Parcelable
+import me.magnum.melonds.domain.model.DualScreenPreset
 import me.magnum.melonds.domain.model.VideoFiltering
 import me.magnum.melonds.domain.model.VideoRenderer
 import me.magnum.melonds.domain.model.rom.config.RomConfig
@@ -34,6 +35,11 @@ class RomConfigParcelable : Parcelable {
             videoFiltering = parcel.readNullableEnum(VideoFiltering.entries),
             retroArchShaderPresetPath = parcel.readString(),
             retroArchShaderParameters = parcel.readString(),
+            retroAchievementsEnabled = parcel.readNullableBoolean(),
+            dualScreenPreset = parcel.readNullableEnum(DualScreenPreset.entries),
+            dualScreenKeepAspectRatio = parcel.readNullableBoolean(),
+            dualScreenIntegerScale = parcel.readNullableBoolean(),
+            translatorSourceLang = parcel.readString(),
             arm9Overclock = parcel.readNullableInt(),
             fastForwardSpeedMultiplier = parcel.readNullableFloat(),
             customVulkanDriverName = parcel.readString(),
@@ -55,6 +61,11 @@ class RomConfigParcelable : Parcelable {
         dest.writeNullableEnum(romConfig.videoFiltering)
         dest.writeString(romConfig.retroArchShaderPresetPath)
         dest.writeString(romConfig.retroArchShaderParameters)
+        dest.writeNullableBoolean(romConfig.retroAchievementsEnabled)
+        dest.writeNullableEnum(romConfig.dualScreenPreset)
+        dest.writeNullableBoolean(romConfig.dualScreenKeepAspectRatio)
+        dest.writeNullableBoolean(romConfig.dualScreenIntegerScale)
+        dest.writeString(romConfig.translatorSourceLang)
         dest.writeNullableInt(romConfig.arm9Overclock)
         dest.writeNullableFloat(romConfig.fastForwardSpeedMultiplier)
         dest.writeString(romConfig.customVulkanDriverName)

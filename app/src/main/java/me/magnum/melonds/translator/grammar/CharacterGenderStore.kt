@@ -27,8 +27,10 @@ class CharacterGenderStore(private val context: Context) {
     private val fallbackDir by lazy { File(context.filesDir, "translator/dictionaries") }
 
     init {
-        ensureDirs()
-        loadForGame("global")
+        scope.launch {
+            ensureDirs()
+            loadFromDisk("global")
+        }
     }
 
     private fun ensureDirs() {
@@ -44,18 +46,30 @@ class CharacterGenderStore(private val context: Context) {
         val sanitized = sanitizeKey(gameKey)
         currentGameKey = sanitized
         memory.clear()
+        scope.launch {
+            ensureDirs()
+            loadFromDisk(sanitized)
+        }
+    }
 
+    private fun loadFromDisk(sanitized: String) {
         val file = File(getStorageDir(), "character_gender_${sanitized}.json")
         if (!file.exists()) return
 
         try {
             val jsonStr = file.readText(Charsets.UTF_8)
             val json = JSONObject(jsonStr)
+            val loaded = HashMap<String, Gender>()
             val keys = json.keys()
             while (keys.hasNext()) {
                 val name = keys.next()
                 val genderStr = json.optString(name, "NEUTRAL")
-                memory[name.lowercase()] = Gender.fromString(genderStr)
+                loaded[name.lowercase()] = Gender.fromString(genderStr)
+            }
+            if (currentGameKey == sanitized) {
+                for ((k, v) in loaded) {
+                    memory.putIfAbsent(k, v)
+                }
             }
         } catch (e: Throwable) {
             Log.w(TAG, "Failed to load character gender store for " + sanitized + ": " + e.message)
@@ -84,6 +98,7 @@ class CharacterGenderStore(private val context: Context) {
         val snapshot = memory.toMap()
         scope.launch {
             try {
+                ensureDirs()
                 val file = File(getStorageDir(), "character_gender_${key}.json")
                 val json = JSONObject()
                 for ((name, gender) in snapshot) {

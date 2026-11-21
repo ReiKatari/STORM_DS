@@ -29,9 +29,9 @@
         <item>system_offline_best</item>
     </string-array>
     <string name="translator_floating_button_opacity">Прозрачность кнопки перевода</string>
-    <string name="translator_floating_button_opacity_summary">Настройка прозрачности плавающей кнопки TR | LOG (по умолчанию 35%)</string>
+    <string name="translator_floating_button_opacity_summary" formatted="false">Настройка прозрачности плавающей кнопки TR | LOG (по умолчанию 35%)</string>
     <string name="translator_voice_pitch_title">Тембр голоса</string>
-    <string name="translator_voice_pitch_summary">Тонкая настройка высоты тона речи (-20%..+20%)</string>
+    <string name="translator_voice_pitch_summary" formatted="false">Тонкая настройка высоты тона речи (-20%..+20%)</string>
     <string name="translator_test_voice_title">Прослушать выбранный голос</string>
     <string name="translator_test_voice_summary">Воспроизвести образец речи для проверки озвучки</string>
     <string name="translator_test_voice_playing">Воспроизведение образца голоса...</string>

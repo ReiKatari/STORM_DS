@@ -14,6 +14,9 @@ import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -42,9 +45,20 @@ class BackgroundsActivity : AppCompatActivity() {
         androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
         super.onCreate(savedInstanceState)
 
+        val initialBackgroundId = intent.getStringExtra(KEY_INITIAL_BACKGROUND_ID)?.let {
+            runCatching { UUID.fromString(it) }.getOrNull()
+        }
+
         setContent {
             MelonTheme {
                 val navController = rememberNavController()
+                val currentSelectedBackground by viewModel.currentSelectedBackground.collectAsStateWithLifecycle()
+
+                LaunchedEffect(currentSelectedBackground) {
+                    if (initialBackgroundId != null && currentSelectedBackground == null) {
+                        setSelectedBackgroundId(null)
+                    }
+                }
 
                 SharedTransitionLayout {
                     NavHost(

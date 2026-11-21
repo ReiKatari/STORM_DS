@@ -41,7 +41,7 @@ std::optional<FATStorageArgs> getSDCardArgs(SdCardSettings settings) noexcept
         .Filename = settings.imagePath,
         .Size = targetSize,
         .ReadOnly = settings.readOnly,
-        .SourceDir = (settings.folderPath && settings.folderPath[0] != '\0') ? std::make_optional(settings.folderPath) : std::nullopt
+        .SourceDir = (settings.folderSync && settings.folderPath && settings.folderPath[0] != '\0') ? std::make_optional(settings.folderPath) : std::nullopt
     };
 }
 }

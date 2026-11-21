@@ -46,6 +46,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -65,8 +66,16 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import me.magnum.melonds.R
 import me.magnum.melonds.domain.model.rom.Rom
+import me.magnum.melonds.domain.repositories.SaveStatesRepository
+import me.magnum.melonds.impl.RomSaveFileManager
 import me.magnum.melonds.ui.romdetails.model.RomDetailsTab
 import me.magnum.melonds.ui.romlist.composables.RegionBadge
 import me.magnum.melonds.ui.romlist.composables.resolveRomRegionBadge
@@ -395,6 +404,13 @@ fun QuickActionTile(
     }
 }
 
+@EntryPoint
+@InstallIn(SingletonComponent::class)
+interface RomHeaderEntryPoint {
+    fun romSaveFileManager(): RomSaveFileManager
+    fun saveStatesRepository(): SaveStatesRepository
+}
+
 @Composable
 fun RomTechPassportCard(
     rom: Rom,
@@ -405,6 +421,26 @@ fun RomTechPassportCard(
     val colors = watermelon
     val isRu = remember { java.util.Locale.getDefault().language.startsWith("ru") }
     var isExpanded by remember { mutableStateOf(false) }
+
+    val hasSaveData by produceState<Boolean?>(initialValue = null, rom.uri) {
+        value = withContext(Dispatchers.IO) {
+            runCatching {
+                val ep = EntryPointAccessors.fromApplication(
+                    context.applicationContext,
+                    RomHeaderEntryPoint::class.java,
+                )
+                ep.romSaveFileManager().hasSaveFile(rom) ||
+                    ep.saveStatesRepository().getRomQuickSaveStateSlot(rom).exists ||
+                    ep.saveStatesRepository().getPeriodicAutoSaveSlot(rom).exists ||
+                    ep.saveStatesRepository().getRomSaveStates(rom).any { it.exists }
+            }.getOrDefault(false)
+        }
+    }
+    val saveStatusLabel = when (hasSaveData) {
+        true -> if (isRu) "НАЙДЕН" else "FOUND"
+        false -> if (isRu) "НЕТ .SAV" else "NONE"
+        null -> "..."
+    }
 
     val fileExt = remember(rom.fileName) {
         rom.fileName.substringAfterLast('.', "NDS").uppercase()
@@ -480,7 +516,7 @@ fun RomTechPassportCard(
             )
             RomInfoChip(
                 label = if (isRu) "СТАТУС .SAV" else "SAVE STATUS",
-                value = if (isRu) "АКТИВЕН" else "READY",
+                value = saveStatusLabel,
                 modifier = Modifier.weight(1f),
             )
         }

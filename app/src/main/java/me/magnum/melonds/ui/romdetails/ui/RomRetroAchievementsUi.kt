@@ -133,7 +133,7 @@ fun RomRetroAchievementsUi(
                         val context = LocalContext.current
                         val colors = watermelon
                         var isBannerSyncing by remember { mutableStateOf(false) }
-                        val pendingCount = offlineAchievementsUiState.pendingSoftcoreUnlockCount + offlineAchievementsUiState.pendingLedgerUnlockCount
+                        val pendingCount = offlineAchievementsUiState.pendingLedgerUnlockCount
 
                         Column(modifier = Modifier.fillMaxSize()) {
                             if (pendingCount > 0) {
@@ -327,14 +327,22 @@ fun OfflineAchievementsStatusUi(
                 Spacer(Modifier.width(10.dp))
                 Column {
                     Text(
-                        text = if (isEnabled) "ОФЛАЙН-СИСТЕМА RETROACHIEVEMENTS АКТИВНА" else "ОФЛАЙН-РЕЖИМ: ТРЕБУЕТСЯ ВХОД",
+                        text = when (state.availability) {
+                            OfflineAchievementsUiState.Availability.ENABLED -> "ОФЛАЙН-СИСТЕМА RETROACHIEVEMENTS АКТИВНА"
+                            OfflineAchievementsUiState.Availability.DISABLED_NOT_LOGGED_IN -> stringResource(R.string.ra_offline_status_not_logged_in)
+                            OfflineAchievementsUiState.Availability.DISABLED_NO_CACHE -> stringResource(R.string.ra_offline_status_no_cache)
+                        },
                         fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.5.sp,
                         color = androidx.compose.ui.graphics.Color.White
                     )
                     Text(
-                        text = if (isEnabled) "Достижения сохраняются локально и синхронизируются при появлении сети" else "Войдите в аккаунт RetroAchievements для локального кэширования",
+                        text = when (state.availability) {
+                            OfflineAchievementsUiState.Availability.ENABLED -> "Достижения сохраняются локально и синхронизируются при появлении сети"
+                            OfflineAchievementsUiState.Availability.DISABLED_NOT_LOGGED_IN -> "Войдите в аккаунт RetroAchievements для локального кэширования"
+                            OfflineAchievementsUiState.Availability.DISABLED_NO_CACHE -> stringResource(R.string.ra_offline_status_no_cache)
+                        },
                         fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
                         fontSize = 9.5.sp,
                         color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.75f)
@@ -436,7 +444,7 @@ fun OfflineAchievementsStatusUi(
         }
 
         // Quick Sync Row directly adjacent to pending counter cards
-        val totalPending = state.pendingSoftcoreUnlockCount + state.pendingLedgerUnlockCount
+        val totalPending = state.pendingLedgerUnlockCount
         Box(
             modifier = Modifier
                 .fillMaxWidth()

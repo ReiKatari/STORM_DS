@@ -355,6 +355,8 @@ class EmulatorViewModel @Inject constructor(
     private var currentRetroAchievementsGameId: Long? = null
     private var offlineRetroAchievementsSession: OfflineRetroAchievementsSession? = null
     private var activeRuntimeBridgeConfig: RARuntimeBridgeConfig? = null
+    private var activeAchievementData: GameAchievementData? = null
+    private var launchJob: Job? = null
     private var activeRuntimePath: RetroAchievementsRuntimePath = RetroAchievementsRuntimePath.DISABLED
     private val runtimeAuthenticationLeaseMonitor = Any()
     private var activeRuntimeAuthenticationLeaseId: String? = null
@@ -639,7 +641,11 @@ class EmulatorViewModel @Inject constructor(
 
     fun relaunchWithNewArgs(args: LaunchArgs) {
         if (!_emulatorState.value.isRunning()) {
-            launchEmulator(args)
+            launchJob?.cancel()
+            viewModelScope.launch {
+                stopEmulatorSuspend()
+                launchEmulator(args)
+            }
             return
         }
 
@@ -712,13 +718,15 @@ class EmulatorViewModel @Inject constructor(
     }
 
     fun onRomLaunchValidated(rom: Rom) {
-        sessionCoroutineScope.launch {
+        launchJob?.cancel()
+        launchJob = sessionCoroutineScope.launch {
             launchRom(refreshRomForLaunch(rom))
         }
     }
 
     fun onFirmwareLaunchValidated(consoleType: ConsoleType) {
-        viewModelScope.launch {
+        launchJob?.cancel()
+        launchJob = viewModelScope.launch {
             launchFirmware(consoleType)
         }
     }
@@ -1299,36 +1307,34 @@ class EmulatorViewModel @Inject constructor(
         }
     }
 
-    private fun launchFirmware(consoleType: ConsoleType) {
-        viewModelScope.launch {
-            resetEmulatorState(EmulatorState.LoadingFirmware(consoleType))
-            startEmulatorSession(
-                sessionType = EmulatorSession.SessionType.FirmwareSession(consoleType),
-                areRetroAchievementsEnabled = false,
-            )
-            sessionCoroutineScope.launch {
-                startObservingMainScreenBackground()
-                startObservingSecondaryScreenBackground()
-                startObservingRuntimeInputLayoutConfiguration()
-                startObservingRendererConfiguration()
-                startObservingLayoutForFirmware()
-                startObservingEmulatorEvents()
+    private suspend fun launchFirmware(consoleType: ConsoleType) {
+        resetEmulatorState(EmulatorState.LoadingFirmware(consoleType))
+        startEmulatorSession(
+            sessionType = EmulatorSession.SessionType.FirmwareSession(consoleType),
+            areRetroAchievementsEnabled = false,
+        )
+        sessionCoroutineScope.launch {
+            startObservingMainScreenBackground()
+            startObservingSecondaryScreenBackground()
+            startObservingRuntimeInputLayoutConfiguration()
+            startObservingRendererConfiguration()
+            startObservingLayoutForFirmware()
+            startObservingEmulatorEvents()
 
-                confirmRetroArchShaderCompile(romConfig = null)
-                isNativeEmulationActive = true
-                val result = emulatorManager.loadFirmware(consoleType)
-                when (result) {
-                    is FirmwareLaunchResult.LaunchFailed -> {
-                        isNativeEmulationActive = false
-                        _emulatorState.value = EmulatorState.FirmwareLoadError(result.reason)
-                    }
-                    FirmwareLaunchResult.LaunchSuccessful -> {
-                        _emulatorState.value = EmulatorState.RunningFirmware(consoleType)
-                        startTrackingFps()
-                    }
+            confirmRetroArchShaderCompile(romConfig = null)
+            isNativeEmulationActive = true
+            val result = emulatorManager.loadFirmware(consoleType)
+            when (result) {
+                is FirmwareLaunchResult.LaunchFailed -> {
+                    isNativeEmulationActive = false
+                    _emulatorState.value = EmulatorState.FirmwareLoadError(result.reason)
+                }
+                FirmwareLaunchResult.LaunchSuccessful -> {
+                    _emulatorState.value = EmulatorState.RunningFirmware(consoleType)
+                    startTrackingFps()
                 }
             }
-        }
+        }.join()
     }
 
     fun setSystemOrientation(orientation: Orientation) {
@@ -1361,7 +1367,7 @@ class EmulatorViewModel @Inject constructor(
         if (runningRom != null) {
             val updatedConfig = runningRom.config.copy(dualScreenKeepAspectRatio = enabled)
             romsRepository.updateRomConfig(runningRom, updatedConfig)
-            currentRom = runningRom.copy(config = updatedConfig)
+            updateRunningRom(runningRom.copy(config = updatedConfig))
         } else {
             settingsRepository.setExternalDisplayKeepAspectRatioEnabled(enabled)
         }
@@ -1373,7 +1379,7 @@ class EmulatorViewModel @Inject constructor(
         if (runningRom != null) {
             val updatedConfig = runningRom.config.copy(dualScreenPreset = preset)
             romsRepository.updateRomConfig(runningRom, updatedConfig)
-            currentRom = runningRom.copy(config = updatedConfig)
+            updateRunningRom(runningRom.copy(config = updatedConfig))
         } else {
             settingsRepository.setDualScreenPreset(preset)
         }
@@ -1385,7 +1391,7 @@ class EmulatorViewModel @Inject constructor(
         if (runningRom != null) {
             val updatedConfig = runningRom.config.copy(dualScreenIntegerScale = enabled)
             romsRepository.updateRomConfig(runningRom, updatedConfig)
-            currentRom = runningRom.copy(config = updatedConfig)
+            updateRunningRom(runningRom.copy(config = updatedConfig))
         } else {
             settingsRepository.setDualScreenIntegerScaleEnabled(enabled)
         }
@@ -1870,6 +1876,7 @@ class EmulatorViewModel @Inject constructor(
     private suspend fun resumeEmulatorIfSessionCanRun() {
         if (
             _emulatorState.value.isRunning() &&
+            isHostActivityRunning &&
             settingsReconciliationsInFlight.get() == 0 &&
             raSessionStopGate.canResume() &&
             !pendingRaModalController.blocksLifecycleResume()
@@ -1909,13 +1916,23 @@ class EmulatorViewModel @Inject constructor(
         finalizeOfflineRetroAchievementsSessionIfNeeded()
         unloadAndReleaseActiveRuntimeAuthenticationLease("emulator_stopped")
         activeRuntimeBridgeConfig = null
+        activeAchievementData = null
         activeRuntimePath = RetroAchievementsRuntimePath.DISABLED
     }
 
     fun stopEmulator() {
+        launchJob?.cancel()
         resetSessionStateOnStop()
         emulatorManager.stopEmulator()
         screenshotFrameBufferProvider.clearBuffer()
+    }
+
+    fun abortLaunchAndStopEmulator() {
+        launchJob?.cancel()
+        sessionCoroutineScope.cancel()
+        viewModelScope.launch(NonCancellable) {
+            stopEmulatorSuspend()
+        }
     }
 
     private suspend fun stopEmulatorSuspend() {
@@ -2397,8 +2414,8 @@ class EmulatorViewModel @Inject constructor(
         }
     }
 
-    fun saveStateToSlot(slot: SaveStateSlot) {
-        sessionCoroutineScope.launch {
+    fun saveStateToSlot(slot: SaveStateSlot, resumeAfter: Boolean = true): Job {
+        return sessionCoroutineScope.launch {
             (_emulatorState.value as? EmulatorState.RunningRom)?.let {
                 emulatorManager.pauseEmulator()
                 try {
@@ -2406,7 +2423,9 @@ class EmulatorViewModel @Inject constructor(
                         _toastEvent.emit(ToastEvent.StateSaveFailed)
                     }
                 } finally {
-                    resumeEmulatorIfSessionCanRun()
+                    if (resumeAfter) {
+                        resumeEmulatorIfSessionCanRun()
+                    }
                 }
             }
         }
@@ -2493,25 +2512,30 @@ class EmulatorViewModel @Inject constructor(
     suspend fun doPeriodicAutoSave(): Boolean {
         val currentState = _emulatorState.value as? EmulatorState.RunningRom ?: return false
         val rom = currentState.rom
-        val uri = saveStatesRepository.getPeriodicAutoSaveUri(rom)
-        val success = emulatorManager.saveState(uri)
-        if (success) {
-            withContext(Dispatchers.IO) {
-                val slot = SaveStateSlot(
-                    slot = SaveStateSlot.PERIODIC_AUTO_SAVE_SLOT,
-                    exists = true,
-                    lastUsedDate = java.util.Date(),
-                    screenshot = null,
-                    customName = "Periodic Auto-Save"
-                )
-                saveStatesRepository.deleteRomSaveStateScreenshot(rom, slot)
-                emulatorManager.takeScreenshot()
-                val screenshot = screenshotFrameBufferProvider.getScreenshot()
-                saveStatesRepository.setRomSaveStateScreenshot(rom, slot, screenshot)
+        emulatorManager.pauseEmulator()
+        return try {
+            val uri = saveStatesRepository.getPeriodicAutoSaveUri(rom)
+            val success = emulatorManager.saveState(uri)
+            if (success) {
+                withContext(Dispatchers.IO) {
+                    val slot = SaveStateSlot(
+                        slot = SaveStateSlot.PERIODIC_AUTO_SAVE_SLOT,
+                        exists = true,
+                        lastUsedDate = java.util.Date(),
+                        screenshot = null,
+                        customName = "Periodic Auto-Save"
+                    )
+                    saveStatesRepository.deleteRomSaveStateScreenshot(rom, slot)
+                    emulatorManager.takeScreenshot()
+                    val screenshot = screenshotFrameBufferProvider.getScreenshot()
+                    saveStatesRepository.setRomSaveStateScreenshot(rom, slot, screenshot)
+                }
+                _toastEvent.emit(ToastEvent.PeriodicAutoSaveCompleted)
             }
-            _toastEvent.emit(ToastEvent.PeriodicAutoSaveCompleted)
+            success
+        } finally {
+            resumeEmulatorIfSessionCanRun()
         }
-        return success
     }
 
     fun hasPeriodicAutoSave(rom: Rom): Boolean {
@@ -2544,12 +2568,35 @@ class EmulatorViewModel @Inject constructor(
     }
 
     fun isRetroAchievementsHardcoreActive(): Boolean {
-        return emulatorSession.isRetroAchievementsHardcoreModeEnabled || settingsRepository.isRetroAchievementsHardcoreEnabled()
+        return emulatorSession.isRetroAchievementsHardcoreModeEnabled
     }
 
     fun switchToSoftcore() {
         settingsRepository.setRetroAchievementsHardcoreEnabled(false)
         emulatorSession.switchToSoftcore()
+        retroAchievementsSessionMode = RetroAchievementsSessionMode.SOFTCORE
+        val updatedConfig = activeRuntimeBridgeConfig?.copy(hardcoreEnabled = false)
+        activeRuntimeBridgeConfig = updatedConfig
+        val achievementData = activeAchievementData
+        val runningRom = (_emulatorState.value as? EmulatorState.RunningRom)?.rom ?: currentRom
+        if (isNativeEmulationActive) {
+            sessionCoroutineScope.launch {
+                if (updatedConfig != null && achievementData != null) {
+                    runCatching {
+                        emulatorManager.setupRetroAchievements(achievementData, updatedConfig)
+                    }
+                }
+                if (runningRom != null) {
+                    runCatching {
+                        emulatorManager.updateRomEmulatorConfiguration(runningRom)
+                    }
+                }
+            }
+        }
+    }
+
+    fun setSlowMotionMultiplier(multiplier: Float?) {
+        (emulatorManager as? AndroidEmulatorManager)?.setSlowMotionMultiplier(multiplier)
     }
 
     fun getPeriodicAutoSaveIntervalMinutes(): Int {
@@ -3070,6 +3117,7 @@ class EmulatorViewModel @Inject constructor(
         startedSessionOnlineLive = false
         isRetroAchievementsOnlineSessionStarted = false
         activeRuntimeBridgeConfig = null
+        activeAchievementData = null
         activeRuntimePath = RetroAchievementsRuntimePath.DISABLED
         leaderboardDiagnosticsEnabled = false
         didReceiveRendererInitFailure = false
@@ -6112,6 +6160,7 @@ class EmulatorViewModel @Inject constructor(
                             }
 
                             activeRuntimeBridgeConfig = runtimeConfig
+                            activeAchievementData = achievementData
                             activeRuntimePath = RetroAchievementsRuntimePath.RC_CLIENT
                             logRaRuntimeSetup(
                                 stage = "running_state_ready",
@@ -6318,6 +6367,7 @@ class EmulatorViewModel @Inject constructor(
                                 null
                             }
                             activeRuntimeBridgeConfig = runtimeConfig
+                            activeAchievementData = achievementData
                             activeRuntimePath = RetroAchievementsRuntimePath.RC_CLIENT_OFFLINE
                             logRaRuntimeSetup(
                                 stage = "running_state_ready",
@@ -6723,7 +6773,8 @@ class EmulatorViewModel @Inject constructor(
     fun isEmulatorPaused(): Boolean = emulatorManager.isEmulatorPaused()
 
     fun canResumeEmulatorFromLifecycle(): Boolean {
-        return settingsReconciliationsInFlight.get() == 0 &&
+        return isHostActivityRunning &&
+            settingsReconciliationsInFlight.get() == 0 &&
             !pendingRaModalController.blocksLifecycleResume() &&
             raSessionStopGate.canResume()
     }
@@ -6924,6 +6975,7 @@ class EmulatorViewModel @Inject constructor(
         _achievementsEvent.tryEmit(RAEventUi.Reset)
         unloadAndReleaseActiveRuntimeAuthenticationLease(reason)
         activeRuntimeBridgeConfig = null
+        activeAchievementData = null
         activeRuntimePath = RetroAchievementsRuntimePath.DISABLED
         emulatorSession.updateRetroAchievementsOfflineModeEnabled(false)
         announcedMasteryKeys.clear()
@@ -7032,6 +7084,7 @@ class EmulatorViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
+        launchJob?.cancel()
         GameCompatibilityManager.clearAllActiveLaunchMarkers(context)
         detachPendingRaSubmissionSession()
         raBootstrapJob?.cancel()

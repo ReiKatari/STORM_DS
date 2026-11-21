@@ -34,6 +34,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.input.key.Key
@@ -53,6 +55,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import me.magnum.melonds.R
 import me.magnum.melonds.domain.model.SaveStateSlot
+import me.magnum.melonds.ui.common.RequestInitialFocus
 import me.magnum.melonds.ui.common.bouncingClickable
 import me.magnum.melonds.ui.theme.watermelon
 import java.text.SimpleDateFormat
@@ -70,6 +73,7 @@ fun QuickSlotCarouselOverlay(
     val colors = watermelon
     val context = LocalContext.current
     val dateFormat = remember { SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()) }
+    val firstSlotFocusRequester = remember { FocusRequester() }
 
     // Filter to slots 1..8
     val carouselSlots = remember(slots) {
@@ -173,6 +177,7 @@ fun QuickSlotCarouselOverlay(
                         slot = slot,
                         isActive = isActive,
                         dateText = slot.lastUsedDate?.let { dateFormat.format(it) } ?: stringResource(R.string.quick_slot_empty),
+                        focusRequester = if (slot.slot == carouselSlots.firstOrNull()?.slot) firstSlotFocusRequester else null,
                         onSelect = { onSelectActiveSlot(slot.slot) },
                         onSave = { onSaveToSlot(slot) },
                         onLoad = { onLoadFromSlot(slot) },
@@ -180,6 +185,8 @@ fun QuickSlotCarouselOverlay(
                 }
             }
         }
+
+        RequestInitialFocus(firstSlotFocusRequester)
     }
 }
 
@@ -188,6 +195,7 @@ private fun QuickSlotCard(
     slot: SaveStateSlot,
     isActive: Boolean,
     dateText: String,
+    focusRequester: FocusRequester?,
     onSelect: () -> Unit,
     onSave: () -> Unit,
     onLoad: () -> Unit,
@@ -291,6 +299,7 @@ private fun QuickSlotCard(
             Box(
                 modifier = Modifier
                     .weight(1f)
+                    .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
                     .clip(RoundedCornerShape(6.dp))
                     .background(if (isActive) colors.greenDim else colors.surface2)
                     .border(1.dp, if (isActive) colors.green else colors.line, RoundedCornerShape(6.dp))

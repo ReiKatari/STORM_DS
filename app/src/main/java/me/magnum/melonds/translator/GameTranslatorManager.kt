@@ -420,6 +420,9 @@ class GameTranslatorManager(
         overlay.onDismissRequested = {
             dismissTranslation()
         }
+        overlay.onRegionsEditCancelled = {
+            loadRegionsForCurrentGame()
+        }
         overlay.onRegionsSaved = { newRegions ->
             saveRegionsForCurrentGame(newRegions)
             val gameLabel = currentGameTitle ?: activity.getString(R.string.category_translator)
@@ -448,10 +451,16 @@ class GameTranslatorManager(
                         preferences = preferences,
                         onClose = { bottomSheetDialog.dismiss() },
                         onSyncOverlay = {
+                            syncOverlaySettings()
+                        },
+                        onEngineChanged = {
+                            cachedEngine = null
+                            cachedEngineType = null
                             textRecognizer.clearCache()
+                            ocrContextGraph.clearDialogueHistory()
                             lastTranslatedRawText = ""
                             lastFrameDHash = 0L
-                            translationCache.clear()
+                            translationCache.clearMemory()
                             overlayView?.clearTranslations()
                             syncOverlaySettings()
                         },
@@ -619,11 +628,9 @@ class GameTranslatorManager(
                         onPauseEmulator()
                     } catch (_: Throwable) {}
                 }
-                val w = capturedBitmap.width.toFloat()
-                val h = capturedBitmap.height.toFloat()
-                val aspect = w / h
-                val isDsAspect = kotlin.math.abs(aspect - (256f / 384f)) < 0.05f || kotlin.math.abs(aspect - (256f / 192f)) < 0.05f
-                val isNativeDsBitmap = isDsAspect || (capturedBitmap.width == 256 && capturedBitmap.height == 384)
+                val w = capturedBitmap.width
+                val h = capturedBitmap.height
+                val isNativeDsBitmap = w == 256 && (h == 384 || h == 192)
                 processCapturedFrame(capturedBitmap, forceFullscreen = isNativeDsBitmap, isAuto = isAuto, expectedGen = currentGen)
             } else {
                 overlayView?.isTranslating = false
@@ -650,8 +657,13 @@ class GameTranslatorManager(
         // Tier 2: Direct DS Framebuffer (native or scaled)
         if (capturedBitmap == null && screenshotProvider != null) {
             try {
-                capturedBitmap = withTimeoutOrNull(500) {
+                val tier2Result = withTimeoutOrNull(500) {
                     screenshotProvider.invoke()
+                }
+                if (tier2Result != null && !isBitmapBlank(tier2Result)) {
+                    capturedBitmap = tier2Result
+                } else {
+                    tier2Result?.recycle()
                 }
             } catch (_: Throwable) {
                 capturedBitmap = null
@@ -678,9 +690,10 @@ class GameTranslatorManager(
     }
 
     fun onMediaProjectionResult(resultCode: Int, data: android.content.Intent?) {
+        val shouldTranslate = pendingTranslateAfterPermission
+        pendingTranslateAfterPermission = false
         mediaProjectionCapturer.setPermissionResult(resultCode, data)
-        if (resultCode == Activity.RESULT_OK && data != null && pendingTranslateAfterPermission) {
-            pendingTranslateAfterPermission = false
+        if (resultCode == Activity.RESULT_OK && data != null && shouldTranslate) {
             mainScope.launch {
                 withTimeoutOrNull(2500) {
                     while (!ScreenCaptureService.isReady) {
@@ -722,35 +735,55 @@ class GameTranslatorManager(
         val completed = AtomicBoolean(false)
         val cancelledOrTimedOut = AtomicBoolean(false)
 
-        val result = withTimeoutOrNull(timeoutMs) {
-            suspendCancellableCoroutine<Bitmap?> { continuation ->
-                continuation.invokeOnCancellation {
-                    cancelledOrTimedOut.set(true)
-                }
-                val onCopyFinished = PixelCopy.OnPixelCopyFinishedListener { copyResult ->
-                    if (completed.compareAndSet(false, true)) {
-                        if (cancelledOrTimedOut.get() || !continuation.isActive) {
+        var result: Bitmap? = null
+        try {
+            result = withTimeoutOrNull(timeoutMs) {
+                suspendCancellableCoroutine<Bitmap?> { continuation ->
+                    continuation.invokeOnCancellation {
+                        cancelledOrTimedOut.set(true)
+                        if (completed.get() && !bitmap.isRecycled) {
                             bitmap.recycle()
-                        } else if (copyResult == PixelCopy.SUCCESS) {
-                            continuation.resume(bitmap, onCancellation = null)
                         } else {
-                            bitmap.recycle()
-                            continuation.resume(null, onCancellation = null)
+                            mainHandler.postDelayed({
+                                if (cancelledOrTimedOut.get() && !bitmap.isRecycled) {
+                                    bitmap.recycle()
+                                }
+                            }, 500L)
                         }
                     }
-                }
-                try {
-                    requestBlock(bitmap, onCopyFinished)
-                } catch (_: Throwable) {
-                    if (completed.compareAndSet(false, true)) {
-                        bitmap.recycle()
+                    val onCopyFinished = PixelCopy.OnPixelCopyFinishedListener { copyResult ->
+                        if (completed.compareAndSet(false, true)) {
+                            if (cancelledOrTimedOut.get() || !continuation.isActive) {
+                                if (!bitmap.isRecycled) bitmap.recycle()
+                            } else if (copyResult == PixelCopy.SUCCESS) {
+                                continuation.resume(bitmap, onCancellation = { _, bmp, _ ->
+                                    if (!bmp.isRecycled) bmp.recycle()
+                                })
+                            } else {
+                                if (!bitmap.isRecycled) bitmap.recycle()
+                                continuation.resume(null, onCancellation = null)
+                            }
+                        } else if (cancelledOrTimedOut.get() && !bitmap.isRecycled) {
+                            bitmap.recycle()
+                        }
                     }
-                    if (continuation.isActive) continuation.resume(null, onCancellation = null)
+                    try {
+                        requestBlock(bitmap, onCopyFinished)
+                    } catch (_: Throwable) {
+                        if (completed.compareAndSet(false, true)) {
+                            if (!bitmap.isRecycled) bitmap.recycle()
+                        }
+                        if (continuation.isActive) continuation.resume(null, onCancellation = null)
+                    }
                 }
             }
-        }
-        if (result == null) {
-            cancelledOrTimedOut.set(true)
+        } finally {
+            if (result == null) {
+                cancelledOrTimedOut.set(true)
+                if (completed.get() && !bitmap.isRecycled) {
+                    bitmap.recycle()
+                }
+            }
         }
         return result
     }
@@ -974,8 +1007,9 @@ class GameTranslatorManager(
                 if (uncachedBlocks.isNotEmpty()) {
                     try {
                         if (engine is MlKitOnDeviceTranslateEngine) {
+                            val sampleText = uncachedTexts.joinToString(" ")
                             val prepared = withTimeoutOrNull(30_000L) {
-                                engine.prepare(sourceLang, targetLang)
+                                engine.prepare(sourceLang, targetLang, sampleText)
                                 true
                             }
                             if (prepared == null) {
@@ -1038,6 +1072,9 @@ class GameTranslatorManager(
                 if (blocks.isNotEmpty()) {
                     val fullSource = blocks.map { it.originalText.trim() }.filter { it.isNotBlank() }.joinToString("\n")
                     val fullTranslation = blocks.map { it.translatedText.trim() }.filter { it.isNotBlank() }.joinToString("\n")
+                    if (fullTranslation.isNotBlank()) {
+                        preferences.edit().putString("pref_translator_last_text", fullTranslation).apply()
+                    }
                     if (fullSource.isNotBlank() && fullTranslation.isNotBlank()) {
                         backlogStore.addOrUpdate(
                             sourceText = fullSource,
@@ -1153,16 +1190,28 @@ class GameTranslatorManager(
         overlayView?.clearTranslations()
     }
 
+    fun onHostPause() {
+        stopAutoTranslate()
+    }
+
+    fun onHostResume() {
+        if (isEnabled) {
+            startAutoTranslateIfEnabled()
+        }
+    }
+
     fun onDestroy() {
         preferences.unregisterOnSharedPreferenceChangeListener(prefChangeListener)
         stopAutoTranslate()
+        translationJob?.cancel()
+        translationJob = null
+        mainScope.cancel()
         ttsManager.destroy()
         translationCache.flush()
         cachedEngine = null
         cachedEngineType = null
         textRecognizer.close()
         MlKitOnDeviceTranslateEngine.closeAll()
-        mainScope.cancel()
         mediaProjectionCapturer.onDestroy()
     }
 }

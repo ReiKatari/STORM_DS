@@ -1051,7 +1051,7 @@
     <string name="translator_enabled">自動翻訳を有効化</string>
     <string name="translator_enabled_summary">画面上のゲームテキストを自動認識して翻訳します</string>
     <string name="translator_engine">翻訳エンジン</string>
-    <string name="translator_engine_offline">オフラインハイブリッド (オンデバイス / ネット接続不要)</string>
+    <string name="translator_engine_offline" formatted="false">オフラインハイブリッド (オンデバイス / ネット接続不要)</string>
     <string name="translator_engine_yandex">Yandex Translate (無料 / ロシア語最適)</string>
     <string name="translator_engine_google">Google Translate (無料 / 高速)</string>
     <string name="translator_engine_lingva">Lingva Neural (無料 / レート制限なし)</string>
@@ -1554,7 +1554,7 @@
     <string name="label_rom_config_translator_section">自動翻訳</string>
     <string name="label_rom_config_translator_source_lang">ゲームの元の言語</string>
     <string name="label_rom_config_dual_screen_preset">デュアル画面レイアウトプリセット</string>
-    <string name="video_ai_upscale_sharpness_title">AIアップスケールとCASシャープネス (%)</string>
+    <string name="video_ai_upscale_sharpness_title" formatted="false">AIアップスケールとCASシャープネス (%)</string>
     <string name="video_ai_upscale_sharpness_summary">コントラスト適応型エッジ・テキスト鮮鋭化の強度</string>
     <string name="video_vulkan_compositor_mode_title">2D/3D コンポジターモード (Vulkan)</string>
     <string name="video_vulkan_compositor_mode_precise">高精度 (レイヤー優先度とブレンディング)</string>
@@ -1638,9 +1638,9 @@
     <string name="video_ds_lcd_grid_off">オフ</string>
     <string name="video_ds_lcd_grid_ds_lite">DS Lite ピクセル格子</string>
     <string name="video_ds_lcd_grid_dsi_xl">DSi XL RGBサブピクセルLCD</string>
-    <string name="video_low_battery_saver_title">低バッテリー自動省電力 (&lt; 20%)</string>
-    <string name="video_low_battery_saver_summary">バッテリー20%未満で解像度を1x-2xに下げSSAOを自動オフ</string>
-    <string name="video_low_battery_activated_toast">バッテリー低下 (&lt; 20%): 解像度制限・SSAO一時停止</string>
+    <string name="video_low_battery_saver_title" formatted="false">低バッテリー自動省電力 (&lt; 20%)</string>
+    <string name="video_low_battery_saver_summary" formatted="false">バッテリー20%未満で解像度を1x-2xに下げSSAOを自動オフ</string>
+    <string name="video_low_battery_activated_toast" formatted="false">バッテリー低下 (&lt; 20%): 解像度制限・SSAO一時停止</string>
     <string name="video_low_battery_restored_toast">電源回復: グラフィック設定を復元しました</string>
     <string name="mic_vu_meter_title">マイクレベルリアルタイムテスト</string>
     <string name="mic_vu_meter_idle">タップしてマイク入力とノイズゲートを確認</string>
@@ -1667,7 +1667,7 @@
     <string name="input_gyro_activation_hold_r">Rボタン長押し時</string>
     <string name="button_theme_picker_title">ボタンカラーテーマ</string>
     <string name="button_theme_picker_subtitle">ボタン背景・枠線・文字色のプレビュー</string>
-    <string name="translator_tts_speed_title">音声読み上げ速度 (%)</string>
+    <string name="translator_tts_speed_title" formatted="false">音声読み上げ速度 (%)</string>
     <string name="translator_tts_speed_summary">%1$d%% - 翻訳されたセリフの読み上げテンポ (100%% が標準)</string>
     <string name="translator_regions_reset_title">OCR領域とボタン位置をリセット</string>
     <string name="translator_regions_reset_summary">保存されたテキスト認識領域を消去し、TRボタンを初期位置に戻します</string>
@@ -1684,4 +1684,5 @@
     <string name="cheats_download_fallback_embedded">オンライン取得不可 - 内蔵 %1$d ゲームを読み込みました</string>
     <string name="cheats_import_finished">チートデータベースのインポートが完了しました</string>
     <string name="cheats_import_failed">チートデータベースのインポートに失敗しました</string>
+    <string name="rom_search_dir_saf_fallback_hint">ディレクトリにアクセスできませんでした。もう一度選択してください</string>
 </resources>

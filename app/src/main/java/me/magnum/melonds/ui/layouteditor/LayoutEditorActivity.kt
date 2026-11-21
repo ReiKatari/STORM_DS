@@ -135,6 +135,15 @@ class LayoutEditorActivity : AppCompatActivity() {
         override fun onExit() {
             finish()
         }
+
+        override fun hasUnsavedChanges(): Boolean {
+            val primaryDirty = ::layoutEditorManager.isInitialized &&
+                (layoutEditorManager.layoutEditorView.isModifiedByUser() || layoutEditorManager.layoutEditorView.canUndo())
+            val externalDirty = externalLayoutEditorPresentation?.layoutEditorManager?.layoutEditorView?.let {
+                it.isModifiedByUser() || it.canUndo()
+            } == true
+            return primaryDirty || externalDirty || viewModel.hasUnsavedChanges.value
+        }
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -221,21 +230,35 @@ class LayoutEditorActivity : AppCompatActivity() {
             lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 var lastOrientation: LayoutConfiguration.LayoutOrientation? = null
                 var lastSystemOrientation: Orientation? = null
+                var lastResetToken: Long = -1L
                 viewModel.currentLayout.collect {
                     if (it == null) {
                         layoutEditorManager.layoutEditorView.destroyLayout()
                         externalLayoutEditorPresentation?.layoutEditorManager?.layoutEditorView?.destroyLayout()
                         lastOrientation = null
                         lastSystemOrientation = null
+                        lastResetToken = -1L
                     } else {
                         handler.removeCallbacksAndMessages(null)
                         handler.post {
                             val orientationChanged = lastOrientation != it.orientation || lastSystemOrientation != it.systemOrientation
-                            if (!layoutEditorManager.layoutEditorView.isModifiedByUser() || orientationChanged) {
+                            val resetChanged = lastResetToken != it.layoutResetToken
+                            val hasAnyEdits = layoutEditorManager.layoutEditorView.isModifiedByUser() ||
+                                layoutEditorManager.layoutEditorView.canUndo() ||
+                                (externalLayoutEditorPresentation?.layoutEditorManager?.layoutEditorView?.let { v ->
+                                    v.isModifiedByUser() || v.canUndo()
+                                } == true) ||
+                                viewModel.hasUnsavedChanges.value
+                            if (resetChanged || orientationChanged || !hasAnyEdits) {
+                                val spread = viewModel.pendingButtonSpread.value
+                                val innerScale = viewModel.pendingButtonInnerScale.value
+                                layoutEditorManager.layoutEditorView.applyButtonClusterAppearance(spread, innerScale)
                                 layoutEditorManager.layoutEditorView.instantiateLayout(it.layout)
+                                externalLayoutEditorPresentation?.layoutEditorManager?.layoutEditorView?.applyButtonClusterAppearance(spread, innerScale)
                                 externalLayoutEditorPresentation?.instantiateLayout(it.layout)
                                 lastOrientation = it.orientation
                                 lastSystemOrientation = it.systemOrientation
+                                lastResetToken = it.layoutResetToken
                             }
                             setLayoutOrientation(it.orientation)
                         }
@@ -343,6 +366,10 @@ class LayoutEditorActivity : AppCompatActivity() {
                 setOnShowListener {
                     val currentConfiguration = viewModel.currentLayout.value
                     if (currentConfiguration != null) {
+                        layoutEditorManager.layoutEditorView.applyButtonClusterAppearance(
+                            viewModel.pendingButtonSpread.value,
+                            viewModel.pendingButtonInnerScale.value,
+                        )
                         instantiateLayout(currentConfiguration.layout)
                     }
                 }

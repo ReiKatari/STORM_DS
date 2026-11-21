@@ -4,7 +4,11 @@ import android.content.Context
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.ui.romlist.composables.romDisplayName
 import java.util.concurrent.ConcurrentHashMap
@@ -19,6 +23,11 @@ object QuickResumeStore {
 
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val quickSaveTimestamps = ConcurrentHashMap<String, Long>()
+    private val _quickSaveTimestampsFlow = MutableStateFlow<Map<String, Long>>(emptyMap())
+    val quickSaveTimestampsFlow: StateFlow<Map<String, Long>> = _quickSaveTimestampsFlow.asStateFlow()
+    private val quickSavesLock = Any()
+    @Volatile
+    private var quickSavesLoaded: Boolean = false
     @Volatile
     private var cachedLastEntry: LastRomEntry? = null
     @Volatile
@@ -30,6 +39,26 @@ object QuickResumeStore {
         val gameCode: String,
         val lastPlayedEpochMs: Long,
     )
+
+    fun ensureQuickSavesLoaded(context: Context) {
+        if (quickSavesLoaded) return
+        synchronized(quickSavesLock) {
+            if (quickSavesLoaded) return
+            runCatching {
+                val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                for ((key, value) in prefs.all) {
+                    if (key.startsWith(KEY_QUICK_SAVE_PREFIX) && value is Long && value > 0L) {
+                        val uriStr = key.removePrefix(KEY_QUICK_SAVE_PREFIX)
+                        if (uriStr.isNotBlank()) {
+                            quickSaveTimestamps[uriStr] = value
+                        }
+                    }
+                }
+                _quickSaveTimestampsFlow.value = quickSaveTimestamps.toMap()
+            }
+            quickSavesLoaded = true
+        }
+    }
 
     fun rememberLastRom(context: Context, rom: Rom) {
         val appContext = context.applicationContext
@@ -48,11 +77,13 @@ object QuickResumeStore {
         entryLoaded = true
 
         ioScope.launch {
+            ensureQuickSavesLoaded(appContext)
             runCatching {
                 val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 val savedQuickTs = prefs.getLong(KEY_QUICK_SAVE_PREFIX + uriString, 0L)
                 if (savedQuickTs > 0L) {
                     quickSaveTimestamps[uriString] = savedQuickTs
+                    _quickSaveTimestampsFlow.value = quickSaveTimestamps.toMap()
                 }
                 prefs.edit()
                     .putString(KEY_URI, uriString)
@@ -70,13 +101,16 @@ object QuickResumeStore {
         }
     }
 
-    fun syncFromContinuePlaying(context: Context, topRom: Rom?) {
+    suspend fun syncFromContinuePlaying(context: Context, topRom: Rom?) {
         if (topRom == null) return
         val appContext = context.applicationContext
         val topUriString = topRom.uri.toString()
         val topPlayedMs = topRom.lastPlayed?.time ?: 0L
         val existing = cachedLastEntry
         if (existing != null && existing.uriString == topUriString && topPlayedMs <= existing.lastPlayedEpochMs) {
+            withContext(Dispatchers.IO) {
+                ensureQuickSavesLoaded(appContext)
+            }
             return
         }
 
@@ -85,12 +119,14 @@ object QuickResumeStore {
         val topUri = topRom.uri
         val effectiveTs = if (topPlayedMs > 0L) topPlayedMs else System.currentTimeMillis()
 
-        ioScope.launch {
+        withContext(Dispatchers.IO) {
+            ensureQuickSavesLoaded(appContext)
             val current = getLastRomEntry(appContext)
             val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val savedQuickTs = prefs.getLong(KEY_QUICK_SAVE_PREFIX + topUriString, 0L)
             if (savedQuickTs > 0L) {
                 quickSaveTimestamps[topUriString] = savedQuickTs
+                _quickSaveTimestampsFlow.value = quickSaveTimestamps.toMap()
             }
             if (current == null || topPlayedMs > current.lastPlayedEpochMs) {
                 val entry = LastRomEntry(
@@ -108,7 +144,7 @@ object QuickResumeStore {
                         .putString(KEY_NAME, displayName)
                         .putString(KEY_GAME_CODE, gameCode)
                         .putLong(KEY_TIMESTAMP, effectiveTs)
-                        .apply()
+                        .commit()
                 }
                 runCatching {
                     QuickResumeShortcuts.publish(appContext, topUri, displayName)
@@ -122,8 +158,10 @@ object QuickResumeStore {
 
     fun markQuickSaveUpdated(context: Context, uriString: String, timestampMs: Long = System.currentTimeMillis()) {
         if (uriString.isBlank()) return
-        quickSaveTimestamps[uriString] = timestampMs
         val appContext = context.applicationContext
+        ensureQuickSavesLoaded(appContext)
+        quickSaveTimestamps[uriString] = timestampMs
+        _quickSaveTimestampsFlow.value = quickSaveTimestamps.toMap()
         ioScope.launch {
             runCatching {
                 appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -136,8 +174,10 @@ object QuickResumeStore {
 
     fun clearQuickSave(context: Context, uriString: String) {
         if (uriString.isBlank()) return
-        quickSaveTimestamps.remove(uriString)
         val appContext = context.applicationContext
+        ensureQuickSavesLoaded(appContext)
+        quickSaveTimestamps.remove(uriString)
+        _quickSaveTimestampsFlow.value = quickSaveTimestamps.toMap()
         ioScope.launch {
             runCatching {
                 appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -152,7 +192,13 @@ object QuickResumeStore {
         return quickSaveTimestamps[uriString]?.takeIf { it > 0L }
     }
 
+    fun getQuickSaveTimestamp(context: Context, uriString: String): Long? {
+        ensureQuickSavesLoaded(context)
+        return quickSaveTimestamps[uriString]?.takeIf { it > 0L }
+    }
+
     fun getLastRomEntry(context: Context): LastRomEntry? {
+        ensureQuickSavesLoaded(context)
         if (entryLoaded) {
             return cachedLastEntry
         }

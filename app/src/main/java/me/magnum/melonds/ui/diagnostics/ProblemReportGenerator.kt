@@ -35,7 +35,7 @@ import java.util.zip.ZipOutputStream
 
 object ProblemReportGenerator {
 
-    private const val APP_VERSION_FALLBACK = "8.0.2"
+    private const val APP_VERSION_FALLBACK = "8.6.0"
     private const val MAX_LOG_ATTACHMENT_BYTES = 512 * 1024L
 
     private val SENSITIVE_KEY_TOKENS = listOf(
@@ -50,6 +50,9 @@ object ProblemReportGenerator {
         "session",
         "api_key",
         "apikey",
+        "_key",
+        "deepl_key",
+        "custom_ai_key",
         "credential",
         "email",
         "ra_user",
@@ -91,7 +94,7 @@ object ProblemReportGenerator {
                 val shareIntent = Intent(Intent.ACTION_SEND).apply {
                     type = "application/zip"
                     putExtra(Intent.EXTRA_STREAM, uri)
-                    putExtra(Intent.EXTRA_SUBJECT, "STORM DS ${getAppVersion(activity)} — Problem report")
+                    putExtra(Intent.EXTRA_SUBJECT, "STORM DS ${getAppVersion(activity)} - Problem report")
                     putExtra(Intent.EXTRA_TITLE, zipFile.name)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     clipData = ClipData.newUri(activity.contentResolver, zipFile.name, uri)

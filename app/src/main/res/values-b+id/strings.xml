@@ -1219,7 +1219,7 @@ Impor ke STORM DS?</string>
     <string name="translator_enabled">Aktifkan penerjemah otomatis</string>
     <string name="translator_enabled_summary">Kenali dan terjemahkan dialog game di layar</string>
     <string name="translator_engine">Mesin penerjemah</string>
-    <string name="translator_engine_offline">Offline Hybrid (On-Device / No Internet Required)</string>
+    <string name="translator_engine_offline" formatted="false">Offline Hybrid (On-Device / No Internet Required)</string>
     <string name="translator_engine_yandex">Yandex Translate (gratis / terbaik untuk bahasa Rusia)</string>
     <string name="translator_engine_google">Google Translate (Free / Fast)</string>
     <string name="translator_engine_lingva">Lingva Neural (gratis / tanpa batas kuota)</string>
@@ -1465,7 +1465,7 @@ Impor ke STORM DS?</string>
     <string name="label_rom_config_translator_section">Penerjemah otomatis</string>
     <string name="label_rom_config_translator_source_lang">Bahasa asli game</string>
     <string name="label_rom_config_dual_screen_preset">Preset tata letak layar ganda</string>
-    <string name="video_ai_upscale_sharpness_title">Ketajaman AI-Upscale dan CAS (%)</string>
+    <string name="video_ai_upscale_sharpness_title" formatted="false">Ketajaman AI-Upscale dan CAS (%)</string>
     <string name="video_ai_upscale_sharpness_summary">Intensitas penajaman tepi dan teks adaptif kontras</string>
     <string name="video_vulkan_compositor_mode_title">Mode kompositor 2D/3D (Vulkan)</string>
     <string name="video_vulkan_compositor_mode_precise">Presisi (prioritas lapisan dan pembauran)</string>
@@ -1549,9 +1549,9 @@ Impor ke STORM DS?</string>
     <string name="video_ds_lcd_grid_off">Mati</string>
     <string name="video_ds_lcd_grid_ds_lite">DS Lite pixel matrix</string>
     <string name="video_ds_lcd_grid_dsi_xl">DSi XL RGB subpixel LCD</string>
-    <string name="video_low_battery_saver_title">Hemat daya otomatis baterai lemah (&lt; 20%)</string>
-    <string name="video_low_battery_saver_summary">Automatically lower resolution scale to 1x-2x and disable SSAO when battery drops below 20%</string>
-    <string name="video_low_battery_activated_toast">Low battery (&lt; 20%): resolution scaled down and SSAO paused</string>
+    <string name="video_low_battery_saver_title" formatted="false">Hemat daya otomatis baterai lemah (&lt; 20%)</string>
+    <string name="video_low_battery_saver_summary" formatted="false">Automatically lower resolution scale to 1x-2x and disable SSAO when battery drops below 20%</string>
+    <string name="video_low_battery_activated_toast" formatted="false">Low battery (&lt; 20%): resolution scaled down and SSAO paused</string>
     <string name="video_low_battery_restored_toast">Power restored: graphics settings resumed</string>
     <string name="mic_vu_meter_title">Uji level mikrofon langsung</string>
     <string name="mic_vu_meter_idle">Tap to test microphone input and noise gate threshold</string>
@@ -1578,7 +1578,7 @@ Impor ke STORM DS?</string>
     <string name="input_gyro_activation_hold_r">Tahan tombol R</string>
     <string name="button_theme_picker_title">Tema warna tombol</string>
     <string name="button_theme_picker_subtitle">Preview button surface, border and symbol colors</string>
-    <string name="translator_tts_speed_title">Kecepatan suara (%)</string>
+    <string name="translator_tts_speed_title" formatted="false">Kecepatan suara (%)</string>
     <string name="translator_tts_speed_summary">%1$d%% - kecepatan baca dialog terjemahan (100%% normal)</string>
     <string name="translator_regions_reset_title">Reset area OCR dan posisi tombol</string>
     <string name="translator_regions_reset_summary">Hapus area tangkapan tersimpan dan kembalikan tombol TR ke posisi awal</string>
@@ -1595,4 +1595,5 @@ Impor ke STORM DS?</string>
     <string name="cheats_download_fallback_embedded">Server tidak terjangkau - memuat %1$d game bawaan</string>
     <string name="cheats_import_finished">Basis data cheat berhasil diimpor</string>
     <string name="cheats_import_failed">Gagal mengimpor basis data cheat</string>
+    <string name="rom_search_dir_saf_fallback_hint">Tidak dapat mengakses direktori, silakan pilih lagi</string>
 </resources>

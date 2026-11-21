@@ -14,8 +14,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -280,13 +282,6 @@ internal object CoverPrefsObserver {
     }
 }
 
-fun getCustomCoverFile(context: Context, rom: Rom): java.io.File? {
-    val clean = rom.fileName.substringBeforeLast('.').trim()
-    val coversDir = java.io.File(android.os.Environment.getExternalStorageDirectory(), "STORM DS/covers")
-    val file = java.io.File(coversDir, "$clean.png")
-    return if (file.exists()) file else null
-}
-
 fun getGameTdbCover3dUrl(rom: Rom): String? {
     val code = when {
         rom.gameCode.isNotBlank() && rom.gameCode.length == 4 && rom.gameCode.all { it.isLetterOrDigit() } -> rom.gameCode.uppercase()
@@ -345,18 +340,31 @@ fun WatermelonRomArt(
     onArtLoadedChanged: (Boolean) -> Unit = {},
 ) {
     val context = LocalContext.current
-    val customCover by produceState<java.io.File?>(initialValue = null, rom.fileName) {
+    val boxArtRepository = remember(context) {
+        runCatching { me.magnum.melonds.di.entrypoint.BoxArtEntryPoint.resolve(context).boxArtRepository() }.getOrNull()
+    }
+    var coverUpdateVersion by remember(rom.uri) { mutableIntStateOf(0) }
+    val customCover by produceState<java.io.File?>(initialValue = null, rom.uri, rom.fileName, coverUpdateVersion) {
         value = withContext(Dispatchers.IO) {
-            getCustomCoverFile(context, rom)
+            boxArtRepository?.getCustomCoverFile(rom)
         }
     }
     val gameTdbUrl = remember(rom.fileName, rom.gameCode) { getGameTdbCover3dUrl(rom) }
     val gameTdb2dUrl = remember(rom.fileName, rom.gameCode) { getGameTdbCover2dUrl(rom) }
     var gameTdbFailed by remember(rom.uri) { mutableStateOf(gameTdbUrl == null || isFailedCoverUrl(gameTdbUrl)) }
     var gameTdb2dFailed by remember(rom.uri) { mutableStateOf(gameTdb2dUrl == null || isFailedCoverUrl(gameTdb2dUrl)) }
-    var boxArtFailed by remember(rom.uri, boxArtUrl) { mutableStateOf(boxArtUrl == null || isFailedCoverUrl(boxArtUrl)) }
+    var boxArtFailed by remember(rom.uri, boxArtUrl, coverUpdateVersion) { mutableStateOf(boxArtUrl == null || isFailedCoverUrl(boxArtUrl)) }
     var raFailed by remember(rom.uri, raCoverUrl) { mutableStateOf(raCoverUrl == null || isFailedCoverUrl(raCoverUrl)) }
-    var artLoaded by remember(rom.uri, boxArtUrl, raCoverUrl, customCover) { mutableStateOf(false) }
+    var artLoaded by remember(rom.uri, boxArtUrl, raCoverUrl, customCover, coverUpdateVersion) { mutableStateOf(false) }
+
+    LaunchedEffect(boxArtRepository, rom.uri) {
+        val targetUri = rom.uri.toString()
+        boxArtRepository?.coverUpdates?.collect { (uri, _) ->
+            if (uri == targetUri) {
+                coverUpdateVersion++
+            }
+        }
+    }
 
     val coverPrefs by CoverPrefsObserver.flow(context).collectAsState()
     val isScraperEnabled = coverPrefs.isScraperEnabled
@@ -370,13 +378,22 @@ fun WatermelonRomArt(
         raCoverUrl.endsWith("000001.png") ||
         raCoverUrl.endsWith("000000.png")
     )
+    val isLocalFileBoxArt = boxArtUrl?.startsWith("file://", ignoreCase = true) == true
     val activeModel: Any? = when {
         customCover != null -> customCover
+        isLocalFileBoxArt && !boxArtFailed -> boxArtUrl
         isRaCoversEnabled && raCoverUrl != null && !isRaPlaceholder && !raFailed && !isFailedCoverUrl(raCoverUrl) -> raCoverUrl
         isGameTdb3dEnabled && gameTdbUrl != null && !gameTdbFailed && !isFailedCoverUrl(gameTdbUrl) -> gameTdbUrl
         isGameTdb2dEnabled && gameTdb2dUrl != null && !gameTdb2dFailed && !isFailedCoverUrl(gameTdb2dUrl) -> gameTdb2dUrl
         isScraperEnabled && boxArtUrl != null && !boxArtFailed && !isFailedCoverUrl(boxArtUrl) -> boxArtUrl
         else -> null
+    }
+
+    LaunchedEffect(activeModel) {
+        if (activeModel == null) {
+            artLoaded = false
+            onArtLoadedChanged(false)
+        }
     }
 
     val title = romDisplayName(rom)

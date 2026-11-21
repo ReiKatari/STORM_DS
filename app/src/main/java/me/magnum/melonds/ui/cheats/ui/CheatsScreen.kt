@@ -214,6 +214,7 @@ fun CheatsScreen(
                     onGameClick = { viewModel.setSelectedGame(it) },
                     cheatsRepository = viewModel.cheatsRepo,
                     romInfo = viewModel.currentRomInfo,
+                    onCheatAttached = { viewModel.refreshGames() },
                 )
             }
             composable<CheatsNavigation.GameFolders> {

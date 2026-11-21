@@ -459,6 +459,8 @@ private:
         melonDS::VulkanPipelineProfile pipelineProfile,
         VkImage& outputImage,
         VkImageView& outputImageView);
+    void drainOrRecreateImageAvailableSemaphore(SurfaceState& surfaceState, bool imageAcquired);
+    bool recreateRetroArchFence(RetroArchResources& retro, bool signaled);
 
     u32 findMemoryType(u32 typeBits, VkMemoryPropertyFlags properties) const;
 

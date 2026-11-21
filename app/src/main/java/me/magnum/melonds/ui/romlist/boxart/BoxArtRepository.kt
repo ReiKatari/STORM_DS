@@ -171,6 +171,7 @@ class BoxArtRepository @Inject constructor(
             }
             scaledBitmap.recycle()
 
+            loadMatches()
             val cacheBustUrl = "file://${targetFile.absolutePath}?t=${targetFile.lastModified()}"
             val romKey = rom.uri.toString()
             memoryCache[romKey] = cacheBustUrl
@@ -194,6 +195,7 @@ class BoxArtRepository @Inject constructor(
                 File(fallbackDir, "$key.$ext").takeIf { it.exists() }?.delete()
             }
 
+            loadMatches()
             val romKey = rom.uri.toString()
             memoryCache.remove(romKey)
             schedulePersistMatches()
@@ -258,7 +260,15 @@ class BoxArtRepository @Inject constructor(
         if (!isMatchesLoaded) {
             loadMatches()
         }
-        memoryCache.filterValues { it != NO_MATCH }
+        memoryCache.filterValues { value ->
+            if (value == NO_MATCH) return@filterValues false
+            if (value.startsWith("file://", ignoreCase = true)) {
+                val path = value.removePrefix("file://").substringBefore('?')
+                File(path).let { it.isFile && it.length() > 0 }
+            } else {
+                true
+            }
+        }
     }
 
     private suspend fun loadMatches() {

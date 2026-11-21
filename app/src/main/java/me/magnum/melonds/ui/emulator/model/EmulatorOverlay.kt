@@ -15,4 +15,6 @@ enum class EmulatorOverlay {
     RA_PENDING_SYNC,
     PRESETS_DIALOG,
     SCREEN_LAYOUT_DIALOG,
+    SLOW_MOTION_DIALOG,
+    LID_CLOSED_OVERLAY,
 }

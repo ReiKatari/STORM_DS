@@ -81,7 +81,14 @@ class RomListActivity : AppCompatActivity() {
                         uri,
                         Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                     )
-                } catch (_: Throwable) {}
+                } catch (_: Throwable) {
+                    try {
+                        contentResolver.takePersistableUriPermission(
+                            uri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        )
+                    } catch (_: Throwable) {}
+                }
                 val rom = viewModel.getRomAtUri(uri)
                 if (rom != null) {
                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
@@ -121,6 +128,7 @@ class RomListActivity : AppCompatActivity() {
 
         emulatorLauncherValidatorDelegate = EmulatorLaunchValidatorDelegate(this, object : EmulatorLaunchValidatorDelegate.Callback {
             override fun onRomValidated(rom: Rom) {
+                viewModel.setRomLastPlayedNow(rom)
                 me.magnum.melonds.ui.quickresume.QuickResumeStore.rememberLastRom(this@RomListActivity, rom)
                 me.magnum.melonds.ui.stats.PlayStatsStore.recordLaunch(this@RomListActivity, rom)
                 val intent = EmulatorActivity.getRomEmulatorActivityIntent(this@RomListActivity, rom)
@@ -161,14 +169,6 @@ class RomListActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.romDirectoryPermissionMissingEvent.collectLatest {
-                    showRomDirectoryPermissionMissingDialog()
-                }
-            }
-        }
-
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
                 updatesViewModel.appUpdate.collectLatest {
                     when (it.type) {
                         AppUpdate.Type.PRODUCTION -> showProdUpdateAvailableDialog(it)
@@ -197,7 +197,7 @@ class RomListActivity : AppCompatActivity() {
                         is ManualUpdateResult.UpToDate -> {
                             val curVer = runCatching {
                                 packageManager.getPackageInfo(packageName, 0).versionName
-                            }.getOrNull() ?: "8.0.2"
+                            }.getOrNull() ?: "8.6.0"
                             AlertDialog.Builder(this@RomListActivity)
                                 .setTitle(R.string.v800_update_up_to_date_title)
                                 .setMessage(getString(R.string.v800_update_up_to_date_msg, curVer))
@@ -351,22 +351,7 @@ class RomListActivity : AppCompatActivity() {
                 return true
             }
             R.id.action_random_rom -> {
-                val randomRom = viewModel.getRandomRom()
-                if (randomRom != null) {
-                    val displayName = me.magnum.melonds.ui.romlist.composables.romDisplayName(randomRom)
-                    android.widget.Toast.makeText(
-                        this,
-                        getString(R.string.toast_random_rom_selected, displayName),
-                        android.widget.Toast.LENGTH_SHORT
-                    ).show()
-                    launchRom(randomRom)
-                } else {
-                    android.widget.Toast.makeText(
-                        this,
-                        getString(R.string.toast_no_roms_found),
-                        android.widget.Toast.LENGTH_SHORT
-                    ).show()
-                }
+                launchRandomRom()
                 return true
             }
             R.id.action_rom_list_refresh -> {
@@ -389,6 +374,25 @@ class RomListActivity : AppCompatActivity() {
             }
         }
         return false
+    }
+
+    internal fun launchRandomRom() {
+        val randomRom = viewModel.getRandomRom()
+        if (randomRom != null) {
+            val displayName = me.magnum.melonds.ui.romlist.composables.romDisplayName(randomRom)
+            Toast.makeText(
+                this,
+                getString(R.string.toast_random_rom_selected, displayName),
+                Toast.LENGTH_SHORT
+            ).show()
+            launchRom(randomRom)
+        } else {
+            Toast.makeText(
+                this,
+                getString(R.string.toast_no_roms_found),
+                Toast.LENGTH_SHORT
+            ).show()
+        }
     }
 
     fun checkForUpdatesManually() {
@@ -513,16 +517,22 @@ class RomListActivity : AppCompatActivity() {
                     val progressBar = it.findViewById<ProgressBar>(R.id.progress_bar_download_progress)!!
                     val progressText = it.findViewById<TextView>(R.id.text_download_progress)!!
 
-                    val progress = (downloadProgress.downloadedBytes.toDouble() / downloadProgress.totalSize) * 100
-                    val downloadedMb = (downloadProgress.downloadedBytes.toDouble() / 1024 / 1024)
-                    val totalMb = (downloadProgress.totalSize.toDouble() / 1024 / 1024)
+                    val totalSize = downloadProgress.totalSize
+                    if (totalSize > 0) {
+                        val progress = (downloadProgress.downloadedBytes.toDouble() / totalSize) * 100
+                        val downloadedMb = (downloadProgress.downloadedBytes.toDouble() / 1024 / 1024)
+                        val totalMb = (totalSize.toDouble() / 1024 / 1024)
 
-                    progressBar.apply {
-                        isIndeterminate = false
-                        this.progress = progress.toInt()
+                        progressBar.apply {
+                            isIndeterminate = false
+                            this.progress = progress.toInt()
+                        }
+
+                        progressText.text = getString(R.string.download_progress_sizes, downloadedMb, totalMb)
+                    } else {
+                        progressBar.isIndeterminate = true
+                        progressText.text = ""
                     }
-
-                    progressText.text = getString(R.string.download_progress_sizes, downloadedMb, totalMb)
                 }
                 is DownloadProgress.DownloadComplete -> {
                     it.dismiss()
@@ -565,17 +575,10 @@ class RomListActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun showRomDirectoryPermissionMissingDialog() {
-        AlertDialog.Builder(this)
-            .setTitle(R.string.rom_directory_permission_missing_title)
-            .setMessage(R.string.rom_directory_permission_missing_message)
-            .setPositiveButton(R.string.settings) { _, _ ->
-                val intent = Intent(this, SettingsActivity::class.java)
-                startActivity(intent)
-            }
-            .setNegativeButton(R.string.ok, null)
-            .setCancelable(true)
-            .show()
+    override fun onDestroy() {
+        downloadProgressDialog?.dismiss()
+        downloadProgressDialog = null
+        super.onDestroy()
     }
 
     private fun applyImmersiveMode() {

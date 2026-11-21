@@ -138,7 +138,11 @@ class FileSystemSaveStatesRepository(
         val targetFile = saveStateDirectoryDocument.findFile(targetName) ?: saveStateDirectoryDocument.createFile("*/*", targetName) ?: return
 
         context.contentResolver.openInputStream(sourceFile.uri)?.use { input ->
-            context.contentResolver.openOutputStream(targetFile.uri)?.use { output ->
+            val outStream = runCatching { context.contentResolver.openOutputStream(targetFile.uri, "wt") }.getOrNull()
+                ?: runCatching { context.contentResolver.openOutputStream(targetFile.uri, "rwt") }.getOrNull()
+                ?: runCatching { context.contentResolver.openOutputStream(targetFile.uri, "w") }.getOrNull()
+                ?: runCatching { context.contentResolver.openOutputStream(targetFile.uri) }.getOrNull()
+            outStream?.use { output ->
                 input.copyTo(output)
             }
         }

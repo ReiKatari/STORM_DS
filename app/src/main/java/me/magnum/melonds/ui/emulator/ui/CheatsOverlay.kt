@@ -50,7 +50,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -65,6 +67,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -78,6 +83,7 @@ import me.magnum.melonds.domain.model.Game
 import me.magnum.melonds.domain.model.RomInfo
 import me.magnum.melonds.domain.repositories.CheatsRepository
 import me.magnum.melonds.impl.RoomCheatsRepository
+import me.magnum.melonds.ui.common.RequestInitialFocus
 import me.magnum.melonds.ui.theme.SpaceGrotesk
 import me.magnum.melonds.ui.theme.WatermelonMono
 import me.magnum.melonds.ui.theme.watermelon
@@ -114,38 +120,55 @@ fun CheatsOverlay(
     var isLoading by remember { mutableStateOf(true) }
     var activeOverlayTab by remember { mutableIntStateOf(0) }
     var hardcoreDismissed by remember { mutableStateOf(false) }
+    val firstTabFocusRequester = remember { FocusRequester() }
 
     // Cross-region games (e.g. VACE for Russian VACV)
     var crossRegionGames by remember { mutableStateOf<List<JusrcheatGame>>(emptyList()) }
     val crossRegionExpanded = remember { mutableStateMapOf<String, Boolean>() }
 
+    suspend fun reloadCurrentCheatsSuspend() {
+        isLoading = true
+        val (resolvedGame, loadedFolders, loadedFolderCheats) = withContext(Dispatchers.IO) {
+            val foundGame = cheatsRepository.findGameForRom(romInfo)
+            if (foundGame != null) {
+                val gameFolders = cheatsRepository.getAllGameCheats(foundGame).firstOrNull() ?: emptyList()
+                val folderCheats = coroutineScope {
+                    gameFolders.map { folder ->
+                        async {
+                            val folderId = folder.id ?: 0L
+                            val cheats = cheatsRepository.getFolderCheats(folder).firstOrNull() ?: emptyList()
+                            folderId to cheats
+                        }
+                    }.awaitAll().toMap()
+                }
+                Triple(foundGame, gameFolders, folderCheats)
+            } else {
+                Triple(null, emptyList(), emptyMap())
+            }
+        }
+        game = resolvedGame
+        folders = loadedFolders
+        folderCheatsMap.clear()
+        loadedFolders.forEach { folder ->
+            val folderId = folder.id ?: 0L
+            if (!expandedFolders.containsKey(folderId)) {
+                expandedFolders[folderId] = true
+            }
+            folderCheatsMap[folderId] = loadedFolderCheats[folderId].orEmpty()
+        }
+        isLoading = false
+    }
+
     fun reloadCurrentCheats() {
         coroutineScope.launch {
-            isLoading = true
-            val resolvedGame = cheatsRepository.findGameForRom(romInfo)
-            game = resolvedGame
-            if (resolvedGame != null) {
-                val loadedFolders = cheatsRepository.getAllGameCheats(resolvedGame).firstOrNull() ?: emptyList()
-                folders = loadedFolders
-                loadedFolders.forEach { folder ->
-                    val folderId = folder.id ?: 0L
-                    if (!expandedFolders.containsKey(folderId)) {
-                        expandedFolders[folderId] = true
-                    }
-                    coroutineScope.launch {
-                        val cheats = cheatsRepository.getFolderCheats(folder).firstOrNull() ?: emptyList()
-                        folderCheatsMap[folderId] = cheats
-                    }
-                }
-            }
-            isLoading = false
+            reloadCurrentCheatsSuspend()
         }
     }
 
     LaunchedEffect(romInfo) {
-        reloadCurrentCheats()
+        reloadCurrentCheatsSuspend()
 
-        withContext(Dispatchers.IO) {
+        val loadedCrossRegion = withContext(Dispatchers.IO) {
             jusrcheatRepo.ensureInitialized()
             var matches = jusrcheatRepo.findCrossRegionFamily(romInfo.gameCode)
             if (matches.isEmpty() && romInfo.gameTitle.isNotBlank()) {
@@ -154,12 +177,12 @@ fun CheatsOverlay(
                     jusrcheatRepo.searchGames(romInfo.gameTitle)
                 }
             }
-            val loaded = matches.mapNotNull { jusrcheatRepo.loadGame(it) }
-            crossRegionGames = loaded
-            // Expand first cross-region game by default if current ROM has 0 cheats
-            if (folders.isEmpty() && loaded.isNotEmpty()) {
-                crossRegionExpanded[loaded.first().gameId] = true
-            }
+            matches.mapNotNull { jusrcheatRepo.loadGame(it) }
+        }
+        crossRegionGames = loadedCrossRegion
+        // Expand first cross-region game by default if current ROM has 0 cheats
+        if (folders.isEmpty() && loadedCrossRegion.isNotEmpty()) {
+            crossRegionExpanded[loadedCrossRegion.first().gameId] = true
         }
     }
 
@@ -321,7 +344,7 @@ fun CheatsOverlay(
                                 Spacer(Modifier.width(8.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = "Активен режим Hardcore — читы заблокированы",
+                                        text = "Активен режим Hardcore - читы заблокированы",
                                         color = colors.text,
                                         fontFamily = SpaceGrotesk,
                                         fontSize = 12.sp,
@@ -349,7 +372,7 @@ fun CheatsOverlay(
                             title = stringResource(R.string.v791_jusrcheat_tab_game_cheats),
                             isSelected = activeOverlayTab == 0,
                             onClick = { activeOverlayTab = 0 },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).focusRequester(firstTabFocusRequester),
                             colors = colors
                         )
                         TabHeaderButton(
@@ -698,6 +721,11 @@ fun CheatsOverlay(
                                         reloadCurrentCheats()
                                         onCheatsUpdated()
                                     },
+                                    isHardcoreActive = isHardcoreActive,
+                                    onSwitchToSoftcore = {
+                                        onSwitchToSoftcore?.invoke()
+                                        hardcoreDismissed = true
+                                    },
                                 )
                             }
                         }
@@ -711,6 +739,8 @@ fun CheatsOverlay(
                 modifier = Modifier.align(Alignment.CenterHorizontally),
             )
         }
+
+        RequestInitialFocus(firstTabFocusRequester)
     }
 }
 
@@ -759,7 +789,7 @@ private fun CrossRegionCheatRow(
     onSwitchToSoftcore: (() -> Unit)?,
     onCheatAttached: () -> Unit
 ) {
-    var isEnabled by remember { mutableStateOf(cheat.enabled) }
+    var isEnabled by remember(cheat, sourceGameId) { mutableStateOf(cheat.enabled) }
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
 

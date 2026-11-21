@@ -25,6 +25,7 @@ data class RomBrowserUiState(
     val canNavigateUp: Boolean,
     val isSearchActive: Boolean,
     val isAtVirtualRoot: Boolean,
+    val searchQuery: String = "",
     val viewMode: RomViewMode = RomViewMode.GRID,
     val filter: RomFilter = RomFilter.ALL,
     val sortingMode: SortingMode = SortingMode.ALPHABETICALLY,

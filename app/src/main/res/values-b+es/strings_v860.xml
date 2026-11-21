@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="decrypt_rom_replace_description">Esta ROM de DSi usa cifrado Modcrypt. El descifrado reemplazará el archivo en el almacenamiento con una copia descifrada.</string>
+    <string name="decrypt_rom_replace_confirm">Descifrar y reemplazar</string>
+    <string name="decrypt_rom_result_success_title">ROM descifrada</string>
+    <string name="decrypt_rom_result_success_message">La ROM de DSi se ha descifrado correctamente y está lista para jugar.</string>
+    <string name="decrypt_rom_launch_now">Iniciar ahora</string>
+    <string name="decrypt_rom_result_error_title">Error de descifrado</string>
+    <string name="decrypt_rom_result_error_message">No se pudo descifrar la ROM: %1$s</string>
+    <string name="decrypt_rom_err_read">Error al leer el archivo ROM</string>
+    <string name="decrypt_rom_err_write">Error al escribir el archivo ROM descifrado</string>
+    <string name="decrypt_rom_err_not_dsi">Este archivo no es una ROM de Nintendo DSi válida</string>
+    <string name="decrypt_rom_err_too_small">El archivo ROM es demasiado pequeño o está dañado</string>
+    <string name="decrypt_rom_err_bounds">La región Modcrypt excede los límites del archivo ROM</string>
+    <string name="decrypt_rom_err_validation">Error al validar el encabezado de la ROM descifrada</string>
+    <string name="rom_list_random_rom">Juego aleatorio</string>
+    <string name="rom_list_check_updates">Buscar actualizaciones</string>
+    <string name="ra_offline_status_not_logged_in">No has iniciado sesión en RetroAchievements</string>
+    <string name="ra_offline_status_no_cache">No hay datos de logros en caché para el modo sin conexión</string>
+    <string name="stats_export_share_chooser">Compartir estadísticas</string>
+    <string name="wfc_lobby_activated_toast">Sala WFC %1$s activada (DNS: %2$s)</string>
+    <string name="ram_finder_invalid_number">Introduce un número válido</string>
+</resources>

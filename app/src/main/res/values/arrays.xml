@@ -347,11 +347,11 @@
     </string-array>
 
     <string-array name="resolution_hud_position_options">
-        <item>Скрыто</item>
-        <item>Верхний левый угол</item>
-        <item>Верхний правый угол</item>
-        <item>Нижний левый угол</item>
-        <item>Нижний правый угол</item>
+        <item>Hidden</item>
+        <item>Top-left corner</item>
+        <item>Top-right corner</item>
+        <item>Bottom-left corner</item>
+        <item>Bottom-right corner</item>
     </string-array>
 
     <string-array name="resolution_hud_position_values">
@@ -363,31 +363,31 @@
     </string-array>
 
     <string-array name="translator_local_voice_model_options">
-        <item>🎭 24 голоса (Нейро-автораспределение по контексту и персонажам)</item>
-        <item>🎙️ Дмитрий (Нейро-Баритон)</item>
-        <item>🎙️ Елена (Нейро-Сопрано)</item>
-        <item>🗡️ Молодой герой (Звонкий тенор)</item>
-        <item>🦇 Темный рыцарь / Бэтмен (Хриплый бас)</item>
-        <item>👹 Босс / Тиран / Баузер (Тяжелый бас)</item>
-        <item>🃏 Джокер / Псих / Трикстер (Маниакальный тенор)</item>
-        <item>💀 Демон бездны / Дракула (Глубокий бас)</item>
-        <item>📜 Мудрый старец / Профессор (Хриплый)</item>
-        <item>👦 Мальчик / Спутник / Люк Тритон (Звонкий)</item>
-        <item>👧 Девочка / Перл Фей (Нежный детский)</item>
-        <item>👑 Принцесса / Королева Зельда (Величественный)</item>
-        <item>💰 Торговец / Том Нук (Услужливый бодрый)</item>
-        <item>🛡️ Стражник / Капитан (Командный суровый)</item>
-        <item>🤖 Робот / Киборг / Покедекс (Синтетический)</item>
-        <item>📖 Рассказчик / Летописец (Бархатный)</item>
-        <item>🎀 Цундере / Франциска (Капризное сопрано)</item>
-        <item>🤫 Таинственный шепот / Тень (Мистический)</item>
-        <item>✨ Веселая фея / Нави (Игривый высокий альт)</item>
-        <item>🏴‍☠️ Капитан пиратов (Грубый рычащий бас)</item>
-        <item>🔬 Безумный ученый / Вайли (Эксцентричный)</item>
-        <item>🎩 Джентльмен / Лейтон / Райт (Элегантный)</item>
-        <item>👻 Призрак / Фантом (Эфирный эхо-тон)</item>
-        <item>⚔️ Благородный рыцарь / Мета Найт (Твердый баритон)</item>
-        <item>🕊️ Богиня / Ангел Палютена (Священный кристальный)</item>
+        <item>🎭 24 voices (Auto neural distribution by context and character)</item>
+        <item>🎙️ Dmitry (Neural Baritone)</item>
+        <item>🎙️ Elena (Neural Soprano)</item>
+        <item>🗡️ Young Hero (Bright Tenor)</item>
+        <item>🦇 Dark Knight / Batman (Gravelly Bass)</item>
+        <item>👹 Boss / Tyrant / Bowser (Heavy Bass)</item>
+        <item>🃏 Joker / Trickster (Manic Tenor)</item>
+        <item>💀 Abyss Demon / Dracula (Deep Bass)</item>
+        <item>📜 Wise Elder / Professor (Raspy)</item>
+        <item>👦 Young Boy / Companion / Luke Triton (Clear)</item>
+        <item>👧 Young Girl / Pearl Fey (Soft Youthful)</item>
+        <item>👑 Princess / Queen Zelda (Regal)</item>
+        <item>💰 Merchant / Tom Nook (Eager Cheerful)</item>
+        <item>🛡️ Guard / Captain (Stern Commanding)</item>
+        <item>🤖 Robot / Cyborg / Pokedex (Synthetic)</item>
+        <item>📖 Narrator / Chronicler (Velvet)</item>
+        <item>🎀 Tsundere / Franziska (Haughty Soprano)</item>
+        <item>🤫 Mysterious Whisper / Shadow (Mystical)</item>
+        <item>✨ Cheerful Fairy / Navi (Playful High Alto)</item>
+        <item>🏴‍☠️ Pirate Captain (Gruff Growling Bass)</item>
+        <item>🔬 Mad Scientist / Dr. Wily (Eccentric)</item>
+        <item>🎩 Gentleman / Layton / Wright (Refined)</item>
+        <item>👻 Ghost / Phantom (Ethereal Echo)</item>
+        <item>⚔️ Noble Knight / Meta Knight (Firm Baritone)</item>
+        <item>🕊️ Goddess / Angel Palutena (Sacred Crystal)</item>
     </string-array>
 
     <string-array name="translator_local_voice_model_values">

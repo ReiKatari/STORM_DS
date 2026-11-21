@@ -7,6 +7,7 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import me.magnum.melonds.MelonEmulator
 import me.magnum.melonds.domain.model.Input
+import me.magnum.melonds.ui.emulator.sensor.RealWorldPeripheralSensorBridge
 import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.sign
@@ -139,6 +140,7 @@ class MotionSensorManager(
         registeredMotionSensors = false
         registeredLightSensor = false
         registeredStepCounterSensor = false
+        lastStepCounterBaseline = null
         if (isTouchingScreen) {
             MelonEmulator.onScreenRelease()
             isTouchingScreen = false
@@ -173,10 +175,26 @@ class MotionSensorManager(
     }
 
     private fun resetDirectionalTilt() {
-        if (lastLeft) { onDirectionalTilt?.invoke(Input.LEFT, false); lastLeft = false }
-        if (lastRight) { onDirectionalTilt?.invoke(Input.RIGHT, false); lastRight = false }
-        if (lastUp) { onDirectionalTilt?.invoke(Input.UP, false); lastUp = false }
-        if (lastDown) { onDirectionalTilt?.invoke(Input.DOWN, false); lastDown = false }
+        if (lastLeft) {
+            onDirectionalTilt?.invoke(Input.LEFT, false)
+            MelonEmulator.onInputUp(Input.LEFT)
+            lastLeft = false
+        }
+        if (lastRight) {
+            onDirectionalTilt?.invoke(Input.RIGHT, false)
+            MelonEmulator.onInputUp(Input.RIGHT)
+            lastRight = false
+        }
+        if (lastUp) {
+            onDirectionalTilt?.invoke(Input.UP, false)
+            MelonEmulator.onInputUp(Input.UP)
+            lastUp = false
+        }
+        if (lastDown) {
+            onDirectionalTilt?.invoke(Input.DOWN, false)
+            MelonEmulator.onInputUp(Input.DOWN)
+            lastDown = false
+        }
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
@@ -193,19 +211,7 @@ class MotionSensorManager(
     private fun processLightSensor(values: FloatArray) {
         if (!solarSensorAutoEnabled || values.isEmpty()) return
         val lux = values[0].coerceAtLeast(0f)
-        val bars = when {
-            lux < 5f -> 0
-            lux < 25f -> 1
-            lux < 60f -> 2
-            lux < 150f -> 3
-            lux < 350f -> 4
-            lux < 750f -> 5
-            lux < 1500f -> 6
-            lux < 3000f -> 7
-            lux < 6000f -> 8
-            lux < 12000f -> 9
-            else -> 10
-        }
+        val bars = RealWorldPeripheralSensorBridge.luxToSolarBars(lux)
         runCatching { MelonEmulator.setSolarSensorLightLevel(bars) }
     }
 
@@ -213,11 +219,15 @@ class MotionSensorManager(
         if (!pedometerAutoEnabled || values.isEmpty()) return
         val totalSteps = values[0].toInt()
         val prev = lastStepCounterBaseline
-        if (prev != null && totalSteps > prev) {
-            val delta = (totalSteps - prev).coerceIn(1, 500)
+        if (prev == null || totalSteps < prev) {
+            lastStepCounterBaseline = totalSteps
+            return
+        }
+        val delta = (totalSteps - prev).coerceAtLeast(0)
+        if (delta > 0) {
+            lastStepCounterBaseline = totalSteps
             runCatching { MelonEmulator.addIrPedometerSteps(delta) }
         }
-        lastStepCounterBaseline = totalSteps
     }
 
     private fun processAccelerometer(values: FloatArray) {

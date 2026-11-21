@@ -38,23 +38,26 @@ private data class LayoutMenuItem(
 fun LayoutEditorMenuDialog(
     snapToGrid: Boolean = true,
     canUndo: Boolean = false,
+    canSaveAsNew: Boolean = true,
     onToggleSnapToGrid: (Boolean) -> Unit = {},
     onDismiss: () -> Unit,
     onOptionSelected: (MenuOption) -> Unit,
 ) {
     val colors = LocalWatermelonColors.current
 
-    val menuItems = listOf(
-        LayoutMenuItem(MenuOption.UNDO, R.string.action_layout_undo, Icons.Filled.Undo),
-        LayoutMenuItem(MenuOption.MULTI_SELECT, R.string.action_layout_multiselect, Icons.Filled.Checklist),
-        LayoutMenuItem(MenuOption.LIVE_TEST, R.string.action_layout_live_test, Icons.Filled.SportsEsports),
-        LayoutMenuItem(MenuOption.PROPERTIES, R.string.properties, Icons.Filled.Settings),
-        LayoutMenuItem(MenuOption.BACKGROUNDS, R.string.background, Icons.Filled.Image),
-        LayoutMenuItem(MenuOption.REVERT, R.string.revert_changes, Icons.Filled.Restore),
-        LayoutMenuItem(MenuOption.SAVE_AS_NEW, R.string.save_as_new, Icons.Filled.Add),
-        LayoutMenuItem(MenuOption.SAVE_AND_EXIT, R.string.save_and_exit, Icons.Filled.Check),
-        LayoutMenuItem(MenuOption.EXIT_WITHOUT_SAVING, R.string.exit_without_saving, Icons.Filled.Close),
-    )
+    val menuItems = buildList {
+        add(LayoutMenuItem(MenuOption.UNDO, R.string.action_layout_undo, Icons.Filled.Undo))
+        add(LayoutMenuItem(MenuOption.MULTI_SELECT, R.string.action_layout_multiselect, Icons.Filled.Checklist))
+        add(LayoutMenuItem(MenuOption.LIVE_TEST, R.string.action_layout_live_test, Icons.Filled.SportsEsports))
+        add(LayoutMenuItem(MenuOption.PROPERTIES, R.string.properties, Icons.Filled.Settings))
+        add(LayoutMenuItem(MenuOption.BACKGROUNDS, R.string.background, Icons.Filled.Image))
+        add(LayoutMenuItem(MenuOption.REVERT, R.string.revert_changes, Icons.Filled.Restore))
+        if (canSaveAsNew) {
+            add(LayoutMenuItem(MenuOption.SAVE_AS_NEW, R.string.save_as_new, Icons.Filled.Add))
+        }
+        add(LayoutMenuItem(MenuOption.SAVE_AND_EXIT, R.string.save_and_exit, Icons.Filled.Check))
+        add(LayoutMenuItem(MenuOption.EXIT_WITHOUT_SAVING, R.string.exit_without_saving, Icons.Filled.Close))
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -184,9 +187,11 @@ fun LayoutEditorMenuDialog(
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         items(menuItems) { item ->
+                            val isEnabled = item.option != MenuOption.UNDO || canUndo
                             val isDestructive = item.option == MenuOption.EXIT_WITHOUT_SAVING || item.option == MenuOption.REVERT
                             val isPrimary = item.option == MenuOption.SAVE_AND_EXIT || item.option == MenuOption.SAVE_AS_NEW
                             val tintColor = when {
+                                !isEnabled -> colors.text3
                                 isDestructive -> colors.red
                                 isPrimary -> colors.green
                                 else -> colors.text
@@ -196,13 +201,16 @@ fun LayoutEditorMenuDialog(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(12.dp))
-                                    .background(if (isPrimary) colors.green.copy(alpha = 0.10f) else colors.surface2)
+                                    .background(
+                                        if (isPrimary && isEnabled) colors.green.copy(alpha = 0.10f)
+                                        else colors.surface2.copy(alpha = if (isEnabled) 1f else 0.55f)
+                                    )
                                     .border(
                                         1.dp,
-                                        if (isPrimary) colors.green.copy(alpha = 0.4f) else colors.line,
+                                        if (isPrimary && isEnabled) colors.green.copy(alpha = 0.4f) else colors.line,
                                         RoundedCornerShape(12.dp)
                                     )
-                                    .clickable {
+                                    .clickable(enabled = isEnabled) {
                                         onOptionSelected(item.option)
                                     }
                                     .padding(horizontal = 14.dp, vertical = 12.dp),

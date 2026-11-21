@@ -536,6 +536,7 @@ std::optional<DSi_NAND::NANDImage> loadNAND(const EmulatorConfiguration& configu
         }
         else
         {
+            CloseFile(nandfile);
             Log(Warn, "Failed to initialize configured DSi NAND image at %s, falling back to synthetic NAND\n", path.c_str());
         }
     }
@@ -575,6 +576,10 @@ std::optional<DSi_NAND::NANDImage> loadNAND(const EmulatorConfiguration& configu
             {
                 Log(Info, "Synthetic DSi NAND fallback successfully initialized\n");
                 nandImage = std::move(synImg);
+            }
+            else
+            {
+                CloseFile(synFile);
             }
         }
     }
@@ -618,7 +623,11 @@ std::optional<DSi_NAND::NANDImage> loadNAND(const EmulatorConfiguration& configu
 
 std::optional<FATStorage> loadSDCard(SdCardSettings settings) noexcept
 {
-    return std::nullopt;
+    auto args = getSDCardArgs(settings);
+    if (!args)
+        return std::nullopt;
+
+    return FATStorage(std::move(*args));
 }
 
 std::optional<std::unique_ptr<NDSArgs>> BuildArgsFromConfiguration(const EmulatorConfiguration& configuration, int instanceId)

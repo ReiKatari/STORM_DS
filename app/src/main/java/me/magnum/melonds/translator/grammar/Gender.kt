@@ -9,7 +9,7 @@ enum class Gender {
         get() = when (this) {
             MALE -> "♂"
             FEMALE -> "♀"
-            NEUTRAL -> "—"
+            NEUTRAL -> "-"
         }
 
     companion object {

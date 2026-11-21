@@ -31,4 +31,5 @@
     <string name="mic_agc_noise_gate_title">Noise Gate adaptativo e AGC do microfone</string>
     <string name="mic_agc_noise_gate_summary">Filtro DC, supressão de ruído ambiente e normalização vocal</string>
     <string name="v790_vulkan_pipeline_cache_status">Cache de pipelines Vulkan ativo</string>
+    <string name="v790_ram_value_required">Valor obrigatório</string>
 </resources>

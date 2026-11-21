@@ -10,6 +10,7 @@ import me.magnum.melonds.MelonDSAndroidInterface
 import me.magnum.melonds.MelonEmulator
 import me.magnum.melonds.common.network.SharedOkHttpClient
 import me.magnum.melonds.domain.model.VulkanDriverConfiguration
+import me.magnum.melonds.domain.model.VulkanDriverInfo
 import me.magnum.melonds.domain.model.VulkanDriverMode
 import me.magnum.melonds.domain.repositories.SettingsRepository
 import okhttp3.Request
@@ -51,6 +52,7 @@ class AdrenoVulkanDriverManager(
 
     companion object {
         private const val MAX_META_SIZE_BYTES = 500_000L
+        private const val MAX_EXTRACTED_BYTES = 512L * 1024L * 1024L
         private const val MIN_ARCHIVE_BYTES = 1024L
         private const val STREAM_BUFFER_BYTES = 65_536
         private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 14; STORM DS) AppleWebKit/537.36 Chrome/128.0.0.0 Mobile Safari/537.36"
@@ -238,11 +240,15 @@ class AdrenoVulkanDriverManager(
             val installedRoot = File(importRoot, "driver-$finalDriverId")
 
             if (duplicateDriver != null) {
+                deletePipelineCacheForDriver(duplicateDriver)
                 runCatching {
-                    File(duplicateDriver.driverDir).parentFile?.let { oldDir ->
-                        if (oldDir != installedRoot && oldDir.name.startsWith("driver-")) {
-                            oldDir.deleteRecursively()
-                        }
+                    val importRootCanonical = importRoot.canonicalFile
+                    var oldDir: File? = File(duplicateDriver.driverDir).canonicalFile
+                    while (oldDir != null && oldDir.parentFile != importRootCanonical) {
+                        oldDir = oldDir.parentFile
+                    }
+                    if (oldDir != null && oldDir != installedRoot.canonicalFile && oldDir.name.startsWith("driver-")) {
+                        oldDir.deleteRecursively()
                     }
                 }
             }
@@ -295,10 +301,13 @@ class AdrenoVulkanDriverManager(
     fun removeDriver(id: String) {
         val target = settingsRepository.getInstalledVulkanDrivers().firstOrNull { it.id == id }
         val importRoot = File(context.filesDir, "adreno-drivers").canonicalFile
+        target?.let { deletePipelineCacheForDriver(it) }
         target?.driverDir?.let { dirPath ->
             runCatching {
-                val dir = File(dirPath).canonicalFile
-                val rootCandidate = if (dir.parentFile == importRoot) dir else dir.parentFile
+                var rootCandidate: File? = File(dirPath).canonicalFile
+                while (rootCandidate != null && rootCandidate.parentFile != importRoot) {
+                    rootCandidate = rootCandidate.parentFile
+                }
                 if (rootCandidate != null && rootCandidate != importRoot && rootCandidate.path.startsWith(importRoot.path + File.separator)) {
                     rootCandidate.deleteRecursively()
                 }
@@ -311,9 +320,22 @@ class AdrenoVulkanDriverManager(
 
     fun removeAllDrivers() {
         File(context.filesDir, "adreno-drivers").deleteRecursively()
+        clearDriverPipelineCaches()
         settingsRepository.clearCustomVulkanDrivers()
         updateActiveDriverPipelineCachePath()
         syncNativeDriverConfiguration()
+    }
+
+    private fun deletePipelineCacheForDriver(driver: VulkanDriverInfo) {
+        val cacheDir = File(context.cacheDir, "vulkan_pipeline_cache_v841")
+        if (!cacheDir.isDirectory) return
+        val keys = listOfNotNull(
+            driver.displayName.takeIf { it.isNotBlank() },
+            driver.driverName.takeIf { it.isNotBlank() },
+        ).map { it.replace(Regex("[^a-zA-Z0-9._-]"), "_") }.distinct()
+        keys.forEach { key ->
+            File(cacheDir, "${key}_v841.bin").takeIf { it.isFile }?.delete()
+        }
     }
 
     suspend fun downloadAndInstallFromUrls(
@@ -421,11 +443,15 @@ class AdrenoVulkanDriverManager(
 
     private fun extractZipStream(input: InputStream, destination: File) {
         val destinationCanonical = destination.canonicalFile
+        var totalExtractedBytes = 0L
+        val buffer = ByteArray(STREAM_BUFFER_BYTES)
         ZipInputStream(input.buffered(STREAM_BUFFER_BYTES)).use { zip ->
             while (true) {
                 val entry = zip.nextEntry ?: break
                 val outputFile = File(destinationCanonical, entry.name).canonicalFile
-                if (!outputFile.path.startsWith(destinationCanonical.path + File.separator)) {
+                val isInsideDestination = outputFile.path.startsWith(destinationCanonical.path + File.separator) ||
+                    (entry.isDirectory && outputFile == destinationCanonical)
+                if (!isInsideDestination) {
                     throw ImportException(ImportException.Reason.InvalidZip)
                 }
 
@@ -434,7 +460,15 @@ class AdrenoVulkanDriverManager(
                 } else {
                     outputFile.parentFile?.mkdirs()
                     outputFile.outputStream().use { output ->
-                        zip.copyTo(output, bufferSize = STREAM_BUFFER_BYTES)
+                        while (true) {
+                            val read = zip.read(buffer)
+                            if (read == -1) break
+                            totalExtractedBytes += read
+                            if (totalExtractedBytes > MAX_EXTRACTED_BYTES) {
+                                throw ImportException(ImportException.Reason.InvalidArchive)
+                            }
+                            output.write(buffer, 0, read)
+                        }
                     }
                 }
                 zip.closeEntry()
@@ -477,11 +511,29 @@ class AdrenoVulkanDriverManager(
     }
 
     private fun selectDriverFile(root: File, metadata: DriverMetadata): File {
-        val soFiles = root.walkTopDown()
+        val allSoFiles = root.walkTopDown()
             .filter { it.isFile && it.extension.equals("so", ignoreCase = true) }
             .toList()
-        if (soFiles.isEmpty()) {
+        if (allSoFiles.isEmpty()) {
             throw ImportException(ImportException.Reason.NoDriver)
+        }
+
+        val arm64Files = allSoFiles.filter { file ->
+            val rel = file.relativeTo(root).path.replace('\\', '/').lowercase()
+            rel.contains("/arm64-v8a/") || rel.startsWith("arm64-v8a/") ||
+                rel.contains("/arm64/") || rel.startsWith("arm64/")
+        }
+        val nonUnsupportedAbiFiles = allSoFiles.filterNot { file ->
+            val rel = file.relativeTo(root).path.replace('\\', '/').lowercase()
+            rel.contains("/armeabi-v7a/") || rel.startsWith("armeabi-v7a/") ||
+                rel.contains("/armeabi/") || rel.startsWith("armeabi/") ||
+                rel.contains("/x86_64/") || rel.startsWith("x86_64/") ||
+                rel.contains("/x86/") || rel.startsWith("x86/")
+        }
+        val soFiles = when {
+            arm64Files.isNotEmpty() -> arm64Files
+            nonUnsupportedAbiFiles.isNotEmpty() -> nonUnsupportedAbiFiles
+            else -> allSoFiles
         }
 
         // Handle multi-SO bundles (such as STORM DRIVER containing both gen8 and a7xx binaries)

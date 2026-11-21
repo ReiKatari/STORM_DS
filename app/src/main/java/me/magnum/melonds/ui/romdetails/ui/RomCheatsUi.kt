@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.magnum.melonds.R
@@ -103,9 +104,11 @@ fun RomCheatsUi(
     var showJusrcheatBrowser by remember { mutableStateOf(false) }
 
     val expandedFolders = remember(rom) { mutableStateMapOf<Long, Boolean>() }
+    var refreshJob by remember(rom) { mutableStateOf<Job?>(null) }
 
     fun refreshCheats() {
-        coroutineScope.launch(Dispatchers.IO) {
+        refreshJob?.cancel()
+        refreshJob = coroutineScope.launch(Dispatchers.IO) {
             isLoading = true
             val parsedInfo = parseRomInfoDeep(context, rom)
             romInfo = parsedInfo
@@ -165,8 +168,14 @@ fun RomCheatsUi(
             val cheatsDir = File(rootBase, "cheats").apply { mkdirs() }
             val usrCheat = File(cheatsDir, "usrcheat.dat")
             if (usrCheat.exists() && usrCheat.length() > 0) {
-                runCatching {
-                    cheatsRepository.importCheats(Uri.fromFile(usrCheat))
+                val prefs = context.getSharedPreferences("storm_cheats_auto_import", android.content.Context.MODE_PRIVATE)
+                val currentSig = "${usrCheat.length()}_${usrCheat.lastModified()}"
+                val lastSig = prefs.getString("usrcheat_auto_import_sig", null)
+                if (currentSig != lastSig) {
+                    runCatching {
+                        cheatsRepository.importCheats(Uri.fromFile(usrCheat))
+                        prefs.edit().putString("usrcheat_auto_import_sig", currentSig).apply()
+                    }
                 }
             }
         }
@@ -194,6 +203,10 @@ fun RomCheatsUi(
                         val target = File(cheatsDir, targetName)
                         FileOutputStream(target).use { output ->
                             input.copyTo(output)
+                        }
+                        if (targetName == "usrcheat.dat") {
+                            val prefs = context.getSharedPreferences("storm_cheats_auto_import", android.content.Context.MODE_PRIVATE)
+                            prefs.edit().putString("usrcheat_auto_import_sig", "${target.length()}_${target.lastModified()}").apply()
                         }
                     }
                 }
@@ -267,6 +280,8 @@ fun RomCheatsUi(
                                     tempCheatFile.delete()
                                 }
                                 cheatsRepository.importCheats(Uri.fromFile(targetCheatFile))
+                                val prefs = context.getSharedPreferences("storm_cheats_auto_import", android.content.Context.MODE_PRIVATE)
+                                prefs.edit().putString("usrcheat_auto_import_sig", "${targetCheatFile.length()}_${targetCheatFile.lastModified()}").apply()
                                 downloaded = true
                             } else {
                                 tempCheatFile.delete()
@@ -296,7 +311,6 @@ fun RomCheatsUi(
     fun toggleCheat(cheat: Cheat, isEnabled: Boolean) {
         coroutineScope.launch(Dispatchers.IO) {
             cheatsRepository.updateCheatsStatus(listOf(cheat.copy(enabled = isEnabled)))
-            refreshCheats()
         }
     }
 
@@ -661,26 +675,29 @@ private fun parseRomInfoDeep(context: android.content.Context, rom: Rom): RomInf
 
     return try {
         val rawStream = context.contentResolver.openInputStream(rom.uri) ?: return null
-        val buffered = rawStream.buffered()
-        buffered.mark(4)
-        val magic = ByteArray(4)
-        val read = buffered.read(magic)
-        buffered.reset()
+        rawStream.buffered().use { buffered ->
+            buffered.mark(4)
+            val magic = ByteArray(4)
+            val read = buffered.read(magic)
+            buffered.reset()
 
-        val isZip = read == 4 && magic[0] == 'P'.code.toByte() && magic[1] == 'K'.code.toByte()
-        if (isZip) {
-            val zip = ZipInputStream(buffered)
-            var entry = zip.nextEntry
-            while (entry != null) {
-                val name = entry.name.lowercase()
-                if (name.endsWith(".nds") || name.endsWith(".dsi") || name.endsWith(".ids")) {
-                    return RomProcessor.getRomInfo(rom, zip)
+            val isZip = read == 4 && magic[0] == 'P'.code.toByte() && magic[1] == 'K'.code.toByte()
+            if (isZip) {
+                ZipInputStream(buffered).use { zip ->
+                    var entry = zip.nextEntry
+                    while (entry != null) {
+                        val name = entry.name.lowercase()
+                        if (name.endsWith(".nds") || name.endsWith(".dsi") || name.endsWith(".ids")) {
+                            return RomProcessor.getRomInfo(rom, zip)
+                        }
+                        zip.closeEntry()
+                        entry = zip.nextEntry
+                    }
+                    null
                 }
-                entry = zip.nextEntry
+            } else {
+                RomProcessor.getRomInfo(rom, buffered)
             }
-            null
-        } else {
-            buffered.use { RomProcessor.getRomInfo(rom, it) }
         }
     } catch (_: Throwable) {
         val code = extractDsiCode(rom)

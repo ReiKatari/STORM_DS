@@ -1202,7 +1202,7 @@ Importarli in STORM DS?</string>
     <string name="translator_enabled">Abilita traduttore automatico</string>
     <string name="translator_enabled_summary">Riconosci e traduci i dialoghi del gioco sullo schermo</string>
     <string name="translator_engine">Motore di traduzione</string>
-    <string name="translator_engine_offline">Offline Hybrid (On-Device / No Internet Required)</string>
+    <string name="translator_engine_offline" formatted="false">Offline Hybrid (On-Device / No Internet Required)</string>
     <string name="translator_engine_yandex">Yandex Translate (gratuito / ideale per il russo)</string>
     <string name="translator_engine_google">Google Translate (Free / Fast)</string>
     <string name="translator_engine_lingva">Lingva Neural (gratuito / senza limiti)</string>
@@ -1448,7 +1448,7 @@ Importarli in STORM DS?</string>
     <string name="label_rom_config_translator_section">Traduttore automatico</string>
     <string name="label_rom_config_translator_source_lang">Lingua originale del gioco</string>
     <string name="label_rom_config_dual_screen_preset">Preset layout doppio schermo</string>
-    <string name="video_ai_upscale_sharpness_title">Nitidezza AI-Upscale e CAS (%)</string>
+    <string name="video_ai_upscale_sharpness_title" formatted="false">Nitidezza AI-Upscale e CAS (%)</string>
     <string name="video_ai_upscale_sharpness_summary">Intensità della nitidezza adattiva al contrasto per bordi e testo</string>
     <string name="video_vulkan_compositor_mode_title">Modalità compositore 2D/3D (Vulkan)</string>
     <string name="video_vulkan_compositor_mode_precise">Precisa (priorità dei livelli e fusione)</string>
@@ -1533,9 +1533,9 @@ Importarli in STORM DS?</string>
     <string name="video_ds_lcd_grid_off">Disattivato</string>
     <string name="video_ds_lcd_grid_ds_lite">DS Lite pixel matrix</string>
     <string name="video_ds_lcd_grid_dsi_xl">DSi XL RGB subpixel LCD</string>
-    <string name="video_low_battery_saver_title">Risparmio automatico batteria scarica (&lt; 20%)</string>
-    <string name="video_low_battery_saver_summary">Automatically lower resolution scale to 1x-2x and disable SSAO when battery drops below 20%</string>
-    <string name="video_low_battery_activated_toast">Low battery (&lt; 20%): resolution scaled down and SSAO paused</string>
+    <string name="video_low_battery_saver_title" formatted="false">Risparmio automatico batteria scarica (&lt; 20%)</string>
+    <string name="video_low_battery_saver_summary" formatted="false">Automatically lower resolution scale to 1x-2x and disable SSAO when battery drops below 20%</string>
+    <string name="video_low_battery_activated_toast" formatted="false">Low battery (&lt; 20%): resolution scaled down and SSAO paused</string>
     <string name="video_low_battery_restored_toast">Power restored: graphics settings resumed</string>
     <string name="mic_vu_meter_title">Test livello microfono</string>
     <string name="mic_vu_meter_idle">Tap to test microphone input and noise gate threshold</string>
@@ -1562,7 +1562,7 @@ Importarli in STORM DS?</string>
     <string name="input_gyro_activation_hold_r">Tieni premuto R</string>
     <string name="button_theme_picker_title">Tema colore pulsanti</string>
     <string name="button_theme_picker_subtitle">Preview button surface, border and symbol colors</string>
-    <string name="translator_tts_speed_title">Velocità voce (%)</string>
+    <string name="translator_tts_speed_title" formatted="false">Velocità voce (%)</string>
     <string name="translator_tts_speed_summary">%1$d%% - velocità di lettura dei dialoghi tradotti (100%% normale)</string>
     <string name="translator_regions_reset_title">Ripristina aree OCR e posizione pulsante</string>
     <string name="translator_regions_reset_summary">Cancella le aree salvate e riporta il pulsante TR alla posizione iniziale</string>
@@ -1579,4 +1579,5 @@ Importarli in STORM DS?</string>
     <string name="cheats_download_fallback_embedded">Server non raggiungibile - caricati %1$d giochi integrati</string>
     <string name="cheats_import_finished">Database dei trucchi importato correttamente</string>
     <string name="cheats_import_failed">Errore durante l\'importazione del database dei trucchi</string>
+    <string name="rom_search_dir_saf_fallback_hint">Impossibile accedere alla directory, selezionala nuovamente</string>
 </resources>

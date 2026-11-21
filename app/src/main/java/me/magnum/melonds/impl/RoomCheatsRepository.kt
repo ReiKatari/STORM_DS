@@ -412,22 +412,26 @@ class RoomCheatsRepository(
         val workManager = WorkManager.getInstance(context)
         return workManager.getWorkInfosForUniqueWorkFlow(IMPORT_WORKER_NAME)
             .mapNotNull { workInfos ->
-                val allWorkFinished = workInfos.all { it.state.isFinished }
-                if (allWorkFinished) {
-                    CheatImportProgress(CheatImportProgress.CheatImportStatus.NOT_IMPORTING, 0f, null)
-                } else {
-                    val workInfo = workInfos.first()
-                    when (workInfo.state) {
-                        WorkInfo.State.ENQUEUED -> CheatImportProgress(CheatImportProgress.CheatImportStatus.STARTING, 0f, null)
-                        WorkInfo.State.RUNNING -> {
-                            val relativeProgress = workInfo.progress.getFloat(CheatImportWorker.KEY_PROGRESS_RELATIVE, 0f)
-                            val itemName = workInfo.progress.getString(CheatImportWorker.KEY_PROGRESS_ITEM)
-                            CheatImportProgress(CheatImportProgress.CheatImportStatus.ONGOING, relativeProgress, itemName)
+                if (workInfos.isEmpty()) {
+                    return@mapNotNull CheatImportProgress(CheatImportProgress.CheatImportStatus.NOT_IMPORTING, 0f, null)
+                }
+                val workInfo = workInfos.firstOrNull { !it.state.isFinished } ?: workInfos.first()
+                when (workInfo.state) {
+                    WorkInfo.State.ENQUEUED -> CheatImportProgress(CheatImportProgress.CheatImportStatus.STARTING, 0f, null)
+                    WorkInfo.State.RUNNING -> {
+                        val relativeProgress = workInfo.progress.getFloat(CheatImportWorker.KEY_PROGRESS_RELATIVE, 0f)
+                        val itemName = workInfo.progress.getString(CheatImportWorker.KEY_PROGRESS_ITEM)
+                        CheatImportProgress(CheatImportProgress.CheatImportStatus.ONGOING, relativeProgress, itemName)
+                    }
+                    WorkInfo.State.SUCCEEDED -> CheatImportProgress(CheatImportProgress.CheatImportStatus.FINISHED, 1f, null)
+                    WorkInfo.State.CANCELLED,
+                    WorkInfo.State.FAILED -> CheatImportProgress(CheatImportProgress.CheatImportStatus.FAILED, 0f, null)
+                    WorkInfo.State.BLOCKED -> {
+                        if (workInfos.all { it.state.isFinished }) {
+                            CheatImportProgress(CheatImportProgress.CheatImportStatus.NOT_IMPORTING, 0f, null)
+                        } else {
+                            null
                         }
-                        WorkInfo.State.SUCCEEDED -> CheatImportProgress(CheatImportProgress.CheatImportStatus.FINISHED, 1f, null)
-                        WorkInfo.State.CANCELLED,
-                        WorkInfo.State.FAILED -> CheatImportProgress(CheatImportProgress.CheatImportStatus.FAILED, 0f, null)
-                        WorkInfo.State.BLOCKED -> null
                     }
                 }
             }

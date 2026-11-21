@@ -121,6 +121,8 @@ fun DialogueBacklogContent(
     var termDialogInitialCaseSensitive by remember { mutableStateOf(false) }
     var termDialogInitialGameSpecific by remember { mutableStateOf(false) }
     var termDialogInitialGender by remember { mutableStateOf(Gender.NEUTRAL) }
+    var termDialogEditingEntry by remember { mutableStateOf<UserGlossaryManager.GlossaryEntry?>(null) }
+    var termDialogEditingWasGameSpecific by remember { mutableStateOf(false) }
 
     // Dialog state for confirming deletion
     var termToDelete by remember { mutableStateOf<UserGlossaryManager.GlossaryEntry?>(null) }
@@ -313,10 +315,13 @@ fun DialogueBacklogContent(
                                 Toast.makeText(context, context.getString(R.string.translator_backlog_copied_toast), Toast.LENGTH_SHORT).show()
                             },
                             onAddToGlossary = {
+                                termDialogEditingEntry = null
+                                termDialogEditingWasGameSpecific = false
                                 termDialogInitialSource = item.sourceText
                                 termDialogInitialTarget = item.translatedText
                                 termDialogInitialCaseSensitive = false
                                 termDialogInitialGameSpecific = glossaryManager.getActiveGameKey() != "global"
+                                termDialogInitialGender = Gender.NEUTRAL
                                 showTermDialog = true
                             }
                         )
@@ -332,10 +337,13 @@ fun DialogueBacklogContent(
             ) {
                 Button(
                     onClick = {
+                        termDialogEditingEntry = null
+                        termDialogEditingWasGameSpecific = false
                         termDialogInitialSource = ""
                         termDialogInitialTarget = ""
                         termDialogInitialCaseSensitive = false
                         termDialogInitialGameSpecific = glossaryManager.getActiveGameKey() != "global"
+                        termDialogInitialGender = Gender.NEUTRAL
                         showTermDialog = true
                     },
                     shape = RoundedCornerShape(8.dp),
@@ -424,6 +432,8 @@ fun DialogueBacklogContent(
                             entry = entry,
                             isGameSpecific = isGame,
                             onEdit = {
+                                termDialogEditingEntry = entry
+                                termDialogEditingWasGameSpecific = isGame
                                 termDialogInitialSource = entry.sourceTerm
                                 termDialogInitialTarget = entry.targetTerm
                                 termDialogInitialCaseSensitive = entry.caseSensitive
@@ -453,9 +463,24 @@ fun DialogueBacklogContent(
             onDismiss = { showTermDialog = false },
             onSave = { source, target, caseSens, gameSpec, gender ->
                 val entry = UserGlossaryManager.GlossaryEntry(source, target, caseSens, gender)
-                glossaryManager.addOrUpdateEntry(entry, isGameSpecific = gameSpec)
+                val editingOld = termDialogEditingEntry
+                if (editingOld != null) {
+                    glossaryManager.replaceEntry(
+                        oldSourceTerm = editingOld.sourceTerm,
+                        oldCaseSensitive = editingOld.caseSensitive,
+                        oldGameSpecific = termDialogEditingWasGameSpecific,
+                        newEntry = entry,
+                        newGameSpecific = gameSpec
+                    )
+                    if (!editingOld.sourceTerm.equals(source, ignoreCase = true)) {
+                        onInvalidateCache(editingOld.sourceTerm)
+                    }
+                } else {
+                    glossaryManager.addOrUpdateEntry(entry, isGameSpecific = gameSpec)
+                }
                 onInvalidateCache(source)
                 glossaryVersion++
+                termDialogEditingEntry = null
                 showTermDialog = false
                 Toast.makeText(context, context.getString(R.string.translator_glossary_saved_toast, source), Toast.LENGTH_SHORT).show()
             }

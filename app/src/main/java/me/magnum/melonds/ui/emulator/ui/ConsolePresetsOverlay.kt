@@ -100,6 +100,7 @@ fun ConsolePresetsOverlay(
 ) {
     val colors = watermelon
     var screen by remember { mutableStateOf(PresetsScreen.MAIN) }
+    val firstFocusRequester = remember { FocusRequester() }
 
     BackHandler {
         if (screen == PresetsScreen.MAIN) onBack() else screen = PresetsScreen.MAIN
@@ -300,14 +301,15 @@ fun ConsolePresetsOverlay(
                                 presets.forEach { (preset, label, icon) ->
                                     val subtitle = when (preset) {
                                         DualScreenPreset.OFF -> "Оба экрана Nintendo DS выводятся на основном дисплее устройства"
-                                        DualScreenPreset.INTERNAL_TOP_EXTERNAL_BOTTOM -> "Основной экран смартфона — Верхний (игра), Внешний монитор — Нижний (тач)"
-                                        DualScreenPreset.INTERNAL_BOTTOM_EXTERNAL_TOP -> "Основной экран смартфона — Нижний (тач в руках), Внешний монитор — Верхний (игра)"
+                                        DualScreenPreset.INTERNAL_TOP_EXTERNAL_BOTTOM -> "Основной экран смартфона - Верхний (игра), Внешний монитор - Нижний (тач)"
+                                        DualScreenPreset.INTERNAL_BOTTOM_EXTERNAL_TOP -> "Основной экран смартфона - Нижний (тач в руках), Внешний монитор - Верхний (игра)"
                                     }
                                     ConsoleRow(
                                         label = label,
                                         subtitle = subtitle,
                                         icon = icon,
                                         selected = preset == dualScreenPreset,
+                                        focusRequester = if (preset == DualScreenPreset.OFF) firstFocusRequester else null,
                                         onClick = { onDualScreenPresetSelected(preset) },
                                     ) {
                                         if (preset == dualScreenPreset) {
@@ -407,6 +409,8 @@ fun ConsolePresetsOverlay(
                 modifier = Modifier.align(Alignment.CenterHorizontally),
             )
         }
+
+        me.magnum.melonds.ui.common.RequestInitialFocus(firstFocusRequester)
     }
 }
 

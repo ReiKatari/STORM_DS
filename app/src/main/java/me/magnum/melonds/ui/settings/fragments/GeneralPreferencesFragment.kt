@@ -20,6 +20,7 @@ import kotlinx.coroutines.withContext
 import me.magnum.melonds.R
 import me.magnum.melonds.common.DirectoryAccessValidator
 import me.magnum.melonds.common.UriPermissionManager
+import me.magnum.melonds.extensions.addOnPreferenceChangeListener
 import me.magnum.melonds.extensions.isSustainedPerformanceModeAvailable
 import me.magnum.melonds.impl.SettingsBackupManager
 import me.magnum.melonds.ui.settings.PreferenceFragmentHelper
@@ -194,7 +195,7 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
         val cardStylePreference = findPreference<ListPreference>("rom_card_style")
         if (cardStylePreference != null) {
             helper.bindPreferenceSummaryToValue(cardStylePreference)
-            cardStylePreference.setOnPreferenceChangeListener { _, newValue ->
+            cardStylePreference.addOnPreferenceChangeListener { _, newValue ->
                 val newStyle = newValue as String
                 me.magnum.melonds.ui.theme.AppThemeManager.cardStyleState.value = newStyle
                 cardStylePreference.sharedPreferences?.edit()?.putString("rom_card_style", newStyle)?.apply()
@@ -443,7 +444,7 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
 
                 val rootJson = org.json.JSONObject()
                 rootJson.put("app", "STORM DS")
-                val vName = (runCatching { appContext.packageManager.getPackageInfo(appContext.packageName, 0).versionName }.getOrNull() ?: "8.5.0").removePrefix("v").removePrefix("V")
+                val vName = (runCatching { appContext.packageManager.getPackageInfo(appContext.packageName, 0).versionName }.getOrNull() ?: "8.6.0").removePrefix("v").removePrefix("V")
                 rootJson.put("version", vName)
                 rootJson.put("timestamp", System.currentTimeMillis())
 
@@ -636,7 +637,19 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
         val preserved = mutableMapOf<String, Any?>()
         val all = prefs.all
 
-        val preservePrefixes = listOf("ra_", "rom_search_dirs", "sram_dir", "save_state_location", "save_state_custom_dir", "bios_dir", "dsi_bios_dir", "dsi_sd_card_dir", "dsi_nand_dir")
+        val preservePrefixes = listOf(
+            "ra_",
+            "rom_search_dirs",
+            "sram_dir",
+            "save_state_location",
+            "save_state_custom_dir",
+            "bios_dir",
+            "dsi_bios_dir",
+            "dsi_sd_card_dir",
+            "dsi_nand_dir",
+            "system_dsi_sd_card_dir",
+            "system_dldi_sd_card_dir",
+        )
 
         for ((key, value) in all) {
             if (preservePrefixes.any { key.startsWith(it) || key == it }) {

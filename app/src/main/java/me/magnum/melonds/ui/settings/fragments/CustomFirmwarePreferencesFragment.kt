@@ -220,6 +220,48 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
                 }.getOrNull()
             }
 
+            val fileIndexCache = HashMap<String, Map<String, androidx.documentfile.provider.DocumentFile>>()
+            fun indexDirectory(dirDoc: androidx.documentfile.provider.DocumentFile?): Map<String, androidx.documentfile.provider.DocumentFile> {
+                if (dirDoc == null) return emptyMap()
+                val key = dirDoc.uri.toString()
+                fileIndexCache[key]?.let { return it }
+                val index = LinkedHashMap<String, androidx.documentfile.provider.DocumentFile>()
+                runCatching { dirDoc.listFiles() }.getOrNull()?.forEach { child ->
+                    val name = child.name
+                    if (!name.isNullOrBlank() && child.isFile) {
+                        index.putIfAbsent(name.lowercase(java.util.Locale.ROOT), child)
+                    }
+                }
+                fileIndexCache[key] = index
+                return index
+            }
+
+            fun resolveFallbackBiosDir(): androidx.documentfile.provider.DocumentFile? {
+                val fallbackDir = java.io.File(android.os.Environment.getExternalStorageDirectory().resolve("STORM DS"), "bios")
+                return if (fallbackDir.exists() && fallbackDir.isDirectory) {
+                    androidx.documentfile.provider.DocumentFile.fromFile(fallbackDir)
+                } else {
+                    null
+                }
+            }
+
+            fun findFileIgnoreCase(
+                dirDoc: androidx.documentfile.provider.DocumentFile?,
+                fallbackDoc: androidx.documentfile.provider.DocumentFile?,
+                vararg candidateNames: String,
+            ): androidx.documentfile.provider.DocumentFile? {
+                for (searchDir in listOfNotNull(dirDoc, fallbackDoc)) {
+                    val index = indexDirectory(searchDir)
+                    for (name in candidateNames) {
+                        index[name.lowercase(java.util.Locale.ROOT)]?.let { return it }
+                        searchDir.findFile(name)?.takeIf { it.isFile }?.let { return it }
+                    }
+                }
+                return null
+            }
+
+            val fallbackBiosDir = resolveFallbackBiosDir()
+
             fun inspectFile(
                 dirDoc: androidx.documentfile.provider.DocumentFile?,
                 label: String,
@@ -228,7 +270,7 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
                 required: Boolean,
                 vararg candidateNames: String,
             ): CheckRow {
-                val doc = candidateNames.firstNotNullOfOrNull { name -> dirDoc?.findFile(name) }
+                val doc = findFileIgnoreCase(dirDoc, fallbackBiosDir, *candidateNames)
                 if (doc == null) {
                     return CheckRow(label, ok = !required, required = required, detail = getString(R.string.v793_bios_missing))
                 }

@@ -32,7 +32,6 @@ import me.magnum.melonds.ui.settings.fragments.GeneralPreferencesFragment
 import me.magnum.melonds.ui.settings.fragments.InputPreferencesFragment
 import me.magnum.melonds.ui.settings.fragments.MainPreferencesFragment
 import me.magnum.melonds.ui.settings.fragments.RetroAchievementsPreferencesFragment
-import me.magnum.melonds.ui.settings.fragments.RewindPreferencesFragment
 import me.magnum.melonds.ui.settings.fragments.RomsPreferencesFragment
 import me.magnum.melonds.ui.settings.fragments.SaveFilesPreferencesFragment
 import me.magnum.melonds.ui.settings.fragments.SystemPreferencesFragment
@@ -73,7 +72,6 @@ class SettingsSearchIndex(private val context: Context) {
         ScreenDescriptor(R.xml.pref_cheats, CheatsPreferencesFragment::class.java.name, R.string.cheats, R.drawable.ic_cheat),
         ScreenDescriptor(R.xml.pref_translator, TranslatorPreferencesFragment::class.java.name, R.string.category_translator, R.drawable.ic_translate),
         ScreenDescriptor(R.xml.pref_about, AboutPreferencesFragment::class.java.name, R.string.about_app_title, R.drawable.ic_info),
-        ScreenDescriptor(R.xml.pref_rewind, RewindPreferencesFragment::class.java.name, R.string.rewind, R.drawable.ic_clock),
         ScreenDescriptor(R.xml.pref_custom_firmware, CustomFirmwarePreferencesFragment::class.java.name, R.string.custom_bios_firmware, R.drawable.ic_firmware),
         ScreenDescriptor(R.xml.pref_internal_firmware_settings, FirmwarePreferencesFragment::class.java.name, R.string.internal_firmware_settings, R.drawable.ic_firmware),
         ScreenDescriptor(R.xml.pref_main, MainPreferencesFragment::class.java.name, R.string.settings, R.drawable.ic_settings),

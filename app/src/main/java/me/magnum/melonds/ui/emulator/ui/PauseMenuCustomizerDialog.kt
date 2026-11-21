@@ -39,7 +39,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -53,8 +55,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import me.magnum.melonds.R
+import me.magnum.melonds.ui.common.RequestInitialFocus
 import me.magnum.melonds.ui.common.bouncingClickable
 import me.magnum.melonds.ui.emulator.PauseMenuOption
+import me.magnum.melonds.ui.emulator.firmware.FirmwarePauseMenuOption
 import me.magnum.melonds.ui.emulator.rom.PauseMenuCustomizationStore
 import me.magnum.melonds.ui.emulator.rom.RomPauseMenuOption
 import me.magnum.melonds.ui.theme.Manrope
@@ -92,6 +96,8 @@ fun PauseMenuCustomizerDialog(
     var currentOptions by remember { mutableStateOf(initialOrder) }
     var hiddenItems by remember { mutableStateOf(store.getHiddenItems()) }
     var pinnedItems by remember { mutableStateOf(store.getIndividuallyPinned()) }
+    var pendingReset by remember { mutableStateOf(false) }
+    val doneFocusRequester = remember { FocusRequester() }
 
     BackHandler { onDismiss() }
 
@@ -196,7 +202,7 @@ fun PauseMenuCustomizerDialog(
                     key = { _, item -> (item as? Enum<*>)?.name ?: item.toString() },
                 ) { index, option ->
                     val optName = (option as? Enum<*>)?.name ?: option.toString()
-                    val isProtected = option == RomPauseMenuOption.SETTINGS
+                    val isProtected = option == RomPauseMenuOption.SETTINGS || option == FirmwarePauseMenuOption.SETTINGS
                     val isExtended = store.isExtendedOption(option)
                     val isVisible = if (isProtected) true else optName !in hiddenItems
 
@@ -327,10 +333,18 @@ fun PauseMenuCustomizerDialog(
                             enabled = !isProtected,
                             onCheckedChange = { checked ->
                                 if (!isProtected) {
+                                    pendingReset = false
                                     hiddenItems = if (checked) {
                                         hiddenItems - optName
                                     } else {
                                         hiddenItems + optName
+                                    }
+                                    if (isExtended) {
+                                        pinnedItems = if (checked) {
+                                            pinnedItems + optName
+                                        } else {
+                                            pinnedItems - optName
+                                        }
                                     }
                                 }
                             },
@@ -355,7 +369,7 @@ fun PauseMenuCustomizerDialog(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // Reset to default button
+                // Reset to default button (deferred until Done)
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -364,7 +378,7 @@ fun PauseMenuCustomizerDialog(
                         .background(colors.surface2)
                         .border(1.dp, colors.line, RoundedCornerShape(12.dp))
                         .bouncingClickable {
-                            store.resetToDefaults()
+                            pendingReset = true
                             currentOptions = availableOptions.toList()
                             hiddenItems = emptySet()
                             pinnedItems = emptySet()
@@ -396,12 +410,18 @@ fun PauseMenuCustomizerDialog(
                     modifier = Modifier
                         .weight(1f)
                         .height(42.dp)
+                        .focusRequester(doneFocusRequester)
                         .clip(RoundedCornerShape(12.dp))
                         .background(colors.green)
                         .bouncingClickable {
-                            val orderNames = currentOptions.map { (it as? Enum<*>)?.name ?: it.toString() }
-                            store.saveCustomOrder(orderNames)
-                            store.saveHiddenItems(hiddenItems)
+                            if (pendingReset && hiddenItems.isEmpty() && pinnedItems.isEmpty() && currentOptions == availableOptions) {
+                                store.resetToDefaults()
+                            } else {
+                                val orderNames = currentOptions.map { (it as? Enum<*>)?.name ?: it.toString() }
+                                store.saveCustomOrder(orderNames)
+                                store.saveHiddenItems(hiddenItems)
+                                store.saveIndividuallyPinned(pinnedItems)
+                            }
                             onApplied()
                             onDismiss()
                         },
@@ -417,5 +437,7 @@ fun PauseMenuCustomizerDialog(
                 }
             }
         }
+
+        RequestInitialFocus(doneFocusRequester)
     }
 }

@@ -179,45 +179,141 @@ class EmulatorLaunchValidatorDelegate(
     }
 
     private fun showRomEncryptedDialog(rom: Rom) {
+        if (context.isFinishing || context.isDestroyed) {
+            return
+        }
+
         AlertDialog.Builder(context)
             .setTitle(R.string.decrypt_rom_title)
-            .setMessage(R.string.decrypt_rom_description)
-            .setPositiveButton(R.string.decrypt_rom_button) { _, _ ->
-                @Suppress("DEPRECATION")
-                val progressDialog = android.app.ProgressDialog(context).apply {
-                    setTitle(context.getString(R.string.decrypt_rom_title))
-                    setMessage(context.getString(R.string.decrypt_rom_progress))
-                    setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL)
-                    max = 100
-                    setCancelable(false)
-                    show()
-                }
-
-                context.lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                    val result = me.magnum.melonds.MelonRomDecryptor.decryptRom(context, rom.uri, object : me.magnum.melonds.MelonRomDecryptor.DecryptProgressCallback {
-                        override fun onProgress(current: Int, total: Int) {
-                            val percent = if (total > 0) ((current.toLong() * 100) / total).toInt() else 0
-                            context.runOnUiThread {
-                                progressDialog.progress = percent
-                            }
-                        }
-                    })
-
-                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                        progressDialog.dismiss()
-                        if (result == me.magnum.melonds.MelonRomDecryptor.DecryptResult.SUCCESS || result == me.magnum.melonds.MelonRomDecryptor.DecryptResult.ALREADY_DECRYPTED) {
-                            android.widget.Toast.makeText(context, R.string.decrypt_rom_success, android.widget.Toast.LENGTH_SHORT).show()
-                            validateRom(rom)
-                        } else {
-                            android.widget.Toast.makeText(context, R.string.decrypt_rom_error, android.widget.Toast.LENGTH_LONG).show()
-                            callback.onValidationAborted()
-                        }
-                    }
-                }
+            .setMessage(R.string.decrypt_rom_replace_description)
+            .setPositiveButton(R.string.decrypt_rom_replace_confirm) { _, _ ->
+                startRomDecryptionWithProgressDialog(rom)
             }
             .setNegativeButton(R.string.cancel) { _, _ -> callback.onValidationAborted() }
             .setOnCancelListener { callback.onValidationAborted() }
             .show()
+    }
+
+    private fun startRomDecryptionWithProgressDialog(rom: Rom) {
+        if (context.isFinishing || context.isDestroyed) {
+            return
+        }
+
+        val density = context.resources.displayMetrics.density
+        val padH = (24 * density).toInt()
+        val padV = (16 * density).toInt()
+        val container = android.widget.LinearLayout(context).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(padH, padV, padH, padV)
+        }
+        val statusText = android.widget.TextView(context).apply {
+            text = context.getString(R.string.decrypt_rom_progress)
+            textSize = 14f
+        }
+        val progressBar = android.widget.ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
+            isIndeterminate = false
+            max = 100
+            progress = 0
+            setPadding(0, (12 * density).toInt(), 0, (4 * density).toInt())
+        }
+        val percentText = android.widget.TextView(context).apply {
+            text = "0%"
+            textSize = 13f
+            gravity = android.view.Gravity.END
+        }
+        container.addView(statusText)
+        container.addView(progressBar)
+        container.addView(percentText)
+
+        val progressDialog = AlertDialog.Builder(context)
+            .setTitle(R.string.decrypt_rom_title)
+            .setView(container)
+            .setCancelable(false)
+            .create()
+
+        if (!context.isFinishing && !context.isDestroyed) {
+            progressDialog.show()
+        }
+
+        context.lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val result = me.magnum.melonds.MelonRomDecryptor.decryptRom(
+                context,
+                rom.uri,
+                object : me.magnum.melonds.MelonRomDecryptor.DecryptProgressCallback {
+                    override fun onProgress(current: Int, total: Int) {
+                        val percent = if (total > 0) ((current.toLong() * 100L) / total).toInt().coerceIn(0, 100) else 0
+                        context.runOnUiThread {
+                            if (!context.isFinishing && !context.isDestroyed && progressDialog.isShowing) {
+                                progressBar.progress = percent
+                                percentText.text = "$percent%"
+                            }
+                        }
+                    }
+                },
+            )
+
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                if (!context.isFinishing && !context.isDestroyed && progressDialog.isShowing) {
+                    runCatching { progressDialog.dismiss() }
+                }
+                if (context.isFinishing || context.isDestroyed) {
+                    return@withContext
+                }
+                showRomDecryptionResultDialog(rom, result)
+            }
+        }
+    }
+
+    private fun showRomDecryptionResultDialog(
+        rom: Rom,
+        result: me.magnum.melonds.MelonRomDecryptor.DecryptResult,
+    ) {
+        if (context.isFinishing || context.isDestroyed) {
+            return
+        }
+
+        if (
+            result == me.magnum.melonds.MelonRomDecryptor.DecryptResult.SUCCESS ||
+            result == me.magnum.melonds.MelonRomDecryptor.DecryptResult.ALREADY_DECRYPTED
+        ) {
+            AlertDialog.Builder(context)
+                .setTitle(R.string.decrypt_rom_result_success_title)
+                .setMessage(R.string.decrypt_rom_result_success_message)
+                .setCancelable(false)
+                .setPositiveButton(R.string.decrypt_rom_launch_now) { _, _ ->
+                    validateRom(rom)
+                }
+                .setNegativeButton(R.string.cancel) { _, _ ->
+                    callback.onValidationAborted()
+                }
+                .setOnCancelListener {
+                    callback.onValidationAborted()
+                }
+                .show()
+        } else {
+            val reasonRes = when (result) {
+                me.magnum.melonds.MelonRomDecryptor.DecryptResult.ERROR_READING_FILE -> R.string.decrypt_rom_err_read
+                me.magnum.melonds.MelonRomDecryptor.DecryptResult.ERROR_WRITING_FILE -> R.string.decrypt_rom_err_write
+                me.magnum.melonds.MelonRomDecryptor.DecryptResult.ERROR_NOT_DSI_ROM -> R.string.decrypt_rom_err_not_dsi
+                me.magnum.melonds.MelonRomDecryptor.DecryptResult.ERROR_FILE_TOO_SMALL -> R.string.decrypt_rom_err_too_small
+                me.magnum.melonds.MelonRomDecryptor.DecryptResult.ERROR_MODCRYPT_AREA_OUT_OF_BOUNDS -> R.string.decrypt_rom_err_bounds
+                me.magnum.melonds.MelonRomDecryptor.DecryptResult.ERROR_VALIDATION_FAILED -> R.string.decrypt_rom_err_validation
+                me.magnum.melonds.MelonRomDecryptor.DecryptResult.SUCCESS,
+                me.magnum.melonds.MelonRomDecryptor.DecryptResult.ALREADY_DECRYPTED -> R.string.decrypt_rom_err_read
+            }
+            val reasonText = context.getString(reasonRes)
+            AlertDialog.Builder(context)
+                .setTitle(R.string.decrypt_rom_result_error_title)
+                .setMessage(context.getString(R.string.decrypt_rom_result_error_message, reasonText))
+                .setCancelable(false)
+                .setPositiveButton(R.string.ok) { _, _ ->
+                    callback.onValidationAborted()
+                }
+                .setOnCancelListener {
+                    callback.onValidationAborted()
+                }
+                .show()
+        }
     }
 
     interface Callback {

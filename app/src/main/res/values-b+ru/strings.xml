@@ -1300,7 +1300,7 @@
     <string name="translator_enabled">Включить авто-переводчик</string>
     <string name="translator_enabled_summary">Распознавать и переводить игровые диалоги на экране</string>
     <string name="translator_engine">Движок перевода</string>
-    <string name="translator_engine_offline">Google ML Kit (100% офлайн нейросеть)</string>
+    <string name="translator_engine_offline" formatted="false">Google ML Kit (100% офлайн нейросеть)</string>
     <string name="translator_engine_yandex">Яндекс Переводчик (бесплатно / лучший для русского)</string>
     <string name="translator_engine_google">Google Translate (Онлайн, быстрый)</string>
     <string name="translator_engine_lingva">Lingva Neural (бесплатно / без ограничений)</string>
@@ -1552,7 +1552,7 @@
     <string name="label_rom_config_translator_section">Авто-переводчик</string>
     <string name="label_rom_config_translator_source_lang">Язык оригинала игры</string>
     <string name="label_rom_config_dual_screen_preset">Расположение экранов (Dual screen)</string>
-    <string name="video_ai_upscale_sharpness_title">Резкость AI-Upscale и CAS (%)</string>
+    <string name="video_ai_upscale_sharpness_title" formatted="false">Резкость AI-Upscale и CAS (%)</string>
     <string name="video_ai_upscale_sharpness_summary">Интенсивность контрастно-адаптивной резкости контуров и текста</string>
     <string name="video_vulkan_compositor_mode_title">Режим композиции 2D/3D (Vulkan)</string>
     <string name="video_vulkan_compositor_mode_precise">Точный (приоритеты и смешивание слоёв)</string>
@@ -1639,9 +1639,9 @@
     <string name="video_ds_lcd_grid_off">Выключено</string>
     <string name="video_ds_lcd_grid_ds_lite">Пиксельная матрица DS Lite</string>
     <string name="video_ds_lcd_grid_dsi_xl">Субпиксельная RGB-сетка DSi XL</string>
-    <string name="video_low_battery_saver_title">Авто-экономия при разряде (&lt; 20%)</string>
-    <string name="video_low_battery_saver_summary">Автоматически снижать масштаб разрешения до 1x-2x и отключать SSAO при заряде ниже 20%</string>
-    <string name="video_low_battery_activated_toast">Низкий заряд (&lt; 20%): масштаб снижен, SSAO временно отключён</string>
+    <string name="video_low_battery_saver_title" formatted="false">Авто-экономия при разряде (&lt; 20%)</string>
+    <string name="video_low_battery_saver_summary" formatted="false">Автоматически снижать масштаб разрешения до 1x-2x и отключать SSAO при заряде ниже 20%</string>
+    <string name="video_low_battery_activated_toast" formatted="false">Низкий заряд (&lt; 20%): масштаб снижен, SSAO временно отключён</string>
     <string name="video_low_battery_restored_toast">Питание восстановлено: настройки графики возвращены</string>
     <string name="mic_vu_meter_title">Тест уровня микрофона</string>
     <string name="mic_vu_meter_idle">Нажмите для проверки микрофона и порога шумоподавления</string>
@@ -1668,7 +1668,7 @@
     <string name="input_gyro_activation_hold_r">При удержании R</string>
     <string name="button_theme_picker_title">Цветовая тема кнопок</string>
     <string name="button_theme_picker_subtitle">Превью фона, контура и символов кнопок</string>
-    <string name="translator_tts_speed_title">Скорость речи озвучки (%)</string>
+    <string name="translator_tts_speed_title" formatted="false">Скорость речи озвучки (%)</string>
     <string name="translator_tts_speed_summary">%1$d%% - темп произношения переведённых реплик (100%% - стандартный)</string>
     <string name="translator_regions_reset_title">Сбросить зоны OCR и позицию кнопки</string>
     <string name="translator_regions_reset_summary">Очистить сохранённые области захвата текста и вернуть кнопку TR на место по умолчанию</string>
@@ -1685,4 +1685,5 @@
     <string name="cheats_download_fallback_embedded">Онлайн-сервер недоступен - подключена встроенная база (%1$d игр)</string>
     <string name="cheats_import_finished">База чит-кодов успешно импортирована</string>
     <string name="cheats_import_failed">Ошибка импорта базы читов (неподдерживаемый или повреждённый файл)</string>
+    <string name="rom_search_dir_saf_fallback_hint">Не удалось получить доступ к каталогу, выберите снова</string>
 </resources>

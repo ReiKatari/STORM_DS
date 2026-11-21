@@ -97,79 +97,84 @@ class GameTextRecognizer {
     ): List<TranslatedTextBlock> = withContext(Dispatchers.Default) {
         lastOcrError = null
         val safeBitmap = ensureSoftwareBitmap(bitmap)
-
-        val normalizedLang = sourceLang.lowercase()
-        if (regions.isEmpty()) {
-            val bmpHash = computeBitmapHash(safeBitmap)
-            val cacheKey = "$normalizedLang:$bmpHash"
-            ocrLruCache.get(cacheKey)?.let { cached ->
-                Log.i(TAG, "OCR Cache hit: returning ${cached.size} cached blocks instantly")
-                if (safeBitmap !== bitmap) safeBitmap.recycle()
-                return@withContext cached.map { it.copy(translatedText = "") }
-            }
-        }
-
-        Log.i(TAG, "OCR start: bitmap=${safeBitmap.width}x${safeBitmap.height}, regions=${regions.size}, lang=$sourceLang")
-
-        if (regions.isNotEmpty()) {
-            val allRegionBlocks = mutableListOf<TranslatedTextBlock>()
-            val imgW = safeBitmap.width
-            val imgH = safeBitmap.height
-
-            for ((idx, region) in regions.withIndex()) {
-                val leftPx = (region.rect.left * imgW).toInt().coerceIn(0, imgW - 1)
-                val topPx = (region.rect.top * imgH).toInt().coerceIn(0, imgH - 1)
-                val rightPx = (region.rect.right * imgW).toInt().coerceIn(leftPx + 1, imgW)
-                val bottomPx = (region.rect.bottom * imgH).toInt().coerceIn(topPx + 1, imgH)
-
-                val cropW = rightPx - leftPx
-                val cropH = bottomPx - topPx
-                if (cropW < 6 || cropH < 6) {
-                    Log.w(TAG, "Region #$idx too small ($cropW x $cropH), skipping")
-                    continue
+        try {
+            val normalizedLang = sourceLang.lowercase()
+            if (regions.isEmpty()) {
+                val bmpHash = computeBitmapHash(safeBitmap)
+                val cacheKey = "$normalizedLang:$bmpHash"
+                ocrLruCache.get(cacheKey)?.let { cached ->
+                    Log.i(TAG, "OCR Cache hit: returning ${cached.size} cached blocks instantly")
+                    return@withContext cached.map { it.copy(translatedText = "") }
                 }
+            }
 
-                val cropBitmap = try {
-                    Bitmap.createBitmap(safeBitmap, leftPx, topPx, cropW, cropH)
-                } catch (t: Throwable) {
-                    Log.e(TAG, "Failed to crop region #$idx", t)
-                    null
-                } ?: continue
+            Log.i(TAG, "OCR start: bitmap=${safeBitmap.width}x${safeBitmap.height}, regions=${regions.size}, lang=$sourceLang")
 
-                Log.i(TAG, "Region #$idx: crop=[$leftPx,$topPx,$rightPx,$bottomPx] size=${cropW}x${cropH}")
-                val localBlocks = recognizeWithMultiPass(cropBitmap, sourceLang)
-                cropBitmap.recycle()
+            if (regions.isNotEmpty()) {
+                val allRegionBlocks = mutableListOf<TranslatedTextBlock>()
+                val imgW = safeBitmap.width
+                val imgH = safeBitmap.height
 
-                val regionWidthRel = region.rect.width()
-                val regionHeightRel = region.rect.height()
+                for ((idx, region) in regions.withIndex()) {
+                    val leftPx = (region.rect.left * imgW).toInt().coerceIn(0, imgW - 1)
+                    val topPx = (region.rect.top * imgH).toInt().coerceIn(0, imgH - 1)
+                    val rightPx = (region.rect.right * imgW).toInt().coerceIn(leftPx + 1, imgW)
+                    val bottomPx = (region.rect.bottom * imgH).toInt().coerceIn(topPx + 1, imgH)
 
-                if (localBlocks.isNotEmpty()) {
-                    Log.i(TAG, "Region #$idx found ${localBlocks.size} text blocks")
-                    for (lb in localBlocks) {
-                        val globalBox = RectF(
-                            region.rect.left + lb.boundingBox.left * regionWidthRel,
-                            region.rect.top + lb.boundingBox.top * regionHeightRel,
-                            region.rect.left + lb.boundingBox.right * regionWidthRel,
-                            region.rect.top + lb.boundingBox.bottom * regionHeightRel
-                        )
-                        allRegionBlocks.add(lb.copy(boundingBox = globalBox))
+                    val cropW = rightPx - leftPx
+                    val cropH = bottomPx - topPx
+                    if (cropW < 6 || cropH < 6) {
+                        Log.w(TAG, "Region #$idx too small ($cropW x $cropH), skipping")
+                        continue
+                    }
+
+                    val cropBitmap = try {
+                        Bitmap.createBitmap(safeBitmap, leftPx, topPx, cropW, cropH)
+                    } catch (t: Throwable) {
+                        Log.e(TAG, "Failed to crop region #$idx", t)
+                        null
+                    } ?: continue
+
+                    Log.i(TAG, "Region #$idx: crop=[$leftPx,$topPx,$rightPx,$bottomPx] size=${cropW}x${cropH}")
+                    val localBlocks = try {
+                        recognizeWithMultiPass(cropBitmap, sourceLang)
+                    } finally {
+                        if (!cropBitmap.isRecycled) cropBitmap.recycle()
+                    }
+
+                    val regionWidthRel = region.rect.width()
+                    val regionHeightRel = region.rect.height()
+
+                    if (localBlocks.isNotEmpty()) {
+                        Log.i(TAG, "Region #$idx found ${localBlocks.size} text blocks")
+                        for (lb in localBlocks) {
+                            val globalBox = RectF(
+                                region.rect.left + lb.boundingBox.left * regionWidthRel,
+                                region.rect.top + lb.boundingBox.top * regionHeightRel,
+                                region.rect.left + lb.boundingBox.right * regionWidthRel,
+                                region.rect.top + lb.boundingBox.bottom * regionHeightRel
+                            )
+                            allRegionBlocks.add(lb.copy(boundingBox = globalBox))
+                        }
                     }
                 }
+
+                Log.i(TAG, "OCR finished with ${allRegionBlocks.size} total blocks from ${regions.size} regions")
+                return@withContext allRegionBlocks
             }
 
-            if (safeBitmap !== bitmap) safeBitmap.recycle()
-            Log.i(TAG, "OCR finished with ${allRegionBlocks.size} total blocks from ${regions.size} regions")
-            return@withContext allRegionBlocks
+            // Full Screen OCR: Multi-pass pixel preprocessing pipeline
+            val bmpHash = computeBitmapHash(safeBitmap)
+            val cacheKey = "$normalizedLang:$bmpHash"
+            val blocks = recognizeWithMultiPass(safeBitmap, sourceLang)
+            ocrLruCache.put(cacheKey, blocks)
+            Log.i(TAG, "OCR finished fullscreen with ${blocks.size} total blocks (cached)")
+            blocks
+        } finally {
+            if (safeBitmap !== bitmap && !safeBitmap.isRecycled) {
+                safeBitmap.recycle()
+            }
         }
-
-        // Full Screen OCR: Multi-pass pixel preprocessing pipeline
-        val bmpHash = computeBitmapHash(safeBitmap)
-        val cacheKey = "$normalizedLang:$bmpHash"
-        val blocks = recognizeWithMultiPass(safeBitmap, sourceLang)
-        if (safeBitmap !== bitmap) safeBitmap.recycle()
-        ocrLruCache.put(cacheKey, blocks)
-        Log.i(TAG, "OCR finished fullscreen with ${blocks.size} total blocks (cached)")
-        blocks
     }
 
     private suspend fun recognizeWithMultiPass(
@@ -178,91 +183,103 @@ class GameTextRecognizer {
     ): List<TranslatedTextBlock> {
         // Base: Adaptive resolution scaling for 1x..16x internal emulator resolutions & high-DPI surfaces
         val pixelScaled = createOptimalOcrScaledBitmap(inputBitmap)
+        try {
+            // Pass 1: Crisp Scaled / Nearest-Neighbor (Captures clean standard pixel text)
+            var blocks = recognizeOnBitmap(pixelScaled, sourceLang)
+            if (blocks.isNotEmpty()) {
+                Log.i(TAG, "OCR Pass 1 (Adaptive Scaled) matched ${blocks.size} blocks")
+                return blocks
+            }
 
-        // Pass 1: Crisp Scaled / Nearest-Neighbor (Captures clean standard pixel text)
-        var blocks = recognizeOnBitmap(pixelScaled, sourceLang)
-        if (blocks.isNotEmpty()) {
-            Log.i(TAG, "OCR Pass 1 (Adaptive Scaled) matched ${blocks.size} blocks")
-            if (pixelScaled !== inputBitmap) pixelScaled.recycle()
+            // Pass 2: Contrast Stretching + Sauvola Local Adaptive Thresholding (For gradients / textured boxes)
+            val sauvolaBitmap = createSauvolaBinarizedBitmap(pixelScaled)
+            if (sauvolaBitmap != null) {
+                blocks = try {
+                    recognizeOnBitmap(sauvolaBitmap, sourceLang)
+                } finally {
+                    if (!sauvolaBitmap.isRecycled) sauvolaBitmap.recycle()
+                }
+                if (blocks.isNotEmpty()) {
+                    Log.i(TAG, "OCR Pass 2 (Sauvola Adaptive Thresholding) matched ${blocks.size} blocks")
+                    return blocks
+                }
+            }
+
+            // Pass 3: Otsu Global Optimal Inverted Binarization (For white/light text on dark dialogue boxes)
+            val otsuInverted = createOtsuBinarizedBitmap(pixelScaled, invert = true)
+            if (otsuInverted != null) {
+                blocks = try {
+                    recognizeOnBitmap(otsuInverted, sourceLang)
+                } finally {
+                    if (!otsuInverted.isRecycled) otsuInverted.recycle()
+                }
+                if (blocks.isNotEmpty()) {
+                    Log.i(TAG, "OCR Pass 3 (Otsu Inverted Binarization) matched ${blocks.size} blocks")
+                    return blocks
+                }
+            }
+
+            // Pass 4: Chromatic Text Color Isolation (Extracts White, Yellow, Cyan, Lime dialogue text)
+            val colorIsolated = createTextColorIsolatedBitmap(pixelScaled)
+            if (colorIsolated != null) {
+                blocks = try {
+                    recognizeOnBitmap(colorIsolated, sourceLang)
+                } finally {
+                    if (!colorIsolated.isRecycled) colorIsolated.recycle()
+                }
+                if (blocks.isNotEmpty()) {
+                    Log.i(TAG, "OCR Pass 4 (Chromatic Text Isolation) matched ${blocks.size} blocks")
+                    return blocks
+                }
+            }
+
+            // Pass 5: Split Top / Bottom screen passes for Dual-Screen NDS layout
+            if (pixelScaled.height > 120) {
+                val halfH = pixelScaled.height / 2
+                val topHalf = Bitmap.createBitmap(pixelScaled, 0, 0, pixelScaled.width, halfH)
+                val topBlocks = try {
+                    recognizeOnBitmap(topHalf, sourceLang).map { b ->
+                        b.copy(
+                            boundingBox = RectF(
+                                b.boundingBox.left,
+                                b.boundingBox.top * 0.5f,
+                                b.boundingBox.right,
+                                b.boundingBox.bottom * 0.5f
+                            )
+                        )
+                    }
+                } finally {
+                    if (!topHalf.isRecycled) topHalf.recycle()
+                }
+
+                val bottomHalf = Bitmap.createBitmap(pixelScaled, 0, halfH, pixelScaled.width, halfH)
+                val bottomBlocks = try {
+                    recognizeOnBitmap(bottomHalf, sourceLang).map { b ->
+                        b.copy(
+                            boundingBox = RectF(
+                                b.boundingBox.left,
+                                0.5f + b.boundingBox.top * 0.5f,
+                                b.boundingBox.right,
+                                0.5f + b.boundingBox.bottom * 0.5f
+                            )
+                        )
+                    }
+                } finally {
+                    if (!bottomHalf.isRecycled) bottomHalf.recycle()
+                }
+
+                blocks = topBlocks + bottomBlocks
+                if (blocks.isNotEmpty()) {
+                    Log.i(TAG, "OCR Pass 5 (Split Screen Dual-Pass) matched ${blocks.size} blocks")
+                }
+            }
+
             return blocks
-        }
-
-        // Pass 2: Contrast Stretching + Sauvola Local Adaptive Thresholding (For gradients / textured boxes)
-        val sauvolaBitmap = createSauvolaBinarizedBitmap(pixelScaled)
-        if (sauvolaBitmap != null) {
-            blocks = recognizeOnBitmap(sauvolaBitmap, sourceLang)
-            sauvolaBitmap.recycle()
-            if (blocks.isNotEmpty()) {
-                Log.i(TAG, "OCR Pass 2 (Sauvola Adaptive Thresholding) matched ${blocks.size} blocks")
-                if (pixelScaled !== inputBitmap) pixelScaled.recycle()
-                return blocks
+        } finally {
+            if (pixelScaled !== inputBitmap && !pixelScaled.isRecycled) {
+                pixelScaled.recycle()
             }
         }
-
-        // Pass 3: Otsu Global Optimal Inverted Binarization (For white/light text on dark dialogue boxes)
-        val otsuInverted = createOtsuBinarizedBitmap(pixelScaled, invert = true)
-        if (otsuInverted != null) {
-            blocks = recognizeOnBitmap(otsuInverted, sourceLang)
-            otsuInverted.recycle()
-            if (blocks.isNotEmpty()) {
-                Log.i(TAG, "OCR Pass 3 (Otsu Inverted Binarization) matched ${blocks.size} blocks")
-                if (pixelScaled !== inputBitmap) pixelScaled.recycle()
-                return blocks
-            }
-        }
-
-        // Pass 4: Chromatic Text Color Isolation (Extracts White, Yellow, Cyan, Lime dialogue text)
-        val colorIsolated = createTextColorIsolatedBitmap(pixelScaled)
-        if (colorIsolated != null) {
-            blocks = recognizeOnBitmap(colorIsolated, sourceLang)
-            colorIsolated.recycle()
-            if (blocks.isNotEmpty()) {
-                Log.i(TAG, "OCR Pass 4 (Chromatic Text Isolation) matched ${blocks.size} blocks")
-                if (pixelScaled !== inputBitmap) pixelScaled.recycle()
-                return blocks
-            }
-        }
-
-        // Pass 5: Split Top / Bottom screen passes for Dual-Screen NDS layout
-        if (pixelScaled.height > 120) {
-            val halfH = pixelScaled.height / 2
-            val topHalf = Bitmap.createBitmap(pixelScaled, 0, 0, pixelScaled.width, halfH)
-            val topBlocks = recognizeOnBitmap(topHalf, sourceLang).map { b ->
-                b.copy(
-                    boundingBox = RectF(
-                        b.boundingBox.left,
-                        b.boundingBox.top * 0.5f,
-                        b.boundingBox.right,
-                        b.boundingBox.bottom * 0.5f
-                    )
-                )
-            }
-            topHalf.recycle()
-
-            val bottomHalf = Bitmap.createBitmap(pixelScaled, 0, halfH, pixelScaled.width, halfH)
-            val bottomBlocks = recognizeOnBitmap(bottomHalf, sourceLang).map { b ->
-                b.copy(
-                    boundingBox = RectF(
-                        b.boundingBox.left,
-                        0.5f + b.boundingBox.top * 0.5f,
-                        b.boundingBox.right,
-                        0.5f + b.boundingBox.bottom * 0.5f
-                    )
-                )
-            }
-            bottomHalf.recycle()
-
-            blocks = topBlocks + bottomBlocks
-            if (blocks.isNotEmpty()) {
-                Log.i(TAG, "OCR Pass 5 (Split Screen Dual-Pass) matched ${blocks.size} blocks")
-            }
-        }
-
-        if (pixelScaled !== inputBitmap) {
-            pixelScaled.recycle()
-        }
-
-        return blocks
     }
 
     /**

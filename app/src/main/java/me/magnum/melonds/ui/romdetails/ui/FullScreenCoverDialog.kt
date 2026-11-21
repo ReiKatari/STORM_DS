@@ -70,11 +70,15 @@ fun FullScreenCoverDialog(
 
     var showFormatSelector by remember { mutableStateOf(false) }
 
+    val boxArtRepo = remember { me.magnum.melonds.di.entrypoint.BoxArtEntryPoint.resolve(context).boxArtRepository() }
+    var customCoverFile by remember { mutableStateOf(boxArtRepo.getCustomCoverFile(rom)) }
+    var hasCustomCover by remember { mutableStateOf(customCoverFile != null) }
+
     fun saveImage(format: Bitmap.CompressFormat, extension: String, mimeType: String) {
         coroutineScope.launch(Dispatchers.IO) {
             try {
                 val loader = context.imageLoader
-                val dataModel: Any = boxArtUrl ?: rom
+                val dataModel: Any = customCoverFile ?: boxArtUrl ?: rom
                 val request = ImageRequest.Builder(context)
                     .data(dataModel)
                     .allowHardware(false)
@@ -110,8 +114,21 @@ fun FullScreenCoverDialog(
                     outputStream = java.io.FileOutputStream(file)
                 }
 
-                outputStream?.use { out ->
+                if (outputStream == null) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Ошибка сохранения: не удалось открыть файл", Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
+                }
+
+                val compressed = outputStream.use { out ->
                     bitmap.compress(format, 100, out)
+                }
+                if (!compressed) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Ошибка сохранения изображения", Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
                 }
 
                 withContext(Dispatchers.Main) {
@@ -125,10 +142,6 @@ fun FullScreenCoverDialog(
             }
         }
     }
-
-    val boxArtRepo = remember { me.magnum.melonds.di.entrypoint.BoxArtEntryPoint.resolve(context).boxArtRepository() }
-    var customCoverFile by remember { mutableStateOf(boxArtRepo.getCustomCoverFile(rom)) }
-    var hasCustomCover by remember { mutableStateOf(customCoverFile != null) }
 
     val pickCoverLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()

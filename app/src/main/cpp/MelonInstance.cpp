@@ -1437,6 +1437,7 @@ MelonInstance::MelonInstance(int instanceId, std::shared_ptr<EmulatorConfigurati
     instanceId(instanceId),
     vulkanSessionProfile(makeVulkanSessionProfile(configuration)),
     currentConfiguration(configuration),
+    lastValidRendererConfiguration(configuration),
     net(net),
     lastCompletedVulkanFrame(nullptr),
     lastCompletedVulkanScale(1),
@@ -1799,10 +1800,31 @@ bool MelonInstance::precompileVulkanPipelines(const VulkanSurfaceConfig& retroAr
         return failPrecompile("missing output");
 
     auto& renderer3D = static_cast<VulkanRenderer3D&>(nds->GPU.GetRenderer3D());
-    auto& vulkanRenderSettings = static_cast<VulkanRenderSettings&>(*config->renderSettings);
+    VulkanRenderSettings vulkanRenderSettings = static_cast<const VulkanRenderSettings&>(*config->renderSettings);
     const int vulkanScale = std::max(1, vulkanRenderSettings.scale);
     const u32 validationWidth = static_cast<u32>(256 * vulkanScale);
     const u32 validationHeight = static_cast<u32>((192 + 1) * 2 * vulkanScale);
+
+    auto syncVulkanRenderSettingsClone = [&](VulkanPipelineProfile targetProfile) {
+        auto updated = cloneAndSwapConfiguration([&](EmulatorConfiguration& cloned) {
+            if (cloned.renderSettings && cloned.renderer == Renderer::Vulkan)
+            {
+                auto& v = static_cast<VulkanRenderSettings&>(*cloned.renderSettings);
+                v.pipelineProfile = targetProfile;
+                v.useSimplePipeline = true;
+            }
+        });
+        if (updated && updated->renderSettings && updated->renderer == Renderer::Vulkan)
+        {
+            config = updated;
+            vulkanRenderSettings = static_cast<const VulkanRenderSettings&>(*config->renderSettings);
+        }
+        else
+        {
+            vulkanRenderSettings.pipelineProfile = targetProfile;
+            vulkanRenderSettings.useSimplePipeline = true;
+        }
+    };
 
     auto downgradeToCompatibilityProfile = [&]() -> bool {
         if (vulkanRenderSettings.pipelineProfile == VulkanPipelineProfile::Compatibility
@@ -1814,8 +1836,7 @@ bool MelonInstance::precompileVulkanPipelines(const VulkanSurfaceConfig& retroAr
             "Vulkan precompile: FastPath validation failed; downgrading session to Compatibility profile"
         );
         vulkanSessionProfile.set(VulkanPipelineProfile::Compatibility);
-        vulkanRenderSettings.pipelineProfile = VulkanPipelineProfile::Compatibility;
-        vulkanRenderSettings.useSimplePipeline = true;
+        syncVulkanRenderSettingsClone(VulkanPipelineProfile::Compatibility);
         if (nds != nullptr && dynamic_cast<const GPU2D::CompatibilitySoftRenderer*>(&nds->GPU.GetRenderer2D()) == nullptr)
         {
             nds->GPU.SetRenderer2D(std::make_unique<GPU2D::CompatibilitySoftRenderer>(nds->GPU));
@@ -1852,8 +1873,7 @@ bool MelonInstance::precompileVulkanPipelines(const VulkanSurfaceConfig& retroAr
     {
         const VulkanPipelineProfile activeProfile = renderer3D.GetVulkanPipelineProfile();
         vulkanSessionProfile.set(activeProfile);
-        vulkanRenderSettings.pipelineProfile = activeProfile;
-        vulkanRenderSettings.useSimplePipeline = true;
+        syncVulkanRenderSettingsClone(activeProfile);
         if (!UsesVulkanFastPath(activeProfile)
             && nds != nullptr
             && dynamic_cast<const GPU2D::CompatibilitySoftRenderer*>(&nds->GPU.GetRenderer2D()) == nullptr)
@@ -2914,6 +2934,11 @@ void MelonInstance::applyPendingThreadSafeUpdates()
     bool applyKeyMask = false;
     bool applyCheats = false;
     std::vector<ARCode> cheatsCopy;
+    bool applyRuntimeConfig = false;
+    int audioInterpolation = 0;
+    int audioBitrate = 0;
+    bool enable3dWidescreen = false;
+    int arm9OverclockMultiplier = 1;
 
     {
         std::lock_guard<std::mutex> lock(inputStateMutex);
@@ -2943,6 +2968,15 @@ void MelonInstance::applyPendingThreadSafeUpdates()
             pendingCheats.clear();
             hasPendingCheats = false;
         }
+        if (hasPendingRuntimeConfigUpdate)
+        {
+            applyRuntimeConfig = true;
+            audioInterpolation = pendingAudioInterpolation;
+            audioBitrate = pendingAudioBitrate;
+            enable3dWidescreen = pendingEnable3dWidescreen;
+            arm9OverclockMultiplier = pendingArm9OverclockMultiplier;
+            hasPendingRuntimeConfigUpdate = false;
+        }
     }
 
     if (nds == nullptr)
@@ -2961,6 +2995,13 @@ void MelonInstance::applyPendingThreadSafeUpdates()
     }
     if (applyCheats)
         nds->AREngine.Cheats = std::move(cheatsCopy);
+    if (applyRuntimeConfig)
+    {
+        nds->SPU.SetInterpolation(static_cast<AudioInterpolation>(audioInterpolation));
+        nds->SPU.SetDegrade10Bit(static_cast<AudioBitDepth>(audioBitrate));
+        nds->GPU.GPU3D.SetWidescreen3D(enable3dWidescreen);
+        nds->SetARM9OverclockMultiplier(arm9OverclockMultiplier);
+    }
 }
 
 void MelonInstance::touchScreen(u16 x, u16 y)
@@ -3322,21 +3363,23 @@ bool MelonInstance::presentVulkanFrame(
     std::optional<std::chrono::time_point<std::chrono::steady_clock>> deadline,
     std::optional<std::chrono::time_point<std::chrono::steady_clock>> budgetDeadline)
 {
+    int renderScale = 1;
+    bool graphicsHardwareActive = false;
     {
         std::lock_guard<std::recursive_mutex> presentationLock(vulkanPresentationMutex);
-        if (currentRenderer != Renderer::Vulkan || !vulkanOutput || !vulkanSurfacePresenter)
+        if (currentRenderer != Renderer::Vulkan || !vulkanOutput || !vulkanSurfacePresenter || nds == nullptr)
             return false;
+        auto& renderer3D = static_cast<VulkanRenderer3D&>(nds->GPU.GetRenderer3D());
+        renderScale = std::max(renderer3D.GetScaleFactor(), 1);
+        graphicsHardwareActive =
+            renderer3D.GetActiveBackendMode() == VulkanRenderer3D::BackendMode::GraphicsHardware;
     }
 
     const auto config = getConfigurationSnapshot();
     if (!config || !config->renderSettings)
         return false;
 
-    auto& renderer3D = static_cast<VulkanRenderer3D&>(nds->GPU.GetRenderer3D());
     const auto& vulkanRenderSettings = static_cast<const VulkanRenderSettings&>(*config->renderSettings);
-    const int renderScale = std::max(renderer3D.GetScaleFactor(), 1);
-    const bool graphicsHardwareActive =
-        renderer3D.GetActiveBackendMode() == VulkanRenderer3D::BackendMode::GraphicsHardware;
     const bool fastForwardActive = isFastForwardActive();
     if (lastVulkanFastForwardPresentationState != fastForwardActive)
     {
@@ -3539,10 +3582,17 @@ bool MelonInstance::presentVulkanFrame(
         const int framePresentationScale = frame->width >= 256
             ? std::max<int>(1, static_cast<int>(frame->width / 256u))
             : renderScale;
+        if (nds == nullptr)
+        {
+            presentationLock.unlock();
+            frameQueue.deferPresentedFrame(frame, deferFrameQueuePolicy);
+            return false;
+        }
+        auto& lockedRenderer3D = static_cast<VulkanRenderer3D&>(nds->GPU.GetRenderer3D());
         VulkanCompositionInputs compositionInputs{};
         if (!localOutput->buildCompositionInputs(
                 frame,
-                renderer3D,
+                lockedRenderer3D,
                 framePresentationScale,
                 vulkanRenderSettings.videoFiltering,
                 vulkanRenderSettings.pipelineProfile,
@@ -5450,20 +5500,25 @@ void MelonInstance::updateVulkanFastForwardRenderScale()
 
 void MelonInstance::updateConfiguration(std::shared_ptr<EmulatorConfiguration> newConfiguration)
 {
-    if (nds)
-    {
-        nds->SPU.SetInterpolation(static_cast<AudioInterpolation>(newConfiguration->audioSettings.audioInterpolation));
-        nds->SPU.SetDegrade10Bit(static_cast<AudioBitDepth>(newConfiguration->audioSettings.audioBitrate));
-        nds->GPU.GPU3D.SetWidescreen3D(newConfiguration->enable3dWidescreen);
-        nds->SetARM9OverclockMultiplier(newConfiguration->arm9OverclockMultiplier);
-    }
+    if (!newConfiguration)
+        return;
+
     melonDS::Net_Slirp::SetCustomDNS(newConfiguration->wfcDnsIp);
 
     rewindManager.UpdateRewindSettings(newConfiguration->rewindEnabled, newConfiguration->rewindLengthSeconds, newConfiguration->rewindCaptureSpacingSeconds);
 
     {
+        std::lock_guard<std::mutex> lock(inputStateMutex);
+        pendingAudioInterpolation = newConfiguration->audioSettings.audioInterpolation;
+        pendingAudioBitrate = newConfiguration->audioSettings.audioBitrate;
+        pendingEnable3dWidescreen = newConfiguration->enable3dWidescreen;
+        pendingArm9OverclockMultiplier = newConfiguration->arm9OverclockMultiplier;
+        hasPendingRuntimeConfigUpdate = true;
+    }
+
+    {
         std::lock_guard<std::mutex> configLock(configurationMutex);
-        currentConfiguration = newConfiguration;
+        currentConfiguration = std::move(newConfiguration);
     }
     isRenderConfigurationDirty.store(true, std::memory_order_release);
 }
@@ -5771,6 +5826,37 @@ void MelonInstance::updateRenderer()
     if (!config || !config->renderSettings)
         return;
 
+    auto revertRendererToCurrent = [&]() {
+        std::shared_ptr<EmulatorConfiguration> fallbackSource;
+        {
+            std::lock_guard<std::mutex> configLock(configurationMutex);
+            fallbackSource = lastValidRendererConfiguration;
+        }
+        auto updated = cloneAndSwapConfiguration([&](EmulatorConfiguration& cloned) {
+            cloned.renderer = currentRenderer;
+            if (fallbackSource && fallbackSource->renderer == currentRenderer && fallbackSource->renderSettings)
+            {
+                auto fallbackClone = cloneEmulatorConfiguration(*fallbackSource);
+                cloned.renderSettings = std::move(fallbackClone->renderSettings);
+            }
+        });
+        if (updated)
+            config = std::move(updated);
+    };
+
+    auto syncVulkanProfileInConfig = [&](VulkanPipelineProfile targetProfile) {
+        auto updated = cloneAndSwapConfiguration([&](EmulatorConfiguration& cloned) {
+            if (cloned.renderSettings && cloned.renderer == Renderer::Vulkan)
+            {
+                auto& vulkanSettings = static_cast<VulkanRenderSettings&>(*cloned.renderSettings);
+                vulkanSettings.pipelineProfile = targetProfile;
+                vulkanSettings.useSimplePipeline = true;
+            }
+        });
+        if (updated)
+            config = std::move(updated);
+    };
+
     std::unique_lock<std::recursive_mutex> presentationLock(vulkanPresentationMutex);
     Renderer newRenderer = config->renderer;
 
@@ -5796,13 +5882,7 @@ void MelonInstance::updateRenderer()
                         "VulkanOutput init failed in FastPath; falling back to Compatibility profile"
                     );
                     vulkanSessionProfile.set(VulkanPipelineProfile::Compatibility);
-                    if (config->renderSettings)
-                    {
-                        auto& vulkanRenderSettings = static_cast<VulkanRenderSettings&>(
-                            *config->renderSettings);
-                        vulkanRenderSettings.pipelineProfile = VulkanPipelineProfile::Compatibility;
-                        vulkanRenderSettings.useSimplePipeline = true;
-                    }
+                    syncVulkanProfileInConfig(VulkanPipelineProfile::Compatibility);
                     if (nds != nullptr && dynamic_cast<const GPU2D::CompatibilitySoftRenderer*>(&nds->GPU.GetRenderer2D()) == nullptr)
                     {
                         nds->GPU.SetRenderer2D(std::make_unique<GPU2D::CompatibilitySoftRenderer>(nds->GPU));
@@ -5827,7 +5907,7 @@ void MelonInstance::updateRenderer()
                     }
                 }
 
-                config->renderer = currentRenderer;
+                revertRendererToCurrent();
                 return;
             }
 
@@ -5897,7 +5977,7 @@ void MelonInstance::updateRenderer()
                     if (currentRenderer != Renderer::Vulkan)
                         vulkanOutput = nullptr;
 
-                    config->renderer = currentRenderer;
+                    revertRendererToCurrent();
                     return;
                 }
 
@@ -5913,7 +5993,7 @@ void MelonInstance::updateRenderer()
         if (!nextRenderer)
         {
             Platform::Log(Platform::LogLevel::Error, "Failed to create requested renderer backend");
-            config->renderer = currentRenderer;
+            revertRendererToCurrent();
             return;
         }
 
@@ -5945,14 +6025,15 @@ void MelonInstance::updateRenderer()
         }
         case Renderer::Vulkan:
         {
-            auto& vulkanRenderSettings = static_cast<VulkanRenderSettings&>(*config->renderSettings);
+            auto vulkanRenderSettings = static_cast<const VulkanRenderSettings&>(*config->renderSettings);
             auto& renderer3d = static_cast<VulkanRenderer3D&>(nds->GPU.GetRenderer3D());
             if (renderer3d.GetVulkanPipelineProfile() == VulkanPipelineProfile::Compatibility
                 && vulkanRenderSettings.pipelineProfile == VulkanPipelineProfile::FastPath)
             {
                 vulkanSessionProfile.set(VulkanPipelineProfile::Compatibility);
-                vulkanRenderSettings.pipelineProfile = VulkanPipelineProfile::Compatibility;
-                vulkanRenderSettings.useSimplePipeline = true;
+                syncVulkanProfileInConfig(VulkanPipelineProfile::Compatibility);
+                if (config && config->renderSettings && config->renderer == Renderer::Vulkan)
+                    vulkanRenderSettings = static_cast<const VulkanRenderSettings&>(*config->renderSettings);
                 if (dynamic_cast<const GPU2D::CompatibilitySoftRenderer*>(&nds->GPU.GetRenderer2D()) == nullptr)
                 {
                     nds->GPU.SetRenderer2D(std::make_unique<GPU2D::CompatibilitySoftRenderer>(nds->GPU));
@@ -6011,6 +6092,11 @@ void MelonInstance::updateRenderer()
         }
         default: __builtin_unreachable();
     }
+
+    {
+        std::lock_guard<std::mutex> configLock(configurationMutex);
+        lastValidRendererConfiguration = config;
+    }
 }
 
 void MelonInstance::setBatteryLevels()
@@ -6039,7 +6125,7 @@ bool MelonInstance::updateVulkanScreenshot(Frame* frame, int scale, bool clearOn
 {
     const size_t screenshotPixelCount = static_cast<size_t>(kScreenshotScreenWidth) * static_cast<size_t>(kScreenshotScreenHeight) * 2;
     auto clearScreenshot = [&]() {
-        if (clearOnFailure)
+        if (clearOnFailure && screenshotRenderer != nullptr && screenshotRenderer->getScreenshot() != nullptr)
             std::fill_n(screenshotRenderer->getScreenshot(), screenshotPixelCount, 0u);
     };
 
@@ -6050,7 +6136,9 @@ bool MelonInstance::updateVulkanScreenshot(Frame* frame, int scale, bool clearOn
         || frame == nullptr
         || scale < 1
         || !config
-        || !config->renderSettings)
+        || !config->renderSettings
+        || screenshotRenderer == nullptr
+        || screenshotRenderer->getScreenshot() == nullptr)
     {
         clearScreenshot();
         return false;

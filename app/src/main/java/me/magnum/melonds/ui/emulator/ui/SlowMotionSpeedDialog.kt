@@ -35,6 +35,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -46,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import me.magnum.melonds.R
+import me.magnum.melonds.ui.common.RequestInitialFocus
 import me.magnum.melonds.ui.common.bouncingClickable
 import me.magnum.melonds.ui.theme.Manrope
 import me.magnum.melonds.ui.theme.WatermelonMono
@@ -63,6 +66,7 @@ fun SlowMotionSpeedDialog(
 ) {
     val colors = watermelon
     var sliderValue by remember(currentSpeed) { mutableFloatStateOf(currentSpeed.coerceIn(0.1f, 1.0f)) }
+    val applyFocusRequester = remember { FocusRequester() }
 
     val presets = remember {
         listOf(
@@ -300,6 +304,7 @@ fun SlowMotionSpeedDialog(
                 Box(
                     modifier = Modifier
                         .weight(1f)
+                        .focusRequester(applyFocusRequester)
                         .clip(applyShape)
                         .background(colors.green)
                         .border(1.dp, colors.green, applyShape)
@@ -320,5 +325,7 @@ fun SlowMotionSpeedDialog(
                 }
             }
         }
+
+        RequestInitialFocus(applyFocusRequester)
     }
 }

@@ -31,4 +31,5 @@
     <string name="mic_agc_noise_gate_title">Suppression de bruit adaptative et AGC du micro</string>
     <string name="mic_agc_noise_gate_summary">Filtre DC, réduction du bruit ambiant et normalisation de la voix</string>
     <string name="v790_vulkan_pipeline_cache_status">Cache de pipelines Vulkan actif</string>
+    <string name="v790_ram_value_required">Valeur requise</string>
 </resources>

@@ -73,16 +73,16 @@ class RomDetailsActivity : AppCompatActivity() {
     }
 
     private fun refreshFocusedContent() {
-        val rom = romDetailsViewModel.rom.value
-        val achievement = focusedAchievement.value
-        val setting = focusedSetting.value
         externalInfoController.setContent {
+            val rom by romDetailsViewModel.rom.collectAsState()
+            val achievement by focusedAchievement.collectAsState()
+            val setting by focusedSetting.collectAsState()
             when {
-                achievement != null -> me.magnum.melonds.ui.common.ExternalAchievementInfo(achievement)
+                achievement != null -> me.magnum.melonds.ui.common.ExternalAchievementInfo(achievement!!)
                 setting != null -> me.magnum.melonds.ui.common.ExternalSettingInfo(
                     iconDrawable = null,
-                    title = setting.first,
-                    description = setting.second,
+                    title = setting!!.first,
+                    description = setting!!.second,
                     crumb = rom.name,
                 )
                 else -> {
@@ -319,6 +319,6 @@ class RomDetailsActivity : AppCompatActivity() {
         val intent = Intent(Intent.ACTION_VIEW).apply {
             data = achievementUrl.toUri()
         }
-        startActivity(intent)
+        runCatching { startActivity(intent) }
     }
 }

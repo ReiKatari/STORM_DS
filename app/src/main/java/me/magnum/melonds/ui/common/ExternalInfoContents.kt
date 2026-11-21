@@ -627,7 +627,7 @@ fun ExternalSaveStatesInfo(
                     }
                     val whenLabel = slot.lastUsedDate?.let {
                         android.text.format.DateUtils.getRelativeTimeSpanString(it.time).toString()
-                    } ?: "—"
+                    } ?: "-"
                     Text(
                         text = whenLabel,
                         color = Color.White.copy(alpha = 0.5f),

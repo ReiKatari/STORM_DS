@@ -119,6 +119,8 @@ fun RamCheatFinderTab(
     cheatsRepository: CheatsRepository,
     onCheatCreated: () -> Unit,
     modifier: Modifier = Modifier,
+    isHardcoreActive: Boolean = false,
+    onSwitchToSoftcore: (() -> Unit)? = null,
 ) {
     val colors = watermelon
     val onAccent = if (colors.isDark) Color.Black else Color.White
@@ -294,7 +296,25 @@ fun RamCheatFinderTab(
         }
     }
 
+    fun parseManualNumber(raw: String): Long? {
+        val trimmed = raw.trim()
+        if (trimmed.isEmpty()) return null
+        return try {
+            if (isHexInput || trimmed.startsWith("0x", ignoreCase = true)) {
+                val hexStr = trimmed.removePrefix("0x").removePrefix("0X")
+                if (hexStr.isEmpty()) null else hexStr.toLong(16)
+            } else {
+                trimmed.toLong()
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     fun testWriteOffset(offset: Int, customValue: Long) {
+        if (isHardcoreActive) {
+            onSwitchToSoftcore?.invoke()
+        }
         val success = MelonEmulator.writeMainRamValue(offset, bitness.bytes, customValue)
         testStatusMap[offset] = if (success) {
             context.getString(R.string.v790_ram_test_success)
@@ -304,6 +324,9 @@ fun RamCheatFinderTab(
     }
 
     fun createAndSaveCheat(offset: Int, value: Long) {
+        if (isHardcoreActive) {
+            onSwitchToSoftcore?.invoke()
+        }
         val code = formatActionReplayCode(offset, bitness, value)
         val ramAddress = 0x02000000 + offset
         val cheatName = String.format(context.getString(R.string.v790_ram_cheat_name), ramAddress)
@@ -632,7 +655,7 @@ fun RamCheatFinderTab(
                     val curVal = currSnap?.let { readRamValue(it, offset, bitness.bytes) } ?: 0L
                     val prevVal = prevSnap?.let { readRamValue(it, offset, bitness.bytes) } ?: curVal
 
-                    var itemTestValue by remember(offset) {
+                    var itemTestValue by remember(offset, curVal) {
                         mutableStateOf(testValuesMap[offset] ?: curVal.toString())
                     }
                     val statusText = testStatusMap[offset]
@@ -718,14 +741,10 @@ fun RamCheatFinderTab(
                                         .background(colors.surface)
                                         .border(1.dp, colors.green.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
                                         .clickable {
-                                            val parsed = try {
-                                                if (isHexInput || itemTestValue.startsWith("0x", ignoreCase = true)) {
-                                                    itemTestValue.removePrefix("0x").removePrefix("0X").toLong(16)
-                                                } else {
-                                                    itemTestValue.toLong()
-                                                }
-                                            } catch (_: Exception) {
-                                                curVal
+                                            val parsed = parseManualNumber(itemTestValue)
+                                            if (parsed == null) {
+                                                Toast.makeText(context, context.getString(R.string.ram_finder_invalid_number), Toast.LENGTH_SHORT).show()
+                                                return@clickable
                                             }
                                             testWriteOffset(offset, parsed)
                                         }
@@ -748,14 +767,10 @@ fun RamCheatFinderTab(
                                         .clip(RoundedCornerShape(6.dp))
                                         .background(colors.green)
                                         .clickable {
-                                            val parsed = try {
-                                                if (isHexInput || itemTestValue.startsWith("0x", ignoreCase = true)) {
-                                                    itemTestValue.removePrefix("0x").removePrefix("0X").toLong(16)
-                                                } else {
-                                                    itemTestValue.toLong()
-                                                }
-                                            } catch (_: Exception) {
-                                                curVal
+                                            val parsed = parseManualNumber(itemTestValue)
+                                            if (parsed == null) {
+                                                Toast.makeText(context, context.getString(R.string.ram_finder_invalid_number), Toast.LENGTH_SHORT).show()
+                                                return@clickable
                                             }
                                             createAndSaveCheat(offset, parsed)
                                         }

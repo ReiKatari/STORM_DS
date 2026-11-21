@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="decrypt_rom_replace_description">此 DSi ROM 使用 Modcrypt 加密。解密后将用已解密的副本替换当前文件。</string>
+    <string name="decrypt_rom_replace_confirm">解密并替换</string>
+    <string name="decrypt_rom_result_success_title">ROM 已解密</string>
+    <string name="decrypt_rom_result_success_message">DSi ROM 已成功解密，现在可以启动游玩。</string>
+    <string name="decrypt_rom_launch_now">立即启动</string>
+    <string name="decrypt_rom_result_error_title">解密错误</string>
+    <string name="decrypt_rom_result_error_message">无法解密 ROM：%1$s</string>
+    <string name="decrypt_rom_err_read">读取 ROM 文件失败</string>
+    <string name="decrypt_rom_err_write">写入已解密的 ROM 文件失败</string>
+    <string name="decrypt_rom_err_not_dsi">此文件不是有效的 Nintendo DSi ROM</string>
+    <string name="decrypt_rom_err_too_small">ROM 文件过小或已损坏</string>
+    <string name="decrypt_rom_err_bounds">Modcrypt 区域超出 ROM 文件范围</string>
+    <string name="decrypt_rom_err_validation">已解密 ROM 的文件头校验失败</string>
+    <string name="rom_list_random_rom">随机游戏</string>
+    <string name="rom_list_check_updates">检查更新</string>
+    <string name="ra_offline_status_not_logged_in">尚未登录 RetroAchievements</string>
+    <string name="ra_offline_status_no_cache">没有可用于离线模式的成就缓存数据</string>
+    <string name="stats_export_share_chooser">分享统计数据</string>
+    <string name="wfc_lobby_activated_toast">已启用 WFC 大厅 %1$s (DNS: %2$s)</string>
+    <string name="ram_finder_invalid_number">请输入有效数字</string>
+</resources>

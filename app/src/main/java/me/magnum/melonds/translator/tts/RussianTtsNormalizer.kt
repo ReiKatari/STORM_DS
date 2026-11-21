@@ -7,7 +7,7 @@ import java.util.regex.Pattern
  * - Fixes stress (ударения) on 200+ gaming characters, locations, and RPG terms using combining acute accent (U+0301).
  * - Contextual homograph disambiguation (за́мок vs замо́к).
  * - Strips OCR border artifacts (|, ~, *, _, stray brackets) so voice actors never read symbol names aloud.
- * - Handles pauses on em-dashes (—) and ellipses (...) cleanly without audio clipping.
+ * - Handles pauses on dashes (-) and ellipses (...) cleanly without audio clipping.
  * - Expands gaming abbreviations (HP, MP, EXP, LVL, ATK, DEF, G, etc.) into natural Russian speech.
  */
 object RussianTtsNormalizer {
@@ -159,8 +159,8 @@ object RussianTtsNormalizer {
     private val STRIP_STARS_REGEX = Regex("\\*{1,3}")
     private val MULTI_SPACE_REGEX = Regex("\\s+")
     private val ELLIPSIS_REGEX = Regex("\\.{3,}")
-    private val EM_DASH_REGEX = Regex("\\s*—\\s*")
-    private val EN_DASH_REGEX = Regex("\\s*–\\s*")
+    private val EM_DASH_REGEX = Regex("\\s*\\u2014\\s*")
+    private val EN_DASH_REGEX = Regex("\\s*\\u2013\\s*")
     private val INTERJECTION_HMM = Regex("(?iu)\\bхмм+\\b")
     private val INTERJECTION_MMM = Regex("(?iu)\\bммм+\\b")
     private val INTERJECTION_PFF = Regex("(?iu)\\bпфф+\\b")
@@ -219,11 +219,11 @@ object RussianTtsNormalizer {
             result = pattern.matcher(result).replaceAll(replacement)
         }
 
-        // 3. Clean pause handling on em-dashes and ellipses
+        // 3. Clean pause handling on dashes and ellipses
         result = result
             .replace(ELLIPSIS_REGEX, "... ")
-            .replace(EM_DASH_REGEX, " — ")
-            .replace(EN_DASH_REGEX, " — ")
+            .replace(EM_DASH_REGEX, " - ")
+            .replace(EN_DASH_REGEX, " - ")
             .replace(MULTI_SPACE_REGEX, " ")
 
         // 4. Expressive interjections, contextual Roman numerals & stress for Russian

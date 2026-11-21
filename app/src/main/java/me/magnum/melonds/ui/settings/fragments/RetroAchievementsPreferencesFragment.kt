@@ -268,13 +268,11 @@ class RetroAchievementsPreferencesFragment : BasePreferenceFragment(), Preferenc
         lifecycleScope.launch {
             lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.loggingIn.collect { loggingIn ->
-                    loginProgressDialog = if (loggingIn) {
-                        LoadingDialog(requireContext()).apply {
+                    dismissLoginProgressDialog()
+                    if (loggingIn) {
+                        loginProgressDialog = LoadingDialog(requireContext()).apply {
                             show()
                         }
-                    } else {
-                        loginProgressDialog?.dismiss()
-                        null
                     }
                 }
             }
@@ -417,9 +415,18 @@ class RetroAchievementsPreferencesFragment : BasePreferenceFragment(), Preferenc
         }
     }
 
-    override fun onDestroyView() {
+    private fun dismissLoginProgressDialog() {
         loginProgressDialog?.dismiss()
         loginProgressDialog = null
+    }
+
+    override fun onStop() {
+        dismissLoginProgressDialog()
+        super.onStop()
+    }
+
+    override fun onDestroyView() {
+        dismissLoginProgressDialog()
         super.onDestroyView()
     }
 

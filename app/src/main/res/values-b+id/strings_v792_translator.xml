@@ -29,9 +29,9 @@
         <item>system_offline_best</item>
     </string-array>
     <string name="translator_floating_button_opacity">Transparansi tombol terjemahan</string>
-    <string name="translator_floating_button_opacity_summary">Sesuaikan opasitas tombol melayang TR | LOG (bawaan 35%)</string>
+    <string name="translator_floating_button_opacity_summary" formatted="false">Sesuaikan opasitas tombol melayang TR | LOG (bawaan 35%)</string>
     <string name="translator_voice_pitch_title">Tinggi nada suara</string>
-    <string name="translator_voice_pitch_summary">Penyesuaian nada suara percakapan (-20%..+20%)</string>
+    <string name="translator_voice_pitch_summary" formatted="false">Penyesuaian nada suara percakapan (-20%..+20%)</string>
     <string name="translator_test_voice_title">Uji suara yang dipilih</string>
     <string name="translator_test_voice_summary">Putar sampel suara untuk memeriksa sintesis suara</string>
     <string name="translator_test_voice_playing">Memutar sampel suara...</string>

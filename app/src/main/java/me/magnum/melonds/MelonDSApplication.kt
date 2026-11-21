@@ -33,21 +33,35 @@ import me.magnum.melonds.migrations.Migrator
 import javax.inject.Inject
 
 @HiltAndroidApp
-class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoaderFactory {
+class MelonDSApplication : Application(), Configuration.Provider {
     companion object {
         var appContext: Context? = null
             private set
         const val NOTIFICATION_CHANNEL_ID_BACKGROUND_TASKS = "channel_cheat_importing"
         private const val NOTIFICATION_ID_HARDCORE_OFFLINE_LOSS = 2002
-        private var isMigrating = false
+        private val isMigrating = java.util.concurrent.atomic.AtomicBoolean(false)
+        @Volatile
         private var lastMigrationTime = 0L
+        private val migrationScope = kotlinx.coroutines.CoroutineScope(
+            kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob()
+        )
+
+        private fun isDirectoryWritable(dir: File): Boolean {
+            return runCatching {
+                if (!dir.exists() && !dir.mkdirs()) return@runCatching false
+                if (!dir.isDirectory || !dir.canWrite()) return@runCatching false
+                val probe = File.createTempFile(".storm_write_probe_", null, dir)
+                probe.delete()
+                true
+            }.getOrDefault(false)
+        }
 
         fun migrateStorageToRoot(context: Context, force: Boolean = false) {
             val now = System.currentTimeMillis()
-            if (!force && (isMigrating || (now - lastMigrationTime < 30_000L))) return
-            isMigrating = true
+            if (!force && (now - lastMigrationTime < 30_000L)) return
+            if (!isMigrating.compareAndSet(false, true)) return
 
-            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            migrationScope.launch {
                 try {
                     val rootBase = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS")
                     if (!rootBase.exists()) rootBase.mkdirs()
@@ -158,7 +172,8 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
                     }
 
                     // Purge legacy internal system directories so deleted files are NEVER resurrected
-                    listOf(
+                    val externalCoversWritable = isDirectoryWritable(File(rootBase, "cache/covers_cache"))
+                    val legacyInternalDirs = mutableListOf(
                         File(context.filesDir, "bios"),
                         File(context.filesDir, "quicksaves"),
                         File(context.filesDir, "cheats"),
@@ -169,12 +184,18 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
                         File(context.filesDir, "boxart"),
                         File(context.filesDir, "logs"),
                         File(context.filesDir, "cache"),
-                        File(context.cacheDir, "covers_cache"),
                         File(context.cacheDir, "installed_dsiware"),
                         File(context.cacheDir, "save_backups"),
                         File(context.cacheDir, "retroarch-shaders"),
-                    ).forEach { legacyDir ->
+                    )
+                    if (externalCoversWritable) {
+                        legacyInternalDirs.add(File(context.cacheDir, "covers_cache"))
+                    }
+                    legacyInternalDirs.forEach { legacyDir ->
                         runCatching { if (legacyDir.exists()) legacyDir.deleteRecursively() }
+                    }
+                    runCatching {
+                        File(rootBase, "cache/installed_dsiware").deleteRecursively()
                     }
                     context.getExternalFilesDir(null)?.let { extFiles ->
                         listOf(
@@ -326,52 +347,13 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
                 } catch (e: Throwable) {
                     Log.w("MelonDSApplication", "Failed to complete root storage migration", e)
                 } finally {
-                    isMigrating = false
+                    isMigrating.set(false)
                 }
             }
         }
     }
 
-    override fun newImageLoader(): coil.ImageLoader {
-        return coil.ImageLoader.Builder(this)
-            .memoryCache {
-                coil.memory.MemoryCache.Builder(this)
-                    .maxSizePercent(0.25)
-                    .build()
-            }
-            .diskCache {
-                val externalCoversCache = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS/cache/covers_cache")
-                val storageCoversCache = if (isDirectoryWritable(externalCoversCache)) {
-                    externalCoversCache
-                } else {
-                    File(cacheDir, "covers_cache").apply { mkdirs() }
-                }
-                coil.disk.DiskCache.Builder()
-                    .directory(storageCoversCache)
-                    .maxSizeBytes(256L * 1024 * 1024)
-                    .build()
-            }
-            .okHttpClient {
-                val baseClient = if (::okHttpClient.isInitialized) {
-                    okHttpClient
-                } else {
-                    me.magnum.melonds.common.network.SharedOkHttpClient.instance
-                }
-                baseClient.newBuilder()
-                    .connectTimeout(6, java.util.concurrent.TimeUnit.SECONDS)
-                    .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
-                    .callTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
-                    .retryOnConnectionFailure(false)
-                    .build()
-            }
-            // Box art never changes: reuse the disk copy without revalidating it over the network.
-            .respectCacheHeaders(false)
-            .crossfade(true)
-            .build()
-    }
-
     @Inject lateinit var workerFactory: HiltWorkerFactory
-    @Inject lateinit var okHttpClient: okhttp3.OkHttpClient
     @Inject lateinit var settingsRepository: SettingsRepository
     @Inject lateinit var migrator: Migrator
     @Inject lateinit var uriHandler: UriHandler
@@ -399,10 +381,6 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
         runCatching { applyTheme() }
         runCatching { performMigrations() }
         runCatching { migrateStorageToRoot(this) }
-        runCatching {
-            val rootBase = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS")
-            File(rootBase, "cache/installed_dsiware").deleteRecursively()
-        }
         runCatching { appLogFileRecorder.start() }
         runCatching { recoverUnexpectedHardcoreOfflineLossIfNeeded() }
         runCatching {
@@ -469,16 +447,6 @@ class MelonDSApplication : Application(), Configuration.Provider, coil.ImageLoad
         }.onFailure {
             Log.w("MelonDSApplication", "Could not point librashader at a cache directory", it)
         }
-    }
-
-    private fun isDirectoryWritable(dir: File): Boolean {
-        return runCatching {
-            if (!dir.exists() && !dir.mkdirs()) return@runCatching false
-            if (!dir.isDirectory || !dir.canWrite()) return@runCatching false
-            val probe = File.createTempFile(".storm_write_probe_", null, dir)
-            probe.delete()
-            true
-        }.getOrDefault(false)
     }
 
     private fun createNotificationChannels() {

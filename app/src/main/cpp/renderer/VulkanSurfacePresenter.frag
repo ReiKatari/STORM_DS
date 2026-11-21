@@ -82,6 +82,7 @@ const uint kPackedScreenHeight = 192u;
 layout(location = 0) in vec2 inFragUv;
 vec2 fragUv = vec2(0.0);
 bool gAllowCarryStore = true;
+ivec2 gCarryUvPixelOffset = ivec2(0, 0);
 layout(location = 1) in float fragAlpha;
 
 layout(location = 0) out vec4 outColor;
@@ -1526,8 +1527,8 @@ vec4 sampleComposedCarryColor(bool topScreen)
         : imageSize(uBottomComposedCarryImage);
     int carryWidth = max(1, carrySize.x);
     int carryHeight = max(1, carrySize.y);
-    int x = clamp(int(gl_FragCoord.x), 0, carryWidth - 1);
-    int y = clamp(int(gl_FragCoord.y), 0, carryHeight - 1);
+    int x = clamp(int(gl_FragCoord.x) + gCarryUvPixelOffset.x, 0, carryWidth - 1);
+    int y = clamp(int(gl_FragCoord.y) + gCarryUvPixelOffset.y, 0, carryHeight - 1);
     vec4 color = topScreen
         ? imageLoad(uTopComposedCarryImage, ivec2(x, y))
         : imageLoad(uBottomComposedCarryImage, ivec2(x, y));
@@ -1555,8 +1556,8 @@ vec4 sampleBottomComp2OneShotCarryRaw()
     ivec2 carrySize = imageSize(uBottomComp2OneShotCarryImage);
     int carryWidth = max(1, carrySize.x);
     int carryHeight = max(1, carrySize.y);
-    int x = clamp(int(gl_FragCoord.x), 0, carryWidth - 1);
-    int y = clamp(int(gl_FragCoord.y), 0, carryHeight - 1);
+    int x = clamp(int(gl_FragCoord.x) + gCarryUvPixelOffset.x, 0, carryWidth - 1);
+    int y = clamp(int(gl_FragCoord.y) + gCarryUvPixelOffset.y, 0, carryHeight - 1);
     return imageLoad(uBottomComp2OneShotCarryImage, ivec2(x, y));
 }
 
@@ -2740,17 +2741,53 @@ void runPresenterCore()
     outColor = color;
 }
 
+bool isCompositeAtlasDrawMode()
+{
+    return pushConstants.drawMode == 1u
+        || pushConstants.drawMode == 4u
+        || pushConstants.drawMode == 5u
+        || pushConstants.drawMode == 6u
+        || pushConstants.drawMode == 7u
+        || pushConstants.drawMode == 8u;
+}
+
+bool resolvePresenterTopScreen(vec2 uv)
+{
+    if (pushConstants.drawMode == 1u || pushConstants.drawMode == 6u)
+        return uv.y < 0.5;
+    return (pushConstants.drawMode == 2u)
+        || (pushConstants.drawMode == 4u)
+        || (pushConstants.drawMode == 7u)
+        || ((pushConstants.drawMode >= 9u && pushConstants.drawMode <= 20u)
+            && ((pushConstants.drawMode & 1u) != 0u));
+}
+
+vec2 resolveDepthScreenLocalUv(vec2 uv, bool topScreen)
+{
+    if (isCompositeAtlasDrawMode())
+        return screenLocalCoord(uv, topScreen);
+    return vec2(clamp(uv.x, 0.0, 1.0), clamp(1.0 - uv.y, 0.0, 1.0));
+}
+
+vec2 clampDepth3dUv(vec2 uv, bool topScreen)
+{
+    if (isCompositeAtlasDrawMode())
+        return clampCompositeUvToScreen(uv, topScreen);
+    return clamp(uv, vec2(0.001), vec2(0.999));
+}
+
 float sampleSingleDepthPoint(vec2 uv, bool topScreen, bool screenOwns3D)
 {
-    int sx = int(clamp(uv.x * 256.0, 0.0, 255.0));
-    int sy = int(clamp((1.0 - uv.y) * 192.0, 0.0, 191.0));
+    vec2 localUv = resolveDepthScreenLocalUv(uv, topScreen);
+    int sx = int(clamp(localUv.x * 256.0, 0.0, 255.0));
+    int sy = int(clamp(localUv.y * 192.0, 0.0, 191.0));
     Rgba6 v1 = unpackColor6(topScreen ? readTopPacked(sy, sx) : readBottomPacked(sy, sx));
     Rgba6 v3 = unpackColor6(topScreen ? readTopPacked(sy, 512 + sx) : readBottomPacked(sy, 512 + sx));
 
     int rW = int(max(pushConstants.rendererWidth, 1u));
     int rH = int(max(pushConstants.rendererHeight, 1u));
-    int scaledX = int(clamp(uv.x * float(rW), 0.0, float(rW - 1)));
-    int scaledY = int(clamp((1.0 - uv.y) * float(rH), 0.0, float(rH - 1)));
+    int scaledX = int(clamp(localUv.x * float(rW), 0.0, float(rW - 1)));
+    int scaledY = int(clamp(localUv.y * float(rH), 0.0, float(rH - 1)));
     vec4 raw3D = screenOwns3D
         ? imageLoad(u3dImage, ivec2(scaledX, scaledY))
         : (topScreen
@@ -2768,7 +2805,7 @@ float sampleSingleDepthPoint(vec2 uv, bool topScreen, bool screenOwns3D)
         float minC = min(raw3D.r, min(raw3D.g, raw3D.b));
         float chroma = maxC - minC;
         // Ground-plane perspective + foreground chroma/brightness cues
-        float persp = clamp((1.0 - uv.y) * 0.58 + rawLuma * 0.27 + chroma * 0.22, 0.0, 1.0);
+        float persp = clamp((1.0 - localUv.y) * 0.58 + rawLuma * 0.27 + chroma * 0.22, 0.0, 1.0);
         return mix(-0.32, 0.68, persp);
     }
     float luma = clamp((float(v1.r) * 0.299 + float(v1.g) * 0.587 + float(v1.b) * 0.114) * (1.0 / 63.0), 0.0, 1.0);
@@ -2777,24 +2814,24 @@ float sampleSingleDepthPoint(vec2 uv, bool topScreen, bool screenOwns3D)
 
 float estimateSceneDepthFactor(vec2 uv)
 {
-    bool topScreen = (pushConstants.drawMode == 1u)
-        || (pushConstants.drawMode == 2u)
-        || (pushConstants.drawMode == 4u)
-        || (pushConstants.drawMode == 7u)
-        || ((pushConstants.drawMode >= 9u && pushConstants.drawMode <= 20u)
-            && ((pushConstants.drawMode & 1u) != 0u));
+    bool topScreen = resolvePresenterTopScreen(uv);
     bool screenOwns3D = topScreen ? ((pushConstants.screenSwap & 1u) != 0u) : ((pushConstants.screenSwap & 1u) == 0u);
 
     // 5-tap cross-filtered depth estimation to eliminate jagged silhouette tearing
     vec2 stepUv = vec2(2.0 / 256.0, 2.0 / 192.0);
+    if (isCompositeAtlasDrawMode())
+    {
+        vec4 bounds = screenUvBounds(topScreen);
+        stepUv.y *= max(bounds.w - bounds.y, 0.0001);
+    }
     float dc = sampleSingleDepthPoint(uv, topScreen, screenOwns3D);
     // Keep crisp 2D HUD overlays locked on the front glass plane without halo bleed
     if (dc > 0.80)
         return dc;
-    float dl = sampleSingleDepthPoint(clamp(uv - vec2(stepUv.x, 0.0), vec2(0.001), vec2(0.999)), topScreen, screenOwns3D);
-    float dr = sampleSingleDepthPoint(clamp(uv + vec2(stepUv.x, 0.0), vec2(0.001), vec2(0.999)), topScreen, screenOwns3D);
-    float du = sampleSingleDepthPoint(clamp(uv - vec2(0.0, stepUv.y), vec2(0.001), vec2(0.999)), topScreen, screenOwns3D);
-    float dd = sampleSingleDepthPoint(clamp(uv + vec2(0.0, stepUv.y), vec2(0.001), vec2(0.999)), topScreen, screenOwns3D);
+    float dl = sampleSingleDepthPoint(clampDepth3dUv(uv - vec2(stepUv.x, 0.0), topScreen), topScreen, screenOwns3D);
+    float dr = sampleSingleDepthPoint(clampDepth3dUv(uv + vec2(stepUv.x, 0.0), topScreen), topScreen, screenOwns3D);
+    float du = sampleSingleDepthPoint(clampDepth3dUv(uv - vec2(0.0, stepUv.y), topScreen), topScreen, screenOwns3D);
+    float dd = sampleSingleDepthPoint(clampDepth3dUv(uv + vec2(0.0, stepUv.y), topScreen), topScreen, screenOwns3D);
     return dc * 0.48 + (dl + dr + du + dd) * 0.13;
 }
 
@@ -2867,11 +2904,15 @@ void main()
     float strengthNorm = float((pushConstants.filtering >> 14u) & 0x7Fu) * 0.01;
     uint lcdGridMode = (pushConstants.filtering >> 21u) & 0x3u;
 
+    vec2 uvDx = dFdx(inFragUv);
+    vec2 uvDy = dFdy(inFragUv);
     vec2 baseUv = inFragUv;
     vec2 gridUv = inFragUv;
     float depthFactor = 0.0;
     float sheen = 0.0;
     float sbsDivider = 1.0;
+    bool depthTopScreen = resolvePresenterTopScreen(inFragUv);
+    bool uvDistorted = false;
     if (pushConstants.drawMode != 0u && depthMode != 0u)
     {
         if (depthMode == 1u)
@@ -2879,14 +2920,20 @@ void main()
             float tiltX = float(bitfieldExtract(int(pushConstants.screenSwap), 8, 8)) * 0.01;
             float tiltY = float(bitfieldExtract(int(pushConstants.screenSwap), 16, 8)) * 0.01;
             vec2 parallaxVec = vec2(tiltX, -tiltY) * (0.010 + 0.030 * strengthNorm);
+            if (isCompositeAtlasDrawMode())
+            {
+                vec4 bounds = screenUvBounds(depthTopScreen);
+                parallaxVec.y *= max(bounds.w - bounds.y, 0.0001);
+            }
             // 2-step occlusion-refined parallax lookup for cleaner 3D silhouette separation
             float d1 = estimateSceneDepthFactor(inFragUv);
-            vec2 uv1 = clamp(inFragUv + parallaxVec * d1, vec2(0.001), vec2(0.999));
+            vec2 uv1 = clampDepth3dUv(inFragUv + parallaxVec * d1, depthTopScreen);
             float d2 = estimateSceneDepthFactor(uv1);
             depthFactor = mix(d1, d2, 0.45);
-            baseUv = clamp(inFragUv + parallaxVec * depthFactor, vec2(0.001), vec2(0.999));
+            baseUv = clampDepth3dUv(inFragUv + parallaxVec * depthFactor, depthTopScreen);
             gridUv = baseUv;
             sheen = clamp((tiltX * (inFragUv.x - 0.5) + tiltY * (inFragUv.y - 0.5)) * 0.11 * strengthNorm, -0.055, 0.055) * max(depthFactor, 0.0);
+            uvDistorted = true;
         }
         else if (depthMode == 2u)
         {
@@ -2899,19 +2946,29 @@ void main()
             vec2 sbsUv = vec2(rightEye ? ((inFragUv.x - 0.5) * 2.0) : (inFragUv.x * 2.0), inFragUv.y);
             float dispScale = eyeSign * (0.004 + 0.018 * strengthNorm);
             float d1 = estimateSceneDepthFactor(sbsUv);
-            vec2 uv1 = vec2(clamp(sbsUv.x + dispScale * d1, 0.001, 0.999), clamp(sbsUv.y, 0.001, 0.999));
+            vec2 uv1 = clampDepth3dUv(vec2(sbsUv.x + dispScale * d1, sbsUv.y), depthTopScreen);
             float d2 = estimateSceneDepthFactor(uv1);
             depthFactor = mix(d1, d2, 0.45);
-            baseUv = vec2(clamp(sbsUv.x + dispScale * depthFactor, 0.001, 0.999), clamp(sbsUv.y, 0.001, 0.999));
+            baseUv = clampDepth3dUv(vec2(sbsUv.x + dispScale * depthFactor, sbsUv.y), depthTopScreen);
             gridUv = baseUv;
             // Thin optical center separator prevents left/right eye bleed on XR glasses
             if (abs(inFragUv.x - 0.5) < 0.0018)
                 sbsDivider = 0.0;
+            uvDistorted = true;
         }
     }
 
     fragUv = baseUv;
-    gAllowCarryStore = true;
+    gAllowCarryStore = !uvDistorted;
+    if (uvDistorted && abs(uvDx.x) > 1e-6 && abs(uvDy.y) > 1e-6)
+    {
+        vec2 deltaUv = baseUv - inFragUv;
+        gCarryUvPixelOffset = ivec2(round(deltaUv.x / uvDx.x), round(deltaUv.y / uvDy.y));
+    }
+    else
+    {
+        gCarryUvPixelOffset = ivec2(0, 0);
+    }
     runPresenterCore();
     if (pushConstants.drawMode == 0u || (depthMode == 0u && colorProfile == 0u && lcdGridMode == 0u))
         return;
@@ -2930,23 +2987,19 @@ void main()
         // Linear-space Dubois stereoscopic Red/Cyan anaglyph with convergence balance (low ghosting)
         float convergence = 0.12;
         float shiftPx = (1.0 + 4.2 * strengthNorm) * (depthFactor - convergence);
-        bool topScreen = (pushConstants.drawMode == 1u)
-            || (pushConstants.drawMode == 2u)
-            || (pushConstants.drawMode == 4u)
-            || (pushConstants.drawMode == 7u)
-            || ((pushConstants.drawMode >= 9u && pushConstants.drawMode <= 20u)
-                && ((pushConstants.drawMode & 1u) != 0u));
-        int sy = int(clamp((1.0 - inFragUv.y) * 192.0, 0.0, 191.0));
-        int sxL = int(clamp(inFragUv.x * 256.0 - shiftPx, 0.0, 255.0));
-        int sxR = int(clamp(inFragUv.x * 256.0 + shiftPx, 0.0, 255.0));
+        bool topScreen = depthTopScreen;
+        vec2 localUv = resolveDepthScreenLocalUv(inFragUv, topScreen);
+        int sy = int(clamp(localUv.y * 192.0, 0.0, 191.0));
+        int sxL = int(clamp(localUv.x * 256.0 - shiftPx, 0.0, 255.0));
+        int sxR = int(clamp(localUv.x * 256.0 + shiftPx, 0.0, 255.0));
         vec3 pL = color6ToRgb01(unpackColor6(topScreen ? readTopPacked(sy, sxL) : readBottomPacked(sy, sxL)));
         vec3 pR = color6ToRgb01(unpackColor6(topScreen ? readTopPacked(sy, sxR) : readBottomPacked(sy, sxR)));
         int rW = int(max(pushConstants.rendererWidth, 1u));
         int rH = int(max(pushConstants.rendererHeight, 1u));
-        int scY = int(clamp((1.0 - inFragUv.y) * float(rH), 0.0, float(rH - 1)));
+        int scY = int(clamp(localUv.y * float(rH), 0.0, float(rH - 1)));
         float scScale = float(max(pushConstants.scale, 1u));
-        int scXL = int(clamp(inFragUv.x * float(rW) - shiftPx * scScale, 0.0, float(rW - 1)));
-        int scXR = int(clamp(inFragUv.x * float(rW) + shiftPx * scScale, 0.0, float(rW - 1)));
+        int scXL = int(clamp(localUv.x * float(rW) - shiftPx * scScale, 0.0, float(rW - 1)));
+        int scXR = int(clamp(localUv.x * float(rW) + shiftPx * scScale, 0.0, float(rW - 1)));
         bool screenOwns3D = topScreen ? ((pushConstants.screenSwap & 1u) != 0u) : ((pushConstants.screenSwap & 1u) == 0u);
         vec4 r3L = screenOwns3D ? imageLoad(u3dImage, ivec2(scXL, scY)) : (topScreen ? imageLoad(u3dPreviousTopImage, ivec2(scXL, scY)) : imageLoad(u3dPreviousBottomImage, ivec2(scXL, scY)));
         vec4 r3R = screenOwns3D ? imageLoad(u3dImage, ivec2(scXR, scY)) : (topScreen ? imageLoad(u3dPreviousTopImage, ivec2(scXR, scY)) : imageLoad(u3dPreviousBottomImage, ivec2(scXR, scY)));

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -32,6 +33,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
@@ -44,10 +47,13 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import me.magnum.melonds.R
+import me.magnum.melonds.ui.common.RequestInitialFocus
 import me.magnum.melonds.ui.theme.watermelon
+import kotlin.math.roundToInt
 
 @Composable
 fun Slot2PeripheralOverlay(
@@ -109,6 +115,7 @@ private fun SolarSensorOverlay(
     }
     val colors = watermelon
     val isAutoMode = currentLevel < 0
+    val firstPresetFocusRequester = remember { FocusRequester() }
 
     Box(
         modifier = Modifier
@@ -171,10 +178,11 @@ private fun SolarSensorOverlay(
                     10 to stringResource(R.string.solar_preset_100),
                 )
                 presets.forEach { (level, label) ->
-                    val isSelected = if (level == -2) isAutoMode else (!isAutoMode && sliderValue.toInt() == level)
+                    val isSelected = if (level == -2) isAutoMode else (!isAutoMode && sliderValue.roundToInt() == level)
                     Box(
                         modifier = Modifier
                             .weight(1f)
+                            .then(if (level == -2) Modifier.focusRequester(firstPresetFocusRequester) else Modifier)
                             .clip(RoundedCornerShape(8.dp))
                             .background(if (isSelected) colors.greenDim else colors.surface2)
                             .border(
@@ -212,7 +220,7 @@ private fun SolarSensorOverlay(
                 modifier = Modifier.fillMaxWidth(0.92f),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                val displayLevel = if (isAutoMode) currentSensorBars else sliderValue.toInt()
+                val displayLevel = if (isAutoMode) currentSensorBars else sliderValue.roundToInt()
                 Text(
                     text = "${(displayLevel * 10)}%",
                     color = colors.green,
@@ -224,7 +232,7 @@ private fun SolarSensorOverlay(
                     value = if (isAutoMode) currentSensorBars.toFloat() else sliderValue,
                     onValueChange = { newVal ->
                         sliderValue = newVal
-                        onLevelChanged(newVal.toInt())
+                        onLevelChanged(newVal.roundToInt())
                     },
                     valueRange = 0f..10f,
                     steps = 9,
@@ -237,6 +245,8 @@ private fun SolarSensorOverlay(
                 )
             }
         }
+
+        RequestInitialFocus(firstPresetFocusRequester)
     }
 }
 
@@ -455,6 +465,14 @@ private fun PaddleControllerOverlay(
                     color = colors.text2,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
+                )
+                Box(
+                    modifier = Modifier
+                        .offset { IntOffset(knobPosition.roundToInt(), 0) }
+                        .size(width = 44.dp, height = 34.dp)
+                        .clip(RoundedCornerShape(17.dp))
+                        .background(colors.green.copy(alpha = 0.28f))
+                        .border(1.5.dp, colors.green, RoundedCornerShape(17.dp)),
                 )
             }
         }

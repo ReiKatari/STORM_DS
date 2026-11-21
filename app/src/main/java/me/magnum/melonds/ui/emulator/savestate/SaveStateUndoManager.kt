@@ -6,6 +6,7 @@ import android.util.Log
 import me.magnum.melonds.domain.model.SaveStateSlot
 import me.magnum.melonds.domain.model.rom.Rom
 import java.io.File
+import java.io.OutputStream
 import java.util.ArrayDeque
 
 object SaveStateUndoManager {
@@ -156,7 +157,7 @@ object SaveStateUndoManager {
         var success = false
         runCatching {
             backup.stateBackupFile.inputStream().use { input ->
-                context.contentResolver.openOutputStream(targetSlotUri)?.use { output ->
+                openTruncatedOutputStream(context, targetSlotUri)?.use { output ->
                     input.copyTo(output)
                     success = true
                 }
@@ -167,7 +168,7 @@ object SaveStateUndoManager {
             if (backup.screenshotBackupFile != null && backup.screenshotBackupFile.exists() && targetScreenshotUri != null) {
                 runCatching {
                     backup.screenshotBackupFile.inputStream().use { input ->
-                        context.contentResolver.openOutputStream(targetScreenshotUri)?.use { output ->
+                        openTruncatedOutputStream(context, targetScreenshotUri)?.use { output ->
                             input.copyTo(output)
                         }
                     }
@@ -180,6 +181,13 @@ object SaveStateUndoManager {
             Log.i(TAG, "Restored undo step for slot ${backup.slotNumber}, remaining depth: ${stack.size}")
         }
         return success
+    }
+
+    private fun openTruncatedOutputStream(context: Context, uri: Uri): OutputStream? {
+        return runCatching { context.contentResolver.openOutputStream(uri, "wt") }.getOrNull()
+            ?: runCatching { context.contentResolver.openOutputStream(uri, "rwt") }.getOrNull()
+            ?: runCatching { context.contentResolver.openOutputStream(uri, "w") }.getOrNull()
+            ?: runCatching { context.contentResolver.openOutputStream(uri) }.getOrNull()
     }
 
     @Synchronized

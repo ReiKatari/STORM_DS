@@ -1211,7 +1211,7 @@
     <string name="translator_enabled">启用自动翻译</string>
     <string name="translator_enabled_summary">识别并翻译屏幕上的游戏对话</string>
     <string name="translator_engine">翻译引擎</string>
-    <string name="translator_engine_offline">Google ML Kit (100% 本地离线神经网络)</string>
+    <string name="translator_engine_offline" formatted="false">Google ML Kit (100% 本地离线神经网络)</string>
     <string name="translator_engine_yandex">Yandex Translate (免费 / 最佳俄语支持)</string>
     <string name="translator_engine_google">Google Translate (在线 / 快速)</string>
     <string name="translator_engine_lingva">Lingva Neural (免费 / 无速率限制)</string>
@@ -1483,7 +1483,7 @@
     <string name="label_rom_config_translator_section">自动翻译器</string>
     <string name="label_rom_config_translator_source_lang">游戏源语言</string>
     <string name="label_rom_config_dual_screen_preset">双屏布局预设</string>
-    <string name="video_ai_upscale_sharpness_title">AI 超分辨率与 CAS 锐化度 (%)</string>
+    <string name="video_ai_upscale_sharpness_title" formatted="false">AI 超分辨率与 CAS 锐化度 (%)</string>
     <string name="video_ai_upscale_sharpness_summary">对比度自适应边缘与文字锐化强度</string>
     <string name="video_vulkan_compositor_mode_title">2D/3D 合成器模式 (Vulkan)</string>
     <string name="video_vulkan_compositor_mode_precise">精确（图层优先级与混合）</string>
@@ -1567,9 +1567,9 @@
     <string name="video_ds_lcd_grid_off">关闭</string>
     <string name="video_ds_lcd_grid_ds_lite">DS Lite 像素点阵</string>
     <string name="video_ds_lcd_grid_dsi_xl">DSi XL RGB 子像素网格</string>
-    <string name="video_low_battery_saver_title">低电量自动省电 (&lt; 20%)</string>
-    <string name="video_low_battery_saver_summary">电量低于 20% 时自动降至 1x-2x 分辨率并关闭 SSAO</string>
-    <string name="video_low_battery_activated_toast">电量偏低 (&lt; 20%)：已降低分辨率并暂停 SSAO</string>
+    <string name="video_low_battery_saver_title" formatted="false">低电量自动省电 (&lt; 20%)</string>
+    <string name="video_low_battery_saver_summary" formatted="false">电量低于 20% 时自动降至 1x-2x 分辨率并关闭 SSAO</string>
+    <string name="video_low_battery_activated_toast" formatted="false">电量偏低 (&lt; 20%)：已降低分辨率并暂停 SSAO</string>
     <string name="video_low_battery_restored_toast">电量已恢复：图形设置已还原</string>
     <string name="mic_vu_meter_title">实时麦克风电平测试</string>
     <string name="mic_vu_meter_idle">点击测试麦克风输入与噪声门阈值</string>
@@ -1596,7 +1596,7 @@
     <string name="input_gyro_activation_hold_r">按住 R 键</string>
     <string name="button_theme_picker_title">按键配色主题</string>
     <string name="button_theme_picker_subtitle">预览按键背景、边框与符号配色</string>
-    <string name="translator_tts_speed_title">语音朗读语速 (%)</string>
+    <string name="translator_tts_speed_title" formatted="false">语音朗读语速 (%)</string>
     <string name="translator_tts_speed_summary">%1$d%% - 已翻译对话的朗读速度 (100%% 为标准语速)</string>
     <string name="translator_regions_reset_title">重置 OCR 区域与悬浮按钮位置</string>
     <string name="translator_regions_reset_summary">清除已保存的屏幕识别区域并将 TR 按钮恢复到默认位置</string>
@@ -1613,4 +1613,5 @@
     <string name="cheats_download_fallback_embedded">在线仓库无法连接 - 已加载 %1$d 款内置游戏金手指</string>
     <string name="cheats_import_finished">金手指数据库导入成功</string>
     <string name="cheats_import_failed">金手指数据库导入失败</string>
+    <string name="rom_search_dir_saf_fallback_hint">无法访问该目录，请重新选择</string>
 </resources>

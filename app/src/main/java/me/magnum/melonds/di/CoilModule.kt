@@ -1,7 +1,10 @@
 package me.magnum.melonds.di
 
 import android.content.Context
+import android.os.Environment
 import coil.ImageLoader
+import coil.disk.DiskCache
+import coil.memory.MemoryCache
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -12,6 +15,9 @@ import me.magnum.melonds.impl.RomIconProvider
 import me.magnum.melonds.impl.image.CoilBackgroundThumbnailFetcher
 import me.magnum.melonds.impl.image.CoilRomIconFetcher
 import me.magnum.melonds.impl.image.CoilURLMapper
+import okhttp3.OkHttpClient
+import java.io.File
+import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
 
 @Module
@@ -32,6 +38,7 @@ object CoilModule {
     @Singleton
     fun provideCoilImageLoader(
         @ApplicationContext context: Context,
+        okHttpClient: OkHttpClient,
         coilBackgroundThumbnailFetcherFactory: CoilBackgroundThumbnailFetcher.Factory,
         coilRomIconFetcherFactory: CoilRomIconFetcher.Factory,
     ): ImageLoader {
@@ -42,24 +49,43 @@ object CoilModule {
                 add(coilRomIconFetcherFactory, me.magnum.melonds.domain.model.rom.Rom::class.java)
             }
             .memoryCache {
-                coil.memory.MemoryCache.Builder(context)
+                MemoryCache.Builder(context)
                     .maxSizePercent(0.25)
                     .build()
             }
             .diskCache {
-                val rootBase = java.io.File(android.os.Environment.getExternalStorageDirectory(), "STORM DS")
-                val storageCacheDir = java.io.File(rootBase, "cache/image_cache").apply { mkdirs() }
-                val targetDir = if (storageCacheDir.exists() && (storageCacheDir.canWrite() || rootBase.canWrite())) {
-                    storageCacheDir
+                val externalCoversCache = File(Environment.getExternalStorageDirectory(), "STORM DS/cache/covers_cache")
+                val targetDir = if (isDirectoryWritable(externalCoversCache)) {
+                    externalCoversCache
                 } else {
-                    context.cacheDir.resolve("image_cache")
+                    File(context.cacheDir, "covers_cache").apply { mkdirs() }
                 }
-                coil.disk.DiskCache.Builder()
+                DiskCache.Builder()
                     .directory(targetDir)
-                    .maxSizeBytes(96L * 1024 * 1024)
+                    .maxSizeBytes(256L * 1024 * 1024)
                     .build()
             }
+            .okHttpClient {
+                okHttpClient.newBuilder()
+                    .connectTimeout(6, TimeUnit.SECONDS)
+                    .readTimeout(10, TimeUnit.SECONDS)
+                    .callTimeout(20, TimeUnit.SECONDS)
+                    .retryOnConnectionFailure(false)
+                    .build()
+            }
+            // Box art never changes: reuse the disk copy without revalidating it over the network.
+            .respectCacheHeaders(false)
             .crossfade(true)
             .build()
+    }
+
+    private fun isDirectoryWritable(dir: File): Boolean {
+        return runCatching {
+            if (!dir.exists() && !dir.mkdirs()) return@runCatching false
+            if (!dir.isDirectory || !dir.canWrite()) return@runCatching false
+            val probe = File.createTempFile(".storm_write_probe_", null, dir)
+            probe.delete()
+            true
+        }.getOrDefault(false)
     }
 }

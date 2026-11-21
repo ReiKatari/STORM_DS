@@ -123,6 +123,9 @@ bool getEnumOrdinal(JNIEnv* env, jobject enumObject, jint* ordinalOut)
 
 jfieldID getFieldIdOrClear(JNIEnv* env, jclass objectClass, const char* name, const char* signature)
 {
+    if (objectClass == nullptr)
+        return nullptr;
+
     jfieldID fieldId = env->GetFieldID(objectClass, name, signature);
     if (fieldId == nullptr || env->ExceptionCheck())
     {
@@ -133,8 +136,26 @@ jfieldID getFieldIdOrClear(JNIEnv* env, jclass objectClass, const char* name, co
     return fieldId;
 }
 
+jmethodID getMethodIdOrClear(JNIEnv* env, jclass objectClass, const char* name, const char* signature)
+{
+    if (objectClass == nullptr)
+        return nullptr;
+
+    jmethodID methodId = env->GetMethodID(objectClass, name, signature);
+    if (methodId == nullptr || env->ExceptionCheck())
+    {
+        env->ExceptionClear();
+        return nullptr;
+    }
+
+    return methodId;
+}
+
 jobject getOptionalObjectField(JNIEnv* env, jobject object, jclass objectClass, const char* name, const char* signature)
 {
+    if (object == nullptr || objectClass == nullptr)
+        return nullptr;
+
     jfieldID fieldId = getFieldIdOrClear(env, objectClass, name, signature);
     if (fieldId == nullptr)
         return nullptr;
@@ -147,6 +168,62 @@ jobject getOptionalObjectField(JNIEnv* env, jobject object, jclass objectClass, 
     }
 
     return value;
+}
+
+jboolean getBooleanFieldOrDefault(JNIEnv* env, jobject object, jclass objectClass, const char* name, jboolean defaultValue = JNI_FALSE)
+{
+    jfieldID fieldId = getFieldIdOrClear(env, objectClass, name, "Z");
+    if (object == nullptr || fieldId == nullptr)
+        return defaultValue;
+
+    jboolean value = env->GetBooleanField(object, fieldId);
+    if (env->ExceptionCheck())
+    {
+        env->ExceptionClear();
+        return defaultValue;
+    }
+    return value;
+}
+
+jint getIntFieldOrDefault(JNIEnv* env, jobject object, jclass objectClass, const char* name, jint defaultValue = 0)
+{
+    jfieldID fieldId = getFieldIdOrClear(env, objectClass, name, "I");
+    if (object == nullptr || fieldId == nullptr)
+        return defaultValue;
+
+    jint value = env->GetIntField(object, fieldId);
+    if (env->ExceptionCheck())
+    {
+        env->ExceptionClear();
+        return defaultValue;
+    }
+    return value;
+}
+
+jfloat getFloatFieldOrDefault(JNIEnv* env, jobject object, jclass objectClass, const char* name, jfloat defaultValue = 0.0f)
+{
+    jfieldID fieldId = getFieldIdOrClear(env, objectClass, name, "F");
+    if (object == nullptr || fieldId == nullptr)
+        return defaultValue;
+
+    jfloat value = env->GetFloatField(object, fieldId);
+    if (env->ExceptionCheck())
+    {
+        env->ExceptionClear();
+        return defaultValue;
+    }
+    return value;
+}
+
+jclass findClassOrClear(JNIEnv* env, const char* name)
+{
+    jclass cls = env->FindClass(name);
+    if (cls == nullptr || env->ExceptionCheck())
+    {
+        env->ExceptionClear();
+        return nullptr;
+    }
+    return cls;
 }
 
 MelonDSAndroid::SdCardSettings disabledSdCardSettings()
@@ -254,53 +331,62 @@ uint32_t parseIpv4HostOrder(const char* ipStr)
 }
 
 MelonDSAndroid::EmulatorConfiguration MelonDSAndroidConfiguration::buildEmulatorConfiguration(JNIEnv* env, jobject emulatorConfiguration) {
+    if (env == nullptr || emulatorConfiguration == nullptr)
+        return MelonDSAndroid::EmulatorConfiguration{};
+
     jclass emulatorConfigurationClass = env->GetObjectClass(emulatorConfiguration);
-    jclass uriClass = env->FindClass("android/net/Uri");
-    jclass consoleTypeEnumClass = env->FindClass("me/magnum/melonds/domain/model/ConsoleType");
-    jclass audioBitrateEnumClass = env->FindClass("me/magnum/melonds/domain/model/AudioBitrate");
-    jclass audioInterpolationEnumClass = env->FindClass("me/magnum/melonds/domain/model/AudioInterpolation");
-    jclass audioLatencyEnumClass = env->FindClass("me/magnum/melonds/domain/model/AudioLatency");
-    jclass micSourceEnumClass = env->FindClass("me/magnum/melonds/domain/model/MicSource");
-    jclass videoRendererEnumClass = env->FindClass("me/magnum/melonds/domain/model/VideoRenderer");
-    jclass renderConfigurationClass = env->FindClass("me/magnum/melonds/domain/model/RendererConfiguration");
+    if (emulatorConfigurationClass == nullptr || env->ExceptionCheck())
+    {
+        env->ExceptionClear();
+        return MelonDSAndroid::EmulatorConfiguration{};
+    }
 
-    jmethodID uriToStringMethod = env->GetMethodID(uriClass, "toString", "()Ljava/lang/String;");
+    jclass uriClass = findClassOrClear(env, "android/net/Uri");
+    jclass consoleTypeEnumClass = findClassOrClear(env, "me/magnum/melonds/domain/model/ConsoleType");
+    jclass audioBitrateEnumClass = findClassOrClear(env, "me/magnum/melonds/domain/model/AudioBitrate");
+    jclass audioInterpolationEnumClass = findClassOrClear(env, "me/magnum/melonds/domain/model/AudioInterpolation");
+    jclass audioLatencyEnumClass = findClassOrClear(env, "me/magnum/melonds/domain/model/AudioLatency");
+    jclass micSourceEnumClass = findClassOrClear(env, "me/magnum/melonds/domain/model/MicSource");
+    jclass videoRendererEnumClass = findClassOrClear(env, "me/magnum/melonds/domain/model/VideoRenderer");
+    jclass renderConfigurationClass = findClassOrClear(env, "me/magnum/melonds/domain/model/RendererConfiguration");
 
-    jobject firmwareConfigurationObject = env->GetObjectField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "firmwareConfiguration", "Lme/magnum/melonds/domain/model/FirmwareConfiguration;"));
-    jobject rendererConfigurationObject = env->GetObjectField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "rendererConfiguration", "Lme/magnum/melonds/domain/model/RendererConfiguration;"));
+    jmethodID uriToStringMethod = getMethodIdOrClear(env, uriClass, "toString", "()Ljava/lang/String;");
+
+    jobject firmwareConfigurationObject = getOptionalObjectField(env, emulatorConfiguration, emulatorConfigurationClass, "firmwareConfiguration", "Lme/magnum/melonds/domain/model/FirmwareConfiguration;");
+    jobject rendererConfigurationObject = getOptionalObjectField(env, emulatorConfiguration, emulatorConfigurationClass, "rendererConfiguration", "Lme/magnum/melonds/domain/model/RendererConfiguration;");
     jobject dldiSdCardConfigurationObject = getOptionalObjectField(env, emulatorConfiguration, emulatorConfigurationClass, "dldiSdCardConfiguration", "Lme/magnum/melonds/domain/model/DldiSdCardConfiguration;");
     jfieldID dsiWareAutoloadTitleIdField = getFieldIdOrClear(env, emulatorConfigurationClass, "dsiWareAutoloadTitleId", "J");
-    jboolean useCustomBios = env->GetBooleanField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "useCustomBios", "Z"));
-    jboolean showBootScreen = env->GetBooleanField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "showBootScreen", "Z"));
-    jobject dsBios7Uri = env->GetObjectField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "dsBios7Uri", "Landroid/net/Uri;"));
-    jobject dsBios9Uri = env->GetObjectField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "dsBios9Uri", "Landroid/net/Uri;"));
-    jobject dsFirmwareUri = env->GetObjectField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "dsFirmwareUri", "Landroid/net/Uri;"));
-    jobject dsiBios7Uri = env->GetObjectField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "dsiBios7Uri", "Landroid/net/Uri;"));
-    jobject dsiBios9Uri = env->GetObjectField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "dsiBios9Uri", "Landroid/net/Uri;"));
-    jobject dsiFirmwareUri = env->GetObjectField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "dsiFirmwareUri", "Landroid/net/Uri;"));
-    jobject dsiNandUri = env->GetObjectField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "dsiNandUri", "Landroid/net/Uri;"));
-    jstring internalFilesDir = (jstring) env->GetObjectField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "internalDirectory", "Ljava/lang/String;"));
-    jfloat fastForwardMaxSpeed = env->GetFloatField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "fastForwardSpeedMultiplier", "F"));
-    jfloat frameLimitSpeed = env->GetFloatField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "frameLimitSpeedMultiplier", "F"));
-    jboolean enableRewind = env->GetBooleanField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "rewindEnabled", "Z"));
-    jint rewindPeriodSeconds = env->GetIntField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "rewindPeriodSeconds", "I"));
-    jint rewindWindowSeconds = env->GetIntField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "rewindWindowSeconds", "I"));
-    jboolean useJit = env->GetBooleanField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "useJit", "Z"));
-    jboolean hgEngineFixEnabled = env->GetBooleanField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "hgEngineFixEnabled", "Z"));
-    jobject consoleTypeEnum = env->GetObjectField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "consoleType", "Lme/magnum/melonds/domain/model/ConsoleType;"));
-    jint consoleType = env->GetIntField(consoleTypeEnum, env->GetFieldID(consoleTypeEnumClass, "consoleType", "I"));
-    jboolean soundEnabled = env->GetBooleanField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "soundEnabled", "Z"));
-    jint volume = std::clamp<jint>(env->GetIntField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "volume", "I")), 0, 512);
-    jobject audioInterpolationEnum = env->GetObjectField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "audioInterpolation", "Lme/magnum/melonds/domain/model/AudioInterpolation;"));
-    jint audioInterpolation = env->GetIntField(audioInterpolationEnum, env->GetFieldID(audioInterpolationEnumClass, "interpolationValue", "I"));
-    jobject audioBitrateEnum = env->GetObjectField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "audioBitrate", "Lme/magnum/melonds/domain/model/AudioBitrate;"));
-    jint audioBitrate = env->GetIntField(audioBitrateEnum, env->GetFieldID(audioBitrateEnumClass, "bitrateValue", "I"));
-    jobject audioLatencyEnum = env->GetObjectField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "audioLatency", "Lme/magnum/melonds/domain/model/AudioLatency;"));
-    jint audioLatency = env->GetIntField(audioLatencyEnum, env->GetFieldID(audioLatencyEnumClass, "latencyValue", "I"));
-    jobject micSourceEnum = env->GetObjectField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "micSource", "Lme/magnum/melonds/domain/model/MicSource;"));
-    jint micSource = env->GetIntField(micSourceEnum, env->GetFieldID(micSourceEnumClass, "sourceValue", "I"));
-    jobject videoRendererEnum = env->GetObjectField(rendererConfigurationObject, env->GetFieldID(renderConfigurationClass, "renderer", "Lme/magnum/melonds/domain/model/VideoRenderer;"));
-    MelonDSAndroid::Renderer videoRenderer = static_cast<MelonDSAndroid::Renderer>(env->GetIntField(videoRendererEnum, env->GetFieldID(videoRendererEnumClass, "renderer", "I")));
+    jboolean useCustomBios = getBooleanFieldOrDefault(env, emulatorConfiguration, emulatorConfigurationClass, "useCustomBios", JNI_FALSE);
+    jboolean showBootScreen = getBooleanFieldOrDefault(env, emulatorConfiguration, emulatorConfigurationClass, "showBootScreen", JNI_FALSE);
+    jobject dsBios7Uri = uriToStringMethod ? getOptionalObjectField(env, emulatorConfiguration, emulatorConfigurationClass, "dsBios7Uri", "Landroid/net/Uri;") : nullptr;
+    jobject dsBios9Uri = uriToStringMethod ? getOptionalObjectField(env, emulatorConfiguration, emulatorConfigurationClass, "dsBios9Uri", "Landroid/net/Uri;") : nullptr;
+    jobject dsFirmwareUri = uriToStringMethod ? getOptionalObjectField(env, emulatorConfiguration, emulatorConfigurationClass, "dsFirmwareUri", "Landroid/net/Uri;") : nullptr;
+    jobject dsiBios7Uri = uriToStringMethod ? getOptionalObjectField(env, emulatorConfiguration, emulatorConfigurationClass, "dsiBios7Uri", "Landroid/net/Uri;") : nullptr;
+    jobject dsiBios9Uri = uriToStringMethod ? getOptionalObjectField(env, emulatorConfiguration, emulatorConfigurationClass, "dsiBios9Uri", "Landroid/net/Uri;") : nullptr;
+    jobject dsiFirmwareUri = uriToStringMethod ? getOptionalObjectField(env, emulatorConfiguration, emulatorConfigurationClass, "dsiFirmwareUri", "Landroid/net/Uri;") : nullptr;
+    jobject dsiNandUri = uriToStringMethod ? getOptionalObjectField(env, emulatorConfiguration, emulatorConfigurationClass, "dsiNandUri", "Landroid/net/Uri;") : nullptr;
+    jstring internalFilesDir = static_cast<jstring>(getOptionalObjectField(env, emulatorConfiguration, emulatorConfigurationClass, "internalDirectory", "Ljava/lang/String;"));
+    jfloat fastForwardMaxSpeed = getFloatFieldOrDefault(env, emulatorConfiguration, emulatorConfigurationClass, "fastForwardSpeedMultiplier", 1.0f);
+    jfloat frameLimitSpeed = getFloatFieldOrDefault(env, emulatorConfiguration, emulatorConfigurationClass, "frameLimitSpeedMultiplier", 1.0f);
+    jboolean enableRewind = getBooleanFieldOrDefault(env, emulatorConfiguration, emulatorConfigurationClass, "rewindEnabled", JNI_FALSE);
+    jint rewindPeriodSeconds = getIntFieldOrDefault(env, emulatorConfiguration, emulatorConfigurationClass, "rewindPeriodSeconds", 0);
+    jint rewindWindowSeconds = getIntFieldOrDefault(env, emulatorConfiguration, emulatorConfigurationClass, "rewindWindowSeconds", 0);
+    jboolean useJit = getBooleanFieldOrDefault(env, emulatorConfiguration, emulatorConfigurationClass, "useJit", JNI_FALSE);
+    jboolean hgEngineFixEnabled = getBooleanFieldOrDefault(env, emulatorConfiguration, emulatorConfigurationClass, "hgEngineFixEnabled", JNI_FALSE);
+    jobject consoleTypeEnum = getOptionalObjectField(env, emulatorConfiguration, emulatorConfigurationClass, "consoleType", "Lme/magnum/melonds/domain/model/ConsoleType;");
+    jint consoleType = getIntFieldOrDefault(env, consoleTypeEnum, consoleTypeEnumClass, "consoleType", 0);
+    jboolean soundEnabled = getBooleanFieldOrDefault(env, emulatorConfiguration, emulatorConfigurationClass, "soundEnabled", JNI_FALSE);
+    jint volume = std::clamp<jint>(getIntFieldOrDefault(env, emulatorConfiguration, emulatorConfigurationClass, "volume", 256), 0, 512);
+    jobject audioInterpolationEnum = getOptionalObjectField(env, emulatorConfiguration, emulatorConfigurationClass, "audioInterpolation", "Lme/magnum/melonds/domain/model/AudioInterpolation;");
+    jint audioInterpolation = getIntFieldOrDefault(env, audioInterpolationEnum, audioInterpolationEnumClass, "interpolationValue", 0);
+    jobject audioBitrateEnum = getOptionalObjectField(env, emulatorConfiguration, emulatorConfigurationClass, "audioBitrate", "Lme/magnum/melonds/domain/model/AudioBitrate;");
+    jint audioBitrate = getIntFieldOrDefault(env, audioBitrateEnum, audioBitrateEnumClass, "bitrateValue", 0);
+    jobject audioLatencyEnum = getOptionalObjectField(env, emulatorConfiguration, emulatorConfigurationClass, "audioLatency", "Lme/magnum/melonds/domain/model/AudioLatency;");
+    jint audioLatency = getIntFieldOrDefault(env, audioLatencyEnum, audioLatencyEnumClass, "latencyValue", 0);
+    jobject micSourceEnum = getOptionalObjectField(env, emulatorConfiguration, emulatorConfigurationClass, "micSource", "Lme/magnum/melonds/domain/model/MicSource;");
+    jint micSource = getIntFieldOrDefault(env, micSourceEnum, micSourceEnumClass, "sourceValue", 0);
+    jobject videoRendererEnum = getOptionalObjectField(env, rendererConfigurationObject, renderConfigurationClass, "renderer", "Lme/magnum/melonds/domain/model/VideoRenderer;");
+    MelonDSAndroid::Renderer videoRenderer = static_cast<MelonDSAndroid::Renderer>(getIntFieldOrDefault(env, videoRendererEnum, videoRendererEnumClass, "renderer", 0));
     char* dsBios7Path = duplicateAndDecodeJavaUriString(env, dsBios7Uri, uriToStringMethod);
     char* dsBios9Path = duplicateAndDecodeJavaUriString(env, dsBios9Uri, uriToStringMethod);
     char* dsFirmwarePath = duplicateAndDecodeJavaUriString(env, dsFirmwareUri, uriToStringMethod);
@@ -376,19 +462,36 @@ MelonDSAndroid::EmulatorConfiguration MelonDSAndroidConfiguration::buildEmulator
     jfieldID wfcDnsServerIpField = getFieldIdOrClear(env, emulatorConfigurationClass, "wfcDnsServerIp", "Ljava/lang/String;");
 
     finalEmulatorConfiguration.renderer = videoRenderer;
-    finalEmulatorConfiguration.dsiWareAutoloadTitleId =
-        dsiWareAutoloadTitleIdField != nullptr
-            ? static_cast<uint32_t>(env->GetLongField(emulatorConfiguration, dsiWareAutoloadTitleIdField))
-            : 0u;
-    finalEmulatorConfiguration.arm9OverclockMultiplier = arm9OverclockMultiplierField != nullptr ? env->GetIntField(emulatorConfiguration, arm9OverclockMultiplierField) : 1;
+    finalEmulatorConfiguration.dsiWareAutoloadTitleId = 0u;
+    if (dsiWareAutoloadTitleIdField != nullptr)
+    {
+        finalEmulatorConfiguration.dsiWareAutoloadTitleId =
+            static_cast<uint32_t>(env->GetLongField(emulatorConfiguration, dsiWareAutoloadTitleIdField));
+        if (env->ExceptionCheck())
+        {
+            env->ExceptionClear();
+            finalEmulatorConfiguration.dsiWareAutoloadTitleId = 0u;
+        }
+    }
+    finalEmulatorConfiguration.arm9OverclockMultiplier = getIntFieldOrDefault(env, emulatorConfiguration, emulatorConfigurationClass, "arm9OverclockMultiplier", 1);
     if (finalEmulatorConfiguration.arm9OverclockMultiplier < 1) finalEmulatorConfiguration.arm9OverclockMultiplier = 1;
-    finalEmulatorConfiguration.enable3dWidescreen = enable3dWidescreenField != nullptr ? (bool)env->GetBooleanField(emulatorConfiguration, enable3dWidescreenField) : false;
-    finalEmulatorConfiguration.enable60FpsPatch = enable60FpsPatchField != nullptr ? (bool)env->GetBooleanField(emulatorConfiguration, enable60FpsPatchField) : false;
+    finalEmulatorConfiguration.enable3dWidescreen = getBooleanFieldOrDefault(env, emulatorConfiguration, emulatorConfigurationClass, "enable3dWidescreen", JNI_FALSE) != 0;
+    finalEmulatorConfiguration.enable60FpsPatch = getBooleanFieldOrDefault(env, emulatorConfiguration, emulatorConfigurationClass, "enable60FpsPatch", JNI_FALSE) != 0;
     finalEmulatorConfiguration.wfcDnsIp = 0;
     if (wfcDnsServerIpField != nullptr) {
         jstring dnsString = static_cast<jstring>(env->GetObjectField(emulatorConfiguration, wfcDnsServerIpField));
+        if (env->ExceptionCheck())
+        {
+            env->ExceptionClear();
+            dnsString = nullptr;
+        }
         if (dnsString != nullptr) {
             const char* dnsChars = env->GetStringUTFChars(dnsString, nullptr);
+            if (env->ExceptionCheck())
+            {
+                env->ExceptionClear();
+                dnsChars = nullptr;
+            }
             if (dnsChars != nullptr) {
                 finalEmulatorConfiguration.wfcDnsIp = parseIpv4HostOrder(dnsChars);
                 env->ReleaseStringUTFChars(dnsString, dnsChars);
@@ -428,15 +531,24 @@ MelonDSAndroid::EmulatorConfiguration MelonDSAndroidConfiguration::buildEmulator
 }
 
 MelonDSAndroid::FirmwareConfiguration MelonDSAndroidConfiguration::buildFirmwareConfiguration(JNIEnv* env, jobject firmwareConfiguration) {
+    if (env == nullptr || firmwareConfiguration == nullptr)
+        return MelonDSAndroid::FirmwareConfiguration{};
+
     jclass firmwareConfigurationClass = env->GetObjectClass(firmwareConfiguration);
-    jstring nicknameString = (jstring) env->GetObjectField(firmwareConfiguration, env->GetFieldID(firmwareConfigurationClass, "nickname", "Ljava/lang/String;"));
-    jstring messageString = (jstring) env->GetObjectField(firmwareConfiguration, env->GetFieldID(firmwareConfigurationClass, "message", "Ljava/lang/String;"));
-    int language = env->GetIntField(firmwareConfiguration, env->GetFieldID(firmwareConfigurationClass, "language", "I"));
-    int colour = env->GetIntField(firmwareConfiguration, env->GetFieldID(firmwareConfigurationClass, "favouriteColour", "I"));
-    int birthdayDay = env->GetIntField(firmwareConfiguration, env->GetFieldID(firmwareConfigurationClass, "birthdayDay", "I"));
-    int birthdayMonth = env->GetIntField(firmwareConfiguration, env->GetFieldID(firmwareConfigurationClass, "birthdayMonth", "I"));
-    bool randomizeMacAddress = env->GetBooleanField(firmwareConfiguration, env->GetFieldID(firmwareConfigurationClass, "randomizeMacAddress", "Z"));
-    jstring macAddressString = (jstring) env->GetObjectField(firmwareConfiguration, env->GetFieldID(firmwareConfigurationClass, "internalMacAddress", "Ljava/lang/String;"));
+    if (firmwareConfigurationClass == nullptr || env->ExceptionCheck())
+    {
+        env->ExceptionClear();
+        return MelonDSAndroid::FirmwareConfiguration{};
+    }
+
+    jstring nicknameString = static_cast<jstring>(getOptionalObjectField(env, firmwareConfiguration, firmwareConfigurationClass, "nickname", "Ljava/lang/String;"));
+    jstring messageString = static_cast<jstring>(getOptionalObjectField(env, firmwareConfiguration, firmwareConfigurationClass, "message", "Ljava/lang/String;"));
+    int language = getIntFieldOrDefault(env, firmwareConfiguration, firmwareConfigurationClass, "language", 1);
+    int colour = getIntFieldOrDefault(env, firmwareConfiguration, firmwareConfigurationClass, "favouriteColour", 0);
+    int birthdayDay = getIntFieldOrDefault(env, firmwareConfiguration, firmwareConfigurationClass, "birthdayDay", 1);
+    int birthdayMonth = getIntFieldOrDefault(env, firmwareConfiguration, firmwareConfigurationClass, "birthdayMonth", 1);
+    bool randomizeMacAddress = getBooleanFieldOrDefault(env, firmwareConfiguration, firmwareConfigurationClass, "randomizeMacAddress", JNI_FALSE) != 0;
+    jstring macAddressString = static_cast<jstring>(getOptionalObjectField(env, firmwareConfiguration, firmwareConfigurationClass, "internalMacAddress", "Ljava/lang/String;"));
 
     const char* nickname = nicknameString ? env->GetStringUTFChars(nicknameString, nullptr) : nullptr;
     const char* message = messageString ? env->GetStringUTFChars(messageString, nullptr) : nullptr;
@@ -477,9 +589,15 @@ MelonDSAndroid::FirmwareConfiguration MelonDSAndroidConfiguration::buildFirmware
 }
 
 std::unique_ptr<MelonDSAndroid::RenderSettings> MelonDSAndroidConfiguration::buildRenderSettings(JNIEnv* env, MelonDSAndroid::Renderer renderer, jobject renderSettings) {
-    jclass renderSettingsClass = env->GetObjectClass(renderSettings);
-    jmethodID getResolutionScalingMethod = env->GetMethodID(renderSettingsClass, "getResolutionScaling", "()I");
-    jboolean threadedRendering = env->GetBooleanField(renderSettings, env->GetFieldID(renderSettingsClass, "threadedRendering", "Z"));
+    jclass renderSettingsClass = (env != nullptr && renderSettings != nullptr) ? env->GetObjectClass(renderSettings) : nullptr;
+    if (env != nullptr && env->ExceptionCheck())
+    {
+        env->ExceptionClear();
+        renderSettingsClass = nullptr;
+    }
+
+    jmethodID getResolutionScalingMethod = getMethodIdOrClear(env, renderSettingsClass, "getResolutionScaling", "()I");
+    jboolean threadedRendering = getBooleanFieldOrDefault(env, renderSettings, renderSettingsClass, "threadedRendering", JNI_FALSE);
     jobject vulkanPipelineProfileObject = getOptionalObjectField(
         env,
         renderSettings,
@@ -490,21 +608,30 @@ std::unique_ptr<MelonDSAndroid::RenderSettings> MelonDSAndroidConfiguration::bui
     (void)getEnumOrdinal(env, vulkanPipelineProfileObject, &vulkanPipelineProfileOrdinal);
     if (vulkanPipelineProfileObject != nullptr)
         env->DeleteLocalRef(vulkanPipelineProfileObject);
-    jboolean rendererDebugToolsEnabled = env->GetBooleanField(renderSettings, env->GetFieldID(renderSettingsClass, "rendererDebugToolsEnabled", "Z"));
-    jboolean rendererDebugBgObjEnabled = env->GetBooleanField(renderSettings, env->GetFieldID(renderSettingsClass, "rendererDebugBgObjEnabled", "Z"));
-    jboolean rendererDebugLatchTraceEnabled = env->GetBooleanField(renderSettings, env->GetFieldID(renderSettingsClass, "rendererDebugLatchTraceEnabled", "Z"));
-    jboolean conservativeCoverageEnabled = env->GetBooleanField(renderSettings, env->GetFieldID(renderSettingsClass, "conservativeCoverageEnabled", "Z"));
-    jfloat conservativeCoveragePx = env->GetFloatField(renderSettings, env->GetFieldID(renderSettingsClass, "conservativeCoveragePx", "F"));
-    jfloat conservativeCoverageDepthBias = env->GetFloatField(renderSettings, env->GetFieldID(renderSettingsClass, "conservativeCoverageDepthBias", "F"));
-    jboolean conservativeCoverageApplyRepeat = env->GetBooleanField(renderSettings, env->GetFieldID(renderSettingsClass, "conservativeCoverageApplyRepeat", "Z"));
-    jboolean conservativeCoverageApplyClamp = env->GetBooleanField(renderSettings, env->GetFieldID(renderSettingsClass, "conservativeCoverageApplyClamp", "Z"));
-    jboolean debug3dClearMagenta = env->GetBooleanField(renderSettings, env->GetFieldID(renderSettingsClass, "debug3dClearMagenta", "Z"));
-    jobject videoFilteringObject = env->GetObjectField(renderSettings, env->GetFieldID(renderSettingsClass, "videoFiltering", "Lme/magnum/melonds/domain/model/VideoFiltering;"));
+    jboolean rendererDebugToolsEnabled = getBooleanFieldOrDefault(env, renderSettings, renderSettingsClass, "rendererDebugToolsEnabled", JNI_FALSE);
+    jboolean rendererDebugBgObjEnabled = getBooleanFieldOrDefault(env, renderSettings, renderSettingsClass, "rendererDebugBgObjEnabled", JNI_FALSE);
+    jboolean rendererDebugLatchTraceEnabled = getBooleanFieldOrDefault(env, renderSettings, renderSettingsClass, "rendererDebugLatchTraceEnabled", JNI_FALSE);
+    jboolean conservativeCoverageEnabled = getBooleanFieldOrDefault(env, renderSettings, renderSettingsClass, "conservativeCoverageEnabled", JNI_FALSE);
+    jfloat conservativeCoveragePx = getFloatFieldOrDefault(env, renderSettings, renderSettingsClass, "conservativeCoveragePx", 0.0f);
+    jfloat conservativeCoverageDepthBias = getFloatFieldOrDefault(env, renderSettings, renderSettingsClass, "conservativeCoverageDepthBias", 0.0f);
+    jboolean conservativeCoverageApplyRepeat = getBooleanFieldOrDefault(env, renderSettings, renderSettingsClass, "conservativeCoverageApplyRepeat", JNI_FALSE);
+    jboolean conservativeCoverageApplyClamp = getBooleanFieldOrDefault(env, renderSettings, renderSettingsClass, "conservativeCoverageApplyClamp", JNI_FALSE);
+    jboolean debug3dClearMagenta = getBooleanFieldOrDefault(env, renderSettings, renderSettingsClass, "debug3dClearMagenta", JNI_FALSE);
+    jobject videoFilteringObject = getOptionalObjectField(env, renderSettings, renderSettingsClass, "videoFiltering", "Lme/magnum/melonds/domain/model/VideoFiltering;");
     jint videoFilteringOrdinal = 0;
     (void)getEnumOrdinal(env, videoFilteringObject, &videoFilteringOrdinal);
     if (videoFilteringObject != nullptr)
         env->DeleteLocalRef(videoFilteringObject);
-    jint internalResolutionScaling = env->CallIntMethod(renderSettings, getResolutionScalingMethod);
+    jint internalResolutionScaling = 1;
+    if (env != nullptr && renderSettings != nullptr && getResolutionScalingMethod != nullptr)
+    {
+        internalResolutionScaling = env->CallIntMethod(renderSettings, getResolutionScalingMethod);
+        if (env->ExceptionCheck())
+        {
+            env->ExceptionClear();
+            internalResolutionScaling = 1;
+        }
+    }
     if (renderSettingsClass) env->DeleteLocalRef(renderSettingsClass);
 
     std::unique_ptr<MelonDSAndroid::RenderSettings> settings;

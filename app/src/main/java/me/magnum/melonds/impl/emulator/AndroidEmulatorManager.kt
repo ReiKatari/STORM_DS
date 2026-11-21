@@ -10,13 +10,17 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import me.magnum.melonds.MelonDSAndroidInterface
 import me.magnum.melonds.MelonEmulator
@@ -24,6 +28,7 @@ import me.magnum.melonds.MelonRomDecryptor
 import me.magnum.melonds.impl.NusDSiWareMetadataRepository
 import me.magnum.melonds.impl.StormDeviceSystemInfoReporter
 import me.magnum.melonds.common.PermissionHandler
+import me.magnum.melonds.common.romprocessors.CompressedRomFileProcessor
 import me.magnum.melonds.common.romprocessors.RomFileProcessorFactory
 import me.magnum.melonds.common.runtime.ScreenshotFrameBufferProvider
 import me.magnum.melonds.utils.NdsHeaderParser
@@ -86,12 +91,15 @@ class AndroidEmulatorManager(
         val titleIdHex: String,
         val sramUri: Uri,
         val cachePublicSaveFile: File?,
+        val cacheExecutableFile: File? = null,
         val isTemporaryInjected: Boolean,
         val fileType: DSiWareTitleFileType = DSiWareTitleFileType.PUBLIC_SAV,
         val cacheSaveInitialModified: Long = cachePublicSaveFile?.lastModified() ?: 0L,
+        val cacheSaveInitialCrc32: Long? = null,
     )
 
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val nativeLifecycleMutex = Mutex()
     private val _emulatorEvents = MutableSharedFlow<EmulatorEvent>(extraBufferCapacity = 256)
     override val emulatorEvents: Flow<EmulatorEvent> = _emulatorEvents.asSharedFlow()
 
@@ -101,6 +109,11 @@ class AndroidEmulatorManager(
     private var activeDsiWareSession: ActiveDsiWareSession? = null
     @Volatile private var leaderboardDiagnosticsEnabled = false
     @Volatile private var isEmulationPaused = false
+    @Volatile private var activeSlowMotionMultiplier: Float? = null
+
+    fun setSlowMotionMultiplier(multiplier: Float?) {
+        activeSlowMotionMultiplier = multiplier?.takeIf { it > 0f && !it.isNaN() }
+    }
 
     private fun startNativeEmulation(startPaused: Boolean) {
         isEmulationPaused = startPaused
@@ -109,6 +122,7 @@ class AndroidEmulatorManager(
 
     private fun stopNativeEmulation() {
         isEmulationPaused = false
+        activeSlowMotionMultiplier = null
         MelonEmulator.stopEmulation()
     }
     private val leaderboardTrackerUpdateLogLimiter = LeaderboardTrackerUpdateLogLimiter()
@@ -317,12 +331,19 @@ class AndroidEmulatorManager(
         }
     }
 
+    private fun getCompressedRomProcessor(rom: Rom): CompressedRomFileProcessor? {
+        val byName = romFileProcessorFactory.getFileRomProcessorForFileName(rom.fileName)
+        if (byName is CompressedRomFileProcessor) {
+            return byName
+        }
+        val byDoc = DocumentFile.fromSingleUri(context, rom.uri)?.let(romFileProcessorFactory::getFileRomProcessorForDocument)
+        return byDoc as? CompressedRomFileProcessor
+    }
+
     private suspend fun resolvePlayableRomUri(rom: Rom): Uri? {
-        val isArchive = rom.fileName.endsWith(".zip", ignoreCase = true) || rom.fileName.endsWith(".7z", ignoreCase = true)
-        return if (isArchive) {
-            val fileRomProcessor = romFileProcessorFactory.getFileRomProcessorForFileName(rom.fileName)
-                ?: DocumentFile.fromSingleUri(context, rom.uri)?.let(romFileProcessorFactory::getFileRomProcessorForDocument)
-            fileRomProcessor?.getRealRomUri(rom)
+        val compressedProcessor = getCompressedRomProcessor(rom)
+        return if (compressedProcessor != null) {
+            compressedProcessor.getRealRomUri(rom)
         } else {
             rom.uri
         }
@@ -339,12 +360,7 @@ class AndroidEmulatorManager(
         if (rom.isDsiWareTitle || romGc0 == 'K' || romGc0 == 'H' || romGc0 == '4') {
             return true
         }
-        val isArchive = rom.fileName.endsWith(".zip", ignoreCase = true) || rom.fileName.endsWith(".7z", ignoreCase = true)
-        val targetUri = if (isArchive) {
-            resolvePlayableRomUri(rom) ?: return false
-        } else {
-            rom.uri
-        }
+        val targetUri = resolvePlayableRomUri(rom) ?: return false
         return NdsHeaderParser.readHeader(context, targetUri, maxBytes = 0x240, minBytes = 0x160)
             ?.isDsiWare
             ?: rom.isDsiWareTitle
@@ -352,7 +368,16 @@ class AndroidEmulatorManager(
 
     override suspend fun loadRom(rom: Rom, cheats: List<Cheat>): RomLaunchResult {
         return withContext(Dispatchers.IO) {
+            nativeLifecycleMutex.withLock {
+                loadRomInternal(rom, cheats)
+            }
+        }
+    }
+
+    private suspend fun loadRomInternal(rom: Rom, cheats: List<Cheat>): RomLaunchResult {
+        return withContext(Dispatchers.IO) {
             try {
+                currentCoroutineContext().ensureActive()
                 val isDsiWare = rom.isDsiWareTitle || isRealDsiWareTitle(rom)
 
                 val dsiBiosResult = configurationDirectoryVerifier.checkConsoleConfigurationDirectory(ConsoleType.DSi)
@@ -366,15 +391,13 @@ class AndroidEmulatorManager(
                 }
 
                 // Fast-path: If the ROM is a standard NDS/DSi file (not an archive), bypass slow DocumentFile SAF queries
-                val isArchive = rom.fileName.endsWith(".zip", ignoreCase = true) || rom.fileName.endsWith(".7z", ignoreCase = true)
-                val romUri = if (isArchive) {
-                    val fileRomProcessor = romFileProcessorFactory.getFileRomProcessorForFileName(rom.fileName)
-                        ?: DocumentFile.fromSingleUri(context, rom.uri)?.let(romFileProcessorFactory::getFileRomProcessorForDocument)
-                        ?: return@withContext RomLaunchResult.LaunchFailedRomNotFound
-                    fileRomProcessor.getRealRomUri(rom) ?: return@withContext RomLaunchResult.LaunchFailedRomNotSupported
+                val compressedProcessor = getCompressedRomProcessor(rom)
+                val romUri = if (compressedProcessor != null) {
+                    compressedProcessor.getRealRomUri(rom) ?: return@withContext RomLaunchResult.LaunchFailedRomNotSupported
                 } else {
                     rom.uri
                 }
+                currentCoroutineContext().ensureActive()
                 val sram = try {
                     sramProvider.getSramForRom(rom)
                 } catch (exception: SramLoadException) {
@@ -387,6 +410,7 @@ class AndroidEmulatorManager(
                     precheckedDsiBiosValid = dsiBiosResult.status == ConfigurationDirResult.Status.VALID,
                 )
                     .withPreparedDldiConfiguration()
+                currentCoroutineContext().ensureActive()
                 setupEmulator(emulatorConfiguration, rom.config.customVulkanDriverName)
 
                 val gbaSlotRomConfig = rom.config.gbaSlotConfig
@@ -433,8 +457,10 @@ class AndroidEmulatorManager(
                     gbaSramUri = (gbaSlotRomConfig as? RomGbaSlotConfig.GbaRom)?.savePath
                 )
 
+                currentCoroutineContext().ensureActive()
+
                 // Fallback: If loading failed in DSi mode, retry immediately in standard DS mode
-                if ((loadResult.isTerminal || !isActive) && emulatorConfiguration.consoleType == ConsoleType.DSi) {
+                if (loadResult.isTerminal && isActive && emulatorConfiguration.consoleType == ConsoleType.DSi) {
                     Log.w(TAG, "Loading ROM '${rom.name}' in DSi mode failed ($loadResult), attempting fallback in DS mode")
                     val fallbackConfig = emulatorConfiguration.copy(
                         consoleType = ConsoleType.DS,
@@ -449,6 +475,7 @@ class AndroidEmulatorManager(
                         gbaRomUri = (gbaSlotRomConfig as? RomGbaSlotConfig.GbaRom)?.romPath,
                         gbaSramUri = (gbaSlotRomConfig as? RomGbaSlotConfig.GbaRom)?.savePath
                     )
+                    currentCoroutineContext().ensureActive()
                     if (!retryResult.isTerminal && isActive) {
                         messageQueue.start()
                         val vulkanFailedResult = ensureVulkanOrFallbackToGl(
@@ -478,6 +505,7 @@ class AndroidEmulatorManager(
                         writeGameExecutionLog(rom, rom.fileName, true, "Fallback boot successful in standard DS FreeBIOS mode\n$fullDiag", "loadRom (DS Fallback)")
                         return@withContext RomLaunchResult.LaunchSuccessful(retryResult != MelonEmulator.LoadResult.SUCCESS_GBA_FAILED)
                     }
+                    loadResult = retryResult
                 }
 
                 if (loadResult.isTerminal || !isActive) {
@@ -486,6 +514,7 @@ class AndroidEmulatorManager(
                     val fullDiag = "--- Native Boot Diagnostic ---\n$nativeDiag\n--- Emulation CPU and Hardware Diagnostic ---\n$cpuDiag"
                     cameraManager.stopCurrentCameraSource()
                     stopNativeEmulation()
+                    messageQueue.stop()
                     writeGameExecutionLog(rom, rom.fileName, false, "loadRom returned terminal error: $loadResult\n$fullDiag", "loadRom")
                     RomLaunchResult.LaunchFailed(loadResult)
                 } else {
@@ -577,12 +606,18 @@ class AndroidEmulatorManager(
             return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.BIOS_FAILED)
         }
 
+        var directPrimaryFileType = DSiWareTitleFileType.PUBLIC_SAV
         if (isDirectRomFile) {
             try {
                 val header = NdsHeaderParser.readHeader(context, playableRomUri, maxBytes = 0x1000, minBytes = 0x160)
                 if (header != null) {
                     val pubSav = header.publicSaveSize
                     val privSav = header.privateSaveSize
+                    directPrimaryFileType = if (pubSav > 0u || privSav == 0u) {
+                        DSiWareTitleFileType.PUBLIC_SAV
+                    } else {
+                        DSiWareTitleFileType.PRIVATE_SAV
+                    }
                     val tmdMetadata = runCatching {
                         NusDSiWareMetadataRepository.createTmd(
                             categoryId = 0x00030004u,
@@ -609,32 +644,25 @@ class AndroidEmulatorManager(
                         }
                     }
 
-                    // If user has existing .sav in their save folder, sync it into NAND before launching;
-                    // otherwise or if corrupted/empty, repair NAND and export valid FAT12 public.sav so user storage immediately has valid FAT12 save
+                    // If user has existing valid FAT12 .sav in their save folder, sync it into NAND before launching;
+                    // otherwise format valid FAT12 save, write to user sramUri, and sync into NAND.
                     try {
-                        val expectedSize = if (pubSav > 0u) pubSav.toInt() else 64 * 1024
+                        val primarySavSize = if (directPrimaryFileType == DSiWareTitleFileType.PRIVATE_SAV) privSav else pubSav
+                        val expectedSize = if (primarySavSize > 0u) primarySavSize.toInt() else 64 * 1024
                         val sramBytes = readUserSaveBytes(sram)
-                        val isSizeMatching = sramBytes != null && (sramBytes.size == expectedSize || pubSav == 0u)
+                        val isSizeMatching = sramBytes != null && (sramBytes.size == expectedSize || primarySavSize == 0u)
 
                         if (isSizeMatching && isValidDsiWareFatSave(sramBytes)) {
-                            dsiNandManager.importTitleFile(titleId, DSiWareTitleFileType.PUBLIC_SAV, sram)
-                            Log.i(TAG, "loadDsiWare: successfully synced valid user FAT12 save (${sramBytes?.size} B) into NAND title=$titleIdHex")
-                        } else if (isSizeMatching) {
-                            dsiNandManager.importTitleFile(titleId, DSiWareTitleFileType.PUBLIC_SAV, sram)
-                            Log.i(TAG, "loadDsiWare: synced existing user save (${sramBytes?.size} B) into NAND title=$titleIdHex")
+                            dsiNandManager.importTitleFile(titleId, directPrimaryFileType, sram)
+                            Log.i(TAG, "loadDsiWare: successfully synced valid user FAT12 save (${sramBytes?.size} B, $directPrimaryFileType) into NAND title=$titleIdHex")
                         } else {
-                            // User save is missing or mismatched size:
-                            // 1. Generate a valid FAT12 filesystem matching pubSav (or default 64KB)
                             val validFatBytes = createFormattedFat12(expectedSize)
-
-                            // 2. Directly write valid FAT12 into user sramUri
-                            val openStream = runCatching { context.contentResolver.openOutputStream(sram, "rwt") }.getOrNull()
+                            val openStream = runCatching { context.contentResolver.openOutputStream(sram, "wt") }.getOrNull()
+                                ?: runCatching { context.contentResolver.openOutputStream(sram, "rwt") }.getOrNull()
                                 ?: runCatching { context.contentResolver.openOutputStream(sram, "w") }.getOrNull()
                             openStream?.use { output -> output.write(validFatBytes) }
-                            Log.i(TAG, "loadDsiWare: wrote valid formatted FAT12 save (${validFatBytes.size} B) directly to user sram=$sram")
-
-                            // 3. Format and sync into NAND
-                            dsiNandManager.importTitleFile(titleId, DSiWareTitleFileType.PUBLIC_SAV, sram)
+                            Log.i(TAG, "loadDsiWare: formatted and wrote valid FAT12 save (${validFatBytes.size} B, $directPrimaryFileType) to user sram=$sram")
+                            dsiNandManager.importTitleFile(titleId, directPrimaryFileType, sram)
                         }
                     } catch (e: Throwable) {
                         Log.w(TAG, "loadDsiWare: error syncing user save into NAND", e)
@@ -646,6 +674,7 @@ class AndroidEmulatorManager(
                 dsiNandManager.closeNand()
             }
 
+            currentCoroutineContext().ensureActive()
             val emulatorConfiguration = getRomEmulatorConfiguration(rom)
                 .copy(
                     consoleType = ConsoleType.DSi,
@@ -666,7 +695,8 @@ class AndroidEmulatorManager(
                 gbaRomUri = null,
                 gbaSramUri = null,
             )
-            if (loadResult.isTerminal || !isActive) {
+            currentCoroutineContext().ensureActive()
+            if (loadResult.isTerminal && isActive) {
                 Log.w(TAG, "loadDsiWare: DSi direct launch failed ($loadResult), falling back to standard DS launch for '${rom.name}'")
                 val fallbackConfig = emulatorConfiguration.copy(
                     consoleType = ConsoleType.DS,
@@ -682,6 +712,7 @@ class AndroidEmulatorManager(
                     gbaRomUri = null,
                     gbaSramUri = null,
                 )
+                currentCoroutineContext().ensureActive()
                 if (!retryResult.isTerminal && isActive) {
                     messageQueue.start()
                     val vulkanFailedResult = ensureVulkanOrFallbackToGl(
@@ -716,6 +747,7 @@ class AndroidEmulatorManager(
                 val diag = MelonEmulator.stopAndGetBootDiagnostic()
                 cameraManager.stopCurrentCameraSource()
                 stopNativeEmulation()
+                messageQueue.stop()
                 writeGameExecutionLog(rom, titleIdHex, false, "loadRom returned terminal error: $loadResult\n--- Native Boot Diagnostic ---\n$diag", "loadDsiWare")
                 return@withContext RomLaunchResult.LaunchFailed(loadResult)
             }
@@ -747,8 +779,9 @@ class AndroidEmulatorManager(
                 titleIdHex = titleIdHex,
                 sramUri = sram,
                 cachePublicSaveFile = null,
+                cacheExecutableFile = null,
                 isTemporaryInjected = false,
-                fileType = DSiWareTitleFileType.PUBLIC_SAV,
+                fileType = directPrimaryFileType,
             )
             startNativeEmulation(startPaused = true)
             delay(10)
@@ -772,21 +805,27 @@ class AndroidEmulatorManager(
         var primaryFileType: DSiWareTitleFileType? = null
         val dsiWareBootMode = settingsRepository.getDsiWareBootMode()
 
+        var initialCacheSaveModified = 0L
+        var initialCacheSaveCrc32: Long? = null
         try {
             val installedTitle = dsiNandManager.listTitles().firstOrNull { it.titleId == titleId }
+            val installedPrimaryType = if (installedTitle != null) {
+                if (installedTitle.hasPublicSavFile()) DSiWareTitleFileType.PUBLIC_SAV
+                else if (installedTitle.hasPrivateSavFile()) DSiWareTitleFileType.PRIVATE_SAV
+                else DSiWareTitleFileType.PUBLIC_SAV
+            } else {
+                DSiWareTitleFileType.PUBLIC_SAV
+            }
             if (installedTitle != null) {
-                // If user has existing .sav in their save folder, sync it into NAND before launching
+                // If user has existing valid FAT12 .sav in their save folder, sync it into NAND before launching
                 try {
                     val sramBytes = readUserSaveBytes(sram)
                     if (sramBytes != null && isValidDsiWareFatSave(sramBytes)) {
-                        dsiNandManager.importTitleFile(titleId, DSiWareTitleFileType.PUBLIC_SAV, sram)
-                        Log.i(TAG, "loadDsiWare: successfully synced valid user FAT12 save (${sramBytes.size} B) into NAND title=$titleIdHex")
-                    } else if (sramBytes != null) {
-                        dsiNandManager.importTitleFile(titleId, DSiWareTitleFileType.PUBLIC_SAV, sram)
-                        Log.i(TAG, "loadDsiWare: synced existing installed title save (${sramBytes.size} B) into NAND title=$titleIdHex")
+                        dsiNandManager.importTitleFile(titleId, installedPrimaryType, sram)
+                        Log.i(TAG, "loadDsiWare: successfully synced valid user FAT12 save (${sramBytes.size} B, $installedPrimaryType) into NAND title=$titleIdHex")
                     } else {
                         dsiNandManager.repairTitleSaves(titleId)
-                        dsiNandManager.exportTitleFile(titleId, DSiWareTitleFileType.PUBLIC_SAV, sram)
+                        dsiNandManager.exportTitleFile(titleId, installedPrimaryType, sram)
                     }
                 } catch (e: Throwable) {
                     Log.w(TAG, "loadDsiWare: error syncing user public save with NAND", e)
@@ -809,6 +848,8 @@ class AndroidEmulatorManager(
 
             if (!executableFile.exists() || executableFile.length() == 0L) {
                 Log.w(TAG, "loadDsiWare: failed to prepare executable title=$titleIdHex")
+                runCatching { executableFile.delete() }
+                runCatching { saveFile.delete() }
                 writeGameExecutionLog(rom, titleIdHex, false, "Failed to prepare executable for title", "loadDsiWare")
                 return@withContext RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
             }
@@ -826,6 +867,9 @@ class AndroidEmulatorManager(
                 )
                 if (!exportedSave || saveFile.length() == 0L) {
                     runCatching { saveFile.delete() }
+                } else {
+                    initialCacheSaveModified = saveFile.lastModified()
+                    initialCacheSaveCrc32 = computeFileCrc32(saveFile)
                 }
             } else {
                 runCatching { saveFile.delete() }
@@ -834,6 +878,7 @@ class AndroidEmulatorManager(
             dsiNandManager.closeNand()
         }
 
+        currentCoroutineContext().ensureActive()
         val (showBootScreen, autoloadTitleId) = when (dsiWareBootMode) {
             me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.SYSTEM_MENU -> true to 0L
             me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.AUTOLOAD -> false to titleId
@@ -866,7 +911,8 @@ class AndroidEmulatorManager(
             gbaRomUri = null,
             gbaSramUri = null,
         )
-        if (loadResult.isTerminal || !isActive) {
+        currentCoroutineContext().ensureActive()
+        if (loadResult.isTerminal && isActive) {
             Log.w(TAG, "loadDsiWare: DSi launch failed ($loadResult), falling back to standard DS launch for '${rom.name}'")
             val fallbackConfig = emulatorConfiguration.copy(
                 consoleType = ConsoleType.DS,
@@ -882,6 +928,7 @@ class AndroidEmulatorManager(
                 gbaRomUri = null,
                 gbaSramUri = null,
             )
+            currentCoroutineContext().ensureActive()
             if (!retryResult.isTerminal && isActive) {
                 messageQueue.start()
                 val vulkanFailedResult = ensureVulkanOrFallbackToGl(
@@ -900,9 +947,14 @@ class AndroidEmulatorManager(
                     )
                 }
                 if (vulkanFailedResult != null) {
+                    runCatching { executableFile.delete() }
+                    runCatching { saveFile.delete() }
                     return@withContext RomLaunchResult.LaunchFailed(vulkanFailedResult)
                 }
+                runCatching { executableFile.delete() }
+                runCatching { saveFile.delete() }
                 MelonEmulator.setupCheats(cheats.toTypedArray())
+                activeDsiWareSession = null
                 startNativeEmulation(startPaused = true)
                 delay(10)
                 val nativeDiag = MelonEmulator.stopAndGetBootDiagnostic()
@@ -915,6 +967,9 @@ class AndroidEmulatorManager(
             val diag = MelonEmulator.stopAndGetBootDiagnostic()
             cameraManager.stopCurrentCameraSource()
             stopNativeEmulation()
+            messageQueue.stop()
+            runCatching { executableFile.delete() }
+            runCatching { saveFile.delete() }
             writeGameExecutionLog(rom, titleIdHex, false, "loadRom/bootFirmware returned terminal error: $loadResult\n--- Native Boot Diagnostic ---\n$diag", "loadDsiWare")
             return@withContext RomLaunchResult.LaunchFailed(loadResult)
         }
@@ -936,6 +991,8 @@ class AndroidEmulatorManager(
             )
         }
         if (vulkanFailedResult != null) {
+            runCatching { executableFile.delete() }
+            runCatching { saveFile.delete() }
             return@withContext RomLaunchResult.LaunchFailed(vulkanFailedResult)
         }
 
@@ -946,8 +1003,11 @@ class AndroidEmulatorManager(
             titleIdHex = titleIdHex,
             sramUri = sram,
             cachePublicSaveFile = if (hasPublicSave || hasPrivateSave) saveFile else null,
+            cacheExecutableFile = executableFile,
             isTemporaryInjected = false,
             fileType = primaryFileType ?: DSiWareTitleFileType.PUBLIC_SAV,
+            cacheSaveInitialModified = initialCacheSaveModified,
+            cacheSaveInitialCrc32 = initialCacheSaveCrc32,
         )
         startNativeEmulation(startPaused = true)
         delay(10)
@@ -1176,54 +1236,61 @@ class AndroidEmulatorManager(
 
     override suspend fun loadFirmware(consoleType: ConsoleType): FirmwareLaunchResult {
         return withContext(Dispatchers.IO) {
-            try {
-                val emulatorConfiguration = getFirmwareEmulatorConfiguration(consoleType)
-                    .withPreparedDldiConfiguration()
-                setupEmulator(emulatorConfiguration, null)
-                val result = MelonEmulator.bootFirmware()
-                if (result != MelonEmulator.FirmwareLoadResult.SUCCESS) {
+            nativeLifecycleMutex.withLock {
+                try {
+                    currentCoroutineContext().ensureActive()
+                    val emulatorConfiguration = getFirmwareEmulatorConfiguration(consoleType)
+                        .withPreparedDldiConfiguration()
+                    setupEmulator(emulatorConfiguration, null)
+                    val result = MelonEmulator.bootFirmware()
+                    currentCoroutineContext().ensureActive()
+                    if (result != MelonEmulator.FirmwareLoadResult.SUCCESS) {
+                        cameraManager.stopCurrentCameraSource()
+                        stopNativeEmulation()
+                        FirmwareLaunchResult.LaunchFailed(result)
+                    } else {
+                        messageQueue.start()
+                        if (!precompileVulkanPipelines(emulatorConfiguration)) {
+                            val fallbackRenderer = GameCompatibilityManager.resolveSupportedFallbackRenderer(context)
+                            messageQueue.stop()
+                            stopNativeEmulation()
+                            val glConfig = emulatorConfiguration.copy(
+                                rendererConfiguration = emulatorConfiguration.rendererConfiguration.copy(renderer = fallbackRenderer)
+                            )
+                            setupEmulator(glConfig, null)
+                            val glResult = MelonEmulator.bootFirmware()
+                            if (glResult != MelonEmulator.FirmwareLoadResult.SUCCESS) {
+                                cameraManager.stopCurrentCameraSource()
+                                stopNativeEmulation()
+                                messageQueue.stop()
+                                _emulatorEvents.tryEmit(EmulatorEvent.RendererInitFailed(fallbackRenderer))
+                                return@withLock FirmwareLaunchResult.LaunchFailed(glResult)
+                            }
+                            messageQueue.start()
+                            _emulatorEvents.tryEmit(EmulatorEvent.RendererInitFailed(VideoRenderer.VULKAN))
+                        }
+                        startNativeEmulation(startPaused = true)
+                        FirmwareLaunchResult.LaunchSuccessful
+                    }
+                } catch (exception: Throwable) {
+                    if (exception is CancellationException) {
+                        throw exception
+                    }
+                    Log.e(TAG, "Failed to load firmware", exception)
                     cameraManager.stopCurrentCameraSource()
                     stopNativeEmulation()
-                    FirmwareLaunchResult.LaunchFailed(result)
-                } else {
-                    messageQueue.start()
-                    if (!precompileVulkanPipelines(emulatorConfiguration)) {
-                        val fallbackRenderer = GameCompatibilityManager.resolveSupportedFallbackRenderer(context)
-                        messageQueue.stop()
-                        stopNativeEmulation()
-                        val glConfig = emulatorConfiguration.copy(
-                            rendererConfiguration = emulatorConfiguration.rendererConfiguration.copy(renderer = fallbackRenderer)
-                        )
-                        setupEmulator(glConfig, null)
-                        val glResult = MelonEmulator.bootFirmware()
-                        if (glResult != MelonEmulator.FirmwareLoadResult.SUCCESS) {
-                            cameraManager.stopCurrentCameraSource()
-                            stopNativeEmulation()
-                            _emulatorEvents.tryEmit(EmulatorEvent.RendererInitFailed(fallbackRenderer))
-                            return@withContext FirmwareLaunchResult.LaunchFailed(glResult)
-                        }
-                        messageQueue.start()
-                        _emulatorEvents.tryEmit(EmulatorEvent.RendererInitFailed(VideoRenderer.VULKAN))
-                    }
-                    startNativeEmulation(startPaused = true)
-                    FirmwareLaunchResult.LaunchSuccessful
+                    messageQueue.stop()
+                    FirmwareLaunchResult.LaunchFailed(MelonEmulator.FirmwareLoadResult.FIRMWARE_BAD)
                 }
-            } catch (exception: Throwable) {
-                if (exception is CancellationException) {
-                    throw exception
-                }
-                Log.e(TAG, "Failed to load firmware", exception)
-                cameraManager.stopCurrentCameraSource()
-                stopNativeEmulation()
-                messageQueue.stop()
-                FirmwareLaunchResult.LaunchFailed(MelonEmulator.FirmwareLoadResult.FIRMWARE_BAD)
             }
         }
     }
 
     override suspend fun updateRomEmulatorConfiguration(rom: Rom) {
-        val configuration = getRomEmulatorConfiguration(rom)
-        MelonEmulator.updateEmulatorConfiguration(configuration)
+        nativeLifecycleMutex.withLock {
+            val configuration = getRomEmulatorConfiguration(rom)
+            MelonEmulator.updateEmulatorConfiguration(configuration)
+        }
     }
 
     private fun logRetroArchShaderLaunchState(configuration: EmulatorConfiguration) {
@@ -1278,8 +1345,10 @@ class AndroidEmulatorManager(
         setupEmulator(glConfig, rom.config.customVulkanDriverName)
         val glRetryResult = reloadAction()
         if (glRetryResult.isTerminal || !kotlin.coroutines.coroutineContext.isActive) {
+            runCatching { MelonEmulator.stopAndGetBootDiagnostic() }
             cameraManager.stopCurrentCameraSource()
             stopNativeEmulation()
+            messageQueue.stop()
             _emulatorEvents.tryEmit(EmulatorEvent.RendererInitFailed(fallbackRenderer))
             return glRetryResult
         }
@@ -1315,8 +1384,10 @@ class AndroidEmulatorManager(
     }
 
     override suspend fun updateFirmwareEmulatorConfiguration(consoleType: ConsoleType) {
-        val configuration = getFirmwareEmulatorConfiguration(consoleType)
-        MelonEmulator.updateEmulatorConfiguration(configuration)
+        nativeLifecycleMutex.withLock {
+            val configuration = getFirmwareEmulatorConfiguration(consoleType)
+            MelonEmulator.updateEmulatorConfiguration(configuration)
+        }
     }
 
     override suspend fun getRewindWindow(): RewindWindow {
@@ -1430,26 +1501,22 @@ class AndroidEmulatorManager(
     }
 
     override fun stopEmulator() {
-        stopNativeEmulation()
-        val session = takeActiveDsiWareSession()
-        if (session != null) {
-            coroutineScope.launch(Dispatchers.IO) {
-                syncDsiWareSessionSaveAndCleanup(session)
-            }
+        coroutineScope.launch {
+            stopEmulatorSuspend()
         }
-        cameraManager.stopCurrentCameraSource()
-        messageQueue.stop()
     }
 
     suspend fun stopEmulatorSuspend() {
         withContext(Dispatchers.IO) {
-            stopNativeEmulation()
-            val session = takeActiveDsiWareSession()
-            if (session != null) {
-                syncDsiWareSessionSaveAndCleanup(session)
+            nativeLifecycleMutex.withLock {
+                stopNativeEmulation()
+                val session = takeActiveDsiWareSession()
+                if (session != null) {
+                    syncDsiWareSessionSaveAndCleanup(session)
+                }
+                cameraManager.stopCurrentCameraSource()
+                messageQueue.stop()
             }
-            cameraManager.stopCurrentCameraSource()
-            messageQueue.stop()
         }
     }
 
@@ -1459,54 +1526,80 @@ class AndroidEmulatorManager(
         }
     }
 
+    private fun computeFileCrc32(file: File?): Long? {
+        if (file == null || !file.exists() || file.length() == 0L) return null
+        return runCatching {
+            val crc = java.util.zip.CRC32()
+            file.inputStream().use { input ->
+                val buf = ByteArray(16 * 1024)
+                while (true) {
+                    val read = input.read(buf)
+                    if (read <= 0) break
+                    crc.update(buf, 0, read)
+                }
+            }
+            crc.value
+        }.getOrNull()
+    }
+
     private suspend fun syncDsiWareSessionSaveAndCleanup(session: ActiveDsiWareSession) {
         val cacheSave = session.cachePublicSaveFile
+        val currentCrc = computeFileCrc32(cacheSave)
         val cacheSaveWasModified = cacheSave != null &&
             cacheSave.exists() &&
             cacheSave.length() > 0L &&
-            cacheSave.lastModified() > session.cacheSaveInitialModified
-
-        // Step 1: If the emulator updated the cache .sav file directly during the session, copy it to user's save folder
-        if (cacheSaveWasModified && cacheSave != null) {
-            runCatching {
-                context.contentResolver.openOutputStream(session.sramUri, "wt")?.use { output ->
-                    cacheSave.inputStream().use { input ->
-                        input.copyTo(output)
-                    }
-                }
-                Log.i(TAG, "DSiWare session: synced updated cache save to user save folder (${session.sramUri})")
-            }.onFailure {
-                Log.w(TAG, "DSiWare session: failed to sync save to user save folder", it)
-            }
-        }
-
-        // Step 2: Sync save with NAND and cleanup
-        val openNandResult = dsiNandManager.openNand()
-        if (openNandResult.isFailure()) {
-            Log.w(TAG, "DSiWare session: failed to reopen NAND for save sync title=${session.titleIdHex} result=$openNandResult")
-            return
-        }
+            (cacheSave.lastModified() > session.cacheSaveInitialModified ||
+                (currentCrc != null && currentCrc != session.cacheSaveInitialCrc32))
 
         try {
+            // Step 1: If the emulator updated the cache .sav file directly during the session, copy it to user's save folder
             if (cacheSaveWasModified && cacheSave != null) {
-                val imported = dsiNandManager.importTitleFileFromPath(
-                    titleId = session.titleId,
-                    fileType = session.fileType,
-                    filePath = cacheSave.absolutePath,
-                )
-                Log.i(TAG, "DSiWare session: synced updated cache save into NAND title=${session.titleIdHex} fileType=${session.fileType} result=$imported")
-            } else {
-                val exported = dsiNandManager.exportTitleFile(
-                    titleId = session.titleId,
-                    fileType = session.fileType,
-                    fileUri = session.sramUri,
-                )
-                Log.i(TAG, "DSiWare session: exported NAND save to user sramUri result=$exported")
+                runCatching {
+                    val outStream = runCatching { context.contentResolver.openOutputStream(session.sramUri, "wt") }.getOrNull()
+                        ?: runCatching { context.contentResolver.openOutputStream(session.sramUri, "rwt") }.getOrNull()
+                        ?: runCatching { context.contentResolver.openOutputStream(session.sramUri, "w") }.getOrNull()
+                    outStream?.use { output ->
+                        cacheSave.inputStream().use { input ->
+                            input.copyTo(output)
+                        }
+                    }
+                    Log.i(TAG, "DSiWare session: synced updated cache save to user save folder (${session.sramUri})")
+                }.onFailure {
+                    Log.w(TAG, "DSiWare session: failed to sync save to user save folder", it)
+                }
             }
-        } catch (e: Throwable) {
-            Log.w(TAG, "DSiWare session: error during save sync title=${session.titleIdHex}", e)
+
+            // Step 2: Sync save with NAND
+            val openNandResult = dsiNandManager.openNand()
+            if (openNandResult.isFailure()) {
+                Log.w(TAG, "DSiWare session: failed to reopen NAND for save sync title=${session.titleIdHex} result=$openNandResult")
+                return
+            }
+
+            try {
+                if (cacheSaveWasModified && cacheSave != null) {
+                    val imported = dsiNandManager.importTitleFileFromPath(
+                        titleId = session.titleId,
+                        fileType = session.fileType,
+                        filePath = cacheSave.absolutePath,
+                    )
+                    Log.i(TAG, "DSiWare session: synced updated cache save into NAND title=${session.titleIdHex} fileType=${session.fileType} result=$imported")
+                } else {
+                    val exported = dsiNandManager.exportTitleFile(
+                        titleId = session.titleId,
+                        fileType = session.fileType,
+                        fileUri = session.sramUri,
+                    )
+                    Log.i(TAG, "DSiWare session: exported NAND save to user sramUri (${session.fileType}) result=$exported")
+                }
+            } catch (e: Throwable) {
+                Log.w(TAG, "DSiWare session: error during save sync title=${session.titleIdHex}", e)
+            } finally {
+                dsiNandManager.closeNand()
+            }
         } finally {
-            dsiNandManager.closeNand()
+            runCatching { session.cacheExecutableFile?.delete() }
+            runCatching { session.cachePublicSaveFile?.delete() }
         }
     }
 
@@ -1615,7 +1708,13 @@ class AndroidEmulatorManager(
             useCustomBios = mustUseCustomBios,
             showBootScreen = if (consoleType == ConsoleType.DSi) false else baseConfiguration.showBootScreen && mustUseCustomBios,
             fastForwardSpeedMultiplier = (rom.config.fastForwardSpeedMultiplier ?: baseConfiguration.fastForwardSpeedMultiplier).let { if (it == 0f || it.isNaN()) 1.0f else it },
-            frameLimitSpeedMultiplier = (if (emulatorSession.isRetroAchievementsHardcoreModeEnabled) 1.0f else baseConfiguration.frameLimitSpeedMultiplier).let { if (it <= 0f) 1.0f else it },
+            frameLimitSpeedMultiplier = (
+                if (emulatorSession.isRetroAchievementsHardcoreModeEnabled) {
+                    1.0f
+                } else {
+                    activeSlowMotionMultiplier ?: baseConfiguration.frameLimitSpeedMultiplier
+                }
+            ).let { if (it <= 0f) 1.0f else it },
             arm9OverclockMultiplier = (rom.config.arm9Overclock ?: baseConfiguration.arm9OverclockMultiplier).coerceAtLeast(1),
             hgEngineFixEnabled = rom.config.useHgEngineFix,
             consoleType = consoleType,

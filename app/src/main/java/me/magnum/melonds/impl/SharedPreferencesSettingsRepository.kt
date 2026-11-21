@@ -255,6 +255,7 @@ class SharedPreferencesSettingsRepository(
         MutableStateFlow(initialConfiguration)
     }
     private val preferenceSharedFlows = mutableMapOf<String, MutableSharedFlow<Unit>>()
+    private val driverListLock = Any()
     private val renderConfigurationFlow: SharedFlow<RendererConfiguration>
     @Volatile private var cachedRetroArchShaderRoot: String? = null
     @Volatile private var cachedRetroArchShaderImportKey: String? = null
@@ -374,13 +375,15 @@ class SharedPreferencesSettingsRepository(
                 romName = activeRomName,
                 fileName = activeRomFileName,
             )
-            val effectiveRenderer = if (renderInputs.core.renderer == VideoRenderer.VULKAN && isVulkanRendererSupported()) {
+            val forcedRenderer = safeProfile?.forcedRenderer?.let { forced ->
+                sanitizeVideoRenderer(forced, fallback = resolveSupportedFallbackVideoRenderer())
+            }
+            val effectiveRenderer = if (forcedRenderer != null) {
+                GameCompatibilityManager.pickSaferRenderer(renderInputs.core.renderer, forcedRenderer)
+            } else if (renderInputs.core.renderer == VideoRenderer.VULKAN && isVulkanRendererSupported()) {
                 VideoRenderer.VULKAN
             } else {
-                safeProfile?.forcedRenderer?.let { forced ->
-                    val sanitizedForced = sanitizeVideoRenderer(forced, fallback = resolveSupportedFallbackVideoRenderer())
-                    GameCompatibilityManager.pickSaferRenderer(renderInputs.core.renderer, sanitizedForced)
-                } ?: renderInputs.core.renderer
+                renderInputs.core.renderer
             }
             val requestedFiltering = when {
                 safeProfile?.safeVisuals == true -> VideoFiltering.NONE
@@ -940,18 +943,21 @@ class SharedPreferencesSettingsRepository(
 
     override fun getEffectiveVideoRenderer(romConfig: RomConfig): VideoRenderer {
         val baseRenderer = sanitizeVideoRenderer(romConfig.videoRenderer, fallback = getCurrentVideoRenderer())
-        if (baseRenderer == VideoRenderer.VULKAN && isVulkanRendererSupported()) {
-            return VideoRenderer.VULKAN
-        }
         val safeProfile = GameCompatibilityManager.getEffectiveProfile(
             context = context,
             gameCode = activeGameCode,
             romName = romConfig.customName ?: activeRomName,
             fileName = activeRomFileName,
         )
-        val forced = safeProfile?.forcedRenderer ?: return baseRenderer
-        val sanitizedForced = sanitizeVideoRenderer(forced, fallback = resolveSupportedFallbackVideoRenderer())
-        return GameCompatibilityManager.pickSaferRenderer(baseRenderer, sanitizedForced)
+        val forced = safeProfile?.forcedRenderer
+        if (forced != null) {
+            val sanitizedForced = sanitizeVideoRenderer(forced, fallback = resolveSupportedFallbackVideoRenderer())
+            return GameCompatibilityManager.pickSaferRenderer(baseRenderer, sanitizedForced)
+        }
+        if (baseRenderer == VideoRenderer.VULKAN && isVulkanRendererSupported()) {
+            return VideoRenderer.VULKAN
+        }
+        return baseRenderer
     }
 
     override fun setCurrentVideoRenderer(renderer: VideoRenderer) {
@@ -1005,7 +1011,7 @@ class SharedPreferencesSettingsRepository(
         }
     }
 
-    override fun getInstalledVulkanDrivers(): List<VulkanDriverInfo> {
+    override fun getInstalledVulkanDrivers(): List<VulkanDriverInfo> = synchronized(driverListLock) {
         val storedDrivers = preferences.getString("video_vulkan_custom_drivers", null)
             ?.let { parseVulkanDrivers(it) }
             .orEmpty()
@@ -1030,12 +1036,12 @@ class SharedPreferencesSettingsRepository(
         return emptyList()
     }
 
-    override fun getSelectedVulkanDriverId(): String? {
+    override fun getSelectedVulkanDriverId(): String? = synchronized(driverListLock) {
         return preferences.getString("video_vulkan_selected_driver_id", null)
             ?: getInstalledVulkanDrivers().firstOrNull()?.id
     }
 
-    override fun setSelectedVulkanDriver(id: String) {
+    override fun setSelectedVulkanDriver(id: String) = synchronized(driverListLock) {
         preferences.edit(commit = true) {
             putString("video_vulkan_selected_driver_id", id)
             putString("video_vulkan_driver_mode", VulkanDriverMode.CUSTOM.name.lowercase())
@@ -1059,7 +1065,7 @@ class SharedPreferencesSettingsRepository(
         sourceRepo: String?,
         assetFileName: String?,
         installedAtEpochMs: Long,
-    ) {
+    ) = synchronized(driverListLock) {
         val drivers = getInstalledVulkanDrivers()
             .filterNot { it.id == id }
             .plus(
@@ -1088,7 +1094,7 @@ class SharedPreferencesSettingsRepository(
         }
     }
 
-    override fun removeCustomVulkanDriver(id: String) {
+    override fun removeCustomVulkanDriver(id: String) = synchronized(driverListLock) {
         val remainingDrivers = getInstalledVulkanDrivers().filterNot { it.id == id }
         preferences.edit(commit = true) {
             putString("video_vulkan_custom_drivers", serializeVulkanDrivers(remainingDrivers))
@@ -1102,7 +1108,7 @@ class SharedPreferencesSettingsRepository(
         }
     }
 
-    override fun clearCustomVulkanDrivers() {
+    override fun clearCustomVulkanDrivers() = synchronized(driverListLock) {
         preferences.edit(commit = true) {
             remove("video_vulkan_custom_driver_name")
             remove("video_vulkan_custom_driver_dir")
@@ -1113,7 +1119,7 @@ class SharedPreferencesSettingsRepository(
         }
     }
 
-    private fun getSelectedVulkanDriver(): VulkanDriverInfo? {
+    private fun getSelectedVulkanDriver(): VulkanDriverInfo? = synchronized(driverListLock) {
         val selectedId = getSelectedVulkanDriverId() ?: return null
         return getInstalledVulkanDrivers().firstOrNull { it.id == selectedId }
     }
@@ -1272,14 +1278,8 @@ class SharedPreferencesSettingsRepository(
             observeRetroArchShaderPreset(),
             observeRetroArchShaderParameters(),
             observeRetroArchShaderClearHistory(),
-            observeAiUpscaleConfiguration(),
-        ) { root, presetRelativePath, parameters, clearHistory, (aiEnabled, aiScale) ->
-            val effectivePreset = if (aiEnabled) {
-                findAiUpscalePreset(root, aiScale) ?: presetRelativePath
-            } else {
-                presetRelativePath
-            }
-            importRetroArchShader(root, effectivePreset, parameters, clearHistory)
+        ) { root, presetRelativePath, parameters, clearHistory ->
+            importRetroArchShader(root, presetRelativePath, parameters, clearHistory)
         }
     }
 
@@ -2430,13 +2430,15 @@ class SharedPreferencesSettingsRepository(
             fileName = activeRomFileName,
         )
         val baseSanitizedRenderer = sanitizeVideoRenderer(romConfig.videoRenderer, fallback = baseConfiguration.renderer)
-        val renderer = if (baseSanitizedRenderer == VideoRenderer.VULKAN && isVulkanRendererSupported()) {
+        val forcedRenderer = safeProfile?.forcedRenderer?.let { forced ->
+            sanitizeVideoRenderer(forced, fallback = resolveSupportedFallbackVideoRenderer())
+        }
+        val renderer = if (forcedRenderer != null) {
+            GameCompatibilityManager.pickSaferRenderer(baseSanitizedRenderer, forcedRenderer)
+        } else if (baseSanitizedRenderer == VideoRenderer.VULKAN && isVulkanRendererSupported()) {
             VideoRenderer.VULKAN
         } else {
-            safeProfile?.forcedRenderer?.let { forced ->
-                val sanitizedForced = sanitizeVideoRenderer(forced, fallback = resolveSupportedFallbackVideoRenderer())
-                GameCompatibilityManager.pickSaferRenderer(baseSanitizedRenderer, sanitizedForced)
-            } ?: baseSanitizedRenderer
+            baseSanitizedRenderer
         }
         val aiEnabled = preferences.getBoolean("video_ai_upscale_enabled", false) && !preferences.contains("video_filtering")
         val requestedFiltering = if (safeProfile?.safeVisuals == true) {
@@ -2453,7 +2455,10 @@ class SharedPreferencesSettingsRepository(
             ?.removePrefix("folder:")
             ?.takeIf { it.isNotBlank() && it != "none" }
         val retroArchShader = if (requestedFiltering == VideoFiltering.RETROARCH && safeProfile?.safeVisuals != true) {
-            if (cleanRomPresetPath == null && romConfig.retroArchShaderParameters == null) {
+            if (cleanRomPresetPath == null &&
+                romConfig.retroArchShaderParameters == null &&
+                baseConfiguration.videoFiltering == VideoFiltering.RETROARCH
+            ) {
                 baseConfiguration.retroArchShader
             } else {
                 importRetroArchShader(
@@ -2555,7 +2560,7 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun getThemeAccentColor(): String {
-        return preferences.getString("theme_accent_color", "electric_cyan") ?: "electric_cyan"
+        return preferences.getString("theme_accent_color", "theme_default") ?: "theme_default"
     }
 
     override fun getRomCardStyle(): String {

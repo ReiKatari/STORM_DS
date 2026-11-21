@@ -17,6 +17,7 @@ import me.magnum.melonds.domain.model.MicSource
 import me.magnum.melonds.extensions.isMicrophonePermissionGranted
 import me.magnum.melonds.ui.settings.PreferenceFragmentTitleProvider
 import me.magnum.melonds.utils.enumValueOfIgnoreCase
+import java.util.concurrent.atomic.AtomicBoolean
 
 @AndroidEntryPoint
 class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitleProvider {
@@ -27,6 +28,7 @@ class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
     private var micNoiseGateThresholdPreference: SeekBarPreference? = null
     private var micVuMeterPreference: me.magnum.melonds.ui.settings.preferences.MicLevelMeterPreference? = null
     @Volatile private var activeTestTrack: android.media.AudioTrack? = null
+    @Volatile private var activeTrackReleased: AtomicBoolean? = null
     private var activeTestThread: Thread? = null
 
     private val microphonePermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -163,13 +165,18 @@ class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
     private fun stopAudioDspTestChord() {
         activeTestThread?.interrupt()
         activeTestThread = null
-        runCatching {
-            activeTestTrack?.pause()
-            activeTestTrack?.flush()
-            activeTestTrack?.stop()
-            activeTestTrack?.release()
-        }
+        val track = activeTestTrack
+        val released = activeTrackReleased
         activeTestTrack = null
+        activeTrackReleased = null
+        if (track != null && released != null && released.compareAndSet(false, true)) {
+            runCatching {
+                track.pause()
+                track.flush()
+                track.stop()
+                track.release()
+            }
+        }
     }
 
     private fun playAudioDspTestChord() {
@@ -186,6 +193,8 @@ class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         Toast.makeText(requireContext(), R.string.audio_dsp_test_playing, Toast.LENGTH_SHORT).show()
 
         val thread = Thread({
+            if (Thread.currentThread().isInterrupted) return@Thread
+
             val sampleRate = 48000
             val durationSec = 1.35f
             val totalFrames = (sampleRate * durationSec).toInt()
@@ -205,6 +214,9 @@ class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             val bassAlpha = 0.022f // ~170 Hz low-pass for bass shelf boost
 
             for (i in 0 until totalFrames) {
+                if ((i and 0xFF) == 0 && Thread.currentThread().isInterrupted) {
+                    return@Thread
+                }
                 val t = i.toFloat() / sampleRate.toFloat()
                 var left = 0f
                 var right = 0f
@@ -276,6 +288,10 @@ class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                 pcm[i * 2 + 1] = (right * 32767f).toInt().coerceIn(-32768, 32767).toShort()
             }
 
+            if (Thread.currentThread().isInterrupted) return@Thread
+
+            val trackReleased = AtomicBoolean(false)
+            var track: android.media.AudioTrack? = null
             try {
                 val attrs = android.media.AudioAttributes.Builder()
                     .setUsage(android.media.AudioAttributes.USAGE_GAME)
@@ -286,25 +302,31 @@ class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                     .setSampleRate(sampleRate)
                     .setChannelMask(android.media.AudioFormat.CHANNEL_OUT_STEREO)
                     .build()
-                val track = android.media.AudioTrack.Builder()
+                track = android.media.AudioTrack.Builder()
                     .setAudioAttributes(attrs)
                     .setAudioFormat(format)
                     .setTransferMode(android.media.AudioTrack.MODE_STATIC)
                     .setBufferSizeInBytes(pcm.size * 2)
                     .build()
                 activeTestTrack = track
+                activeTrackReleased = trackReleased
                 track.write(pcm, 0, pcm.size)
+                if (Thread.currentThread().isInterrupted) return@Thread
                 track.play()
                 Thread.sleep((durationSec * 1000L).toLong() + 120L)
-                runCatching {
-                    track.stop()
-                    track.release()
+            } catch (_: Throwable) {
+                // Interrupted or audio device unavailable
+            } finally {
+                if (track != null && trackReleased.compareAndSet(false, true)) {
+                    runCatching {
+                        track.stop()
+                        track.release()
+                    }
                 }
                 if (activeTestTrack === track) {
                     activeTestTrack = null
+                    activeTrackReleased = null
                 }
-            } catch (_: Throwable) {
-                // Interrupted or audio device unavailable
             }
         }, "StormAudioDspTest").apply {
             isDaemon = true

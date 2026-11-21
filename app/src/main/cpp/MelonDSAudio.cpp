@@ -23,6 +23,7 @@ std::mutex micBufferMutex;
 std::atomic<int> actualMicSource{0};
 std::atomic<bool> isMicInputEnabled{true};
 std::atomic<bool> isMicOn{false};
+std::atomic<bool> isAudioPaused{false};
 int micBufferReadPos = 0;
 
 namespace MelonDSAndroid
@@ -175,7 +176,12 @@ namespace MelonDSAndroid
         micStreamBuilder.setDataCallback(callback);
 
         oboe::Result micResult = micStreamBuilder.openStream(micInputStream);
-        if (micResult != oboe::Result::OK)
+        if (micResult != oboe::Result::OK || !micInputStream)
+        {
+            micStreamBuilder.setSharingMode(oboe::SharingMode::Shared);
+            micResult = micStreamBuilder.openStream(micInputStream);
+        }
+        if (micResult != oboe::Result::OK || !micInputStream)
         {
             actualMicSource.store(1, std::memory_order_relaxed);
             Log(Error, "Failed to init mic audio stream");
@@ -314,6 +320,7 @@ namespace MelonDSAndroid
     {
         std::lock_guard<std::mutex> streamLock(audioStreamMutex);
         isMicOn.store(false, std::memory_order_relaxed);
+        isAudioPaused.store(false, std::memory_order_relaxed);
         actualMicSource.store(audioSettings.micSource, std::memory_order_relaxed);
         currentAudioSettings = audioSettings;
 
@@ -334,12 +341,21 @@ namespace MelonDSAndroid
         currentAudioSettings = audioSettings;
 
         if (audioSettings.soundEnabled && audioSettings.volume > 0) {
+            bool streamCreatedOrRecreated = false;
             if (!audioStream) {
                 setupAudioOutputStreamLocked(audioSettings.audioLatency, audioSettings.volume);
+                streamCreatedOrRecreated = true;
             } else if (previousLatency != audioSettings.audioLatency || previousVolume != audioSettings.volume) {
                 // Recreate audio stream with new settings
                 cleanupAudioOutputStreamLocked();
                 setupAudioOutputStreamLocked(audioSettings.audioLatency, audioSettings.volume);
+                streamCreatedOrRecreated = true;
+            }
+            if (streamCreatedOrRecreated && audioStream && !isAudioPaused.load(std::memory_order_relaxed)) {
+                const auto outState = audioStream->getState();
+                if (outState != oboe::StreamState::Started && outState != oboe::StreamState::Starting) {
+                    audioStream->requestStart();
+                }
             }
         } else if (audioStream) {
             cleanupAudioOutputStreamLocked();
@@ -378,6 +394,7 @@ namespace MelonDSAndroid
         std::shared_ptr<oboe::AudioStream> micToClose;
         {
             std::lock_guard<std::mutex> streamLock(audioStreamMutex);
+            isAudioPaused.store(false, std::memory_order_relaxed);
             streamToClose = std::move(audioStream);
             audioStream = nullptr;
             outputCallback = nullptr;
@@ -402,6 +419,7 @@ namespace MelonDSAndroid
     void startAudio()
     {
         std::lock_guard<std::mutex> streamLock(audioStreamMutex);
+        isAudioPaused.store(false, std::memory_order_relaxed);
         if (audioStream)
         {
             const auto outState = audioStream->getState();
@@ -415,6 +433,7 @@ namespace MelonDSAndroid
     void pauseAudio()
     {
         std::lock_guard<std::mutex> streamLock(audioStreamMutex);
+        isAudioPaused.store(true, std::memory_order_relaxed);
         if (audioStream)
             audioStream->requestPause();
 

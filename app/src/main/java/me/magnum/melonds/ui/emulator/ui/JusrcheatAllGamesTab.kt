@@ -208,7 +208,7 @@ fun JusrcheatAllGamesTab(
                     Spacer(Modifier.width(8.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Активен режим Hardcore — читы заблокированы",
+                            text = "Активен режим Hardcore - читы заблокированы",
                             color = colors.text,
                             fontFamily = SpaceGrotesk,
                             fontSize = 11.5.sp,

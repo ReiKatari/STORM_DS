@@ -117,7 +117,7 @@ fun RomTechnicalInfoDialog(
 
     val formattedSize = remember(fileSizeBytes) {
         fileSizeBytes?.let { bytes ->
-            if (bytes <= 0) "—"
+            if (bytes <= 0) "-"
             else {
                 val mb = bytes / (1024.0 * 1024.0)
                 if (mb >= 1.0) {
@@ -147,7 +147,7 @@ fun RomTechnicalInfoDialog(
         if (rom.gameCode.isNotBlank()) {
             textBuilder.appendLine("${context.getString(R.string.rom_info_game_code_label)}: ${rom.gameCode}")
         }
-        val hashStr = if (rom.retroAchievementsHash.isNotBlank()) rom.retroAchievementsHash.uppercase() else "—"
+        val hashStr = if (rom.retroAchievementsHash.isNotBlank()) rom.retroAchievementsHash.uppercase() else "-"
         textBuilder.appendLine("CRC32 / RA Hash: $hashStr")
         textBuilder.appendLine("${context.getString(R.string.rom_info_play_time_label)}: $playTimeStr")
         textBuilder.appendLine("${context.getString(R.string.rom_info_last_played_label)}: $lastPlayedStr")
@@ -225,7 +225,7 @@ fun RomTechnicalInfoDialog(
                             )
                             HardwareBadge(
                                 label = "CRC32 / HASH",
-                                value = if (rom.retroAchievementsHash.isNotBlank()) rom.retroAchievementsHash.take(10).uppercase() else "—",
+                                value = if (rom.retroAchievementsHash.isNotBlank()) rom.retroAchievementsHash.take(10).uppercase() else "-",
                             )
                         }
                     }

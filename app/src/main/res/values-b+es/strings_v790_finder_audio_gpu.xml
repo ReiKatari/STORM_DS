@@ -31,4 +31,5 @@
     <string name="mic_agc_noise_gate_title">Puerta de ruido adaptativa y AGC de micrófono</string>
     <string name="mic_agc_noise_gate_summary">Filtro DC, supresión de ruido ambiental y normalización de voz</string>
     <string name="v790_vulkan_pipeline_cache_status">Caché de pipelines Vulkan activo</string>
+    <string name="v790_ram_value_required">Valor obligatorio</string>
 </resources>

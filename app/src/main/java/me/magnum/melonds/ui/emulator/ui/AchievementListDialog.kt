@@ -17,7 +17,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -40,6 +42,7 @@ fun AchievementListDialog(
 ) {
     val colors = watermelon
     val achievementListState by viewModel.uiState.collectAsState()
+    val backButtonFocusRequester = remember { FocusRequester() }
 
     var detailAchievement by remember {
         mutableStateOf<Pair<me.magnum.melonds.ui.common.achievements.ui.model.AchievementUiModel, Boolean>?>(null)
@@ -182,8 +185,11 @@ fun AchievementListDialog(
             // Unified Bottom Center Back Arrow
             me.magnum.melonds.ui.common.UnifiedBackButton(
                 onClick = onDismiss,
+                modifier = Modifier.focusRequester(backButtonFocusRequester),
             )
         }
+
+        me.magnum.melonds.ui.common.RequestInitialFocus(backButtonFocusRequester)
 
         detailAchievement?.let { (model, inLedger) ->
             AchievementDetailOverlay(

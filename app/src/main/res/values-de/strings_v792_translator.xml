@@ -29,9 +29,9 @@
         <item>system_offline_best</item>
     </string-array>
     <string name="translator_floating_button_opacity">Transparenz der Übersetzungstaste</string>
-    <string name="translator_floating_button_opacity_summary">Transparenz der schwebenden TR | LOG-Taste anpassen (Standard 35%)</string>
+    <string name="translator_floating_button_opacity_summary" formatted="false">Transparenz der schwebenden TR | LOG-Taste anpassen (Standard 35%)</string>
     <string name="translator_voice_pitch_title">Stimmlage</string>
-    <string name="translator_voice_pitch_summary">Feinabstimmung der Tonhöhe (-20%..+20%)</string>
+    <string name="translator_voice_pitch_summary" formatted="false">Feinabstimmung der Tonhöhe (-20%..+20%)</string>
     <string name="translator_test_voice_title">Ausgewählte Stimme testen</string>
     <string name="translator_test_voice_summary">Sprachprobe zur Überprüfung der Sprachsynthese abspielen</string>
     <string name="translator_test_voice_playing">Sprachprobe wird abgespielt...</string>

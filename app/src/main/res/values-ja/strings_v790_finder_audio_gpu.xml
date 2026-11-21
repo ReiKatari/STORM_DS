@@ -31,4 +31,5 @@
     <string name="mic_agc_noise_gate_title">適応型ノイズゲートとマイクAGC</string>
     <string name="mic_agc_noise_gate_summary">DCノイズ低減、環境雑音抑制、および音量自動正規化</string>
     <string name="v790_vulkan_pipeline_cache_status">Vulkanシェーダーパイプラインキャッシュ有効</string>
+    <string name="v790_ram_value_required">値の入力が必要です</string>
 </resources>

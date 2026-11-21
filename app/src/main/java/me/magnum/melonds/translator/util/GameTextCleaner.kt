@@ -73,8 +73,8 @@ object GameTextCleaner {
             // Remove floating button artifact ("TR", "[TR]")
             .replace(Regex("(?i)^\\[?TR\\]?[:\\s]+\\s*"), "")
             // Remove stray edge scan noise (bullets, pipes, tildes, hyphens at boundaries)
-            .replace(Regex("^[•|~>_—\\-]+\\s*"), "")
-            .replace(Regex("\\s*[•|~_—\\-]+$"), "")
+            .replace(Regex("^[•|~>_\\u2014\\-]+\\s*"), "")
+            .replace(Regex("\\s*[•|~_\\u2014\\-]+$"), "")
             .replace(Regex("\\s+"), " ")
             .trim()
     }

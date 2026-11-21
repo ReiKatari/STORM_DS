@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -77,6 +78,8 @@ class VulkanDriverManagerViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
+    private var refreshJob: Job? = null
+    private var isImportingUri = false
 
     init {
         loadInitialState()
@@ -189,8 +192,9 @@ class VulkanDriverManagerViewModel @Inject constructor(
         if (!_uiState.value.isSupported) return
         if (_uiState.value.isSyncingRepos && !forceRefresh) return
 
+        refreshJob?.cancel()
         _uiState.update { it.copy(isSyncingRepos = true) }
-        viewModelScope.launch {
+        refreshJob = viewModelScope.launch {
             val fetched = onlineDriverRepository.fetchAllRepositories(forceRefresh = forceRefresh)
             _uiState.update {
                 it.copy(
@@ -250,7 +254,7 @@ class VulkanDriverManagerViewModel @Inject constructor(
     }
 
     fun installStormDriver() {
-        if (!_uiState.value.isSupported || _uiState.value.activeDownloadKey != null) return
+        if (!_uiState.value.isSupported || _uiState.value.activeDownloadKey != null || isImportingUri) return
 
         val liveStormRelease = _uiState.value.repoGroups
             .firstOrNull { it.spec.id == "storm_driver" }
@@ -259,7 +263,11 @@ class VulkanDriverManagerViewModel @Inject constructor(
         val liveAsset = liveStormRelease?.assets?.firstOrNull()
 
         val urls = if (liveAsset != null) {
-            (liveAsset.allUrls() + OnlineVulkanDriverRepository.STORM_DRIVER_MIRRORS).distinct()
+            if (liveAsset.name.equals("STORM_DRIVER_12.0.0.zip", ignoreCase = true)) {
+                (liveAsset.allUrls() + OnlineVulkanDriverRepository.STORM_DRIVER_MIRRORS).distinct()
+            } else {
+                liveAsset.allUrls()
+            }
         } else {
             OnlineVulkanDriverRepository.STORM_DRIVER_MIRRORS
         }
@@ -282,7 +290,7 @@ class VulkanDriverManagerViewModel @Inject constructor(
         release: VulkanDriverRelease,
         asset: VulkanDriverAsset,
     ) {
-        if (!_uiState.value.isSupported || _uiState.value.activeDownloadKey != null) return
+        if (!_uiState.value.isSupported || _uiState.value.activeDownloadKey != null || isImportingUri) return
 
         val cleanAssetName = asset.name
             .removeSuffix(".adpkg.zip")
@@ -377,23 +385,28 @@ class VulkanDriverManagerViewModel @Inject constructor(
     }
 
     fun importFromUri(uri: Uri) {
-        if (!_uiState.value.isSupported) return
+        if (!_uiState.value.isSupported || _uiState.value.activeDownloadKey != null || isImportingUri) return
+        isImportingUri = true
         viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) {
-                runCatching { driverManager.importDriver(uri) }
-            }
-            val ctx = getApplication<Application>()
-            result.onSuccess { imported ->
-                _uiState.update {
-                    it.copy(
-                        snackbarMessage = ctx.getString(R.string.video_vulkan_driver_import_success, imported.displayName),
-                    )
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    runCatching { driverManager.importDriver(uri) }
                 }
-                refreshLocalState()
-            }.onFailure { throwable ->
-                _uiState.update {
-                    it.copy(snackbarMessage = mapErrorMessage(ctx, throwable))
+                val ctx = getApplication<Application>()
+                result.onSuccess { imported ->
+                    _uiState.update {
+                        it.copy(
+                            snackbarMessage = ctx.getString(R.string.video_vulkan_driver_import_success, imported.displayName),
+                        )
+                    }
+                    refreshLocalState()
+                }.onFailure { throwable ->
+                    _uiState.update {
+                        it.copy(snackbarMessage = mapErrorMessage(ctx, throwable))
+                    }
                 }
+            } finally {
+                isImportingUri = false
             }
         }
     }

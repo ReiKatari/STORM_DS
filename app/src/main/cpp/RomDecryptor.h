@@ -23,6 +23,7 @@ enum class DecryptResult : int {
     ERROR_NOT_DSI_ROM = -3,
     ERROR_FILE_TOO_SMALL = -4,
     ERROR_MODCRYPT_AREA_OUT_OF_BOUNDS = -5,
+    ERROR_VALIDATION_FAILED = -6,
 };
 
 // Check if a ROM file is encrypted (reads only the header)

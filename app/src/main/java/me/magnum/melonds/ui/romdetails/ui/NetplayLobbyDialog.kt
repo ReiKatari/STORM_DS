@@ -36,8 +36,13 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.preference.PreferenceManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.magnum.melonds.MelonEmulator
+import me.magnum.melonds.R
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.ui.romlist.composables.romDisplayName
 import me.magnum.melonds.ui.theme.SpaceGrotesk
@@ -45,6 +50,16 @@ import me.magnum.melonds.ui.theme.WatermelonMono
 import me.magnum.melonds.ui.theme.watermelon
 import java.net.Inet4Address
 import java.net.NetworkInterface
+import java.util.concurrent.atomic.AtomicBoolean
+
+private fun isValidHostIp(input: String): Boolean {
+    val trimmed = input.trim()
+    if (trimmed.isEmpty() || trimmed.any { it.isWhitespace() }) return false
+    val ipv4Regex = Regex("""^((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$""")
+    if (ipv4Regex.matches(trimmed)) return true
+    val hostnameRegex = Regex("""^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$""")
+    return hostnameRegex.matches(trimmed)
+}
 
 data class NetplayRoom(
     val id: String,
@@ -112,9 +127,12 @@ fun NetplayLobbyDialog(
     onJoinRoom: (NetplayRoom) -> Unit,
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val prefs = remember { PreferenceManager.getDefaultSharedPreferences(context) }
     val colors = watermelon
     var selectedTab by remember { mutableStateOf(0) } // 0 = NiFi Local Wireless, 1 = WFC Online
+    val joinedSessionRef = remember { AtomicBoolean(false) }
+    var isLanConnecting by remember { mutableStateOf(false) }
 
     val defaultNickname = remember {
         prefs.getString("firmware_settings_nickname", null)?.takeIf { it.isNotBlank() } ?: "STORM_Player"
@@ -122,13 +140,11 @@ fun NetplayLobbyDialog(
     var manualHostIp by remember {
         mutableStateOf(prefs.getString("lan_last_host_ip", "") ?: "")
     }
-    val localIpAddress = remember { resolveLocalIpv4Address() }
-    val romTitle = remember(rom) { romDisplayName(rom) }
-
-    var discoveredRooms by remember { mutableStateOf<List<NetplayRoom>>(emptyList()) }
-    var activeWfcServer by remember {
-        mutableStateOf(prefs.getString("system_wfc_server", "wiimmfi") ?: "wiimmfi")
+    var localIpAddress by remember { mutableStateOf("...") }
+    LaunchedEffect(Unit) {
+        localIpAddress = withContext(Dispatchers.IO) { resolveLocalIpv4Address() }
     }
+    val romTitle = remember(rom) { romDisplayName(rom) }
 
     val wfcServers = remember {
         listOf(
@@ -153,18 +169,36 @@ fun NetplayLobbyDialog(
         )
     }
 
+    var discoveredRooms by remember { mutableStateOf<List<NetplayRoom>>(emptyList()) }
+    var activeWfcServer by remember {
+        val saved = prefs.getString("system_wfc_server", "wiimmfi") ?: "wiimmfi"
+        mutableStateOf(if (saved in wfcServers.map { it.id }) saved else "wiimmfi")
+    }
+
     DisposableEffect(Unit) {
-        runCatching { MelonEmulator.startLanDiscovery() }
+        coroutineScope.launch(Dispatchers.IO) {
+            runCatching { MelonEmulator.startLanDiscovery() }
+        }
         onDispose {
-            runCatching { MelonEmulator.stopLanDiscovery() }
+            val didJoin = joinedSessionRef.get()
+            CoroutineScope(Dispatchers.IO).launch {
+                runCatching { MelonEmulator.stopLanDiscovery() }
+                if (!didJoin) {
+                    runCatching { MelonEmulator.stopLanSession() }
+                }
+            }
         }
     }
 
     LaunchedEffect(selectedTab, romTitle) {
         if (selectedTab == 0) {
-            runCatching { MelonEmulator.startLanDiscovery() }
+            withContext(Dispatchers.IO) {
+                runCatching { MelonEmulator.startLanDiscovery() }
+            }
             while (true) {
-                val raw = runCatching { MelonEmulator.getLanDiscoveredSessions() }.getOrDefault(emptyArray())
+                val raw = withContext(Dispatchers.IO) {
+                    runCatching { MelonEmulator.getLanDiscoveredSessions() }.getOrDefault(emptyArray())
+                }
                 discoveredRooms = parseDiscoveredLanRooms(raw, romTitle)
                 delay(1200L)
             }
@@ -330,32 +364,39 @@ fun NetplayLobbyDialog(
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(10.dp))
                                     .background(Brush.horizontalGradient(listOf(Color(0xFF0284C7), Color(0xFF00E5FF))))
-                                    .clickable {
-                                        val ok = runCatching { MelonEmulator.startLanHost(defaultNickname, 4) }.getOrDefault(false)
-                                        if (ok) {
-                                            Toast.makeText(
-                                                context,
-                                                "Локальная комната создана ($localIpAddress). Запуск игры...",
-                                                Toast.LENGTH_LONG
-                                            ).show()
-                                            onJoinRoom(
-                                                NetplayRoom(
-                                                    id = "local_host",
-                                                    hostName = defaultNickname,
-                                                    gameTitle = romTitle,
-                                                    serverType = "LAN Host ($localIpAddress)",
-                                                    currentPlayers = 1,
-                                                    maxPlayers = 4,
-                                                    pingMs = 1,
-                                                    hostIp = localIpAddress,
+                                    .clickable(enabled = !isLanConnecting) {
+                                        isLanConnecting = true
+                                        coroutineScope.launch {
+                                            val ok = withContext(Dispatchers.IO) {
+                                                runCatching { MelonEmulator.startLanHost(defaultNickname, 4) }.getOrDefault(false)
+                                            }
+                                            isLanConnecting = false
+                                            if (ok) {
+                                                joinedSessionRef.set(true)
+                                                Toast.makeText(
+                                                    context,
+                                                    "Локальная комната создана ($localIpAddress). Запуск игры...",
+                                                    Toast.LENGTH_LONG
+                                                ).show()
+                                                onJoinRoom(
+                                                    NetplayRoom(
+                                                        id = "local_host",
+                                                        hostName = defaultNickname,
+                                                        gameTitle = romTitle,
+                                                        serverType = "LAN Host ($localIpAddress)",
+                                                        currentPlayers = 1,
+                                                        maxPlayers = 4,
+                                                        pingMs = 1,
+                                                        hostIp = localIpAddress,
+                                                    )
                                                 )
-                                            )
-                                        } else {
-                                            Toast.makeText(
-                                                context,
-                                                "Не удалось открыть порт локального хоста. Проверьте подключение к Wi-Fi.",
-                                                Toast.LENGTH_LONG
-                                            ).show()
+                                            } else {
+                                                Toast.makeText(
+                                                    context,
+                                                    "Не удалось открыть порт локального хоста. Проверьте подключение к Wi-Fi.",
+                                                    Toast.LENGTH_LONG
+                                                ).show()
+                                            }
                                         }
                                     }
                                     .padding(vertical = 11.dp),
@@ -418,30 +459,37 @@ fun NetplayLobbyDialog(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(8.dp))
                                     .background(Color(0xFF00E5FF))
-                                    .clickable {
+                                    .clickable(enabled = !isLanConnecting) {
                                         val targetIp = manualHostIp.trim()
-                                        if (targetIp.isEmpty()) {
-                                            Toast.makeText(context, "Введите IP-адрес хоста", Toast.LENGTH_SHORT).show()
+                                        if (!isValidHostIp(targetIp)) {
+                                            Toast.makeText(context, "Введите корректный IP-адрес хоста", Toast.LENGTH_SHORT).show()
                                             return@clickable
                                         }
-                                        prefs.edit().putString("lan_last_host_ip", targetIp).apply()
-                                        val ok = runCatching { MelonEmulator.startLanClient(defaultNickname, targetIp) }.getOrDefault(false)
-                                        if (ok) {
-                                            Toast.makeText(context, "Подключено к $targetIp! Запуск игры...", Toast.LENGTH_SHORT).show()
-                                            onJoinRoom(
-                                                NetplayRoom(
-                                                    id = targetIp,
-                                                    hostName = targetIp,
-                                                    gameTitle = romTitle,
-                                                    serverType = "LAN Direct IP",
-                                                    currentPlayers = 2,
-                                                    maxPlayers = 4,
-                                                    pingMs = 4,
-                                                    hostIp = targetIp,
+                                        isLanConnecting = true
+                                        coroutineScope.launch {
+                                            val ok = withContext(Dispatchers.IO) {
+                                                runCatching { MelonEmulator.startLanClient(defaultNickname, targetIp) }.getOrDefault(false)
+                                            }
+                                            isLanConnecting = false
+                                            if (ok) {
+                                                prefs.edit().putString("lan_last_host_ip", targetIp).apply()
+                                                joinedSessionRef.set(true)
+                                                Toast.makeText(context, "Подключено к $targetIp! Запуск игры...", Toast.LENGTH_SHORT).show()
+                                                onJoinRoom(
+                                                    NetplayRoom(
+                                                        id = targetIp,
+                                                        hostName = targetIp,
+                                                        gameTitle = romTitle,
+                                                        serverType = "LAN Direct IP",
+                                                        currentPlayers = 2,
+                                                        maxPlayers = 4,
+                                                        pingMs = 4,
+                                                        hostIp = targetIp,
+                                                    )
                                                 )
-                                            )
-                                        } else {
-                                            Toast.makeText(context, "Не удалось подключиться к $targetIp", Toast.LENGTH_LONG).show()
+                                            } else {
+                                                Toast.makeText(context, "Не удалось подключиться к $targetIp", Toast.LENGTH_LONG).show()
+                                            }
                                         }
                                     }
                                     .padding(horizontal = 12.dp, vertical = 8.dp),
@@ -475,9 +523,13 @@ fun NetplayLobbyDialog(
                                     .clip(RoundedCornerShape(8.dp))
                                     .background(colors.surface2)
                                     .clickable {
-                                        val raw = runCatching { MelonEmulator.getLanDiscoveredSessions() }.getOrDefault(emptyArray())
-                                        discoveredRooms = parseDiscoveredLanRooms(raw, romTitle)
-                                        Toast.makeText(context, "Поиск комнат в сети обновлён", Toast.LENGTH_SHORT).show()
+                                        coroutineScope.launch {
+                                            val raw = withContext(Dispatchers.IO) {
+                                                runCatching { MelonEmulator.getLanDiscoveredSessions() }.getOrDefault(emptyArray())
+                                            }
+                                            discoveredRooms = parseDiscoveredLanRooms(raw, romTitle)
+                                            Toast.makeText(context, "Поиск комнат в сети обновлён", Toast.LENGTH_SHORT).show()
+                                        }
                                     }
                                     .padding(horizontal = 10.dp, vertical = 5.dp),
                                 verticalAlignment = Alignment.CenterVertically
@@ -515,14 +567,22 @@ fun NetplayLobbyDialog(
                                     RoomCard(
                                         room = room,
                                         onJoin = {
-                                            val ok = runCatching {
-                                                MelonEmulator.startLanClient(defaultNickname, room.hostIp)
-                                            }.getOrDefault(false)
-                                            if (ok) {
-                                                Toast.makeText(context, "Подключено к ${room.hostName}!", Toast.LENGTH_SHORT).show()
-                                                onJoinRoom(room)
-                                            } else {
-                                                Toast.makeText(context, "Ошибка подключения к ${room.hostIp}", Toast.LENGTH_LONG).show()
+                                            if (isLanConnecting) return@RoomCard
+                                            isLanConnecting = true
+                                            coroutineScope.launch {
+                                                val ok = withContext(Dispatchers.IO) {
+                                                    runCatching {
+                                                        MelonEmulator.startLanClient(defaultNickname, room.hostIp)
+                                                    }.getOrDefault(false)
+                                                }
+                                                isLanConnecting = false
+                                                if (ok) {
+                                                    joinedSessionRef.set(true)
+                                                    Toast.makeText(context, "Подключено к ${room.hostName}!", Toast.LENGTH_SHORT).show()
+                                                    onJoinRoom(room)
+                                                } else {
+                                                    Toast.makeText(context, "Ошибка подключения к ${room.hostIp}", Toast.LENGTH_LONG).show()
+                                                }
                                             }
                                         }
                                     )
@@ -650,27 +710,33 @@ fun NetplayLobbyDialog(
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(Brush.horizontalGradient(listOf(Color(0xFF059669), Color(0xFF10B981))))
                                 .clickable {
-                                    runCatching { MelonEmulator.stopLanSession() }
-                                    val chosenServer = if (activeWfcServer == "off") "wiimmfi" else activeWfcServer
+                                    val validServerIds = wfcServers.map { it.id }
+                                    val chosenServer = if (activeWfcServer in validServerIds) activeWfcServer else "wiimmfi"
                                     prefs.edit().putString("system_wfc_server", chosenServer).apply()
                                     val serverObj = wfcServers.firstOrNull { it.id == chosenServer } ?: wfcServers.first()
-                                    Toast.makeText(
-                                        context,
-                                        "WFC онлайн активен (${serverObj.title}, DNS ${serverObj.dnsIp}). Запуск игры...",
-                                        Toast.LENGTH_LONG
-                                    ).show()
-                                    onJoinRoom(
-                                        NetplayRoom(
-                                            id = serverObj.id,
-                                            hostName = serverObj.title,
-                                            gameTitle = romTitle,
-                                            serverType = serverObj.dnsIp,
-                                            currentPlayers = 1,
-                                            maxPlayers = 8,
-                                            pingMs = 24,
-                                            hostIp = serverObj.dnsIp,
+                                    coroutineScope.launch {
+                                        withContext(Dispatchers.IO) {
+                                            runCatching { MelonEmulator.stopLanSession() }
+                                        }
+                                        joinedSessionRef.set(true)
+                                        Toast.makeText(
+                                            context,
+                                            context.getString(R.string.wfc_lobby_activated_toast, serverObj.title, serverObj.dnsIp),
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                        onJoinRoom(
+                                            NetplayRoom(
+                                                id = serverObj.id,
+                                                hostName = serverObj.title,
+                                                gameTitle = romTitle,
+                                                serverType = serverObj.dnsIp,
+                                                currentPlayers = 1,
+                                                maxPlayers = 8,
+                                                pingMs = 24,
+                                                hostIp = serverObj.dnsIp,
+                                            )
                                         )
-                                    )
+                                    }
                                 }
                                 .padding(vertical = 12.dp),
                             contentAlignment = Alignment.Center

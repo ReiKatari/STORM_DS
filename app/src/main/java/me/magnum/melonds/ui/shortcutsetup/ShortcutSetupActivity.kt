@@ -24,30 +24,37 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updateLayoutParams
 import androidx.core.view.updatePadding
 import androidx.fragment.app.commit
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import me.magnum.melonds.R
 import me.magnum.melonds.databinding.ActivityShortcutSetupBinding
 import me.magnum.melonds.domain.model.RomIconFiltering
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.ui.emulator.EmulatorActivity
+import me.magnum.melonds.ui.romlist.NoRomSearchDirectoriesFragment
 import me.magnum.melonds.ui.romlist.RomIcon
 import me.magnum.melonds.ui.romlist.RomListFragment
 import me.magnum.melonds.ui.romlist.RomListViewModel
+import me.magnum.melonds.ui.romlist.composables.romDisplayName
 
 @AndroidEntryPoint
 class ShortcutSetupActivity : AppCompatActivity() {
     companion object {
         private const val FRAGMENT_ROM_LIST = "rom_list"
+        private const val FRAGMENT_NO_ROM_DIRECTORIES = "no_rom_directory"
     }
 
     private val viewModel: RomListViewModel by viewModels()
+    private lateinit var binding: ActivityShortcutSetupBinding
 
     override fun onCreate(savedInstanceState: Bundle?) {
         me.magnum.melonds.ui.theme.AppThemeManager.applyEdgeToEdgeTheme(this)
         super.onCreate(savedInstanceState)
-        val binding = ActivityShortcutSetupBinding.inflate(layoutInflater)
+        binding = ActivityShortcutSetupBinding.inflate(layoutInflater)
         setContentView(binding.root)
         setSupportActionBar(binding.toolbar)
 
@@ -74,27 +81,54 @@ class ShortcutSetupActivity : AppCompatActivity() {
             windowInsets.inset(insets.left, insets.top, insets.right, 0)
         }
 
-        val fragment = if (savedInstanceState == null) {
-            RomListFragment.newInstance(false, RomListFragment.RomEnableCriteria.ENABLE_ALL).also {
-                supportFragmentManager.commit {
-                    replace(binding.layoutRoot.id, it, FRAGMENT_ROM_LIST)
+        (supportFragmentManager.findFragmentByTag(FRAGMENT_ROM_LIST) as? RomListFragment)
+            ?.setRomSelectedListener { onRomSelected(it) }
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.hasSearchDirectories.collectLatest { hasDirectories ->
+                    if (hasDirectories) {
+                        addRomListFragment()
+                    } else {
+                        addNoSearchDirectoriesFragment()
+                    }
                 }
             }
-        } else {
-            supportFragmentManager.findFragmentByTag(FRAGMENT_ROM_LIST) as RomListFragment
         }
+    }
 
+    private fun addRomListFragment() {
+        var fragment = supportFragmentManager.findFragmentByTag(FRAGMENT_ROM_LIST) as? RomListFragment
+        if (fragment == null) {
+            fragment = RomListFragment.newInstance(false, RomListFragment.RomEnableCriteria.ENABLE_ALL)
+            supportFragmentManager.commit(allowStateLoss = true) {
+                replace(binding.layoutRoot.id, fragment, FRAGMENT_ROM_LIST)
+            }
+        }
         fragment.setRomSelectedListener { onRomSelected(it) }
+    }
+
+    private fun addNoSearchDirectoriesFragment() {
+        var fragment = supportFragmentManager.findFragmentByTag(FRAGMENT_NO_ROM_DIRECTORIES) as? NoRomSearchDirectoriesFragment
+        if (fragment == null) {
+            fragment = NoRomSearchDirectoriesFragment.newInstance()
+            supportFragmentManager.commit(allowStateLoss = true) {
+                replace(binding.layoutRoot.id, fragment, FRAGMENT_NO_ROM_DIRECTORIES)
+            }
+        }
     }
 
     private fun onRomSelected(rom: Rom) {
         val intent = Intent("${packageName}.LAUNCH_ROM").apply {
+            setPackage(packageName)
             putExtra(EmulatorActivity.KEY_URI, rom.uri.toString())
         }
 
         lifecycleScope.launch {
             val romIcon = viewModel.getRomIcon(rom)
-            val safeLabel = rom.name.ifBlank { rom.fileName.ifBlank { getString(R.string.app_name) } }
+            val safeLabel = romDisplayName(rom).ifBlank {
+                rom.name.ifBlank { rom.fileName.ifBlank { getString(R.string.app_name) } }
+            }
             val shortcutInfo = ShortcutInfoCompat.Builder(this@ShortcutSetupActivity, rom.uri.toString())
                 .setShortLabel(safeLabel)
                 .setIcon(IconCompat.createWithAdaptiveBitmap(buildShortcutBitmap(romIcon)))

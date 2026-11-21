@@ -3,6 +3,10 @@ package me.magnum.melonds.translator.context
 import android.content.Context
 import android.os.Environment
 import android.util.Log
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import me.magnum.melonds.translator.grammar.Gender
 import org.json.JSONArray
 import org.json.JSONObject
@@ -96,6 +100,9 @@ object OcrContextGraph {
     private val entities = mutableMapOf<String, CharacterEntity>()
     private val glossary = mutableMapOf<String, String>()
     private val compiledGlossary = mutableListOf<Pair<Regex, String>>()
+
+    private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val castWriteLock = Any()
 
     // Persistent & in-memory speaker voice profiles (keyed by normalized speaker name)
     private val speakerProfileCache = mutableMapOf<String, SpeakerVoiceProfile>()
@@ -415,7 +422,7 @@ object OcrContextGraph {
     }
 
     /**
-     * Activates per-game voice cast storage and loads saved character voices from disk.
+     * Activates per-game voice cast storage and loads saved character voices from disk on Dispatchers.IO.
      */
     @Synchronized
     fun setActiveGame(context: Context, gameKey: String) {
@@ -423,11 +430,23 @@ object OcrContextGraph {
         currentGameKey = normalizedKey
         speakerProfileCache.clear()
         speakerPersonaCache.clear()
-        loadCastFile(getCastFiles(context, "global").firstOrNull { it.exists() })
-        if (normalizedKey != "global") {
-            loadCastFile(getCastFiles(context, normalizedKey).firstOrNull { it.exists() })
+        val appCtx = context.applicationContext
+        ioScope.launch {
+            val loadedProfiles = mutableMapOf<String, SpeakerVoiceProfile>()
+            loadCastFileInto(getCastFiles(appCtx, "global").firstOrNull { it.exists() }, loadedProfiles)
+            if (normalizedKey != "global") {
+                loadCastFileInto(getCastFiles(appCtx, normalizedKey).firstOrNull { it.exists() }, loadedProfiles)
+            }
+            synchronized(this@OcrContextGraph) {
+                if (currentGameKey == normalizedKey) {
+                    for ((k, v) in loadedProfiles) {
+                        speakerProfileCache.putIfAbsent(k, v)
+                        speakerPersonaCache.putIfAbsent(k, v.persona)
+                    }
+                    Log.i(TAG, "Loaded ${speakerProfileCache.size} persistent character voice profiles for game [$normalizedKey]")
+                }
+            }
         }
-        Log.i(TAG, "Loaded ${speakerProfileCache.size} persistent character voice profiles for game [$normalizedKey]")
     }
 
     private fun getCastFiles(context: Context, gameKey: String): List<File> {
@@ -442,7 +461,7 @@ object OcrContextGraph {
         return files
     }
 
-    private fun loadCastFile(file: File?) {
+    private fun loadCastFileInto(file: File?, target: MutableMap<String, SpeakerVoiceProfile>) {
         if (file == null || !file.exists()) return
         try {
             val content = file.readText(Charsets.UTF_8)
@@ -450,8 +469,7 @@ object OcrContextGraph {
             for (i in 0 until arr.length()) {
                 val obj = arr.optJSONObject(i) ?: continue
                 val profile = SpeakerVoiceProfile.fromJson(obj) ?: continue
-                speakerProfileCache[profile.speakerKey] = profile
-                speakerPersonaCache[profile.speakerKey] = profile.persona
+                target[profile.speakerKey] = profile
             }
         } catch (e: Throwable) {
             Log.w(TAG, "Failed to read voice cast file ${file.absolutePath}: ${e.message}")
@@ -462,22 +480,27 @@ object OcrContextGraph {
     private fun saveCurrentGameCast(context: Context) {
         val profiles = speakerProfileCache.values.toList()
         if (profiles.isEmpty()) return
-        val arr = JSONArray()
-        profiles.forEach { arr.put(it.toJson()) }
-        val jsonStr = arr.toString(2)
-
-        for (target in getCastFiles(context, currentGameKey)) {
-            try {
-                target.parentFile?.mkdirs()
-                target.writeText(jsonStr, Charsets.UTF_8)
-            } catch (_: Throwable) {}
-        }
-        if (currentGameKey != "global") {
-            for (globalTarget in getCastFiles(context, "global")) {
-                try {
-                    globalTarget.parentFile?.mkdirs()
-                    globalTarget.writeText(jsonStr, Charsets.UTF_8)
-                } catch (_: Throwable) {}
+        val gameKey = currentGameKey
+        val appCtx = context.applicationContext
+        ioScope.launch {
+            val arr = JSONArray()
+            profiles.forEach { arr.put(it.toJson()) }
+            val jsonStr = arr.toString(2)
+            synchronized(castWriteLock) {
+                for (target in getCastFiles(appCtx, gameKey)) {
+                    try {
+                        target.parentFile?.mkdirs()
+                        target.writeText(jsonStr, Charsets.UTF_8)
+                    } catch (_: Throwable) {}
+                }
+                if (gameKey != "global") {
+                    for (globalTarget in getCastFiles(appCtx, "global")) {
+                        try {
+                            globalTarget.parentFile?.mkdirs()
+                            globalTarget.writeText(jsonStr, Charsets.UTF_8)
+                        } catch (_: Throwable) {}
+                    }
+                }
             }
         }
     }
@@ -657,7 +680,7 @@ object OcrContextGraph {
 
     private fun normalizeSpeakerKey(name: String): String {
         return name.trim().lowercase()
-            .replace(Regex("^[\\[(«\"'【]+|[\\])»\"'】:\\-—]+$"), "")
+            .replace(Regex("^[\\[(«\"'【]+|[\\])»\"'】:\\-\\u2014]+$"), "")
             .replace(Regex("\\s+"), " ")
             .trim()
     }
@@ -816,7 +839,7 @@ object OcrContextGraph {
         }
 
         // Alternating dialogue heuristic
-        if (text.startsWith("—") || text.startsWith("-") || text.startsWith("\"") || text.startsWith("«")) {
+        if (text.startsWith("\u2014") || text.startsWith("-") || text.startsWith("\"") || text.startsWith("«")) {
             previousSpeakerWasMale = !previousSpeakerWasMale
             return if (previousSpeakerWasMale) "PROTAGONIST_MALE" else "PROTAGONIST_FEMALE"
         }

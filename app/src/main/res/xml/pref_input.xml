@@ -19,13 +19,14 @@
                 android:summary="@string/layouts_summary"
                 app:iconSpaceReserved="false" />
 
-        <ListPreference
+        <me.magnum.melonds.ui.settings.preferences.SoftwareInputBehaviourPreference
                 android:key="soft_input_behaviour"
                 android:title="@string/soft_input_behaviour"
                 android:summary="%s"
                 android:entries="@array/soft_input_behaviour_options"
                 android:entryValues="@array/soft_input_behaviour"
                 android:defaultValue="hide_system_buttons_when_controller_connected"
+                app:fragment="me.magnum.melonds.ui.settings.fragments.SoftInputBehaviourPreferencesFragment"
                 app:useSimpleSummaryProvider="true"
                 app:iconSpaceReserved="false" />
     </PreferenceCategory>

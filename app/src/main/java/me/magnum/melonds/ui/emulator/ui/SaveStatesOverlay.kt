@@ -51,6 +51,7 @@ import kotlinx.coroutines.launch
 import me.magnum.melonds.R
 import me.magnum.melonds.domain.model.SaveStateSlot
 import me.magnum.melonds.domain.model.rom.Rom
+import me.magnum.melonds.domain.repositories.SaveStatesRepository
 import me.magnum.melonds.impl.saves.RomDataBundleExporter
 import me.magnum.melonds.ui.common.GamepadHint
 import me.magnum.melonds.ui.common.GamepadHintsFooter
@@ -69,6 +70,7 @@ fun SaveStatesOverlay(
     isSaving: Boolean,
     gameTitle: String?,
     rom: Rom? = null,
+    saveStatesRepository: SaveStatesRepository? = null,
     undoSlotNumber: Int? = null,
     onUndoOverwrite: (() -> Unit)? = null,
     onSlotPicked: (SaveStateSlot) -> Unit,
@@ -184,6 +186,7 @@ fun SaveStatesOverlay(
                                             context = context,
                                             rom = rom,
                                             slots = slots,
+                                            saveStatesRepository = saveStatesRepository,
                                         )
                                         isExportingBundle = false
                                         result.fold(
@@ -227,8 +230,8 @@ fun SaveStatesOverlay(
                         }
 
                         // ↩️ UNDO OVERWRITE BUTTON (LIFO Multi-Step Stack)
-                        val undoCount = SaveStateUndoManager.getActiveUndoCount()
-                        val topUndo = SaveStateUndoManager.peekTopUndo()
+                        val undoCount = SaveStateUndoManager.getUndoCount(rom)
+                        val topUndo = SaveStateUndoManager.peekTopUndo(rom)
                         val effectiveUndoSlot = undoSlotNumber ?: topUndo?.slotNumber
 
                         if (effectiveUndoSlot != null && onUndoOverwrite != null && (undoCount > 0 || undoSlotNumber != null)) {

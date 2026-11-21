@@ -81,6 +81,7 @@ class FileSystemRomsRepository(
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val dsiWareTitlesMetadataStore by lazy { DSiWareTitlesMetadataStore(context) }
     private val romListType: Type = object : TypeToken<List<RomDto>>(){}.type
     private val romMetadataMirrorListType: Type = object : TypeToken<List<RomMetadataMirrorDto>>(){}.type
     private val directoryStateListType: Type = object : TypeToken<List<RomDirectoryStateDto>>(){}.type
@@ -298,6 +299,30 @@ class FileSystemRomsRepository(
             return refreshRomConfigFromOptions(cachedRom)
 
         // ROM is not known. Create a new ROM from the URI
+        if (uri.scheme == Rom.INSTALLED_DSIWARE_URI_SCHEME) {
+            val titleId = resolveInstalledDsiWareTitleId(uri)
+            if (titleId != null) {
+                val titleIdHex = (titleId and 0xFFFFFFFFL).toString(16).padStart(8, '0').lowercase()
+                val displayName = dsiWareTitlesMetadataStore.getDisplayName(titleId, "DSiWare ($titleIdHex)")
+                val customName = dsiWareTitlesMetadataStore.getCustomName(titleIdHex)
+                val savedConfig = readInstalledDsiWareConfig(titleId)
+                    ?: RomConfig.forDsiWareTitle().copy(customName = customName)
+                val raHash = dsiWareTitlesMetadataStore.getRaHash(titleIdHex).orEmpty()
+                return Rom(
+                    name = displayName,
+                    developerName = "",
+                    fileName = "$displayName.nds",
+                    uri = uri,
+                    parentTreeUri = null,
+                    config = savedConfig,
+                    lastPlayed = null,
+                    isDsiWareTitle = true,
+                    retroAchievementsHash = raHash,
+                    installedDsiWareTitleId = titleId and 0xFFFFFFFFL,
+                )
+            }
+        }
+
         return romFileProcessorFactory.getFileRomProcessorForDocument(uri)
             ?.getRomFromUri(uri, null)
             ?.let { rom ->
@@ -323,11 +348,19 @@ class FileSystemRomsRepository(
     }
 
     override fun updateRomConfig(rom: Rom, romConfig: RomConfig) {
+        val installedTitleId = resolveInstalledDsiWareTitleId(rom)
+        if (installedTitleId != null && (rom.isInstalledDsiWareShortcut || rom.uri.scheme == Rom.INSTALLED_DSIWARE_URI_SCHEME)) {
+            writeInstalledDsiWareConfig(installedTitleId, romConfig)
+        }
+
         val romIndex = roms.indexOfFirst { it.hasSameFileAsRom(rom) }
         if (romIndex < 0)
             return
 
         roms[romIndex].config = romConfig
+        if (installedTitleId != null) {
+            writeInstalledDsiWareConfig(installedTitleId, romConfig)
+        }
         syncRomOptionsFile(roms[romIndex])
         onRomsChanged()
     }
@@ -529,8 +562,49 @@ class FileSystemRomsRepository(
         return rom.config != defaultConfig
     }
 
+    private fun resolveInstalledDsiWareTitleId(uri: Uri): Long? {
+        if (uri.scheme != Rom.INSTALLED_DSIWARE_URI_SCHEME) return null
+        return uri.lastPathSegment?.toLongOrNull(16)?.let { it and 0xFFFFFFFFL }
+    }
+
+    private fun resolveInstalledDsiWareTitleId(rom: Rom): Long? {
+        return rom.installedDsiWareTitleId?.let { it and 0xFFFFFFFFL } ?: resolveInstalledDsiWareTitleId(rom.uri)
+    }
+
+    private fun readInstalledDsiWareConfig(titleId: Long): RomConfig? {
+        val rawJson = dsiWareTitlesMetadataStore.getRomConfigJson(titleId) ?: return null
+        return runCatching {
+            val dto = gson.fromJson(rawJson, RomConfigDto::class.java) ?: return null
+            val config = dto.toModel()
+            if (config.customName.isNullOrBlank()) {
+                val titleIdHex = (titleId and 0xFFFFFFFFL).toString(16).padStart(8, '0').lowercase()
+                val customName = dsiWareTitlesMetadataStore.getCustomName(titleIdHex)
+                if (!customName.isNullOrBlank()) config.copy(customName = customName) else config
+            } else {
+                config
+            }
+        }.onFailure {
+            Log.w(TAG, "Failed to parse installed DSiWare RomConfig for titleId=$titleId", it)
+        }.getOrNull()
+    }
+
+    private fun writeInstalledDsiWareConfig(titleId: Long, romConfig: RomConfig) {
+        dsiWareTitlesMetadataStore.setCustomName(titleId, romConfig.customName)
+        if (romConfig == RomConfig.forDsiWareTitle()) {
+            dsiWareTitlesMetadataStore.setRomConfigJson(titleId, null)
+        } else {
+            val json = gson.toJson(RomConfigDto.fromModel(romConfig))
+            dsiWareTitlesMetadataStore.setRomConfigJson(titleId, json)
+        }
+    }
+
     private fun readRomOptionsConfig(rom: Rom): RomConfig? {
-        val optionsDocument = getRomOptionsDocument(rom) ?: return null
+        val installedTitleId = resolveInstalledDsiWareTitleId(rom)
+        if (installedTitleId != null && (rom.isInstalledDsiWareShortcut || rom.uri.scheme == Rom.INSTALLED_DSIWARE_URI_SCHEME)) {
+            return readInstalledDsiWareConfig(installedTitleId)
+        }
+        val optionsDocument = getRomOptionsDocument(rom)
+            ?: return installedTitleId?.let { readInstalledDsiWareConfig(it) }
         return runCatching {
             val reader = context.contentResolver.openInputStream(optionsDocument.uri)?.bufferedReader()
                 ?: throw IllegalStateException("Could not open ${optionsDocument.uri}")

@@ -31,4 +31,5 @@
     <string name="mic_agc_noise_gate_title">自适应降噪与麦克风AGC</string>
     <string name="mic_agc_noise_gate_summary">直流低频消除、环境噪音抑制与语音平滑增益</string>
     <string name="v790_vulkan_pipeline_cache_status">Vulkan着色器管线缓存已启用</string>
+    <string name="v790_ram_value_required">需要输入数值</string>
 </resources>

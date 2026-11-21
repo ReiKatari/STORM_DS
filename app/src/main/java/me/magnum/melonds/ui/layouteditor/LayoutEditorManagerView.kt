@@ -72,6 +72,7 @@ class LayoutEditorManagerView(
         fun onSaveLayoutAndExit()
         fun onSaveLayoutAsNewAndExit()
         fun onExit()
+        fun hasUnsavedChanges(): Boolean
     }
 
     private enum class ScreenAspectRatio(val ratio: Float?) {
@@ -224,6 +225,7 @@ class LayoutEditorManagerView(
                         me.magnum.melonds.ui.layouteditor.ui.LayoutEditorMenuDialog(
                             snapToGrid = binding.viewLayoutEditor.snapToGridEnabled,
                             canUndo = binding.viewLayoutEditor.canUndo(),
+                            canSaveAsNew = viewModel.canSaveLayoutAsNew(),
                             onToggleSnapToGrid = { enabled ->
                                 binding.viewLayoutEditor.snapToGridEnabled = enabled
                                 androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
@@ -292,6 +294,7 @@ class LayoutEditorManagerView(
         binding.buttonUndo.setOnClickListener {
             if (binding.viewLayoutEditor.canUndo()) {
                 binding.viewLayoutEditor.undo()
+                syncScreenAspectRatiosFromEditor()
                 instantiatedComponentsState = binding.viewLayoutEditor.getInstantiatedComponents().toSet()
                 listener?.onStoreLayoutChanges()
             }
@@ -299,6 +302,13 @@ class LayoutEditorManagerView(
         binding.viewLayoutEditor.setOnUndoAvailabilityChangedListener { canUndo ->
             binding.buttonUndo.isEnabled = canUndo
             binding.buttonUndo.alpha = if (canUndo) 1.0f else 0.45f
+        }
+        binding.viewLayoutEditor.setOnLayoutInstantiatedListener {
+            syncScreenAspectRatiosFromEditor()
+        }
+        binding.viewLayoutEditor.setOnButtonClusterAppearanceRestoredListener { spread, innerScale ->
+            viewModel.setPendingButtonSpread(spread)
+            viewModel.setPendingButtonInnerScale(innerScale)
         }
         val snapPref = androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
             .getBoolean("layout_editor_snap_to_grid", true)
@@ -314,7 +324,7 @@ class LayoutEditorManagerView(
             binding.viewLayoutEditor.deleteSelectedView()
         }
         binding.buttonToggleVisibility.setOnClickListener {
-            binding.viewLayoutEditor.deleteSelectedView()
+            openButtonsMenu()
         }
         binding.buttonEditPosition.captureEditTargetOnTouchDown()
         binding.buttonEditPosition.setOnClickListener {
@@ -333,12 +343,11 @@ class LayoutEditorManagerView(
                     val comp = binding.viewLayoutEditor.getSelectedComponent()
                     if (comp == LayoutComponent.BUTTONS) {
                         val spread = progress / 100f
-                        val view = binding.viewLayoutEditor.getLayoutComponentView(comp)?.view
-                        (view as? me.magnum.melonds.ui.common.views.ModernButtonsView)?.buttonSpread = spread
-                        androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
-                            .edit()
-                            .putFloat("pref_button_cluster_spread", spread)
-                            .apply()
+                        binding.viewLayoutEditor.applyButtonClusterAppearance(
+                            spread = spread,
+                            innerScale = binding.viewLayoutEditor.currentButtonInnerScale,
+                        )
+                        viewModel.setPendingButtonSpread(spread)
                         listener?.onStoreLayoutChanges()
                     }
                 }
@@ -356,12 +365,11 @@ class LayoutEditorManagerView(
                     val comp = binding.viewLayoutEditor.getSelectedComponent()
                     if (comp == LayoutComponent.BUTTONS) {
                         val scale = progress / 100f
-                        val view = binding.viewLayoutEditor.getLayoutComponentView(comp)?.view
-                        (view as? me.magnum.melonds.ui.common.views.ModernButtonsView)?.buttonInnerScale = scale
-                        androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
-                            .edit()
-                            .putFloat("pref_button_cluster_inner_scale", scale)
-                            .apply()
+                        binding.viewLayoutEditor.applyButtonClusterAppearance(
+                            spread = binding.viewLayoutEditor.currentButtonSpread,
+                            innerScale = scale,
+                        )
+                        viewModel.setPendingButtonInnerScale(scale)
                         listener?.onStoreLayoutChanges()
                     }
                 }
@@ -516,13 +524,21 @@ class LayoutEditorManagerView(
             override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
                 if (!selectedViewSupportsAspectRatio || updatingAspectSpinner) return
                 val targetComponent = selectedScreenComponent ?: return
-                selectedAspectRatio = ScreenAspectRatio.entries[position]
+                val nextAspectRatio = ScreenAspectRatio.entries[position]
+                if (nextAspectRatio == selectedAspectRatio) return
+                selectedAspectRatio = nextAspectRatio
                 when (targetComponent) {
                     LayoutComponent.TOP_SCREEN -> topAspectRatio = selectedAspectRatio
                     LayoutComponent.BOTTOM_SCREEN -> bottomAspectRatio = selectedAspectRatio
                     else -> { }
                 }
-                enforceAspectRatio(selectedAspectRatio, WIDTH)
+                binding.viewLayoutEditor.pushUndoSnapshot()
+                updatingScalingControls = true
+                try {
+                    enforceAspectRatio(selectedAspectRatio, WIDTH)
+                } finally {
+                    updatingScalingControls = false
+                }
                 binding.viewLayoutEditor.scaleSelectedView(currentWidthScale, currentHeightScale)
                 binding.spinnerAspectRatio.post {
                     binding.viewLayoutEditor.selectComponent(targetComponent)
@@ -788,7 +804,8 @@ class LayoutEditorManagerView(
             return
         }
 
-        val hasUnsavedChanges = binding.viewLayoutEditor.isModifiedByUser() || binding.viewLayoutEditor.canUndo()
+        val hasUnsavedChanges = listener?.hasUnsavedChanges()
+            ?: (binding.viewLayoutEditor.isModifiedByUser() || binding.viewLayoutEditor.canUndo() || viewModel.hasUnsavedChanges.value)
         if (hasUnsavedChanges) {
             showUnsavedChangesExitDialog()
         } else {
@@ -954,6 +971,7 @@ class LayoutEditorManagerView(
             MenuOption.UNDO -> {
                 if (binding.viewLayoutEditor.canUndo()) {
                     binding.viewLayoutEditor.undo()
+                    syncScreenAspectRatiosFromEditor()
                     instantiatedComponentsState = binding.viewLayoutEditor.getInstantiatedComponents().toSet()
                     listener?.onStoreLayoutChanges()
                 }
@@ -969,10 +987,18 @@ class LayoutEditorManagerView(
             MenuOption.REVERT -> {
                 binding.viewLayoutEditor.resetModifiedState()
                 viewModel.revertLayoutChanges()
+                binding.viewLayoutEditor.applyButtonClusterAppearance(
+                    viewModel.pendingButtonSpread.value,
+                    viewModel.pendingButtonInnerScale.value,
+                )
             }
             MenuOption.RESET -> {
                 binding.viewLayoutEditor.resetModifiedState()
                 viewModel.resetLayout()
+                binding.viewLayoutEditor.applyButtonClusterAppearance(
+                    viewModel.pendingButtonSpread.value,
+                    viewModel.pendingButtonInnerScale.value,
+                )
             }
             MenuOption.SAVE_AS_NEW -> showLayoutNameInputDialog(
                 initialName = viewModel.getCurrentLayoutName()?.ifBlank { resources.getString(R.string.custom_layout_default_name) }
@@ -1268,6 +1294,28 @@ class LayoutEditorManagerView(
         currentHeightScale = ((height - selectedViewMinSize) / binding.seekBarHeight.max.toFloat()).coerceIn(0f, 1f)
         binding.seekBarHeight.progress = (currentHeightScale * binding.seekBarHeight.max).toInt()
         binding.textHeight.text = (binding.seekBarHeight.max * currentHeightScale + selectedViewMinSize).toInt().toString()
+    }
+
+    private fun syncScreenAspectRatiosFromEditor() {
+        binding.viewLayoutEditor.getLayoutComponentView(LayoutComponent.TOP_SCREEN)?.let {
+            topAspectRatio = inferScreenAspectRatio(it)
+        }
+        binding.viewLayoutEditor.getLayoutComponentView(LayoutComponent.BOTTOM_SCREEN)?.let {
+            bottomAspectRatio = inferScreenAspectRatio(it)
+        }
+    }
+
+    private fun inferScreenAspectRatio(view: me.magnum.melonds.ui.common.LayoutComponentView): ScreenAspectRatio {
+        val rect = view.getRect()
+        val w = rect.width.takeIf { it > 0 } ?: view.getWidth()
+        val h = rect.height.takeIf { it > 0 } ?: view.getHeight()
+        if (w <= 0 || h <= 0) return ScreenAspectRatio.RATIO_4_3
+        val ratio = w.toFloat() / h.toFloat()
+        return when {
+            kotlin.math.abs(ratio - consoleAspectRatio) < 0.04f -> ScreenAspectRatio.RATIO_4_3
+            kotlin.math.abs(ratio - (16f / 9f)) < 0.04f -> ScreenAspectRatio.RATIO_16_9
+            else -> ScreenAspectRatio.UNRESTRICTED
+        }
     }
 
     private fun LayoutComponent.supportsAspectRatioSelection(): Boolean {

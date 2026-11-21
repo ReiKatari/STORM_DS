@@ -12,9 +12,9 @@ import java.util.regex.Pattern
 object SpeakerAndGenderResolver {
 
     // Regex for inline speaker prefix patterns:
-    // "Phoenix: Objection!", "[Maya] Look!", "【Miles】 Indeed.", "«Apollo»: I'm fine!", "Edgeworth — No."
+    // "Phoenix: Objection!", "[Maya] Look!", "【Miles】 Indeed.", "«Apollo»: I'm fine!", "Edgeworth - No."
     private val INLINE_SPEAKER_REGEX = Pattern.compile(
-        "^\\s*(?:【([^】]{2,30})】|\\[([^\\]]{2,30})\\]|«([^»]{2,30})»|([A-Za-zА-Яа-яЁё0-9_\\-'.\\s]{2,25})[:—–-])\\s*(.*)$"
+        "^\\s*(?:【([^】]{2,30})】|\\[([^\\]]{2,30})\\]|«([^»]{2,30})»|([A-Za-zА-Яа-яЁё0-9_\\-'.\\s]{2,25})[:\\u2014\\u2013-])\\s*(.*)$"
     )
 
     // Male honorifics and title cues
@@ -436,7 +436,7 @@ object SpeakerAndGenderResolver {
             .removeSurrounding("«", "»")
             .removeSuffix(":")
             .removeSuffix("-")
-            .removeSuffix("—")
+            .removeSuffix("\u2014")
             .trim()
     }
 

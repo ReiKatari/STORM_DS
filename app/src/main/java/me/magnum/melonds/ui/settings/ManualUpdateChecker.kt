@@ -10,11 +10,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import me.magnum.melonds.R
-import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
+import me.magnum.melonds.domain.model.Version
+import me.magnum.melonds.github.GitHubReleaseSelector
+import me.magnum.melonds.github.GitHubUpdateChannel
+import me.magnum.melonds.github.PREF_KEY_GITHUB_UPDATE_CHANNEL
+import me.magnum.melonds.github.StormUpdateMirrorClient
 
 object ManualUpdateChecker {
 
@@ -40,52 +41,12 @@ object ManualUpdateChecker {
 
         scope.launch {
             try {
-                val currentVersion = (runCatching {
+                val currentVersionStr = (runCatching {
                     context.packageManager.getPackageInfo(context.packageName, 0).versionName
-                }.getOrNull() ?: "8.0.2").removePrefix("v").removePrefix("V")
+                }.getOrNull() ?: "8.6.0").removePrefix("v").removePrefix("V")
 
-                val result = withContext(Dispatchers.IO) {
-                    val url = URL("https://api.github.com/repos/ReiKatari/STORM_DS/releases/latest")
-                    val conn = url.openConnection() as HttpURLConnection
-                    try {
-                        conn.connectTimeout = 10000
-                        conn.readTimeout = 10000
-                        conn.requestMethod = "GET"
-                        conn.setRequestProperty("Accept", "application/vnd.github+json")
-                        conn.setRequestProperty("User-Agent", "STORM-DS-App")
-
-                        if (conn.responseCode in 200..299) {
-                            val body = conn.inputStream.bufferedReader().use { it.readText() }
-                            val json = JSONObject(body)
-                            val tagName = json.optString("tag_name", "").trim()
-                            val releaseName = json.optString("name", tagName).trim()
-                            val releaseBody = json.optString("body", "").trim()
-                            var downloadUrl = json.optString("html_url", "https://github.com/ReiKatari/STORM_DS/releases/latest")
-
-                            val assets = json.optJSONArray("assets")
-                            if (assets != null) {
-                                for (i in 0 until assets.length()) {
-                                    val asset = assets.optJSONObject(i) ?: continue
-                                    val assetName = asset.optString("name", "")
-                                    if (assetName.endsWith(".apk", ignoreCase = true)) {
-                                        val browserUrl = asset.optString("browser_download_url", "")
-                                        if (browserUrl.isNotBlank()) {
-                                            downloadUrl = browserUrl
-                                            break
-                                        }
-                                    }
-                                }
-                            }
-                            ReleaseInfo(tagName, releaseName, releaseBody, downloadUrl)
-                        } else {
-                            null
-                        }
-                    } finally {
-                        conn.disconnect()
-                    }
-                }
-
-                if (result == null) {
+                val releases = StormUpdateMirrorClient.fetchReleasesWithMirror()
+                if (releases.isEmpty()) {
                     Toast.makeText(context, R.string.v800_update_error, Toast.LENGTH_SHORT).show()
                     return@launch
                 }
@@ -95,13 +56,29 @@ object ManualUpdateChecker {
                     return@launch
                 }
 
-                val remoteVersion = result.tagName.removePrefix("v").removePrefix("V")
-                if (isNewer(remoteVersion, currentVersion)) {
+                val currentVersion = Version.parseOrNull(currentVersionStr) ?: Version.fromString("8.6.0")
+                val channel = GitHubUpdateChannel.fromPreference(
+                    defaultPrefs.getString(PREF_KEY_GITHUB_UPDATE_CHANNEL, GitHubUpdateChannel.STABLE.preferenceValue)
+                )
+                val preferLegacyApk = !runCatching {
+                    context.resources.getBoolean(R.bool.adrenotools_enabled)
+                }.getOrDefault(false)
+
+                val candidate = GitHubReleaseSelector.selectProduction(
+                    releases = releases,
+                    currentVersion = currentVersion,
+                    channel = channel,
+                    skippedVersion = null,
+                    preferLegacyApk = preferLegacyApk,
+                )
+
+                if (candidate != null) {
+                    val remoteVersion = candidate.release.tagName.removePrefix("v").removePrefix("V")
                     MaterialAlertDialogBuilder(activity)
                         .setTitle(context.getString(R.string.v800_update_available_title, remoteVersion))
-                        .setMessage(result.body.ifBlank { result.name })
+                        .setMessage(candidate.release.body.ifBlank { candidate.release.name })
                         .setPositiveButton(R.string.v800_update_download) { _, _ ->
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(result.downloadUrl)).apply {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(candidate.asset.url)).apply {
                                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                             }
                             context.startActivity(intent)
@@ -111,7 +88,7 @@ object ManualUpdateChecker {
                 } else {
                     MaterialAlertDialogBuilder(activity)
                         .setTitle(R.string.v800_update_up_to_date_title)
-                        .setMessage(context.getString(R.string.v800_update_up_to_date_msg, currentVersion))
+                        .setMessage(context.getString(R.string.v800_update_up_to_date_msg, currentVersionStr))
                         .setPositiveButton(android.R.string.ok, null)
                         .show()
                 }
@@ -120,31 +97,4 @@ object ManualUpdateChecker {
             }
         }
     }
-
-    private fun parseVersion(versionStr: String): List<Int> {
-        val clean = versionStr.trim().removePrefix("v").removePrefix("V")
-        return clean.split('.').map { segment ->
-            segment.takeWhile { it.isDigit() }.toIntOrNull() ?: 0
-        }
-    }
-
-    private fun isNewer(remote: String, current: String): Boolean {
-        val rParts = parseVersion(remote)
-        val cParts = parseVersion(current)
-        val maxLen = maxOf(rParts.size, cParts.size)
-        for (i in 0 until maxLen) {
-            val r = rParts.getOrElse(i) { 0 }
-            val c = cParts.getOrElse(i) { 0 }
-            if (r > c) return true
-            if (r < c) return false
-        }
-        return false
-    }
-
-    private data class ReleaseInfo(
-        val tagName: String,
-        val name: String,
-        val body: String,
-        val downloadUrl: String,
-    )
 }

@@ -12,7 +12,7 @@ object DialogueSentenceAssembler {
 
     private val strictTerminals = charArrayOf('.', '!', '?', '。', '！', '？', '‼', '⁉')
     private val closingMarks = charArrayOf('"', '\'', '”', '’', '»', '」', '』', ')', '）', '】', ']')
-    private val softEndings = charArrayOf(',', '，', '、', ';', '；', ':', '：', '-', '–', '—', '…')
+    private val softEndings = charArrayOf(',', '，', '、', ';', '；', ':', '：', '-', '\u2013', '\u2014', '…')
 
     /** Joins the lines of one fragment, repairing words hyphenated across line breaks. */
     fun joinFragments(parts: List<String>, isCjk: Boolean): String {

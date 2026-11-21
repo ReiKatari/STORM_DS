@@ -290,8 +290,9 @@ private fun GamepadTesterDialogContent(
                     fontWeight = FontWeight.SemiBold,
                 )
                 val rows = listOf(
-                    listOf("UP", "DOWN", "LEFT", "RIGHT", "A", "B", "X", "Y"),
-                    listOf("L1", "R1", "L2", "R2", "L3", "R3", "START", "SELECT"),
+                    listOf("UP", "DOWN", "LEFT", "RIGHT", "A", "B"),
+                    listOf("X", "Y", "L1", "R1", "L2", "R2"),
+                    listOf("L3", "R3", "START", "SELECT", "HOME"),
                 )
                 rows.forEach { row ->
                     Row(

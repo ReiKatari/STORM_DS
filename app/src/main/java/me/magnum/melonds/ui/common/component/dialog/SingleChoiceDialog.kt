@@ -38,7 +38,7 @@ fun <T> SingleChoiceDialog(
         title = payload.title,
         onDismiss = { dialogState.dismiss() },
         content = { padding ->
-            // Plain Column (not LazyColumn) — option lists are short and BaseDialog already wraps
+            // Plain Column (not LazyColumn) - option lists are short and BaseDialog already wraps
             // its content in a verticalScroll, which would crash a LazyColumn with infinite height.
             Column(modifier = Modifier.fillMaxWidth().padding(padding)) {
                 payload.items.forEach { item ->

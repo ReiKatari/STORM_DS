@@ -36,7 +36,8 @@ fun TranslatorSettingsContent(
     onStartAutoTranslate: () -> Unit,
     onOpenRegionEditor: () -> Unit,
     onPreviewTts: () -> Unit,
-    onOpenBacklogAndGlossary: (() -> Unit)? = null
+    onOpenBacklogAndGlossary: (() -> Unit)? = null,
+    onEngineChanged: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val lang = context.resources.configuration.locales.get(0)?.language?.lowercase().orEmpty()
@@ -156,7 +157,7 @@ fun TranslatorSettingsContent(
                         val nextIdx = (engines.indexOfFirst { it.first == enginePref } + 1) % engines.size
                         enginePref = engines[nextIdx].first
                         updatePref(GameTranslatorManager.PREF_TRANSLATOR_ENGINE, enginePref)
-                        onSyncOverlay()
+                        (onEngineChanged ?: onSyncOverlay)()
                     }
                 )
                 Divider(color = watermelon.line)

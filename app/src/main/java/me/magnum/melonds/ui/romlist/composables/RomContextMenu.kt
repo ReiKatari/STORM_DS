@@ -26,8 +26,6 @@ import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
@@ -35,6 +33,7 @@ import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -47,7 +46,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import me.magnum.melonds.MelonRomDecryptor
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import me.magnum.melonds.R
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.ui.theme.SpaceGrotesk
@@ -64,16 +64,21 @@ fun RomContextMenu(
     onSendSaveFile: (Rom) -> Unit,
     onImportSaveFile: (Rom) -> Unit,
     onLaunchRom: (Rom) -> Unit = {},
-    onDecryptRom: (Rom) -> Unit = {},
     onPickCustomCover: ((Rom) -> Unit)? = null,
     onClearCustomCover: ((Rom) -> Unit)? = null,
 ) {
     if (rom == null) return
     val colors = watermelon
     val context = LocalContext.current
-    var showTechnicalInfo by remember { mutableStateOf(false) }
-    val boxArtRepo = remember { runCatching { me.magnum.melonds.di.entrypoint.BoxArtEntryPoint.resolve(context).boxArtRepository() }.getOrNull() }
-    val hasCustomCover = remember(rom) { boxArtRepo?.hasCustomCover(rom) ?: false }
+    var showTechnicalInfo by remember(rom.uri) { mutableStateOf(false) }
+    val boxArtRepo = remember(context) {
+        runCatching { me.magnum.melonds.di.entrypoint.BoxArtEntryPoint.resolve(context).boxArtRepository() }.getOrNull()
+    }
+    val hasCustomCover by produceState(initialValue = false, rom.uri, rom.fileName) {
+        value = withContext(Dispatchers.IO) {
+            boxArtRepo?.hasCustomCover(rom) ?: false
+        }
+    }
 
     if (showTechnicalInfo) {
         RomTechnicalInfoDialog(
@@ -83,6 +88,7 @@ fun RomContextMenu(
                 onDismiss()
             }
         )
+        return
     }
 
     Dialog(onDismissRequest = onDismiss) {

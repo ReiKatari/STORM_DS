@@ -90,8 +90,7 @@ class CheatsPreferencesViewModel @Inject constructor(
             "https://github.com/3song/Hacking-DeadSkullzJr-s-NDS-i--Cheat-Databases/raw/main/Cheat%20Databases/usrcheat.dat",
         )
         val jsdelivrUrls = listOf(
-            "https://ghfast.top/$rawPrimary",
-            "https://ghproxy.net/$rawPrimary",
+            "https://cdn.jsdelivr.net/gh/3song/Hacking-DeadSkullzJr-s-NDS-i--Cheat-Databases@main/Cheat%20Databases/usrcheat.dat",
             rawPrimary,
         )
         val ghproxyUrls = listOf(
@@ -103,7 +102,7 @@ class CheatsPreferencesViewModel @Inject constructor(
             MIRROR_GITHUB_RAW -> githubRawUrls
             MIRROR_JSDELIVR -> jsdelivrUrls
             MIRROR_GHPROXY -> ghproxyUrls
-            else -> (githubRawUrls + ghproxyUrls).distinct()
+            else -> (githubRawUrls + jsdelivrUrls + ghproxyUrls).distinct()
         }
     }
 
@@ -134,7 +133,7 @@ class CheatsPreferencesViewModel @Inject constructor(
             try {
                 val request = Request.Builder()
                     .url(url)
-                    .header("User-Agent", "STORM-DS/8.5.0")
+                    .header("User-Agent", "STORM-DS/8.6.0")
                     .build()
                 client.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) return@use
@@ -166,7 +165,6 @@ class CheatsPreferencesViewModel @Inject constructor(
         }
 
         if (downloadedValidDat) {
-            saveDatabaseUpdatedNow()
             cheatsRepository.importCheats(Uri.fromFile(targetFile))
             return@withContext OnlineCheatsDownloadResult.OnlineUsrCheatImportStarted
         }

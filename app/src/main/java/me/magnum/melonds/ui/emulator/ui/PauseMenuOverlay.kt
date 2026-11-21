@@ -266,13 +266,14 @@ fun PauseMenuOverlay(
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.screenWidthDp > configuration.screenHeightDp
     val context = LocalContext.current
-    val store = remember(context) { PauseMenuCustomizationStore(context) }
+    val isFirmwareMode = rom == null || pauseMenu.options.any { it is FirmwarePauseMenuOption }
+    val store = remember(context, isFirmwareMode) { PauseMenuCustomizationStore(context, isFirmwareMode) }
     var showCustomizer by remember { mutableStateOf(false) }
     var customizationVersion by remember { mutableIntStateOf(0) }
     androidx.compose.runtime.DisposableEffect(context) {
         val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
         val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            if (key == null || key.startsWith("pause_menu_")) {
+            if (key == null || key.startsWith("pause_menu_") || key.startsWith("firmware_pause_menu_")) {
                 customizationVersion++
             }
         }

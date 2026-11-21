@@ -1365,7 +1365,7 @@
     <string name="translator_enabled">Enable auto-translator</string>
     <string name="translator_enabled_summary">Recognize and translate game dialogue on screen</string>
     <string name="translator_engine">Translation engine</string>
-    <string name="translator_engine_offline">Google ML Kit (100% on-device neural)</string>
+    <string name="translator_engine_offline" formatted="false">Google ML Kit (100% on-device neural)</string>
     <string name="translator_engine_yandex">Yandex Translate (free / best for Russian)</string>
     <string name="translator_engine_google">Google Translate (online / fast)</string>
     <string name="translator_engine_lingva">Lingva Neural (free / no rate limits)</string>
@@ -1624,7 +1624,7 @@
     <string name="label_rom_config_translator_section">Auto-translator</string>
     <string name="label_rom_config_translator_source_lang">Game source language</string>
     <string name="label_rom_config_dual_screen_preset">Dual screen layout preset</string>
-    <string name="video_ai_upscale_sharpness_title">AI-Upscale and CAS sharpness (%)</string>
+    <string name="video_ai_upscale_sharpness_title" formatted="false">AI-Upscale and CAS sharpness (%)</string>
     <string name="video_ai_upscale_sharpness_summary">Intensity of contrast-adaptive edge and text sharpening</string>
     <string name="video_vulkan_compositor_mode_title">2D/3D compositor mode (Vulkan)</string>
     <string name="video_vulkan_compositor_mode_precise">Precise (layer priorities and blending)</string>
@@ -1709,9 +1709,9 @@
     <string name="video_ds_lcd_grid_off">Off</string>
     <string name="video_ds_lcd_grid_ds_lite">DS Lite pixel matrix</string>
     <string name="video_ds_lcd_grid_dsi_xl">DSi XL RGB subpixel LCD</string>
-    <string name="video_low_battery_saver_title">Auto low-battery power saver (&lt; 20%)</string>
-    <string name="video_low_battery_saver_summary">Automatically lower resolution scale to 1x-2x and disable SSAO when battery drops below 20%</string>
-    <string name="video_low_battery_activated_toast">Low battery (&lt; 20%): resolution scaled down and SSAO paused</string>
+    <string name="video_low_battery_saver_title" formatted="false">Auto low-battery power saver (&lt; 20%)</string>
+    <string name="video_low_battery_saver_summary" formatted="false">Automatically lower resolution scale to 1x-2x and disable SSAO when battery drops below 20%</string>
+    <string name="video_low_battery_activated_toast" formatted="false">Low battery (&lt; 20%): resolution scaled down and SSAO paused</string>
     <string name="video_low_battery_restored_toast">Power restored: graphics settings resumed</string>
     <string name="mic_vu_meter_title">Live microphone level test</string>
     <string name="mic_vu_meter_idle">Tap to test microphone input and noise gate threshold</string>
@@ -1738,7 +1738,7 @@
     <string name="input_gyro_activation_hold_r">Hold R button</string>
     <string name="button_theme_picker_title">Button color theme</string>
     <string name="button_theme_picker_subtitle">Preview button surface, border and symbol colors</string>
-    <string name="translator_tts_speed_title">Speech rate (%)</string>
+    <string name="translator_tts_speed_title" formatted="false">Speech rate (%)</string>
     <string name="translator_tts_speed_summary">%1$d%% - Playback speed for translated dialogue (100%% is normal)</string>
     <string name="translator_regions_reset_title">Reset OCR regions and button position</string>
     <string name="translator_regions_reset_summary">Clear saved capture areas and restore the floating TR button to its default position</string>

@@ -1,11 +1,14 @@
 package me.magnum.melonds.ui.stats
 
 import android.app.Application
+import android.content.ClipData
+import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Color as AndroidColor
 import android.os.Bundle
 import android.view.KeyEvent
 import android.widget.Toast
+import androidx.core.content.FileProvider
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -84,6 +87,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -98,14 +102,24 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import me.magnum.melonds.R
+import me.magnum.melonds.di.entrypoint.PlayStatsEntryPoint
+import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.domain.repositories.RomsRepository
+import me.magnum.melonds.domain.repositories.SettingsRepository
 import me.magnum.melonds.ui.Theme
 import me.magnum.melonds.ui.romlist.boxart.BoxArtRepository
 import me.magnum.melonds.ui.romlist.composables.DsBoxArtAspectRatio
@@ -179,26 +193,57 @@ class PlayerStatsActivity : AppCompatActivity() {
                     onBackClick = { finish() },
                     onExportJson = {
                         viewModel.exportJson { file ->
-                            val msg = if (file != null) {
-                                getString(R.string.feature_stats_export_success, file.name)
+                            if (file != null) {
+                                Toast.makeText(
+                                    this@PlayerStatsActivity,
+                                    getString(R.string.feature_stats_export_success, file.name),
+                                    Toast.LENGTH_LONG,
+                                ).show()
+                                shareExportedFile(file, "application/json")
                             } else {
-                                getString(R.string.feature_stats_export_error)
+                                Toast.makeText(
+                                    this@PlayerStatsActivity,
+                                    getString(R.string.feature_stats_export_error),
+                                    Toast.LENGTH_LONG,
+                                ).show()
                             }
-                            Toast.makeText(this@PlayerStatsActivity, msg, Toast.LENGTH_LONG).show()
                         }
                     },
                     onExportCsv = {
                         viewModel.exportCsv { file ->
-                            val msg = if (file != null) {
-                                getString(R.string.feature_stats_export_success, file.name)
+                            if (file != null) {
+                                Toast.makeText(
+                                    this@PlayerStatsActivity,
+                                    getString(R.string.feature_stats_export_success, file.name),
+                                    Toast.LENGTH_LONG,
+                                ).show()
+                                shareExportedFile(file, "text/csv")
                             } else {
-                                getString(R.string.feature_stats_export_error)
+                                Toast.makeText(
+                                    this@PlayerStatsActivity,
+                                    getString(R.string.feature_stats_export_error),
+                                    Toast.LENGTH_LONG,
+                                ).show()
                             }
-                            Toast.makeText(this@PlayerStatsActivity, msg, Toast.LENGTH_LONG).show()
                         }
                     },
                 )
             }
+        }
+    }
+
+    private fun shareExportedFile(file: File, mimeType: String) {
+        runCatching {
+            val uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", file)
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = mimeType
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_TITLE, file.name)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                clipData = ClipData.newUri(contentResolver, file.name, uri)
+            }
+            val chooser = Intent.createChooser(shareIntent, getString(R.string.stats_export_share_chooser))
+            startActivity(chooser)
         }
     }
 
@@ -216,6 +261,7 @@ class PlayerStatsViewModel @Inject constructor(
     application: Application,
     private val romsRepository: RomsRepository,
     private val boxArtRepository: BoxArtRepository,
+    private val settingsRepository: SettingsRepository,
 ) : AndroidViewModel(application) {
 
     private val _summary = MutableStateFlow(PlayStatsStore.emptySummary())
@@ -227,31 +273,80 @@ class PlayerStatsViewModel @Inject constructor(
     private val _dailySessions = MutableStateFlow<List<PlayStatsStore.DailySessionLog>>(emptyList())
     val dailySessions: StateFlow<List<PlayStatsStore.DailySessionLog>> = _dailySessions.asStateFlow()
 
+    @Volatile
+    private var latestRoms: List<Rom> = emptyList()
+    private val fetchedBoxArtUris = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
     init {
         viewModelScope.launch(Dispatchers.IO) {
             val cached = runCatching { boxArtRepository.getAllCachedMatches() }.getOrDefault(emptyMap())
             if (cached.isNotEmpty()) {
-                _boxArtByUri.value = cached
+                _boxArtByUri.update { current -> cached + current.filterValues { it.isNotEmpty() } }
+            }
+            boxArtRepository.coverUpdates.collect { (uri, url) ->
+                _boxArtByUri.update { current ->
+                    if (url != null) current + (uri to url) else current - uri
+                }
             }
         }
         viewModelScope.launch(Dispatchers.IO) {
-            romsRepository.getRoms().collectLatest { roms ->
-                _summary.value = PlayStatsStore.buildSummary(getApplication(), roms)
+            val dao = PlayStatsEntryPoint.resolve(getApplication()).database().playStatsDao()
+            combine(
+                romsRepository.getRoms(),
+                dao.observeAllPlayStats(),
+                dao.observeAllSessions(),
+            ) { roms, _, _ -> roms }.collectLatest { roms ->
+                latestRoms = roms
+                val summary = PlayStatsStore.buildSummarySuspend(getApplication(), roms)
+                _summary.value = summary
                 _dailySessions.value = PlayStatsStore.getDailySessionLogs(getApplication())
+
+                val missingArtRoms = summary.allGames
+                    .mapNotNull { it.rom }
+                    .filter { rom ->
+                        val key = rom.uri.toString()
+                        !_boxArtByUri.value.containsKey(key) && fetchedBoxArtUris.add(key)
+                    }
+                if (missingArtRoms.isNotEmpty()) {
+                    fetchMissingBoxArt(missingArtRoms)
+                }
             }
+        }
+    }
+
+    private suspend fun fetchMissingBoxArt(roms: List<Rom>) = coroutineScope {
+        val semaphore = Semaphore(6)
+        val allowOnline = settingsRepository.isGameTdbCoversEnabled()
+        val resolved = roms.map { rom ->
+            async(Dispatchers.IO) {
+                semaphore.withPermit {
+                    val key = rom.uri.toString()
+                    val url = runCatching {
+                        if (allowOnline) {
+                            boxArtRepository.getBoxArtUrl(rom)
+                        } else {
+                            boxArtRepository.getCustomCoverFile(rom)?.let { "file://${it.absolutePath}?t=${it.lastModified()}" }
+                        }
+                    }.getOrNull()
+                    key to (url ?: "")
+                }
+            }
+        }.awaitAll().toMap()
+        if (resolved.isNotEmpty()) {
+            _boxArtByUri.update { it + resolved }
         }
     }
 
     fun exportJson(onResult: (File?) -> Unit) {
         viewModelScope.launch {
-            val file = runCatching { PlayStatsStore.exportToJson(getApplication()) }.getOrNull()
+            val file = runCatching { PlayStatsStore.exportToJson(getApplication(), latestRoms) }.getOrNull()
             withContext(Dispatchers.Main) { onResult(file) }
         }
     }
 
     fun exportCsv(onResult: (File?) -> Unit) {
         viewModelScope.launch {
-            val file = runCatching { PlayStatsStore.exportToCsv(getApplication()) }.getOrNull()
+            val file = runCatching { PlayStatsStore.exportToCsv(getApplication(), latestRoms) }.getOrNull()
             withContext(Dispatchers.Main) { onResult(file) }
         }
     }
@@ -1123,31 +1218,31 @@ private fun InteractiveDailyChartCard(
                             color = accentColor,
                             style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
                         )
+                    }
 
-                        for (i in pointsCoords.indices) {
-                            val coord = pointsCoords[i]
-                            val pt = points[i]
-                            val isSelected = selectedPoint?.dateKey == pt.dateKey
-                            val r = if (isSelected) 5.5.dp.toPx() else 3.2.dp.toPx()
+                    for (i in pointsCoords.indices) {
+                        val coord = pointsCoords[i]
+                        val pt = points[i]
+                        val isSelected = selectedPoint?.dateKey == pt.dateKey
+                        val r = if (isSelected) 5.5.dp.toPx() else 3.2.dp.toPx()
 
-                            if (isSelected) {
-                                drawCircle(
-                                    color = accentColor.copy(alpha = 0.35f),
-                                    radius = r * 2.2f,
-                                    center = coord,
-                                )
-                            }
+                        if (isSelected) {
                             drawCircle(
-                                color = colors.surface,
-                                radius = r + 1.dp.toPx(),
-                                center = coord,
-                            )
-                            drawCircle(
-                                color = if (pt.playTimeMs > 0L) accentColor else colors.text3,
-                                radius = r,
+                                color = accentColor.copy(alpha = 0.35f),
+                                radius = r * 2.2f,
                                 center = coord,
                             )
                         }
+                        drawCircle(
+                            color = colors.surface,
+                            radius = r + 1.dp.toPx(),
+                            center = coord,
+                        )
+                        drawCircle(
+                            color = if (pt.playTimeMs > 0L) accentColor else colors.text3,
+                            radius = r,
+                            center = coord,
+                        )
                     }
                 }
             }
@@ -1155,22 +1250,37 @@ private fun InteractiveDailyChartCard(
 
         Spacer(Modifier.height(6.dp))
 
-        // X-Axis Date Labels
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
+        // X-Axis Date Labels aligned to stepX centers
+        if (points.isNotEmpty()) {
             val stepInterval = if (points.size > 14) points.size / 6 else 1
-            points.forEachIndexed { index, pt ->
-                val showLabel = (index % stepInterval == 0) || (index == points.size - 1)
-                if (showLabel) {
-                    Text(
-                        text = pt.dayLabel,
-                        color = if (pt.isToday) accentColor else colors.text3,
-                        fontFamily = WatermelonMono,
-                        fontSize = 9.sp,
-                        fontWeight = if (pt.isToday) FontWeight.Bold else FontWeight.Normal,
-                    )
+            val shownIndices = points.indices.filter { (it % stepInterval == 0) || (it == points.size - 1) }
+            Layout(
+                content = {
+                    shownIndices.forEach { index ->
+                        val pt = points[index]
+                        Text(
+                            text = pt.dayLabel,
+                            color = if (pt.isToday) accentColor else colors.text3,
+                            fontFamily = WatermelonMono,
+                            fontSize = 9.sp,
+                            fontWeight = if (pt.isToday) FontWeight.Bold else FontWeight.Normal,
+                            maxLines = 1,
+                            softWrap = false,
+                        )
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) { measurables, constraints ->
+                val placeables = measurables.map { it.measure(constraints.copy(minWidth = 0)) }
+                val height = placeables.maxOfOrNull { it.height } ?: 0
+                val stepX = constraints.maxWidth.toFloat() / points.size.toFloat()
+                layout(constraints.maxWidth, height) {
+                    shownIndices.forEachIndexed { mIdx, pointIdx ->
+                        val placeable = placeables.getOrNull(mIdx) ?: return@forEachIndexed
+                        val centerX = ((pointIdx + 0.5f) * stepX).toInt()
+                        val x = (centerX - placeable.width / 2).coerceIn(0, (constraints.maxWidth - placeable.width).coerceAtLeast(0))
+                        placeable.placeRelative(x, 0)
+                    }
                 }
             }
         }

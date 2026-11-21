@@ -36,6 +36,7 @@ object PlayStatsStore {
     private const val LAUNCH_DEBOUNCE_MS = 3_500L
 
     private val statsIoScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val migrationMutex = Mutex()
     private val isMigrated = AtomicBoolean(false)
 
     @Volatile
@@ -170,48 +171,65 @@ object PlayStatsStore {
         topRecent = emptyList(),
     )
 
-    private fun getDao(context: Context): PlayStatsDao {
-        val entryPoint = PlayStatsEntryPoint.resolve(context)
+    private suspend fun getDao(context: Context): PlayStatsDao {
+        val appContext = context.applicationContext
+        val entryPoint = PlayStatsEntryPoint.resolve(appContext)
         val dao = entryPoint.database().playStatsDao()
-        checkAndPerformMigration(context, dao)
+        checkAndPerformMigration(appContext, dao)
         return dao
     }
 
-    private fun checkAndPerformMigration(context: Context, dao: PlayStatsDao) {
+    private suspend fun checkAndPerformMigration(context: Context, dao: PlayStatsDao) {
         if (isMigrated.get()) return
-        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        if (prefs.getBoolean("migrated_to_room_v10", false)) {
-            isMigrated.set(true)
-            return
-        }
-        statsIoScope.launch {
-            try {
-                val allEntries = prefs.all
-                val entitiesToMigrate = mutableListOf<PlayStatsEntity>()
-                for ((key, value) in allEntries) {
-                    if (key.startsWith(KEY_ROM_META_PREFIX) && value is String) {
-                        val uriStr = key.removePrefix(KEY_ROM_META_PREFIX)
-                        parseStoredRomStats(uriStr, value)?.let { stored ->
-                            entitiesToMigrate.add(
-                                PlayStatsEntity(
-                                    romUri = uriStr,
-                                    romName = stored.displayName,
-                                    gameCode = stored.gameCode,
-                                    launchCount = stored.launchCount,
-                                    totalPlayTimeMs = stored.recordedPlayTimeMs,
-                                    lastPlayedEpochMs = stored.lastLaunchedEpochMs,
-                                )
-                            )
+        migrationMutex.withLock {
+            if (isMigrated.get()) return
+            val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            if (prefs.getBoolean("migrated_to_room_v10", false)) {
+                isMigrated.set(true)
+                return
+            }
+            withContext(Dispatchers.IO) {
+                try {
+                    val allEntries = prefs.all
+                    val entitiesToMigrate = mutableListOf<PlayStatsEntity>()
+                    for ((key, value) in allEntries) {
+                        if (key.startsWith(KEY_ROM_META_PREFIX) && value is String) {
+                            val uriStr = key.removePrefix(KEY_ROM_META_PREFIX)
+                            parseStoredRomStats(uriStr, value)?.let { stored ->
+                                val existing = dao.getPlayStatsForRom(uriStr)
+                                if (existing == null) {
+                                    entitiesToMigrate.add(
+                                        PlayStatsEntity(
+                                            romUri = uriStr,
+                                            romName = stored.displayName,
+                                            gameCode = stored.gameCode,
+                                            launchCount = stored.launchCount,
+                                            totalPlayTimeMs = stored.recordedPlayTimeMs,
+                                            lastPlayedEpochMs = stored.lastLaunchedEpochMs,
+                                        )
+                                    )
+                                } else {
+                                    entitiesToMigrate.add(
+                                        existing.copy(
+                                            romName = existing.romName.ifBlank { stored.displayName },
+                                            gameCode = existing.gameCode.ifBlank { stored.gameCode },
+                                            launchCount = maxOf(existing.launchCount, stored.launchCount),
+                                            totalPlayTimeMs = maxOf(existing.totalPlayTimeMs, stored.recordedPlayTimeMs),
+                                            lastPlayedEpochMs = maxOf(existing.lastPlayedEpochMs, stored.lastLaunchedEpochMs),
+                                        )
+                                    )
+                                }
+                            }
                         }
                     }
+                    if (entitiesToMigrate.isNotEmpty()) {
+                        dao.insertAllStats(entitiesToMigrate)
+                    }
+                    prefs.edit().putBoolean("migrated_to_room_v10", true).commit()
+                    isMigrated.set(true)
+                } catch (e: Throwable) {
+                    Log.e(TAG, "Failed to migrate stats from SharedPreferences to Room", e)
                 }
-                if (entitiesToMigrate.isNotEmpty()) {
-                    dao.insertAllStats(entitiesToMigrate)
-                }
-                prefs.edit().putBoolean("migrated_to_room_v10", true).apply()
-                isMigrated.set(true)
-            } catch (e: Throwable) {
-                Log.e(TAG, "Failed to migrate stats from SharedPreferences to Room", e)
             }
         }
     }
@@ -346,6 +364,12 @@ object PlayStatsStore {
     }
 
     fun buildSummary(context: Context, roms: List<Rom>): PlayerStatsSummary {
+        return kotlinx.coroutines.runBlocking(Dispatchers.IO) {
+            buildSummarySuspend(context, roms)
+        }
+    }
+
+    suspend fun buildSummarySuspend(context: Context, roms: List<Rom>): PlayerStatsSummary = withContext(Dispatchers.IO) {
         val appContext = context.applicationContext
         val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
@@ -355,9 +379,9 @@ object PlayStatsStore {
 
         runCatching {
             val db = PlayStatsEntryPoint.resolve(appContext).database()
-            val dao = db.playStatsDao()
-            val roomStats = kotlinx.coroutines.runBlocking(Dispatchers.IO) { dao.getAllPlayStats() }
-            allSessions = kotlinx.coroutines.runBlocking(Dispatchers.IO) { dao.getAllSessions() }
+            val dao = getDao(appContext)
+            val roomStats = dao.getAllPlayStats()
+            allSessions = dao.getAllSessions()
 
             unlockedAchievementsCount = runCatching {
                 val cursor = db.openHelper.readableDatabase.query("SELECT COUNT(*) FROM ra_user_achievement WHERE is_unlocked = 1")
@@ -552,15 +576,7 @@ object PlayStatsStore {
                     prefs.getInt(KEY_DAILY_LAUNCHES_PREFIX + dotKey, 0),
                 )
 
-                var dayPlayMs = maxOf(sessionSumMs, legacyPlayMs)
-                if (dayPlayMs == 0L) {
-                    val fallbackMs = mergedItems
-                        .filter { it.lastPlayedEpochMs > 0L && toDayNumber(it.lastPlayedEpochMs) == dayNum }
-                        .sumOf { it.playTimeMs }
-                    if (fallbackMs > 0L) {
-                        dayPlayMs = fallbackMs
-                    }
-                }
+                val dayPlayMs = maxOf(sessionSumMs, legacyPlayMs)
                 val dayLaunches = maxOf(sessionCount, legacyLaunches)
 
                 list.add(
@@ -788,7 +804,7 @@ object PlayStatsStore {
             .filter { it.lastPlayedEpochMs > 0L }
             .sortedWith(compareByDescending<GameStatItem> { it.lastPlayedEpochMs }.thenByDescending { it.playTimeMs })
 
-        return PlayerStatsSummary(
+        return@withContext PlayerStatsSummary(
             totalPlayTimeMs = totalPlayTimeMs,
             gamesPlayedCount = gamesPlayedCount,
             totalLaunches = totalLaunches,
@@ -811,14 +827,17 @@ object PlayStatsStore {
         )
     }
 
-    suspend fun exportToJson(context: Context): File = withContext(Dispatchers.IO) {
-        val summary = buildSummary(context, emptyList())
+    suspend fun exportToJson(context: Context, roms: List<Rom> = emptyList()): File = withContext(Dispatchers.IO) {
+        val summary = buildSummarySuspend(context, roms)
         val dao = getDao(context)
         val sessions = dao.getAllSessions()
+        val appVersion = runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        }.getOrNull() ?: "8.6.0"
 
         val rootObj = JSONObject().apply {
             put("app", "STORM DS")
-            put("appVersion", "8.0.2")
+            put("appVersion", appVersion)
             put("exportedAt", SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date()))
             put("playerLevel", summary.levelInfo.level)
             put("totalXp", summary.levelInfo.totalXp)
@@ -895,10 +914,13 @@ object PlayStatsStore {
         file
     }
 
-    suspend fun exportToCsv(context: Context): File = withContext(Dispatchers.IO) {
-        val summary = buildSummary(context, emptyList())
+    suspend fun exportToCsv(context: Context, roms: List<Rom> = emptyList()): File = withContext(Dispatchers.IO) {
+        val summary = buildSummarySuspend(context, roms)
         val dao = getDao(context)
         val sessions = dao.getAllSessions()
+        val appVersion = runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        }.getOrNull() ?: "8.6.0"
 
         val exportDir = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS/exports").apply { mkdirs() }
         val targetDir = if (exportDir.exists() && exportDir.canWrite()) exportDir else File(context.filesDir, "exports").apply { mkdirs() }
@@ -907,7 +929,7 @@ object PlayStatsStore {
 
         val sb = StringBuilder()
         val exportTime = SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.US).format(Date())
-        sb.append("# STORM DS 8.0.2 - Extended Player Statistics Export\n")
+        sb.append("# STORM DS $appVersion - Extended Player Statistics Export\n")
         sb.append("Exported At,Player Level,Total XP,Rank Tier,Current Streak (days),Best Streak (days),Total Play Time (min),Average Session (min),Total Launches,Total Sessions\n")
         sb.append("\"$exportTime\",${summary.levelInfo.level},${summary.levelInfo.totalXp},${summary.levelInfo.rankTierIndex},${summary.currentStreakDays},${summary.bestStreakDays},${summary.totalPlayTimeMs / 60000L},${summary.averageSessionMs / 60000L},${summary.totalLaunches},${summary.totalSessionsCount}\n\n")
 

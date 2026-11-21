@@ -410,6 +410,11 @@ GLRenderer::~GLRenderer()
     glDeleteBuffers(1, &ClearVertexBufferID);
 
     glDeleteBuffers(1, &ShaderConfigUBO);
+    if (PixelbufferID != 0)
+    {
+        glDeleteBuffers(1, &PixelbufferID);
+        PixelbufferID = 0;
+    }
 
     for (int i = 0; i < 16; i++)
     {

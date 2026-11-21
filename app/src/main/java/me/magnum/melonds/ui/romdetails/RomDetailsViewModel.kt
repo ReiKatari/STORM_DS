@@ -1,11 +1,16 @@
 package me.magnum.melonds.ui.romdetails
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.preference.PreferenceManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -13,8 +18,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import me.magnum.melonds.common.Permission
 import me.magnum.melonds.common.UriPermissionManager
-import me.magnum.melonds.domain.model.VideoFiltering
-import me.magnum.melonds.domain.model.VideoRenderer
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.domain.model.rom.config.RomConfig
 import me.magnum.melonds.domain.model.rom.config.RomInputMode
@@ -88,8 +91,9 @@ class RomDetailsViewModel @Inject constructor(
             val globalRuntimeConfig = combine(
                 settingsRepository.observeDefaultConsoleType(),
                 settingsRepository.observeMicSource(),
-            ) { consoleType, micSource ->
-                consoleType to micSource
+                observeGlobalRuntimeOverrides(),
+            ) { consoleType, micSource, overrides ->
+                Triple(consoleType, micSource, overrides)
             }
             combine(
                 _romConfig,
@@ -97,27 +101,12 @@ class RomDetailsViewModel @Inject constructor(
                 globalCoreVideoConfig,
                 globalShaderConfig,
                 settingsRepository.observeRetroAchievementsEnabled(),
-            ) { romConfig, globalRuntimeConfig, globalVideoConfig, shaderConfig, globalRetroAchievementsEnabled ->
-                val customVulkanSupported = me.magnum.melonds.impl.AdrenoVulkanDriverSupport.isSupported(context)
-                val systemLabel = context.getString(me.magnum.melonds.R.string.rom_config_vulkan_driver_system)
-                val globalLabel = context.getString(me.magnum.melonds.R.string.rom_config_vulkan_driver_global)
-                val activeDriverLabel = if (customVulkanSupported &&
-                    settingsRepository.getVulkanDriverMode() == me.magnum.melonds.domain.model.VulkanDriverMode.CUSTOM
-                ) {
-                    settingsRepository.getCustomVulkanDriverDisplayName() ?: systemLabel
-                } else {
-                    systemLabel
-                }
-                val driverOptions = if (customVulkanSupported) {
-                    listOf(Pair(null, globalLabel), Pair("__SYSTEM__", systemLabel)) +
-                        settingsRepository.getInstalledVulkanDrivers().map { Pair(it.id, it.displayName) }
-                } else {
-                    listOf(Pair(null, systemLabel))
-                }
+            ) { romConfig, globalRuntimeWithOverrides, globalVideoConfig, shaderConfig, globalRetroAchievementsEnabled ->
+                val (globalConsoleType, globalMicSource, overrides) = globalRuntimeWithOverrides
                 romDetailsUiMapper.mapRomConfigToUi(
                     romConfig = romConfig,
-                    globalRuntimeConsoleType = globalRuntimeConfig.first,
-                    globalRuntimeMicSource = globalRuntimeConfig.second,
+                    globalRuntimeConsoleType = globalConsoleType,
+                    globalRuntimeMicSource = globalMicSource,
                     globalVideoRenderer = globalVideoConfig.renderer,
                     globalThreadedRendering = globalVideoConfig.threadedRendering,
                     globalInternalResolutionScaling = globalVideoConfig.internalResolutionScaling,
@@ -126,11 +115,11 @@ class RomDetailsViewModel @Inject constructor(
                     globalRetroArchShaderParameters = shaderConfig.second,
                     hasValidRetroArchShaderRoot = shaderConfig.third,
                     globalRetroAchievementsEnabled = globalRetroAchievementsEnabled,
-                    globalArm9Overclock = settingsRepository.getArm9Overclock(),
-                    globalFastForwardSpeedMultiplier = settingsRepository.getFastForwardSpeedMultiplier(),
-                    globalVulkanDriverDisplayName = activeDriverLabel,
-                    availableVulkanDrivers = driverOptions,
-                    isCustomVulkanDriverSupported = customVulkanSupported,
+                    globalArm9Overclock = overrides.arm9Overclock,
+                    globalFastForwardSpeedMultiplier = overrides.fastForwardSpeedMultiplier,
+                    globalVulkanDriverDisplayName = overrides.activeVulkanDriverLabel,
+                    availableVulkanDrivers = overrides.availableVulkanDrivers,
+                    isCustomVulkanDriverSupported = overrides.isCustomVulkanSupported,
                 )
             }.collect {
                 uiStateFlow.value = RomConfigUiState.Ready(it)
@@ -181,8 +170,8 @@ class RomDetailsViewModel @Inject constructor(
                 val targetFiltering = currentRomConfig.videoFiltering
                 currentRomConfig.copy(
                     videoRenderer = targetRenderer,
-                    videoFiltering = targetFiltering?.takeIf {
-                        targetRenderer == null || isFilteringSupported(targetRenderer, it)
+                    videoFiltering = targetFiltering?.takeIf { filtering ->
+                        targetRenderer == null || filtering.isSupportedByRenderer(targetRenderer)
                     },
                 )
             }
@@ -242,10 +231,61 @@ class RomDetailsViewModel @Inject constructor(
         romsRepository.updateRomConfig(_rom.value, newConfig)
     }
 
-    private fun isFilteringSupported(renderer: VideoRenderer, filtering: VideoFiltering): Boolean {
-        return when (renderer) {
-            VideoRenderer.VULKAN -> filtering.isSupportedByVulkan()
-            else -> filtering.isSupportedByOpenGlSurface()
+    private data class GlobalRuntimeOverrides(
+        val arm9Overclock: Int,
+        val fastForwardSpeedMultiplier: Float,
+        val activeVulkanDriverLabel: String,
+        val availableVulkanDrivers: List<Pair<String?, String>>,
+        val isCustomVulkanSupported: Boolean,
+    )
+
+    private fun readGlobalRuntimeOverrides(): GlobalRuntimeOverrides {
+        val customVulkanSupported = me.magnum.melonds.impl.AdrenoVulkanDriverSupport.isSupported(context)
+        val systemLabel = context.getString(me.magnum.melonds.R.string.rom_config_vulkan_driver_system)
+        val globalLabel = context.getString(me.magnum.melonds.R.string.rom_config_vulkan_driver_global)
+        val activeDriverLabel = if (customVulkanSupported &&
+            settingsRepository.getVulkanDriverMode() == me.magnum.melonds.domain.model.VulkanDriverMode.CUSTOM
+        ) {
+            settingsRepository.getCustomVulkanDriverDisplayName() ?: systemLabel
+        } else {
+            systemLabel
+        }
+        val driverOptions = if (customVulkanSupported) {
+            listOf(Pair(null, globalLabel), Pair("__SYSTEM__", systemLabel)) +
+                settingsRepository.getInstalledVulkanDrivers().map { Pair(it.id, it.displayName) }
+        } else {
+            listOf(Pair(null, systemLabel))
+        }
+        return GlobalRuntimeOverrides(
+            arm9Overclock = settingsRepository.getArm9Overclock(),
+            fastForwardSpeedMultiplier = settingsRepository.getFastForwardSpeedMultiplier(),
+            activeVulkanDriverLabel = activeDriverLabel,
+            availableVulkanDrivers = driverOptions,
+            isCustomVulkanSupported = customVulkanSupported,
+        )
+    }
+
+    private fun observeGlobalRuntimeOverrides(): Flow<GlobalRuntimeOverrides> = callbackFlow {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+        val watchedKeys = setOf(
+            "arm9_overclock",
+            "fast_forward_speed_multiplier",
+            "video_vulkan_driver_mode",
+            "video_vulkan_selected_driver_id",
+            "video_vulkan_custom_drivers",
+            "video_vulkan_custom_driver_name",
+            "video_vulkan_custom_driver_dir",
+            "video_vulkan_custom_driver_display_name",
+        )
+        trySend(readGlobalRuntimeOverrides())
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == null || key in watchedKeys) {
+                trySend(readGlobalRuntimeOverrides())
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        awaitClose {
+            prefs.unregisterOnSharedPreferenceChangeListener(listener)
         }
     }
 

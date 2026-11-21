@@ -27,6 +27,7 @@ import android.util.Log
 import android.view.WindowManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import androidx.core.content.IntentCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -72,10 +73,16 @@ class ScreenCaptureService : Service() {
                 putExtra(EXTRA_RESULT_CODE, resultCode)
                 putExtra(EXTRA_DATA_INTENT, data)
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (e: Throwable) {
+                Log.e(TAG, "Failed to start ScreenCaptureService", e)
+                MediaProjectionCapturer.resetPermissionFlag()
+                cleanup()
             }
         }
 
@@ -195,6 +202,32 @@ class ScreenCaptureService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        createNotificationChannel()
+        val notification = createNotification()
+        val fgsType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+        } else {
+            0
+        }
+
+        // 1. Android 12-16 MANDATE: startForeground MUST be called unconditionally at the very top
+        // before any early return / stopSelf(), and before getMediaProjection is called.
+        try {
+            ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, fgsType)
+        } catch (e: SecurityException) {
+            Log.e(TAG, "Failed to start MediaProjection foreground service", e)
+            MediaProjectionCapturer.resetPermissionFlag()
+            cleanup()
+            stopSelf()
+            return START_NOT_STICKY
+        } catch (e: IllegalStateException) {
+            Log.e(TAG, "Foreground service start not allowed", e)
+            MediaProjectionCapturer.resetPermissionFlag()
+            cleanup()
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
         if (intent?.action == ACTION_STOP) {
             cleanup()
             ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
@@ -202,33 +235,24 @@ class ScreenCaptureService : Service() {
             return START_NOT_STICKY
         }
 
-        if (intent == null || pendingResultCode != Activity.RESULT_OK || pendingDataIntent == null) {
+        val resultCode = intent?.getIntExtra(EXTRA_RESULT_CODE, Activity.RESULT_CANCELED)
+            ?.takeIf { it == Activity.RESULT_OK }
+            ?: pendingResultCode
+        val dataIntent = intent?.let {
+            IntentCompat.getParcelableExtra(it, EXTRA_DATA_INTENT, Intent::class.java)
+        } ?: pendingDataIntent
+
+        if (intent == null || resultCode != Activity.RESULT_OK || dataIntent == null) {
             MediaProjectionCapturer.resetPermissionFlag()
             cleanup()
+            ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
             stopSelf()
             return START_NOT_STICKY
         }
 
-        createNotificationChannel()
-        val notification = createNotification()
-
-        val fgsType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
-        } else {
-            0
-        }
-
-        // 1. Android 14+ MANDATE: startForeground MUST complete with MEDIA_PROJECTION type
-        // BEFORE getMediaProjection is called in the same process.
-        ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, fgsType)
-
-        // 2. Initialize MediaProjection and VirtualDisplay inside the Foreground Service
-        val resultCode = pendingResultCode
-        val dataIntent = pendingDataIntent
-
-        if (resultCode == Activity.RESULT_OK && dataIntent != null && mediaProjection == null) {
-            setupMediaProjection(resultCode, dataIntent)
-        }
+        // 2. Clean up any existing MediaProjection before using a new Android 14+ single-use token
+        cleanup()
+        setupMediaProjection(resultCode, dataIntent)
 
         return START_NOT_STICKY
     }

@@ -378,7 +378,7 @@ private fun Content(
             ConfigRow(
                 title = stringResource(R.string.label_rom_config_custom_name),
                 value = romConfig.customName ?: rom.name,
-                showDivider = !rom.isDsiWareTitle,
+                showDivider = false,
                 onClick = {
                     renameDialogState.show(
                         initialText = romConfig.customName ?: rom.name,
@@ -394,6 +394,7 @@ private fun Content(
                     } else {
                         runtimeConsoleOptions.getOrNull(romConfig.runtimeConsoleType.ordinal) ?: romConfig.runtimeConsoleType.name
                     },
+                    showDivider = true,
                     onClick = {
                         runtimeConsoleDialogState.show(
                             title = context.getString(R.string.console_type),
@@ -427,7 +428,7 @@ private fun Content(
             ConfigRow(
                 title = stringResource(R.string.rom_config_overclock_arm9),
                 value = arm9Label,
-                showDivider = true,
+                showDivider = false,
                 onClick = {
                     arm9OverclockDialogState.show(
                         title = context.getString(R.string.rom_config_overclock_arm9),
@@ -461,7 +462,7 @@ private fun Content(
             ConfigRow(
                 title = stringResource(R.string.rom_config_speed_multiplier),
                 value = speedLabel,
-                showDivider = false,
+                showDivider = true,
                 onClick = {
                     fastForwardSpeedDialogState.show(
                         title = context.getString(R.string.rom_config_speed_multiplier),
@@ -496,7 +497,7 @@ private fun Content(
                 } else {
                     micOptions[romConfig.runtimeMicSource.ordinal]
                 },
-                showDivider = true,
+                showDivider = false,
                 onClick = {
                     micDialogState.show(
                         title = context.getString(R.string.microphone_source),
@@ -516,6 +517,7 @@ private fun Content(
             ConfigToggleRow(
                 title = stringResource(R.string.label_rom_config_hg_engine_fix),
                 isOn = romConfig.useHgEngineFix,
+                showDivider = true,
                 onToggle = { onConfigUpdate(RomConfigUpdateEvent.UseHgEngineFixUpdate(it)) },
             )
         }
@@ -537,7 +539,7 @@ private fun Content(
                 title = stringResource(R.string.rom_config_vulkan_driver),
                 value = vulkanDriverLabel,
                 enabled = romConfig.isCustomVulkanDriverSupported,
-                showDivider = true,
+                showDivider = false,
                 onClick = {
                     if (!romConfig.isCustomVulkanDriverSupported) return@ConfigRow
                     customVulkanDriverDialogState.show(
@@ -619,7 +621,7 @@ private fun Content(
             ConfigRow(
                 title = stringResource(R.string.filter),
                 value = selectedFiltering?.let { videoFilteringOptions.getOrNull(it.ordinal) ?: it.name } ?: useGlobalWithValue(globalVideoFilteringLabel),
-                showDivider = effectiveRenderer != VideoRenderer.SOFTWARE && effectiveFiltering == VideoFiltering.RETROARCH,
+                showDivider = true,
                 onClick = {
                     videoFilteringDialogState.show(
                         title = context.getString(R.string.filter),
@@ -650,6 +652,7 @@ private fun Content(
                     ConfigRow(
                         title = stringResource(R.string.video_retroarch_shader_parameters_title),
                         value = romConfig.retroArchShaderParameters ?: useGlobalWithValue(globalRetroArchParametersLabel),
+                        showDivider = true,
                         onClick = {
                             if (romConfig.hasValidRetroArchShaderRoot) {
                                 retroArchParametersDialogState.show(
@@ -675,7 +678,7 @@ private fun Content(
                 } else {
                     inputModeOptions[romConfig.inputMode.ordinal]
                 },
-                showDivider = romConfig.inputMode == RomInputMode.CUSTOM,
+                showDivider = false,
                 onClick = {
                     inputModeDialogState.show(
                         title = context.getString(R.string.label_rom_config_input_mode),
@@ -696,6 +699,7 @@ private fun Content(
                 ConfigRow(
                     title = stringResource(R.string.label_rom_config_custom_input_mapping),
                     value = stringResource(R.string.edit),
+                    showDivider = true,
                     onClick = {
                         customInputSetupLauncher.launch(InputSetupActivity.getRomCustomIntent(context, rom))
                     },
@@ -737,7 +741,7 @@ private fun Content(
             ConfigRow(
                 title = stringResource(R.string.controller_layout),
                 value = romConfig.layoutName ?: useGlobalWithValue(globalLayoutLabel),
-                showDivider = true,
+                showDivider = false,
                 onClick = {
                     val intent = Intent(context, LayoutSelectorActivity::class.java).apply {
                         putExtra(LayoutSelectorActivity.KEY_SELECTED_LAYOUT_ID, romConfig.layoutId?.toString())
@@ -756,6 +760,7 @@ private fun Content(
             ConfigRow(
                 title = stringResource(R.string.label_rom_config_dual_screen_preset),
                 value = dualScreenPresetLabel(romConfig.dualScreenPreset),
+                showDivider = true,
                 onClick = {
                     dualScreenPresetDialogState.show(
                         title = context.getString(R.string.label_rom_config_dual_screen_preset),
@@ -798,7 +803,7 @@ private fun Content(
             ConfigRow(
                 title = stringResource(R.string.label_rom_config_gba_slot),
                 value = gbaSlotOptions[romConfig.gbaSlotConfig.type.ordinal],
-                showDivider = isGbaRom,
+                showDivider = false,
                 onClick = {
                     gbaSlotDialogState.show(
                         title = context.getString(R.string.label_rom_config_gba_slot),
@@ -820,6 +825,7 @@ private fun Content(
                     ConfigRow(
                         title = stringResource(R.string.label_rom_config_gba_save_path),
                         value = romConfig.gbaSlotConfig.gbaSavePath ?: stringResource(R.string.not_set),
+                        showDivider = true,
                         onClick = { gbaSaveSelectorLauncher.launch(Pair(null, null)) },
                     )
                 }

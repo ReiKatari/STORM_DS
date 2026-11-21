@@ -8,7 +8,6 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
-import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.compose.runtime.collectAsState
@@ -79,8 +78,6 @@ class RomListFragment : Fragment() {
             }
         }
     }
-    private lateinit var backPressedCallback: OnBackPressedCallback
-
     private var romSelectedListener: ((Rom) -> Unit)? = null
     private var pendingSaveImportRom: Rom? = null
 
@@ -96,13 +93,6 @@ class RomListFragment : Fragment() {
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         val allowRomConfiguration = arguments?.getBoolean(KEY_ALLOW_ROM_CONFIGURATION) ?: true
 
-        backPressedCallback = object : OnBackPressedCallback(false) {
-            override fun handleOnBackPressed() {
-                romListViewModel.navigateUp()
-            }
-        }
-        requireActivity().onBackPressedDispatcher.addCallback(this, backPressedCallback)
-
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
@@ -114,15 +104,8 @@ class RomListFragment : Fragment() {
                     val isRaAuthenticated by romListViewModel.isRaAuthenticated.collectAsState()
                     val raCoverByHash by romListViewModel.raCoverByHash.collectAsState()
                     val boxArtByUri by romListViewModel.boxArtByUri.collectAsState()
+                    val searchQuery by romListViewModel.searchQuery.collectAsState()
                     var contextRomUri by remember { mutableStateOf<String?>(null) }
-                    var searchQuery by remember { mutableStateOf("") }
-                    
-                    var decryptionRom by remember { mutableStateOf<Rom?>(null) }
-                    var decryptionState by remember { mutableStateOf(me.magnum.melonds.ui.romlist.composables.DecryptionState.CONFIRM) }
-                    var decryptionProgress by remember { mutableStateOf(0f) }
-                    val scope = androidx.compose.runtime.rememberCoroutineScope()
-
-                    backPressedCallback.isEnabled = state.canNavigateUp && !state.isSearchActive
 
                     val currentContextRom: Rom? = remember(contextRomUri, state.entries, state.continuePlaying) {
                         val target = contextRomUri ?: return@remember null
@@ -154,32 +137,36 @@ class RomListFragment : Fragment() {
                         scanningStatus = scanningStatus,
                         confirmedAchievementHashes = confirmedAchievementHashes,
                         isRaAuthenticated = isRaAuthenticated,
-                        onFolderClick = { folder -> romListViewModel.openFolder(folder.docId) },
+                        onFolderClick = {},
                         onRomClick = { rom ->
-                            romListViewModel.setRomLastPlayedNow(rom)
                             checkAndLaunch(rom)
                         },
                         onQuickResumeRom = { rom ->
-                            if (me.magnum.melonds.ui.quickresume.QuickResumeStore.getQuickSaveTimestamp(rom.uri.toString()) != null) {
+                            if (state.quickResumeHasSaveState ||
+                                me.magnum.melonds.ui.quickresume.QuickResumeStore.getQuickSaveTimestamp(requireContext(), rom.uri.toString()) != null
+                            ) {
                                 me.magnum.melonds.ui.quickresume.QuickResumeRequest.request(rom.uri)
                             }
-                            romListViewModel.setRomLastPlayedNow(rom)
                             checkAndLaunch(rom)
                         },
                         onRomLongPress = { rom -> contextRomUri = rom.uri.toString() },
                         onRomConfigClick = { rom -> contextRomUri = rom.uri.toString() },
                         onFilterSelected = { filter -> romListViewModel.setFilter(filter) },
                         onSortSelected = { mode -> romListViewModel.setRomSorting(mode) },
-                        onNavigateUp = { romListViewModel.navigateUp() },
-                        onRefresh = { romListViewModel.refreshRoms() },
+                        onNavigateUp = {},
+                        onRefresh = {
+                            romListViewModel.refreshRoms()
+                            (activity as? RomListActivity)?.checkForUpdatesManually()
+                        },
                         onSearchQueryChanged = { query ->
-                            searchQuery = query ?: ""
                             romListViewModel.setRomSearchQuery(query)
                         },
                         onToggleViewMode = { romListViewModel.toggleViewMode() },
                         onBootFirmwareDs = { (activity as? RomListActivity)?.bootFirmware(me.magnum.melonds.domain.model.ConsoleType.DS) },
                         onBootFirmwareDsi = { (activity as? RomListActivity)?.bootFirmware(me.magnum.melonds.domain.model.ConsoleType.DSi) },
                         onOpenSingleRom = { (activity as? RomListActivity)?.openSingleRom() },
+                        onRandomRom = { (activity as? RomListActivity)?.launchRandomRom() },
+                        onCheckUpdates = { (activity as? RomListActivity)?.checkForUpdatesManually() },
                         onOpenSettings = { (activity as? RomListActivity)?.openSettings() },
                         onOpenPlayerStats = { (activity as? RomListActivity)?.openPlayerStats() },
                         onReportProblem = { (activity as? RomListActivity)?.reportProblem(topContinueRom) },
@@ -200,10 +187,6 @@ class RomListFragment : Fragment() {
                         onSendSaveFile = { rom -> shareSaveFile(rom) },
                         onImportSaveFile = { rom -> requestSaveFileImport(rom) },
                         onLaunchRom = { rom -> checkAndLaunch(rom) },
-                        onDecryptRom = { rom ->
-                            decryptionRom = rom
-                            decryptionState = me.magnum.melonds.ui.romlist.composables.DecryptionState.CONFIRM
-                        },
                         onPickCustomCover = { rom ->
                             pendingCoverRom = rom
                             pickCustomCoverLauncher.launch("image/*")
@@ -217,35 +200,6 @@ class RomListFragment : Fragment() {
                             }
                         }
                     )
-
-                    decryptionRom?.let { rom ->
-                        me.magnum.melonds.ui.romlist.composables.DecryptionDialog(
-                            show = true,
-                            onDismiss = { decryptionRom = null },
-                            onDecrypt = {
-                                decryptionState = me.magnum.melonds.ui.romlist.composables.DecryptionState.DECRYPTING
-                                decryptionProgress = 0f
-                                scope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                                    val result = me.magnum.melonds.MelonRomDecryptor.decryptRom(requireContext(), rom.uri, object : me.magnum.melonds.MelonRomDecryptor.DecryptProgressCallback {
-                                        override fun onProgress(current: Int, total: Int) {
-                                            scope.launch(kotlinx.coroutines.Dispatchers.Main) {
-                                                decryptionProgress = if (total > 0) current.toFloat() / total else 0f
-                                            }
-                                        }
-                                    })
-                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                        if (result == me.magnum.melonds.MelonRomDecryptor.DecryptResult.SUCCESS || result == me.magnum.melonds.MelonRomDecryptor.DecryptResult.ALREADY_DECRYPTED) {
-                                            decryptionState = me.magnum.melonds.ui.romlist.composables.DecryptionState.SUCCESS
-                                        } else {
-                                            decryptionState = me.magnum.melonds.ui.romlist.composables.DecryptionState.ERROR
-                                        }
-                                    }
-                                }
-                            },
-                            state = decryptionState,
-                            progress = decryptionProgress
-                        )
-                    }
                 }
             }
         }
@@ -335,7 +289,7 @@ class RomListFragment : Fragment() {
     override fun onResume() {
         super.onResume()
         romListViewModel.refreshAuthenticationState()
-        romListViewModel.refreshInstalledDsiWareShortcuts()
+        romListViewModel.refreshSavesStatus()
     }
 
     fun setRomSelectedListener(listener: (Rom) -> Unit) {

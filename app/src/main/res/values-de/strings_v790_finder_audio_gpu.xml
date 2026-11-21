@@ -31,4 +31,5 @@
     <string name="mic_agc_noise_gate_title">Adaptives Noise Gate und Mikrofon-AGC</string>
     <string name="mic_agc_noise_gate_summary">DC-Brummfilter, Raumgeräuschunterdrückung und Sprachnormalisierung</string>
     <string name="v790_vulkan_pipeline_cache_status">Vulkan-Shader-Pipeline-Cache aktiv</string>
+    <string name="v790_ram_value_required">Wert erforderlich</string>
 </resources>

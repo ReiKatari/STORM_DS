@@ -328,20 +328,26 @@ class SettingsBackupManager @Inject constructor(
 
     fun backup(treeUri: Uri) {
         runCatching { createSnapshot("manual") }
-        val root = DocumentFile.fromTreeUri(context, treeUri) ?: return
+        val root = DocumentFile.fromTreeUri(context, treeUri)
+            ?: throw java.io.IOException("Unable to access selected backup folder")
 
         val backupDoc = getMirrorDocument(treeUri)
             ?: root.createFile("*/*", STORM_DS_OPTIONS_FILE)
-            ?: return
-        context.contentResolver.openOutputStream(backupDoc.uri, "wt")?.use { outStream ->
+            ?: throw java.io.IOException("Unable to create $STORM_DS_OPTIONS_FILE in selected folder")
+        val backupStream = context.contentResolver.openOutputStream(backupDoc.uri, "wt")
+            ?: context.contentResolver.openOutputStream(backupDoc.uri)
+            ?: throw java.io.IOException("Unable to open output stream for $STORM_DS_OPTIONS_FILE")
+        backupStream.use { outStream ->
             outStream.writer().use { it.write(createBackupJson(includeLocalKeys = true).toString()) }
         }
         val settingsDoc = root.findFile(SETTINGS_FILE)
             ?: root.createFile("*/*", SETTINGS_FILE)
-        settingsDoc?.uri?.let { uri ->
-            context.contentResolver.openOutputStream(uri, "wt")?.use { outStream ->
-                outStream.writer().use { it.write(createSettingsJson(includeLocalKeys = true).toString()) }
-            }
+            ?: throw java.io.IOException("Unable to create $SETTINGS_FILE in selected folder")
+        val settingsStream = context.contentResolver.openOutputStream(settingsDoc.uri, "wt")
+            ?: context.contentResolver.openOutputStream(settingsDoc.uri)
+            ?: throw java.io.IOException("Unable to open output stream for $SETTINGS_FILE")
+        settingsStream.use { outStream ->
+            outStream.writer().use { it.write(createSettingsJson(includeLocalKeys = true).toString()) }
         }
     }
 
@@ -526,10 +532,12 @@ class SettingsBackupManager @Inject constructor(
     }
 
     fun restore(treeUri: Uri) {
-        val root = DocumentFile.fromTreeUri(context, treeUri) ?: return
+        val root = DocumentFile.fromTreeUri(context, treeUri)
+            ?: throw java.io.IOException("Unable to access selected restore folder")
         val subSettingsDir = findDocCaseInsensitive(root, "settings")
         val searchRoots = listOfNotNull(root, subSettingsDir)
 
+        var restoredAny = false
         isRestoringMirror.set(true)
         try {
             for (candidateRoot in searchRoots) {
@@ -540,21 +548,27 @@ class SettingsBackupManager @Inject constructor(
                     LEGACY_OPTIONS_FILE
                 )?.takeIf { it.isFile }
                 if (backupDoc != null) {
-                    context.contentResolver.openInputStream(backupDoc.uri)?.use { input ->
-                        restoreBackupJsonInternal(JSONObject(input.reader().readText()), includeLocalKeys = true)
+                    val input = context.contentResolver.openInputStream(backupDoc.uri)
+                        ?: throw java.io.IOException("Unable to read ${backupDoc.name ?: STORM_DS_OPTIONS_FILE}")
+                    input.use { stream ->
+                        restoreBackupJsonInternal(JSONObject(stream.reader().readText()), includeLocalKeys = true)
                     }
+                    restoredAny = true
                 }
 
                 val settingsDoc = findDocCaseInsensitive(candidateRoot, SETTINGS_FILE)?.takeIf { it.isFile }
-                settingsDoc?.uri?.let { uri ->
-                    context.contentResolver.openInputStream(uri)?.use { input ->
-                        val json = JSONObject(input.reader().readText())
+                if (settingsDoc != null) {
+                    val input = context.contentResolver.openInputStream(settingsDoc.uri)
+                        ?: throw java.io.IOException("Unable to read $SETTINGS_FILE")
+                    input.use { stream ->
+                        val json = JSONObject(stream.reader().readText())
                         if (json.has("settings") && json.optJSONObject("settings") != null && json.has("version")) {
                             restoreBackupJsonInternal(json, includeLocalKeys = true)
                         } else {
                             restoreSettingsJson(json, includeLocalKeys = true)
                         }
                     }
+                    restoredAny = true
                 }
 
                 val storageSettingsDir = getStorageSettingsDir()
@@ -563,6 +577,7 @@ class SettingsBackupManager @Inject constructor(
                         val dest = File(storageSettingsDir, auxFile)
                         context.contentResolver.openInputStream(uri)?.use { input ->
                             writeBytesAtomically(dest, input.readBytes())
+                            restoredAny = true
                         }
                     }
                 }
@@ -572,8 +587,13 @@ class SettingsBackupManager @Inject constructor(
                         val text = input.reader().readText()
                         JSONArray(text)
                         writeTextAtomically(File(storageSettingsDir, ROM_DATA_FILE), text)
+                        restoredAny = true
                     }
                 }
+            }
+
+            if (!restoredAny) {
+                throw java.io.FileNotFoundException("No valid backup file found in selected folder")
             }
 
             runCatching { me.magnum.melonds.ui.theme.AppThemeManager.init(context) }

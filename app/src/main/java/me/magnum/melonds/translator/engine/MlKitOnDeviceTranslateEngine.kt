@@ -50,9 +50,17 @@ class MlKitOnDeviceTranslateEngine(
         }
     }
 
-    override suspend fun prepare(sourceLang: String, targetLang: String) = withContext(Dispatchers.IO) {
+    override suspend fun prepare(sourceLang: String, targetLang: String) {
+        prepare(sourceLang, targetLang, "")
+    }
+
+    suspend fun prepare(sourceLang: String, targetLang: String, sampleText: String) = withContext(Dispatchers.IO) {
         val target = resolveLanguageCode("", targetLang)
-        val source = if (normalizeLangCode(sourceLang) == "auto") TranslateLanguage.ENGLISH else resolveLanguageCode("", sourceLang)
+        val source = if (normalizeLangCode(sourceLang) == "auto") {
+            if (sampleText.isNotBlank()) resolveLanguageCode(sampleText, "auto") else return@withContext
+        } else {
+            resolveLanguageCode("", sourceLang)
+        }
         if (source == target) return@withContext
         val ready = if (downloadIfMissing) {
             ensureDownloadStarted(source, target).await()

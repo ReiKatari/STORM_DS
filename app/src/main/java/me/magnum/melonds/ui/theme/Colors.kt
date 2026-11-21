@@ -33,5 +33,5 @@ val DarkMelonColors @Composable get() = darkColors(
     onPrimary = Color(0xFF000000),
     onSecondary = Color(0xFFFFFFFF),
     onSurface = Color(0xFFFFFFFF),
-    onBackground = Color(0xA5A5B5),
+    onBackground = Color(0xFFA5A5B5),
 )

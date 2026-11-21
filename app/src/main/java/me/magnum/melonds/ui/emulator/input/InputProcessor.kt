@@ -91,6 +91,7 @@ class InputProcessor(
     // Chord Hotkeys state
     private val heldPhysicalKeys = mutableSetOf<Int>()
     private val activeChordTriggers = mutableMapOf<Int, Input>()
+    private val consumedChordModifiers = mutableSetOf<Int>()
     private var selectModifierHeld = false
     private var selectUsedInChord = false
 
@@ -185,6 +186,7 @@ class InputProcessor(
                     val customChordInput = controllerConfiguration.chordToInput(modKey, keyCode)
                     if (customChordInput != null) {
                         activeChordTriggers[keyCode] = customChordInput
+                        consumedChordModifiers.add(modKey)
                         // Release modifier in system listener if it was previously pressed
                         controllerConfiguration.keyToInput(modKey)?.let { modInput ->
                             if (modInput.isSystemInput) {
@@ -196,14 +198,14 @@ class InputProcessor(
                     }
                 }
 
-                // 2. Check built-in Select Chord Hotkeys (Select + R, L, Start, Y, X)
+                // 2. Check built-in Select Chord Hotkeys (Select + R, L, Start, X, Y)
                 if (isChordHotkeysEnabled() && (selectModifierHeld || heldPhysicalKeys.any { isSelectKeyCode(it) })) {
                     val selectChordAction: Input? = when {
                         input == Input.R || keyCode == KeyEvent.KEYCODE_BUTTON_R1 -> Input.FAST_FORWARD
                         input == Input.L || keyCode == KeyEvent.KEYCODE_BUTTON_L1 -> Input.REWIND
                         input == Input.START || keyCode == KeyEvent.KEYCODE_BUTTON_START -> Input.PAUSE
-                        input == Input.Y || keyCode == KeyEvent.KEYCODE_BUTTON_Y || keyCode == KeyEvent.KEYCODE_BUTTON_X -> Input.TAKE_SCREENSHOT
-                        input == Input.X -> Input.SLOW_MOTION
+                        input == Input.X || keyCode == KeyEvent.KEYCODE_BUTTON_X -> Input.SLOW_MOTION
+                        input == Input.Y || keyCode == KeyEvent.KEYCODE_BUTTON_Y -> Input.TAKE_SCREENSHOT
                         else -> null
                     }
                     if (selectChordAction != null) {
@@ -241,7 +243,16 @@ class InputProcessor(
                     return true
                 }
 
-                // 2. If Select key released
+                // 2. Suppress duplicate release for custom chord modifier already released on chord trigger
+                if (consumedChordModifiers.remove(keyCode)) {
+                    if (isSelectKeyCode(keyCode)) {
+                        selectModifierHeld = false
+                        selectUsedInChord = false
+                    }
+                    return true
+                }
+
+                // 3. If Select key released
                 if (isSelectKeyCode(keyCode)) {
                     selectModifierHeld = false
                     if (selectUsedInChord) {

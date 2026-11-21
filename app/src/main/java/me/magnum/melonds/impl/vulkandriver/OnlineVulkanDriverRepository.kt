@@ -177,13 +177,13 @@ class OnlineVulkanDriverRepository @Inject constructor(
     fun getCachedRepositoryGroups(): List<VulkanDriverRepoGroup> {
         return ALL_REPOSITORIES.map { spec ->
             val file = cacheJsonFile(spec.id)
-            if (file.isFile && file.length() > 2L) {
+            if (file.isFile && file.length() >= 2L) {
                 val parsed = runCatching { parseReleasesJson(spec, file.readText(Charsets.UTF_8), isOfflineFallback = false) }
                     .getOrNull()
-                if (!parsed.isNullOrEmpty()) {
+                if (parsed != null) {
                     return@map VulkanDriverRepoGroup(
                         spec = spec,
-                        releases = parsed,
+                        releases = parsed.ifEmpty { getOfflineFallbackForRepo(spec) },
                         isLoading = false,
                         fromCache = true,
                     )
@@ -222,10 +222,10 @@ class OnlineVulkanDriverRepository @Inject constructor(
         if (!forceRefresh && jsonFile.isFile && (now - jsonFile.lastModified() < CACHE_TTL_MS)) {
             val cached = runCatching { parseReleasesJson(spec, jsonFile.readText(Charsets.UTF_8), isOfflineFallback = false) }
                 .getOrNull()
-            if (!cached.isNullOrEmpty()) {
+            if (cached != null) {
                 return@withContext VulkanDriverRepoGroup(
                     spec = spec,
-                    releases = cached,
+                    releases = cached.ifEmpty { getOfflineFallbackForRepo(spec) },
                     isLoading = false,
                     fromCache = true,
                 )
@@ -354,7 +354,7 @@ class OnlineVulkanDriverRepository @Inject constructor(
                 if (assetName.isEmpty() || downloadUrl.isEmpty()) continue
                 if (!isSupportedDriverArchiveName(assetName)) continue
 
-                val extraMirrors = if (spec.id == "storm_driver" && assetName.contains("STORM_DRIVER_12.0.0", ignoreCase = true)) {
+                val extraMirrors = if (spec.id == "storm_driver" && assetName.equals("STORM_DRIVER_12.0.0.zip", ignoreCase = true)) {
                     STORM_DRIVER_MIRRORS
                 } else {
                     emptyList()

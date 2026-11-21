@@ -115,7 +115,12 @@ object GameCompatibilityManager {
     fun clearDeviceVulkanUnavailable(context: Context) {
         cachedVulkanUnavailableFp = null
         vulkanUnavailableLoaded = true
-        clearAllSafeProfiles(context)
+        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (prefs.contains(KEY_VULKAN_UNAVAILABLE_FINGERPRINT)) {
+            prefs.edit {
+                remove(KEY_VULKAN_UNAVAILABLE_FINGERPRINT)
+            }
+        }
     }
 
     fun clearAllSafeProfiles(context: Context) {
@@ -326,15 +331,25 @@ object GameCompatibilityManager {
     ): SafeCompatibilityProfile? {
         val rawMarker = prefs.getString("$KEY_MARKER_PREFIX$key", null) ?: return null
         val marker = parseLaunchMarker(rawMarker)
+        if (marker == null) {
+            val lastKey = prefs.getString(KEY_LAST_MARKER_GAME_KEY, null)
+            prefs.edit {
+                remove("$KEY_MARKER_PREFIX$key")
+                if (lastKey == key) {
+                    remove(KEY_LAST_MARKER_GAME_KEY)
+                }
+            }
+            return null
+        }
+        if (marker.crashCount < 2) {
+            return null
+        }
         val lastKey = prefs.getString(KEY_LAST_MARKER_GAME_KEY, null)
         prefs.edit {
             remove("$KEY_MARKER_PREFIX$key")
             if (lastKey == key) {
                 remove(KEY_LAST_MARKER_GAME_KEY)
             }
-        }
-        if (marker == null || marker.crashCount < 2) {
-            return null
         }
 
         val existing = readProfileFromPrefs(prefs, key)

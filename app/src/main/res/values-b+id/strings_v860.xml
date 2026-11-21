@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="decrypt_rom_replace_description">ROM DSi ini menggunakan enkripsi Modcrypt. Dekripsi akan mengganti file di penyimpanan dengan salinan yang telah didekripsi.</string>
+    <string name="decrypt_rom_replace_confirm">Dekripsi dan ganti</string>
+    <string name="decrypt_rom_result_success_title">ROM didekripsi</string>
+    <string name="decrypt_rom_result_success_message">ROM DSi berhasil didekripsi dan siap dimainkan.</string>
+    <string name="decrypt_rom_launch_now">Mainkan sekarang</string>
+    <string name="decrypt_rom_result_error_title">Kesalahan dekripsi</string>
+    <string name="decrypt_rom_result_error_message">Gagal mendekripsi ROM: %1$s</string>
+    <string name="decrypt_rom_err_read">Gagal membaca file ROM</string>
+    <string name="decrypt_rom_err_write">Gagal menulis file ROM yang didekripsi</string>
+    <string name="decrypt_rom_err_not_dsi">File ini bukan ROM Nintendo DSi yang valid</string>
+    <string name="decrypt_rom_err_too_small">File ROM terlalu kecil atau rusak</string>
+    <string name="decrypt_rom_err_bounds">Area Modcrypt melebihi batas file ROM</string>
+    <string name="decrypt_rom_err_validation">Validasi header ROM yang didekripsi gagal</string>
+    <string name="rom_list_random_rom">Game acak</string>
+    <string name="rom_list_check_updates">Periksa pembaruan</string>
+    <string name="ra_offline_status_not_logged_in">Belum masuk ke RetroAchievements</string>
+    <string name="ra_offline_status_no_cache">Tidak ada cache data pencapaian untuk mode offline</string>
+    <string name="stats_export_share_chooser">Bagikan statistik</string>
+    <string name="wfc_lobby_activated_toast">Lobi WFC %1$s diaktifkan (DNS: %2$s)</string>
+    <string name="ram_finder_invalid_number">Masukkan angka yang valid</string>
+</resources>

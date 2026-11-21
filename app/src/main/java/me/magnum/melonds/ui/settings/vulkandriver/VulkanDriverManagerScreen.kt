@@ -1438,8 +1438,11 @@ private fun ReleaseCardSection(
         Spacer(Modifier.height(4.dp))
         release.assets.forEach { asset ->
             val matchingInstalled = installedDrivers.firstOrNull { installed ->
-                (installed.sourceRepo == repoId && installed.assetFileName == asset.name) ||
-                    installed.displayName.equals(release.title, ignoreCase = true)
+                if (!installed.sourceRepo.isNullOrBlank() && !installed.assetFileName.isNullOrBlank()) {
+                    installed.sourceRepo == repoId && installed.assetFileName == asset.name
+                } else {
+                    release.assets.size == 1 && installed.displayName.equals(release.title, ignoreCase = true)
+                }
             }
             val isActive = matchingInstalled != null && matchingInstalled.id == activeDriverId
             val isBusy = activeDownloadKey != null

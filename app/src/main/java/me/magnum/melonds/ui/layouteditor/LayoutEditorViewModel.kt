@@ -1,5 +1,7 @@
 package me.magnum.melonds.ui.layouteditor
 
+import android.content.SharedPreferences
+import androidx.core.content.edit
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -41,12 +43,26 @@ class LayoutEditorViewModel @Inject constructor(
     private val backgroundsRepository: BackgroundRepository,
     private val uiLayoutProvider: UILayoutProvider,
     private val settingsRepository: SettingsRepository,
+    private val sharedPreferences: SharedPreferences,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private val editingLayoutId = savedStateHandle.get<String?>(LayoutEditorActivity.KEY_LAYOUT_ID)?.let { UUID.fromString(it) }
 
     private var initialLayoutConfiguration: LayoutConfiguration? = null
     private var currentLayoutVariant: UILayoutVariant? = null
+    private var layoutResetToken: Long = 0L
+
+    private val initialButtonSpread: Float = sharedPreferences.getFloat("pref_button_cluster_spread", 1.0f)
+    private val initialButtonInnerScale: Float = sharedPreferences.getFloat("pref_button_cluster_inner_scale", 1.0f)
+
+    private val _pendingButtonSpread = MutableStateFlow(initialButtonSpread)
+    val pendingButtonSpread = _pendingButtonSpread.asStateFlow()
+
+    private val _pendingButtonInnerScale = MutableStateFlow(initialButtonInnerScale)
+    val pendingButtonInnerScale = _pendingButtonInnerScale.asStateFlow()
+
+    private val _hasUnsavedChanges = MutableStateFlow(false)
+    val hasUnsavedChanges = _hasUnsavedChanges.asStateFlow()
 
     private val _currentLayoutConfiguration = MutableStateFlow<LayoutConfiguration?>(null)
     val currentLayoutConfiguration = _currentLayoutConfiguration.asStateFlow()
@@ -87,6 +103,8 @@ class LayoutEditorViewModel @Inject constructor(
             viewModelScope.launch {
                 val initialLayout = layoutsRepository.getLayout(layoutId)
                 initialLayoutConfiguration = initialLayout
+                layoutResetToken++
+                _hasUnsavedChanges.value = false
                 _currentLayoutConfiguration.value = initialLayout
             }
         } else {
@@ -98,6 +116,8 @@ class LayoutEditorViewModel @Inject constructor(
                     type = LayoutConfiguration.LayoutType.CUSTOM,
                 ) ?: LayoutConfiguration.newCustom().copy(name = "Пользовательская раскладка")
                 initialLayoutConfiguration = newLayout
+                layoutResetToken++
+                _hasUnsavedChanges.value = false
                 _currentLayoutConfiguration.value = newLayout
             }
         }
@@ -116,7 +136,7 @@ class LayoutEditorViewModel @Inject constructor(
                     val (variant, layout) = it
                     val currentLayoutConfig = _currentLayoutConfiguration.value ?: return@collect
                     currentLayoutVariant = variant
-                    _currentLayout.value = CurrentLayoutState(layout, currentLayoutConfig.orientation, variant.orientation)
+                    _currentLayout.value = CurrentLayoutState(layout, currentLayoutConfig.orientation, variant.orientation, layoutResetToken)
                 }
             }
         }
@@ -192,7 +212,28 @@ class LayoutEditorViewModel @Inject constructor(
         }
     }
 
+    fun setPendingButtonSpread(spread: Float, markUnsaved: Boolean = true) {
+        val clamped = spread.coerceIn(0.6f, 1.6f)
+        if (_pendingButtonSpread.value != clamped) {
+            _pendingButtonSpread.value = clamped
+            if (markUnsaved) {
+                _hasUnsavedChanges.value = true
+            }
+        }
+    }
+
+    fun setPendingButtonInnerScale(scale: Float, markUnsaved: Boolean = true) {
+        val clamped = scale.coerceIn(0.6f, 1.4f)
+        if (_pendingButtonInnerScale.value != clamped) {
+            _pendingButtonInnerScale.value = clamped
+            if (markUnsaved) {
+                _hasUnsavedChanges.value = true
+            }
+        }
+    }
+
     fun setCurrentLayoutName(name: String) {
+        _hasUnsavedChanges.value = true
         _currentLayoutConfiguration.update {
             it?.copy(
                 name = name
@@ -203,7 +244,12 @@ class LayoutEditorViewModel @Inject constructor(
     suspend fun saveCurrentLayout() {
         _currentLayoutConfiguration.value?.let {
             withContext(NonCancellable) {
+                sharedPreferences.edit {
+                    putFloat("pref_button_cluster_spread", _pendingButtonSpread.value)
+                    putFloat("pref_button_cluster_inner_scale", _pendingButtonInnerScale.value)
+                }
                 layoutsRepository.saveLayout(it)
+                _hasUnsavedChanges.value = false
             }
         }
     }
@@ -211,21 +257,34 @@ class LayoutEditorViewModel @Inject constructor(
     suspend fun saveCurrentLayoutAsNew() {
         _currentLayoutConfiguration.value?.let { currentLayoutConfiguration ->
             withContext(NonCancellable) {
+                sharedPreferences.edit {
+                    putFloat("pref_button_cluster_spread", _pendingButtonSpread.value)
+                    putFloat("pref_button_cluster_inner_scale", _pendingButtonInnerScale.value)
+                }
                 layoutsRepository.saveLayout(
                     currentLayoutConfiguration.copy(
                         id = null,
                         type = LayoutConfiguration.LayoutType.CUSTOM,
                     )
                 )
+                _hasUnsavedChanges.value = false
             }
         }
     }
 
     fun revertLayoutChanges() {
+        _pendingButtonSpread.value = initialButtonSpread
+        _pendingButtonInnerScale.value = initialButtonInnerScale
+        layoutResetToken++
+        _hasUnsavedChanges.value = false
         _currentLayoutConfiguration.value = initialLayoutConfiguration
     }
 
     fun resetLayout() {
+        _pendingButtonSpread.value = 1.0f
+        _pendingButtonInnerScale.value = 1.0f
+        layoutResetToken++
+        _hasUnsavedChanges.value = true
         _currentLayoutConfiguration.update {
             it?.copy(
                 orientation = LayoutOrientation.FOLLOW_SYSTEM,
@@ -244,6 +303,7 @@ class LayoutEditorViewModel @Inject constructor(
         if (layoutComponents?.isEmpty() == true && secondaryDisplayLayoutComponents == null) return
         val currentVariant = currentLayoutVariant ?: return
 
+        _hasUnsavedChanges.value = true
         _currentLayoutConfiguration.update {
             it?.copy(
                 layoutVariants = it.layoutVariants.toMutableMap().apply {
@@ -272,6 +332,7 @@ class LayoutEditorViewModel @Inject constructor(
 
     fun savePropertiesToCurrentConfiguration(name: String?, orientation: LayoutOrientation, useCustomOpacity: Boolean, layoutOpacity: Int) {
         _currentLayoutConfiguration.value?.let {
+            _hasUnsavedChanges.value = true
             _currentLayoutConfiguration.value = it.copy(
                 name = name,
                 orientation = orientation,
@@ -310,6 +371,7 @@ class LayoutEditorViewModel @Inject constructor(
             LayoutTarget.SECONDARY_SCREEN -> _secondaryScreenBackgroundProperties.value
         } ?: return
 
+        _hasUnsavedChanges.value = true
         _currentLayoutConfiguration.update { layoutConfiguration ->
             layoutConfiguration?.copy(
                 layoutVariants = layoutConfiguration.layoutVariants.toMutableMap().apply {

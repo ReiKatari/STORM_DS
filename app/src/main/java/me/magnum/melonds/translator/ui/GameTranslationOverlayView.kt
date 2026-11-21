@@ -57,6 +57,7 @@ class GameTranslationOverlayView @JvmOverloads constructor(
     var onLassoRegionSelected: ((TranslationRegion) -> Unit)? = null
     var onDismissRequested: (() -> Unit)? = null
     var onRegionsSaved: ((List<TranslationRegion>) -> Unit)? = null
+    var onRegionsEditCancelled: (() -> Unit)? = null
     var onSpeakWordRequested: ((String) -> Unit)? = null
 
     var showFloatingButton: Boolean = false
@@ -386,6 +387,8 @@ class GameTranslationOverlayView @JvmOverloads constructor(
     fun exitRegionEditMode(save: Boolean = true) {
         if (save) {
             onRegionsSaved?.invoke(customRegions.toList())
+        } else {
+            onRegionsEditCancelled?.invoke()
         }
         isEditRegionsMode = false
     }
@@ -750,14 +753,35 @@ class GameTranslationOverlayView @JvmOverloads constructor(
         canvas.drawLine(dictCardRect.left + 20f, curY, dictCardRect.right - 20f, curY, dictLinePaint)
         curY += 24f
 
-        // Word tokens breakdown
+        // Word tokens breakdown (clipped & ellipsized within card bounds)
+        val maxContentW = (dictCardRect.width() - 40f).coerceAtLeast(40f)
+        canvas.save()
+        canvas.clipRect(dictCardRect.left + 16f, dictCardRect.top, dictCardRect.right - 16f, dictCardRect.bottom)
         for (word in dict.words.take(3)) {
             val romajiStr = if (word.romaji.isNotBlank()) " [${word.romaji}]" else ""
-            val tokenStr = "• ${word.original}$romajiStr"
+            val posStr = if (word.partOfSpeech.isNotBlank()) " (${word.partOfSpeech})" else ""
+            val posWidth = if (posStr.isNotEmpty()) dictPosPaint.measureText(posStr) else 0f
+            val availTokenW = (maxContentW - posWidth).coerceAtLeast(maxContentW * 0.4f)
+            val tokenStr = android.text.TextUtils.ellipsize(
+                "• ${word.original}$romajiStr",
+                dictTokenPaint,
+                availTokenW,
+                android.text.TextUtils.TruncateAt.END
+            ).toString()
+            val tokenW = dictTokenPaint.measureText(tokenStr)
+            val availPosW = (maxContentW - tokenW).coerceAtLeast(0f)
+            val clippedPos = if (posStr.isNotEmpty() && availPosW > 12f) {
+                android.text.TextUtils.ellipsize(posStr, dictPosPaint, availPosW, android.text.TextUtils.TruncateAt.END).toString()
+            } else {
+                ""
+            }
             canvas.drawText(tokenStr, dictCardRect.left + 20f, curY, dictTokenPaint)
-            canvas.drawText(" (${word.partOfSpeech})", dictCardRect.left + 20f + dictTokenPaint.measureText(tokenStr), curY, dictPosPaint)
+            if (clippedPos.isNotEmpty()) {
+                canvas.drawText(clippedPos, dictCardRect.left + 20f + tokenW, curY, dictPosPaint)
+            }
             curY += 28f
         }
+        canvas.restore()
 
         // Action Buttons: Speak + Copy
         dictSpeakRect.set(dictCardRect.left + 20f, dictCardRect.bottom - 52f, dictCardRect.left + 160f, dictCardRect.bottom - 14f)
@@ -1000,12 +1024,14 @@ class GameTranslationOverlayView @JvmOverloads constructor(
                         return true
                     }
 
+                    val closeHitRadius = max(32f, 24f * density)
+                    val handleHitRadius = max(36f, 28f * density)
                     for (i in customRegions.indices.reversed()) {
                         val region = customRegions[i]
                         val r = region.rect.right * w
                         val t = region.rect.top * h
                         val closeDist = Math.hypot((x - r).toDouble(), (y - t).toDouble()).toFloat()
-                        if (closeDist <= 32f) {
+                        if (closeDist <= closeHitRadius) {
                             customRegions.removeAt(i)
                             invalidate()
                             return true
@@ -1013,7 +1039,7 @@ class GameTranslationOverlayView @JvmOverloads constructor(
 
                         val b = region.rect.bottom * h
                         val handleDist = Math.hypot((x - r).toDouble(), (y - b).toDouble()).toFloat()
-                        if (handleDist <= 36f) {
+                        if (handleDist <= handleHitRadius) {
                             currentEditAction = EditAction.RESIZE_REGION
                             activeRegionIndex = i
                             touchDownX = x
@@ -1078,7 +1104,7 @@ class GameTranslationOverlayView @JvmOverloads constructor(
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     if (currentEditAction == EditAction.DRAW_NEW) {
-                        val minPx = 40f
+                        val minPx = max(40f, 24f * density)
                         if (drawingNewRect.width() >= minPx && drawingNewRect.height() >= minPx) {
                             val newRegion = TranslationRegion(
                                 rect = RectF(
@@ -1118,7 +1144,7 @@ class GameTranslationOverlayView @JvmOverloads constructor(
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     isLassoModeActive = false
                     isLassoDragging = false
-                    val minDrag = 35f
+                    val minDrag = max(35f, 20f * density)
                     if (lassoRect.width() >= minDrag && lassoRect.height() >= minDrag) {
                         val relRect = RectF(
                             (lassoRect.left / w).coerceIn(0f, 1f),
@@ -1143,11 +1169,12 @@ class GameTranslationOverlayView @JvmOverloads constructor(
             MotionEvent.ACTION_DOWN -> {
                 val halfW = floatBtnPanelWidth / 2f
                 val halfH = floatBtnPanelHeight / 2f
+                val hitPad = 12f * density
                 val touchRect = RectF(
-                    floatBtnX - halfW - 12f,
-                    floatBtnY - halfH - 12f,
-                    floatBtnX + halfW + 12f,
-                    floatBtnY + halfH + 12f
+                    floatBtnX - halfW - hitPad,
+                    floatBtnY - halfH - hitPad,
+                    floatBtnX + halfW + hitPad,
+                    floatBtnY + halfH + hitPad
                 )
                 if (showFloatingButton && !temporarilySuppressedByModal && touchRect.contains(x, y)) {
                     isDraggingFloatBtn = true
@@ -1161,12 +1188,13 @@ class GameTranslationOverlayView @JvmOverloads constructor(
 
                 // Check tap on active translated blocks -> Open Tap-To-Dictionary
                 if (blocks.isNotEmpty()) {
+                    val blockHitPad = 10f * density
                     for (block in blocks) {
                         val bl = block.boundingBox.left * w
                         val bt = block.boundingBox.top * h
                         val br = block.boundingBox.right * w
                         val bb = block.boundingBox.bottom * h
-                        if (RectF(bl - 10f, bt - 10f, br + 10f, bb + 10f).contains(x, y)) {
+                        if (RectF(bl - blockHitPad, bt - blockHitPad, br + blockHitPad, bb + blockHitPad).contains(x, y)) {
                             viewScope.launch {
                                 val lookupResult = GameDictionaryService.lookup(block.originalText, block.translatedText)
                                 activeDictionaryResult = lookupResult
@@ -1186,7 +1214,7 @@ class GameTranslationOverlayView @JvmOverloads constructor(
             MotionEvent.ACTION_MOVE -> {
                 if (isDraggingFloatBtn) {
                     val moveDist = Math.hypot((x - dragStartX).toDouble(), (y - dragStartY).toDouble()).toFloat()
-                    if (moveDist > 16f) {
+                    if (moveDist > max(16f, 8f * density)) {
                         hasMovedFloatBtn = true
                         longPressHandler.removeCallbacks(longPressRunnable)
                     }

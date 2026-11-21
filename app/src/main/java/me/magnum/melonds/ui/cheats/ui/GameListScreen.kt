@@ -58,6 +58,7 @@ fun GameListScreen(
     onGameClick: (Game) -> Unit,
     cheatsRepository: CheatsRepository? = null,
     romInfo: RomInfo? = null,
+    onCheatAttached: () -> Unit = {},
 ) {
     val colors = watermelon
     var activeTab by remember { mutableIntStateOf(0) } // 0: Library / Room, 1: Jusrcheat
@@ -119,7 +120,9 @@ fun GameListScreen(
             JusrcheatAllGamesTab(
                 romInfo = romInfo,
                 cheatsRepository = cheatsRepository,
-                onCheatAttached = {},
+                onCheatAttached = {
+                    onCheatAttached()
+                },
                 modifier = Modifier.fillMaxSize()
             )
         } else {

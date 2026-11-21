@@ -3,10 +3,15 @@ package me.magnum.melonds.ui.emulator.rom
 import android.content.Context
 import androidx.preference.PreferenceManager
 import me.magnum.melonds.ui.emulator.PauseMenuOption
+import me.magnum.melonds.ui.emulator.firmware.FirmwarePauseMenuOption
 
-class PauseMenuCustomizationStore(private val context: Context) {
+class PauseMenuCustomizationStore(
+    private val context: Context,
+    private val isFirmwareMode: Boolean = false,
+) {
 
     private val prefs by lazy { PreferenceManager.getDefaultSharedPreferences(context) }
+    private val keyPrefix: String = if (isFirmwareMode) "firmware_" else ""
 
     companion object {
         const val KEY_CUSTOM_ORDER = "pause_menu_custom_order"
@@ -32,8 +37,16 @@ class PauseMenuCustomizationStore(private val context: Context) {
         val hasCustomOrder: Boolean,
     )
 
+    private val customOrderKey: String get() = "${keyPrefix}$KEY_CUSTOM_ORDER"
+    private val hiddenItemsKey: String get() = "${keyPrefix}$KEY_HIDDEN_ITEMS"
+    private val individuallyPinnedKey: String get() = "${keyPrefix}$KEY_INDIVIDUALLY_PINNED"
+
+    private fun isProtectedOption(option: PauseMenuOption): Boolean {
+        return option == RomPauseMenuOption.SETTINGS || option == FirmwarePauseMenuOption.SETTINGS
+    }
+
     fun getCustomOrder(): List<String> {
-        val raw = prefs.getString(KEY_CUSTOM_ORDER, null) ?: return emptyList()
+        val raw = prefs.getString(customOrderKey, null) ?: return emptyList()
         return raw.split(",")
             .map { it.trim() }
             .filter { it.isNotEmpty() }
@@ -41,32 +54,34 @@ class PauseMenuCustomizationStore(private val context: Context) {
 
     fun saveCustomOrder(order: List<String>) {
         val csv = order.joinToString(",")
-        prefs.edit().putString(KEY_CUSTOM_ORDER, csv).apply()
+        prefs.edit().putString(customOrderKey, csv).apply()
     }
 
     fun getHiddenItems(): Set<String> {
-        return prefs.getStringSet(KEY_HIDDEN_ITEMS, emptySet()) ?: emptySet()
+        return prefs.getStringSet(hiddenItemsKey, emptySet())?.toSet() ?: emptySet()
     }
 
     fun saveHiddenItems(hidden: Set<String>) {
         // Enforce protection: SETTINGS can never be hidden
-        val safeHidden = hidden.filterNot { it == RomPauseMenuOption.SETTINGS.name }.toSet()
-        prefs.edit().putStringSet(KEY_HIDDEN_ITEMS, safeHidden).apply()
+        val safeHidden = hidden.filterNot {
+            it == RomPauseMenuOption.SETTINGS.name || it == FirmwarePauseMenuOption.SETTINGS.name
+        }.toSet()
+        prefs.edit().putStringSet(hiddenItemsKey, safeHidden).apply()
     }
 
     fun getIndividuallyPinned(): Set<String> {
-        return prefs.getStringSet(KEY_INDIVIDUALLY_PINNED, emptySet()) ?: emptySet()
+        return prefs.getStringSet(individuallyPinnedKey, emptySet())?.toSet() ?: emptySet()
     }
 
     fun saveIndividuallyPinned(pinned: Set<String>) {
-        prefs.edit().putStringSet(KEY_INDIVIDUALLY_PINNED, pinned).apply()
+        prefs.edit().putStringSet(individuallyPinnedKey, pinned.toSet()).apply()
     }
 
     fun resetToDefaults() {
         prefs.edit()
-            .remove(KEY_CUSTOM_ORDER)
-            .remove(KEY_HIDDEN_ITEMS)
-            .remove(KEY_INDIVIDUALLY_PINNED)
+            .remove(customOrderKey)
+            .remove(hiddenItemsKey)
+            .remove(individuallyPinnedKey)
             .apply()
     }
 
@@ -77,7 +92,7 @@ class PauseMenuCustomizationStore(private val context: Context) {
     fun isOptionVisible(option: PauseMenuOption, isExtendedEnabled: Boolean): Boolean {
         val name = (option as? Enum<*>)?.name ?: option.toString()
         // Protection: SETTINGS is always visible
-        if (option == RomPauseMenuOption.SETTINGS) return true
+        if (isProtectedOption(option)) return true
 
         val hidden = getHiddenItems()
         if (name in hidden) return false

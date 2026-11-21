@@ -29,9 +29,9 @@
         <item>system_offline_best</item>
     </string-array>
     <string name="translator_floating_button_opacity">Floating button opacity</string>
-    <string name="translator_floating_button_opacity_summary">Adjust the opacity of the floating TR | LOG button (default 35%)</string>
+    <string name="translator_floating_button_opacity_summary" formatted="false">Adjust the opacity of the floating TR | LOG button (default 35%)</string>
     <string name="translator_voice_pitch_title">Voice pitch</string>
-    <string name="translator_voice_pitch_summary">Fine-tune speech pitch offset (-20%..+20%)</string>
+    <string name="translator_voice_pitch_summary" formatted="false">Fine-tune speech pitch offset (-20%..+20%)</string>
     <string name="translator_test_voice_title">Test selected voice</string>
     <string name="translator_test_voice_summary">Play a voice sample to verify speech synthesis</string>
     <string name="translator_test_voice_playing">Playing voice sample...</string>

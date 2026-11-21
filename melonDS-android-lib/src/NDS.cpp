@@ -1117,7 +1117,7 @@ void NDS::SetARM9OverclockMultiplier(int multiplier)
     ARM9OverclockShift = newOverclockShift;
 
     const u32 baseShift = (ConsoleType == 1) ? 2u : 1u;
-    const u32 targetShift = std::max<u32>(baseShift, std::min<u32>(3u, 1u + ARM9OverclockShift));
+    const u32 targetShift = std::min<u32>(3u, baseShift + ARM9OverclockShift);
     if (ARM9ClockShift != targetShift)
     {
         ARM9Timestamp >>= ARM9ClockShift;

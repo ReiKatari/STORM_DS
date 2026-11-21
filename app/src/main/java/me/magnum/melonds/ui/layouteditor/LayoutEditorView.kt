@@ -54,9 +54,20 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
     private var onLayoutChangedListener: ((List<PositionedLayoutComponent>, Int, Int) -> Unit)? = null
     private var onViewPositionEditRequestedListener: ((LayoutComponentPositionEditorState) -> Unit)? = null
 
-    private val undoStack = java.util.ArrayDeque<List<PositionedLayoutComponent>>()
+    private data class EditorSnapshot(
+        val components: List<PositionedLayoutComponent>,
+        val buttonSpread: Float,
+        val buttonInnerScale: Float,
+    )
+
+    private val undoStack = java.util.ArrayDeque<EditorSnapshot>()
     private val maxUndoHistory = 25
     private var onUndoAvailabilityChangedListener: ((Boolean) -> Unit)? = null
+    private var onLayoutInstantiatedListener: (() -> Unit)? = null
+    private var onButtonClusterAppearanceRestoredListener: ((Float, Float) -> Unit)? = null
+
+    var currentButtonSpread: Float = 1.0f
+    var currentButtonInnerScale: Float = 1.0f
 
     var snapToGridEnabled = true
         set(value) {
@@ -156,15 +167,35 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
         listener?.invoke(canUndo())
     }
 
+    fun setOnLayoutInstantiatedListener(listener: (() -> Unit)?) {
+        onLayoutInstantiatedListener = listener
+    }
+
+    fun setOnButtonClusterAppearanceRestoredListener(listener: ((Float, Float) -> Unit)?) {
+        onButtonClusterAppearanceRestoredListener = listener
+    }
+
+    fun applyButtonClusterAppearance(spread: Float, innerScale: Float) {
+        currentButtonSpread = spread.coerceIn(0.6f, 1.6f)
+        currentButtonInnerScale = innerScale.coerceIn(0.6f, 1.4f)
+        (views[LayoutComponent.BUTTONS]?.view as? me.magnum.melonds.ui.common.views.ModernButtonsView)?.let {
+            it.buttonSpread = currentButtonSpread
+            it.buttonInnerScale = currentButtonInnerScale
+        }
+    }
+
     fun canUndo(): Boolean = undoStack.isNotEmpty()
 
     fun pushUndoSnapshot() {
         val currentSnapshot = buildCurrentLayout()
         if (currentSnapshot.isEmpty()) return
+        val buttonsView = views[LayoutComponent.BUTTONS]?.view as? me.magnum.melonds.ui.common.views.ModernButtonsView
+        val spread = buttonsView?.buttonSpread ?: currentButtonSpread
+        val scale = buttonsView?.buttonInnerScale ?: currentButtonInnerScale
         if (undoStack.size >= maxUndoHistory) {
             undoStack.removeFirst()
         }
-        undoStack.addLast(currentSnapshot)
+        undoStack.addLast(EditorSnapshot(currentSnapshot, spread, scale))
         onUndoAvailabilityChangedListener?.invoke(true)
     }
 
@@ -176,14 +207,16 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
         return true
     }
 
-    fun applySnapshot(components: List<PositionedLayoutComponent>) {
+    private fun applySnapshot(snapshot: EditorSnapshot) {
         deselectCurrentView()
         destroyLayout()
-        val screens = components.filter { it.isScreen() }.sortedBy { if (it.onTop) 0 else 1 }
-        val others = components.filterNot { it.isScreen() }
+        val screens = snapshot.components.filter { it.isScreen() }.sortedBy { if (it.onTop) 0 else 1 }
+        val others = snapshot.components.filterNot { it.isScreen() }
         (screens + others).forEach {
             views[it.component] = addPositionedLayoutComponent(it)
         }
+        applyButtonClusterAppearance(snapshot.buttonSpread, snapshot.buttonInnerScale)
+        onButtonClusterAppearanceRestoredListener?.invoke(currentButtonSpread, currentButtonInnerScale)
         modifiedByUser = true
         notifyLayoutChanged()
         invalidate()
@@ -274,12 +307,17 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
         if (isMultiSelectMode) setMultiSelectMode(false)
         if (isLiveTestMode) stopLiveTest()
         super.instantiateLayout(layoutConfiguration, layoutTarget)
+        (views[LayoutComponent.BUTTONS]?.view as? me.magnum.melonds.ui.common.views.ModernButtonsView)?.let {
+            it.buttonSpread = currentButtonSpread
+            it.buttonInnerScale = currentButtonInnerScale
+        }
         if (width > 0 && height > 0) {
             clampComponentsToCanvasBounds(width, height, 0, 0)
         }
         modifiedByUser = false
         undoStack.clear()
         onUndoAvailabilityChangedListener?.invoke(false)
+        onLayoutInstantiatedListener?.invoke()
         notifyLayoutChanged()
     }
 

@@ -202,17 +202,26 @@ namespace Platform
         }
     }
 
-    FileHandle* OpenLocalFile(const std::string& path, FileMode mode)
+    std::string GetLocalFilePath(const std::string& filename)
     {
-        if (path.empty())
-            return nullptr;
+        if (filename.empty())
+            return {};
 
-        if (path[0] == '/')
-            return OpenFile(path, mode);
+        if (filename[0] == '/')
+            return filename;
 
         std::filesystem::path fullFilePath = MelonDSAndroid::internalFilesDir;
-        fullFilePath /= path;
-        return OpenFile(fullFilePath, mode);
+        fullFilePath /= filename;
+        return fullFilePath.string();
+    }
+
+    FileHandle* OpenLocalFile(const std::string& path, FileMode mode)
+    {
+        std::string resolvedPath = GetLocalFilePath(path);
+        if (resolvedPath.empty())
+            return nullptr;
+
+        return OpenFile(resolvedPath, mode);
     }
 
     FileHandle* OpenInternalFile(const std::string path, FileMode mode)
@@ -230,11 +239,13 @@ namespace Platform
 
     bool IsEndOfFile(FileHandle* file)
     {
+        if (!file) return true;
         return feof(reinterpret_cast<FILE *>(file)) != 0;
     }
 
     bool FileReadLine(char* str, int count, FileHandle* file)
     {
+        if (!file || !str || count <= 0) return false;
         return fgets(str, count, reinterpret_cast<FILE *>(file)) != nullptr;
     }
 
@@ -305,6 +316,7 @@ namespace Platform
 
     bool FileSeek(FileHandle* file, s64 offset, FileSeekOrigin origin)
     {
+        if (!file) return false;
         int stdorigin;
         switch (origin)
         {
@@ -318,6 +330,7 @@ namespace Platform
 
     void FileRewind(FileHandle* file)
     {
+        if (!file) return;
         rewind(reinterpret_cast<FILE *>(file));
     }
 
@@ -330,17 +343,19 @@ namespace Platform
 
     bool FileFlush(FileHandle* file)
     {
+        if (!file) return false;
         return fflush(reinterpret_cast<FILE *>(file)) == 0;
     }
 
     u64 FileWrite(const void* data, u64 size, u64 count, FileHandle* file)
     {
+        if (!file || !data || size == 0 || count == 0) return 0;
         return fwrite(data, size, count, reinterpret_cast<FILE *>(file));
     }
 
     u64 FileWriteFormatted(FileHandle* file, const char* fmt, ...)
     {
-        if (fmt == nullptr)
+        if (!file || fmt == nullptr)
             return 0;
 
         va_list args;
@@ -374,7 +389,7 @@ namespace Platform
         return len > 0 ? static_cast<u64>(len) : 0;
     }
 
-    // Boot diagnostic buffer — captures DSi-related native logs for the game execution log
+    // Boot diagnostic buffer - captures DSi-related native logs for the game execution log
     static std::mutex sDiagMutex;
     static std::string sDiagBuffer;
     static bool sDiagCapturing = false;

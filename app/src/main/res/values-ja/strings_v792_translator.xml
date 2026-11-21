@@ -29,9 +29,9 @@
         <item>system_offline_best</item>
     </string-array>
     <string name="translator_floating_button_opacity">翻訳ボタンの透明度</string>
-    <string name="translator_floating_button_opacity_summary">フローティング TR | LOG ボタンの透明度を調整（デフォルト 35%）</string>
+    <string name="translator_floating_button_opacity_summary" formatted="false">フローティング TR | LOG ボタンの透明度を調整（デフォルト 35%）</string>
     <string name="translator_voice_pitch_title">音声のピッチ</string>
-    <string name="translator_voice_pitch_summary">音声の高さの微調整（-20%..+20%）</string>
+    <string name="translator_voice_pitch_summary" formatted="false">音声の高さの微調整（-20%..+20%）</string>
     <string name="translator_test_voice_title">選択した音声をテスト</string>
     <string name="translator_test_voice_summary">音声合成を確認するためにサンプル音声を再生します</string>
     <string name="translator_test_voice_playing">サンプル音声を再生中...</string>

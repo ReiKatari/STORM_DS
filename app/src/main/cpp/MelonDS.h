@@ -2,6 +2,7 @@
 #define MELONDS_MELONDS_H
 
 #include <list>
+#include <mutex>
 #include <vector>
 #include <optional>
 #include <android/native_window.h>
@@ -105,6 +106,7 @@ namespace MelonDSAndroid {
     } RunMode;
 
     extern OpenGLContext *openGlContext;
+    extern std::mutex openGlContextMutex;
     extern AndroidFileHandler* fileHandler;
     extern AndroidCameraHandler* cameraHandler;
     extern std::string internalFilesDir;
@@ -112,6 +114,7 @@ namespace MelonDSAndroid {
     extern bool ensureOpenGlContext();
 
     extern void setConfiguration(EmulatorConfiguration emulatorConfiguration);
+    extern std::shared_ptr<EmulatorConfiguration> cloneEmulatorConfiguration(const EmulatorConfiguration& source);
     extern std::shared_ptr<MelonInstance> GetInstanceSnapshot();
     extern void setup(AndroidCameraHandler* androidCameraHandler, std::shared_ptr<MelonEventMessenger> androidEventMessenger, u32* screenshotBufferPointer, int instanceId);
     extern void setCodeList(std::list<Cheat> cheats);
@@ -253,6 +256,7 @@ namespace MelonDSAndroid {
     extern void resume();
     extern void reset();
     extern bool saveState(const char* path);
+    extern void flushPendingSaveStateWrites();
     extern bool loadState(const char* path);
     extern bool loadRewindState(melonDS::RewindSaveState rewindSaveState);
     extern RewindWindow getRewindWindow();

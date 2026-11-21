@@ -29,9 +29,9 @@
         <item>system_offline_best</item>
     </string-array>
     <string name="translator_floating_button_opacity">Opacità pulsante di traduzione</string>
-    <string name="translator_floating_button_opacity_summary">Regola l\'opacità del pulsante mobile TR | LOG (predefinito 35%)</string>
+    <string name="translator_floating_button_opacity_summary" formatted="false">Regola l\'opacità del pulsante mobile TR | LOG (predefinito 35%)</string>
     <string name="translator_voice_pitch_title">Tonalità della voce</string>
-    <string name="translator_voice_pitch_summary">Regolazione fine del tono della voce (-20%..+20%)</string>
+    <string name="translator_voice_pitch_summary" formatted="false">Regolazione fine del tono della voce (-20%..+20%)</string>
     <string name="translator_test_voice_title">Ascolta la voce selezionata</string>
     <string name="translator_test_voice_summary">Riproduce un campione vocale per verificare la sintesi vocale</string>
     <string name="translator_test_voice_playing">Riproduzione campione vocale...</string>

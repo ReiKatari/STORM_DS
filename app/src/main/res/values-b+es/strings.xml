@@ -1188,7 +1188,7 @@ Rechazos permanentes del servidor: %7$d.</string>
     <string name="translator_enabled">Activar traductor automático</string>
     <string name="translator_enabled_summary">Reconoce y traduce los diálogos del juego en pantalla</string>
     <string name="translator_engine">Motor de traducción</string>
-    <string name="translator_engine_offline">Offline Hybrid (On-Device / No Internet Required)</string>
+    <string name="translator_engine_offline" formatted="false">Offline Hybrid (On-Device / No Internet Required)</string>
     <string name="translator_engine_yandex">Yandex Translate (gratis / mejor para ruso)</string>
     <string name="translator_engine_google">Google Translate (Free / Fast)</string>
     <string name="translator_engine_lingva">Lingva Neural (gratis / sin límite de peticiones)</string>
@@ -1434,7 +1434,7 @@ Rechazos permanentes del servidor: %7$d.</string>
     <string name="label_rom_config_translator_section">Autotraductor</string>
     <string name="label_rom_config_translator_source_lang">Idioma original del juego</string>
     <string name="label_rom_config_dual_screen_preset">Preajuste de doble pantalla</string>
-    <string name="video_ai_upscale_sharpness_title">Nitidez de AI-Upscale y CAS (%)</string>
+    <string name="video_ai_upscale_sharpness_title" formatted="false">Nitidez de AI-Upscale y CAS (%)</string>
     <string name="video_ai_upscale_sharpness_summary">Intensidad del realce adaptativo de bordes y texto</string>
     <string name="video_vulkan_compositor_mode_title">Modo de compositor 2D/3D (Vulkan)</string>
     <string name="video_vulkan_compositor_mode_precise">Preciso (prioridades de capas y mezcla)</string>
@@ -1531,9 +1531,9 @@ Rechazos permanentes del servidor: %7$d.</string>
     <string name="video_ds_lcd_grid_off">Desactivado</string>
     <string name="video_ds_lcd_grid_ds_lite">DS Lite pixel matrix</string>
     <string name="video_ds_lcd_grid_dsi_xl">DSi XL RGB subpixel LCD</string>
-    <string name="video_low_battery_saver_title">Ahorro automático con batería baja (&lt; 20%)</string>
-    <string name="video_low_battery_saver_summary">Automatically lower resolution scale to 1x-2x and disable SSAO when battery drops below 20%</string>
-    <string name="video_low_battery_activated_toast">Low battery (&lt; 20%): resolution scaled down and SSAO paused</string>
+    <string name="video_low_battery_saver_title" formatted="false">Ahorro automático con batería baja (&lt; 20%)</string>
+    <string name="video_low_battery_saver_summary" formatted="false">Automatically lower resolution scale to 1x-2x and disable SSAO when battery drops below 20%</string>
+    <string name="video_low_battery_activated_toast" formatted="false">Low battery (&lt; 20%): resolution scaled down and SSAO paused</string>
     <string name="video_low_battery_restored_toast">Power restored: graphics settings resumed</string>
     <string name="mic_vu_meter_title">Prueba de nivel de micrófono</string>
     <string name="mic_vu_meter_idle">Tap to test microphone input and noise gate threshold</string>
@@ -1560,7 +1560,7 @@ Rechazos permanentes del servidor: %7$d.</string>
     <string name="input_gyro_activation_hold_r">Mantener R</string>
     <string name="button_theme_picker_title">Tema de color de botones</string>
     <string name="button_theme_picker_subtitle">Preview button surface, border and symbol colors</string>
-    <string name="translator_tts_speed_title">Velocidad de voz (%)</string>
+    <string name="translator_tts_speed_title" formatted="false">Velocidad de voz (%)</string>
     <string name="translator_tts_speed_summary">%1$d%% - velocidad de lectura de diálogos traducidos (100%% normal)</string>
     <string name="translator_regions_reset_title">Restablecer zonas OCR y posición del botón</string>
     <string name="translator_regions_reset_summary">Borrar áreas guardadas y devolver el botón TR a su posición inicial</string>
@@ -1577,4 +1577,5 @@ Rechazos permanentes del servidor: %7$d.</string>
     <string name="cheats_download_fallback_embedded">Servidor no disponible - se cargaron %1$d juegos integrados</string>
     <string name="cheats_import_finished">Base de datos de trucos importada correctamente</string>
     <string name="cheats_import_failed">Error al importar la base de datos de trucos</string>
+    <string name="rom_search_dir_saf_fallback_hint">No se pudo acceder al directorio, por favor selecciónalo de nuevo</string>
 </resources>

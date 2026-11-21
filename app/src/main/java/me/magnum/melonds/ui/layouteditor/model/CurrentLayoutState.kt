@@ -8,4 +8,5 @@ data class CurrentLayoutState(
     val layout: UILayout,
     val orientation: LayoutConfiguration.LayoutOrientation,
     val systemOrientation: Orientation = Orientation.PORTRAIT,
+    val layoutResetToken: Long = 0L,
 )

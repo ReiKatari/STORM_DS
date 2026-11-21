@@ -144,6 +144,7 @@ class MicLevelMeterPreference @JvmOverloads constructor(
 
     private var vuBarView: MicVuBarView? = null
     private val running = AtomicBoolean(false)
+    private val audioRecordLock = Any()
     private var captureThread: Thread? = null
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -214,53 +215,58 @@ class MicLevelMeterPreference @JvmOverloads constructor(
             AudioFormat.ENCODING_PCM_16BIT,
         ).coerceAtLeast(1024)
 
+        val previousThread = captureThread
         val thread = Thread({
-            var recorder: AudioRecord? = null
-            try {
-                recorder = AudioRecord(
-                    MediaRecorder.AudioSource.MIC,
-                    sampleRate,
-                    AudioFormat.CHANNEL_IN_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT,
-                    minBuf * 2,
-                )
-                if (recorder.state != AudioRecord.STATE_INITIALIZED) {
-                    mainHandler.post { stopListening() }
-                    return@Thread
-                }
-                recorder.startRecording()
-                val buf = ShortArray(512)
-                var smoothed = 0f
-                var localPeak = 0f
-                while (running.get()) {
-                    val read = recorder.read(buf, 0, buf.size)
-                    if (read > 0) {
-                        var sumSq = 0.0
-                        for (i in 0 until read) {
-                            val s = buf[i].toDouble()
-                            sumSq += s * s
-                        }
-                        val rms = sqrt(sumSq / read.toDouble()).toFloat()
-                        // Map native MicInputOboeCallback scale (0..~4500 RMS) into 0..1 meter bar
-                        val normalized = (rms / 4200f).coerceIn(0f, 1f)
-                        smoothed = smoothed * 0.45f + normalized * 0.55f
-                        localPeak = maxOf(smoothed, localPeak * 0.94f)
-                        val levelSnap = smoothed
-                        val peakSnap = localPeak
-                        mainHandler.post {
-                            if (running.get()) {
-                                lastLevel = levelSnap
-                                peakLevel = peakSnap
-                                syncBarView()
+            runCatching { previousThread?.join(1500L) }
+            synchronized(audioRecordLock) {
+                if (!running.get() || Thread.currentThread().isInterrupted) return@synchronized
+                var recorder: AudioRecord? = null
+                try {
+                    recorder = AudioRecord(
+                        MediaRecorder.AudioSource.MIC,
+                        sampleRate,
+                        AudioFormat.CHANNEL_IN_MONO,
+                        AudioFormat.ENCODING_PCM_16BIT,
+                        minBuf * 2,
+                    )
+                    if (recorder.state != AudioRecord.STATE_INITIALIZED) {
+                        mainHandler.post { stopListening() }
+                        return@synchronized
+                    }
+                    recorder.startRecording()
+                    val buf = ShortArray(512)
+                    var smoothed = 0f
+                    var localPeak = 0f
+                    while (running.get() && !Thread.currentThread().isInterrupted) {
+                        val read = recorder.read(buf, 0, buf.size)
+                        if (read > 0) {
+                            var sumSq = 0.0
+                            for (i in 0 until read) {
+                                val s = buf[i].toDouble()
+                                sumSq += s * s
+                            }
+                            val rms = sqrt(sumSq / read.toDouble()).toFloat()
+                            // Map native MicInputOboeCallback scale (0..~4500 RMS) into 0..1 meter bar
+                            val normalized = (rms / 4200f).coerceIn(0f, 1f)
+                            smoothed = smoothed * 0.45f + normalized * 0.55f
+                            localPeak = maxOf(smoothed, localPeak * 0.94f)
+                            val levelSnap = smoothed
+                            val peakSnap = localPeak
+                            mainHandler.post {
+                                if (running.get()) {
+                                    lastLevel = levelSnap
+                                    peakLevel = peakSnap
+                                    syncBarView()
+                                }
                             }
                         }
                     }
+                } catch (_: Throwable) {
+                    mainHandler.post { stopListening() }
+                } finally {
+                    runCatching { recorder?.stop() }
+                    runCatching { recorder?.release() }
                 }
-            } catch (_: Throwable) {
-                mainHandler.post { stopListening() }
-            } finally {
-                runCatching { recorder?.stop() }
-                runCatching { recorder?.release() }
             }
         }, "StormMicVuMeter").apply {
             isDaemon = true
@@ -272,7 +278,6 @@ class MicLevelMeterPreference @JvmOverloads constructor(
     fun stopListening() {
         val wasRunning = running.getAndSet(false)
         captureThread?.interrupt()
-        captureThread = null
         lastLevel = 0f
         peakLevel = 0f
         if (wasRunning) {

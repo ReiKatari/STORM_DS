@@ -34,6 +34,8 @@
 #include "net/Net_Slirp.h"
 #include <fstream>
 #include <mutex>
+#include <condition_variable>
+#include <deque>
 
 #ifndef MELONDS_ANDROID_DEBUG_BUILD
 #define MELONDS_ANDROID_DEBUG_BUILD 0
@@ -352,6 +354,44 @@ namespace MelonDSAndroid
             }
         }
 
+        char* DuplicateConfigurationPath(const char* path)
+        {
+            if (path == nullptr)
+                return nullptr;
+
+            const size_t len = std::strlen(path);
+            char* copy = static_cast<char*>(std::malloc(len + 1));
+            if (copy != nullptr)
+                std::memcpy(copy, path, len + 1);
+            return copy;
+        }
+
+        std::unique_ptr<MelonDSAndroid::RenderSettings> CloneRenderSettings(
+            MelonDSAndroid::Renderer renderer,
+            const MelonDSAndroid::RenderSettings* source)
+        {
+            if (source == nullptr)
+                return nullptr;
+
+            switch (renderer)
+            {
+                case MelonDSAndroid::Renderer::Software:
+                    return std::make_unique<MelonDSAndroid::SoftwareRenderSettings>(
+                        *static_cast<const MelonDSAndroid::SoftwareRenderSettings*>(source));
+                case MelonDSAndroid::Renderer::OpenGl:
+                    return std::make_unique<MelonDSAndroid::OpenGlRenderSettings>(
+                        *static_cast<const MelonDSAndroid::OpenGlRenderSettings*>(source));
+                case MelonDSAndroid::Renderer::Compute:
+                    return std::make_unique<MelonDSAndroid::ComputeRenderSettings>(
+                        *static_cast<const MelonDSAndroid::ComputeRenderSettings*>(source));
+                case MelonDSAndroid::Renderer::Vulkan:
+                    return std::make_unique<MelonDSAndroid::VulkanRenderSettings>(
+                        *static_cast<const MelonDSAndroid::VulkanRenderSettings*>(source));
+                default:
+                    return nullptr;
+            }
+        }
+
         void DestroyEmulatorConfiguration(MelonDSAndroid::EmulatorConfiguration* configuration)
         {
             if (configuration == nullptr)
@@ -437,6 +477,45 @@ namespace MelonDSAndroid
 
     bool setupOpenGlContext();
     void cleanupOpenGlContext();
+
+    std::shared_ptr<EmulatorConfiguration> cloneEmulatorConfiguration(const EmulatorConfiguration& source)
+    {
+        EmulatorConfiguration copy{};
+        copy.userInternalFirmwareAndBios = source.userInternalFirmwareAndBios;
+        copy.dsBios7Path = DuplicateConfigurationPath(source.dsBios7Path);
+        copy.dsBios9Path = DuplicateConfigurationPath(source.dsBios9Path);
+        copy.dsFirmwarePath = DuplicateConfigurationPath(source.dsFirmwarePath);
+        copy.dsiBios7Path = DuplicateConfigurationPath(source.dsiBios7Path);
+        copy.dsiBios9Path = DuplicateConfigurationPath(source.dsiBios9Path);
+        copy.dsiFirmwarePath = DuplicateConfigurationPath(source.dsiFirmwarePath);
+        copy.dsiNandPath = DuplicateConfigurationPath(source.dsiNandPath);
+        copy.internalFilesDir = DuplicateConfigurationPath(source.internalFilesDir);
+        copy.fastForwardSpeedMultiplier = source.fastForwardSpeedMultiplier;
+        copy.frameLimitSpeedMultiplier = source.frameLimitSpeedMultiplier;
+        copy.showBootScreen = source.showBootScreen;
+        copy.useJit = source.useJit;
+        copy.hgEngineFixEnabled = source.hgEngineFixEnabled;
+        copy.consoleType = source.consoleType;
+        copy.audioSettings = source.audioSettings;
+        copy.rewindEnabled = source.rewindEnabled;
+        copy.rewindCaptureSpacingSeconds = source.rewindCaptureSpacingSeconds;
+        copy.rewindLengthSeconds = source.rewindLengthSeconds;
+        copy.firmwareConfiguration = source.firmwareConfiguration;
+        copy.renderSettings = CloneRenderSettings(source.renderer, source.renderSettings.get());
+        copy.dsiSdCardSettings = source.dsiSdCardSettings;
+        copy.dsiSdCardSettings.imagePath = DuplicateConfigurationPath(source.dsiSdCardSettings.imagePath);
+        copy.dsiSdCardSettings.folderPath = DuplicateConfigurationPath(source.dsiSdCardSettings.folderPath);
+        copy.dldiSdCardSettings = source.dldiSdCardSettings;
+        copy.dldiSdCardSettings.imagePath = DuplicateConfigurationPath(source.dldiSdCardSettings.imagePath);
+        copy.dldiSdCardSettings.folderPath = DuplicateConfigurationPath(source.dldiSdCardSettings.folderPath);
+        copy.renderer = source.renderer;
+        copy.dsiWareAutoloadTitleId = source.dsiWareAutoloadTitleId;
+        copy.arm9OverclockMultiplier = source.arm9OverclockMultiplier;
+        copy.enable3dWidescreen = source.enable3dWidescreen;
+        copy.enable60FpsPatch = source.enable60FpsPatch;
+        copy.wfcDnsIp = source.wfcDnsIp;
+        return ShareConfiguration(std::move(copy));
+    }
 
     /**
      * Used to set the emulator's initial configuration, before boot. To update the configuration during runtime, use @updateEmulatorConfiguration.
@@ -1477,6 +1556,86 @@ namespace MelonDSAndroid
             currentInstance->reset();
     }
 
+    namespace
+    {
+        struct SaveStateWriteTask
+        {
+            std::string targetPath;
+            std::vector<u8> buffer;
+        };
+
+        std::mutex saveStateWriteMutex;
+        std::condition_variable saveStateWriteCv;
+        std::condition_variable saveStateWriteIdleCv;
+        std::deque<SaveStateWriteTask> saveStateWriteQueue;
+        bool saveStateWriteInProgress = false;
+        bool saveStateWorkerRunning = false;
+        bool saveStateWorkerStop = false;
+        std::thread saveStateWorkerThread;
+
+        void saveStateWorkerLoop()
+        {
+            while (true)
+            {
+                SaveStateWriteTask task;
+                {
+                    std::unique_lock<std::mutex> lock(saveStateWriteMutex);
+                    saveStateWriteCv.wait(lock, []() {
+                        return saveStateWorkerStop || !saveStateWriteQueue.empty();
+                    });
+                    if (saveStateWriteQueue.empty())
+                    {
+                        if (saveStateWorkerStop)
+                        {
+                            saveStateWorkerRunning = false;
+                            saveStateWriteIdleCv.notify_all();
+                            return;
+                        }
+                        continue;
+                    }
+                    task = std::move(saveStateWriteQueue.front());
+                    saveStateWriteQueue.pop_front();
+                    saveStateWriteInProgress = true;
+                }
+
+                Platform::FileHandle* saveStateFile = Platform::OpenFile(task.targetPath.c_str(), Platform::FileMode::Write);
+                if (saveStateFile)
+                {
+                    Platform::FileWrite(task.buffer.data(), task.buffer.size(), 1, saveStateFile);
+                    Platform::FileFlush(saveStateFile);
+                    Platform::CloseFile(saveStateFile);
+                }
+
+                {
+                    std::lock_guard<std::mutex> lock(saveStateWriteMutex);
+                    saveStateWriteInProgress = false;
+                    if (saveStateWriteQueue.empty())
+                        saveStateWriteIdleCv.notify_all();
+                }
+            }
+        }
+    }
+
+    void flushPendingSaveStateWrites()
+    {
+        std::thread threadToJoin;
+        {
+            std::unique_lock<std::mutex> lock(saveStateWriteMutex);
+            saveStateWriteIdleCv.wait(lock, []() {
+                return saveStateWriteQueue.empty() && !saveStateWriteInProgress;
+            });
+            if (saveStateWorkerRunning)
+            {
+                saveStateWorkerStop = true;
+                saveStateWriteCv.notify_all();
+            }
+            if (saveStateWorkerThread.joinable())
+                threadToJoin = std::move(saveStateWorkerThread);
+        }
+        if (threadToJoin.joinable())
+            threadToJoin.join();
+    }
+
     bool saveState(const char* path)
     {
         if (path == nullptr)
@@ -1506,13 +1665,19 @@ namespace MelonDSAndroid
         std::vector<u8> bufferCopy(stateBytes, stateBytes + state.Length());
         std::string targetPath(path);
 
-        std::thread([targetPath, bufferCopy = std::move(bufferCopy)]() {
-            Platform::FileHandle* saveStateFile = Platform::OpenFile(targetPath.c_str(), Platform::FileMode::Write);
-            if (!saveStateFile) return;
-            Platform::FileWrite(bufferCopy.data(), bufferCopy.size(), 1, saveStateFile);
-            Platform::FileFlush(saveStateFile);
-            Platform::CloseFile(saveStateFile);
-        }).detach();
+        {
+            std::lock_guard<std::mutex> lock(saveStateWriteMutex);
+            if (!saveStateWorkerRunning)
+            {
+                if (saveStateWorkerThread.joinable())
+                    saveStateWorkerThread.join();
+                saveStateWorkerStop = false;
+                saveStateWorkerRunning = true;
+                saveStateWorkerThread = std::thread(saveStateWorkerLoop);
+            }
+            saveStateWriteQueue.push_back(SaveStateWriteTask{std::move(targetPath), std::move(bufferCopy)});
+        }
+        saveStateWriteCv.notify_one();
 
         return true;
     }
@@ -1672,6 +1837,7 @@ namespace MelonDSAndroid
 
     void cleanup()
     {
+        flushPendingSaveStateWrites();
         cleanupAudio();
 
         ReplaceInstance(nullptr);

@@ -2,10 +2,14 @@ package me.magnum.melonds.translator.tts
 
 import android.util.Log
 import android.util.LruCache
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -16,11 +20,13 @@ import okhttp3.WebSocketListener
 import okio.ByteString
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
+import java.io.IOException
 import java.net.URLEncoder
 import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.coroutines.resume
 
 /**
  * Studio-Grade Microsoft Edge Neural & Multilingual HD 24kHz TTS Engine.
@@ -287,6 +293,8 @@ object EdgeNeuralTtsClient {
                 webSocketRef = client.newWebSocket(request, listener)
                 deferred.await()
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Throwable) {
             Log.w(TAG, "Edge WebSocket synthesis exception: ${e.message}")
             null
@@ -295,6 +303,28 @@ object EdgeNeuralTtsClient {
                 webSocketRef?.cancel()
             } catch (_: Throwable) {}
         }
+    }
+
+    private suspend fun executeBytesAsync(request: Request): ByteArray? = suspendCancellableCoroutine { cont ->
+        val call = client.newCall(request)
+        cont.invokeOnCancellation { runCatching { call.cancel() } }
+        call.enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                if (cont.isActive) cont.resume(null)
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                val bytes = try {
+                    response.use { resp ->
+                        val respBody = resp.body
+                        if (resp.isSuccessful && respBody != null) respBody.bytes() else null
+                    }
+                } catch (_: Throwable) {
+                    null
+                }
+                if (cont.isActive) cont.resume(bytes)
+            }
+        })
     }
 
     private suspend fun synthesizeViaOpenAiCompatible(
@@ -324,21 +354,20 @@ object EdgeNeuralTtsClient {
             }
             val mediaType = "application/json; charset=utf-8".toMediaTypeOrNull()
             val body = json.toString().toRequestBody(mediaType)
-            val request = Request.Builder()
-                .url(targetUrl)
-                .header("Authorization", "Bearer $apiKey")
-                .header("Content-Type", "application/json")
-                .post(body)
-                .build()
-
-            client.newCall(request).execute().use { response ->
-                val respBody = response.body
-                if (response.isSuccessful && respBody != null) {
-                    respBody.bytes()
-                } else {
-                    null
-                }
+            val request = try {
+                Request.Builder()
+                    .url(targetUrl)
+                    .header("Authorization", "Bearer $apiKey")
+                    .header("Content-Type", "application/json")
+                    .post(body)
+                    .build()
+            } catch (_: IllegalArgumentException) {
+                return@withContext null
             }
+
+            executeBytesAsync(request)
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Throwable) {
             null
         }
@@ -367,11 +396,9 @@ object EdgeNeuralTtsClient {
                     .url(url)
                     .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile; rv:130.0) Gecko/130.0 Firefox/130.0")
                     .build()
-                client.newCall(request).execute().use { response ->
-                    val respBody = response.body
-                    if (response.isSuccessful && respBody != null) {
-                        return@withContext respBody.bytes()
-                    }
+                val bytes = executeBytesAsync(request)
+                if (bytes != null && bytes.isNotEmpty()) {
+                    return@withContext bytes
                 }
             } else {
                 val chunks = clean.chunked(150)
@@ -383,16 +410,16 @@ object EdgeNeuralTtsClient {
                         .url(url)
                         .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile; rv:130.0) Gecko/130.0 Firefox/130.0")
                         .build()
-                    client.newCall(request).execute().use { response ->
-                        val respBody = response.body
-                        if (response.isSuccessful && respBody != null) {
-                            out.write(respBody.bytes())
-                        }
+                    val bytes = executeBytesAsync(request)
+                    if (bytes != null && bytes.isNotEmpty()) {
+                        out.write(bytes)
                     }
                 }
                 if (out.size() > 0) return@withContext out.toByteArray()
             }
             null
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Throwable) {
             null
         }

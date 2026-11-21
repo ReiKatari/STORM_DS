@@ -55,6 +55,7 @@ class CheatsViewModel @Inject constructor(
     private val romInfo = savedStateHandle.get<RomInfoParcelable>(CheatsActivity.KEY_ROM_INFO)?.toRomInfo()
     private val modifiedCheatSet = MutableStateFlow(savedStateHandle.get<List<CheatParcelable>>(KEY_MODIFIED_CHEATS).orEmpty().map { it.toCheat() })
     private val deletedCheats = mutableListOf<DeletedCheat>()
+    private val gamesRefreshTrigger = MutableStateFlow(0)
 
     private val selectedGame = savedStateHandle.getStateFlow<GameParcelable?>(KEY_SELECTED_GAME, null).map { it?.toGame() }
     private val selectedCheatFolder = savedStateHandle.getStateFlow<CheatFolderParcelable?>(KEY_SELECTED_FOLDER, null).map { it?.toCheatFolder() }
@@ -63,11 +64,17 @@ class CheatsViewModel @Inject constructor(
     val currentRomInfo: RomInfo? get() = romInfo
 
     val games by lazy {
-        flow {
-            emit(CheatsScreenUiState.Loading())
-            val games = cheatsRepository.getGames()
-            emit(CheatsScreenUiState.Ready(games))
+        gamesRefreshTrigger.flatMapLatest {
+            flow {
+                emit(CheatsScreenUiState.Loading())
+                val games = cheatsRepository.getGames()
+                emit(CheatsScreenUiState.Ready(games))
+            }
         }.shareIn(viewModelScope, started = SharingStarted.WhileSubscribed(stopTimeoutMillis = 1000L), replay = 1)
+    }
+
+    fun refreshGames() {
+        gamesRefreshTrigger.value++
     }
 
     val folders by lazy {
@@ -279,11 +286,25 @@ class CheatsViewModel @Inject constructor(
             return
         }
 
+        val effectiveEnabled = modifiedCheatSet.value.firstOrNull { it.id == originalCheat.id }?.enabled ?: originalCheat.enabled
         val updatedCheat = originalCheat.copy(
             name = cheatSubmissionForm.name,
             description = cheatSubmissionForm.description.takeUnless { it.isBlank() },
             code = cheatSubmissionForm.code,
+            enabled = effectiveEnabled,
         )
+        modifiedCheatSet.update { currentList ->
+            val cheatIndex = currentList.indexOfFirst { it.id == updatedCheat.id }
+            if (cheatIndex >= 0) {
+                currentList.toMutableList().apply {
+                    this[cheatIndex] = updatedCheat
+                }.also { updatedList ->
+                    savedStateHandle[KEY_MODIFIED_CHEATS] = updatedList.map { CheatParcelable.fromCheat(it) }
+                }
+            } else {
+                currentList
+            }
+        }
         viewModelScope.launch {
             cheatsRepository.updateCheat(updatedCheat)
         }
@@ -292,6 +313,15 @@ class CheatsViewModel @Inject constructor(
     fun deleteCheat(cheat: Cheat) {
         val selectedFolder = savedStateHandle.get<CheatFolderParcelable>(KEY_SELECTED_FOLDER) ?: return
 
+        modifiedCheatSet.update { currentList ->
+            if (currentList.any { it.id == cheat.id }) {
+                currentList.filterNot { it.id == cheat.id }.also { updatedList ->
+                    savedStateHandle[KEY_MODIFIED_CHEATS] = updatedList.map { CheatParcelable.fromCheat(it) }
+                }
+            } else {
+                currentList
+            }
+        }
         viewModelScope.launch {
             cheatsRepository.deleteCheat(cheat)
             deletedCheats.add(DeletedCheat(cheat, selectedFolder.toCheatFolder()))

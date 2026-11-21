@@ -29,9 +29,9 @@
         <item>system_offline_best</item>
     </string-array>
     <string name="translator_floating_button_opacity">Transparence du bouton de traduction</string>
-    <string name="translator_floating_button_opacity_summary">Régler la transparence du bouton flottant TR | LOG (35% par défaut)</string>
+    <string name="translator_floating_button_opacity_summary" formatted="false">Régler la transparence du bouton flottant TR | LOG (35% par défaut)</string>
     <string name="translator_voice_pitch_title">Hauteur de la voix</string>
-    <string name="translator_voice_pitch_summary">Ajuster la tonalité de la parole (-20%..+20%)</string>
+    <string name="translator_voice_pitch_summary" formatted="false">Ajuster la tonalité de la parole (-20%..+20%)</string>
     <string name="translator_test_voice_title">Tester la voix sélectionnée</string>
     <string name="translator_test_voice_summary">Lire un échantillon vocal pour vérifier la synthèse vocale</string>
     <string name="translator_test_voice_playing">Lecture de l\'échantillon vocal...</string>

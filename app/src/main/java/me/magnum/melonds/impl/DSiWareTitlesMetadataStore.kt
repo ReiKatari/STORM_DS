@@ -119,6 +119,26 @@ class DSiWareTitlesMetadataStore @Inject constructor(
         }.apply()
     }
 
+    fun getRomConfigJson(titleIdHex: String): String? {
+        return prefs.getString("rom_config_${titleIdHex.lowercase()}", null)?.takeIf { it.isNotBlank() }
+    }
+
+    fun getRomConfigJson(titleId: Long): String? {
+        val titleIdHex = (titleId and 0xFFFFFFFFL).toString(16).padStart(8, '0').lowercase()
+        return getRomConfigJson(titleIdHex)
+    }
+
+    fun setRomConfigJson(titleId: Long, configJson: String?) {
+        val titleIdHex = (titleId and 0xFFFFFFFFL).toString(16).padStart(8, '0').lowercase()
+        prefs.edit().apply {
+            if (configJson.isNullOrBlank()) {
+                remove("rom_config_$titleIdHex")
+            } else {
+                putString("rom_config_$titleIdHex", configJson)
+            }
+        }.apply()
+    }
+
     fun removeTitleMetadata(titleId: Long) {
         val titleIdHex = (titleId and 0xFFFFFFFFL).toString(16).padStart(8, '0').lowercase()
         prefs.edit().apply {
@@ -128,6 +148,7 @@ class DSiWareTitlesMetadataStore @Inject constructor(
             remove("source_uri_$titleIdHex")
             remove("auto_imported_$titleIdHex")
             remove("parent_folder_$titleIdHex")
+            remove("rom_config_$titleIdHex")
         }.apply()
     }
 }

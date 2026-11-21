@@ -38,9 +38,11 @@ class ChoreographerVSyncFrameRenderer(
         val isHighRefresh = frameDelta <= ChoreographerFrameRenderer.DEADLINE_FRAME_TIME_THRESHOLD
         val frameDeadline = if (isHighRefresh) null else rawDeadline
         val shouldRender = if (isHighRefresh) {
+            val safeFrameDelta = frameDelta.coerceAtLeast(1_000_000L)
+            val dynamicPacingIntervalNs = (TARGET_DS_FRAME_INTERVAL_NS - safeFrameDelta / 2L - VSYNC_JITTER_TOLERANCE_NS).coerceAtLeast(0L)
             lastRenderedFrameTimeNanos == 0L ||
                 data.frameTimeNanos < lastRenderedFrameTimeNanos ||
-                (data.frameTimeNanos - lastRenderedFrameTimeNanos) >= HIGH_REFRESH_PACING_INTERVAL_NS
+                (data.frameTimeNanos - lastRenderedFrameTimeNanos) >= dynamicPacingIntervalNs
         } else {
             true
         }
@@ -55,6 +57,7 @@ class ChoreographerVSyncFrameRenderer(
     }
 
     private companion object {
-        const val HIGH_REFRESH_PACING_INTERVAL_NS = 14_500_000L
+        const val TARGET_DS_FRAME_INTERVAL_NS = 16_666_667L
+        const val VSYNC_JITTER_TOLERANCE_NS = 500_000L
     }
 }

@@ -40,6 +40,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -76,6 +78,7 @@ fun ScreenLayoutOverlay(
     onResumeGame: (() -> Unit)? = null,
 ) {
     val colors = watermelon
+    val firstOptionFocusRequester = remember { FocusRequester() }
 
     BackHandler(onBack = onDismiss)
 
@@ -193,6 +196,7 @@ fun ScreenLayoutOverlay(
                         title = stringResource(R.string.layout_even_landscape),
                         subtitle = "2 экрана в альбомном режиме",
                         isSelected = currentLayoutMode == ScreenLayoutMode.EVEN_LANDSCAPE,
+                        focusRequester = firstOptionFocusRequester,
                         icon = { isSel -> LayoutModeIcon(ScreenLayoutMode.EVEN_LANDSCAPE, isSel, colors.green, colors.text2) },
                         onClick = {
                             onLayoutModeSelected(ScreenLayoutMode.EVEN_LANDSCAPE)
@@ -293,6 +297,8 @@ fun ScreenLayoutOverlay(
                 modifier = Modifier.align(Alignment.CenterHorizontally),
             )
         }
+
+        me.magnum.melonds.ui.common.RequestInitialFocus(firstOptionFocusRequester)
     }
 }
 
@@ -301,6 +307,7 @@ private fun LayoutOptionItem(
     title: String,
     subtitle: String? = null,
     isSelected: Boolean,
+    focusRequester: FocusRequester? = null,
     icon: @Composable (Boolean) -> Unit,
     onClick: () -> Unit,
 ) {
@@ -322,6 +329,7 @@ private fun LayoutOptionItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .clip(RoundedCornerShape(14.dp))
             .background(bg)
             .border(1.dp, border, RoundedCornerShape(14.dp))

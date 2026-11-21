@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="decrypt_rom_replace_description">このDSi ROMはModcrypt暗号化を使用しています。復号すると、端末上のファイルが復号済みコピーに置き換わります。</string>
+    <string name="decrypt_rom_replace_confirm">復号して置換</string>
+    <string name="decrypt_rom_result_success_title">ROMを復号しました</string>
+    <string name="decrypt_rom_result_success_message">DSi ROMの復号に成功しました。すぐに起動できます。</string>
+    <string name="decrypt_rom_launch_now">今すぐ起動</string>
+    <string name="decrypt_rom_result_error_title">復号エラー</string>
+    <string name="decrypt_rom_result_error_message">ROMを復号できませんでした: %1$s</string>
+    <string name="decrypt_rom_err_read">ROMファイルの読み込みに失敗しました</string>
+    <string name="decrypt_rom_err_write">復号済みROMファイルの書き込みに失敗しました</string>
+    <string name="decrypt_rom_err_not_dsi">有効なNintendo DSi ROMファイルではありません</string>
+    <string name="decrypt_rom_err_too_small">ROMファイルが小さすぎるか破損しています</string>
+    <string name="decrypt_rom_err_bounds">Modcrypt領域がROMファイルの範囲を超えています</string>
+    <string name="decrypt_rom_err_validation">復号済みROMヘッダーの検証に失敗しました</string>
+    <string name="rom_list_random_rom">ランダムなゲーム</string>
+    <string name="rom_list_check_updates">アップデートを確認</string>
+    <string name="ra_offline_status_not_logged_in">RetroAchievementsにログインしていません</string>
+    <string name="ra_offline_status_no_cache">オフラインモード用の実績キャッシュがありません</string>
+    <string name="stats_export_share_chooser">統計を共有</string>
+    <string name="wfc_lobby_activated_toast">WFCロビー %1$s を有効化しました (DNS: %2$s)</string>
+    <string name="ram_finder_invalid_number">有効な数値を入力してください</string>
+</resources>

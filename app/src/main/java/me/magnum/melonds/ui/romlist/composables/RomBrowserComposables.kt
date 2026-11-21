@@ -100,14 +100,14 @@ fun WatermelonLibraryHeader(
     isSearchActive: Boolean,
     searchQuery: String,
     viewMode: RomViewMode,
-    dsiWareBootMode: me.magnum.melonds.domain.model.dsinand.DSiWareBootMode = me.magnum.melonds.domain.model.dsinand.DSiWareBootMode.AUTOLOAD,
-    onDsiWareBootModeChanged: (me.magnum.melonds.domain.model.dsinand.DSiWareBootMode) -> Unit = {},
     onSearchQueryChanged: (String?) -> Unit,
     onToggleViewMode: () -> Unit,
     onBootFirmwareDs: () -> Unit,
     onBootFirmwareDsi: () -> Unit,
     onOpenSingleRom: () -> Unit = {},
+    onRandomRom: () -> Unit = {},
     onRefresh: () -> Unit,
+    onCheckUpdates: () -> Unit = {},
     onOpenSettings: () -> Unit,
     onOpenPlayerStats: () -> Unit = {},
     onReportProblem: () -> Unit = {},
@@ -123,7 +123,6 @@ fun WatermelonLibraryHeader(
         onSearchQueryChanged(null)
     }
     var overflowOpen by remember { mutableStateOf(false) }
-    var bootModeMenuOpen by remember { mutableStateOf(false) }
     val searchFocusRequester = remember { FocusRequester() }
 
     Column(modifier = modifier.fillMaxWidth().background(colors.bg)) {
@@ -242,6 +241,9 @@ fun WatermelonLibraryHeader(
                         DropdownMenuItem(onClick = { overflowOpen = false; onOpenSingleRom() }) {
                             Text(stringResource(R.string.action_open_single_rom))
                         }
+                        DropdownMenuItem(onClick = { overflowOpen = false; onRandomRom() }) {
+                            Text(stringResource(R.string.rom_list_random_rom))
+                        }
                         DropdownMenuItem(onClick = { overflowOpen = false; onBootFirmwareDs() }) {
                             Text(stringResource(R.string.action_boot_firmware_ds))
                         }
@@ -250,6 +252,9 @@ fun WatermelonLibraryHeader(
                         }
                         DropdownMenuItem(onClick = { overflowOpen = false; onRefresh() }) {
                             Text(stringResource(R.string.action_refresh_rom_list))
+                        }
+                        DropdownMenuItem(onClick = { overflowOpen = false; onCheckUpdates() }) {
+                            Text(stringResource(R.string.rom_list_check_updates))
                         }
                         DropdownMenuItem(onClick = { overflowOpen = false; onOpenPlayerStats() }) {
                             Text(stringResource(R.string.feature_stats_menu_title))

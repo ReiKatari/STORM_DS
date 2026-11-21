@@ -335,12 +335,12 @@ private fun DualScreenPresetsContent(
                 Triple(
                     DualScreenPreset.INTERNAL_TOP_EXTERNAL_BOTTOM,
                     stringResource(R.string.dual_screen_preset_internal_top_external_bottom),
-                    "Основной экран смартфона — Верхний (игра), Внешний монитор — Нижний (тач)",
+                    "Основной экран смартфона - Верхний (игра), Внешний монитор - Нижний (тач)",
                 ),
                 Triple(
                     DualScreenPreset.INTERNAL_BOTTOM_EXTERNAL_TOP,
                     stringResource(R.string.dual_screen_preset_internal_bottom_external_top),
-                    "Основной экран смартфона — Нижний (тач в руках), Внешний монитор — Верхний (игра)",
+                    "Основной экран смартфона - Нижний (тач в руках), Внешний монитор - Верхний (игра)",
                 ),
             )
 

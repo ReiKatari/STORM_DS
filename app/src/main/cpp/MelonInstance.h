@@ -338,11 +338,29 @@ private:
     u16 pendingTouchY = 0;
     bool hasPendingCheats = false;
     std::vector<melonDS::ARCode> pendingCheats;
+    bool hasPendingRuntimeConfigUpdate = false;
+    int pendingAudioInterpolation = 0;
+    int pendingAudioBitrate = 0;
+    bool pendingEnable3dWidescreen = false;
+    int pendingArm9OverclockMultiplier = 1;
     void applyPendingThreadSafeUpdates();
 
     const VulkanSessionProfile vulkanSessionProfile;
     mutable std::mutex configurationMutex;
     std::shared_ptr<EmulatorConfiguration> currentConfiguration;
+    std::shared_ptr<EmulatorConfiguration> lastValidRendererConfiguration;
+
+    template <typename Mutator>
+    std::shared_ptr<EmulatorConfiguration> cloneAndSwapConfiguration(Mutator&& mutator)
+    {
+        std::lock_guard<std::mutex> configLock(configurationMutex);
+        if (!currentConfiguration)
+            return nullptr;
+        auto cloned = cloneEmulatorConfiguration(*currentConfiguration);
+        mutator(*cloned);
+        currentConfiguration = cloned;
+        return cloned;
+    }
     FrameQueue frameQueue;
     mutable std::recursive_mutex vulkanPresentationMutex;
     std::shared_ptr<VulkanOutput> vulkanOutput;

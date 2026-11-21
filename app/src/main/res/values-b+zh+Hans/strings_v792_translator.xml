@@ -29,9 +29,9 @@
         <item>system_offline_best</item>
     </string-array>
     <string name="translator_floating_button_opacity">翻译按钮透明度</string>
-    <string name="translator_floating_button_opacity_summary">调整悬浮 TR | LOG 按钮的不透明度（默认 35%）</string>
+    <string name="translator_floating_button_opacity_summary" formatted="false">调整悬浮 TR | LOG 按钮的不透明度（默认 35%）</string>
     <string name="translator_voice_pitch_title">声音音调</string>
-    <string name="translator_voice_pitch_summary">微调语音音调偏移（-20%..+20%）</string>
+    <string name="translator_voice_pitch_summary" formatted="false">微调语音音调偏移（-20%..+20%）</string>
     <string name="translator_test_voice_title">试听选定声音</string>
     <string name="translator_test_voice_summary">播放语音样本以验证朗读效果</string>
     <string name="translator_test_voice_playing">正在播放语音样本...</string>

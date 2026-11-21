@@ -31,4 +31,5 @@
     <string name="mic_agc_noise_gate_title">Адаптивное шумоподавление и AGC микрофона</string>
     <string name="mic_agc_noise_gate_summary">Фильтрация DC-гула, подавление шума комнаты и мягкая нормализация голоса</string>
     <string name="v790_vulkan_pipeline_cache_status">Кэш шейдеров Vulkan активен</string>
+    <string name="v790_ram_value_required">Требуется значение</string>
 </resources>

@@ -148,14 +148,21 @@ void main()
 
     if (((pc.dispCnt & (1u << 5u)) != 0u) && attr.g > 0.75)
     {
-        vec4 depthU = texelFetch(DepthBuffer, coord + ivec2(0, -scale), 0);
-        vec4 attrU = texelFetch(AttrBuffer, coord + ivec2(0, -scale), 0);
-        vec4 depthD = texelFetch(DepthBuffer, coord + ivec2(0, scale), 0);
-        vec4 attrD = texelFetch(AttrBuffer, coord + ivec2(0, scale), 0);
-        vec4 depthL = texelFetch(DepthBuffer, coord + ivec2(-scale, 0), 0);
-        vec4 attrL = texelFetch(AttrBuffer, coord + ivec2(-scale, 0), 0);
-        vec4 depthR = texelFetch(DepthBuffer, coord + ivec2(scale, 0), 0);
-        vec4 attrR = texelFetch(AttrBuffer, coord + ivec2(scale, 0), 0);
+        ivec2 depthMax = max(textureSize(DepthBuffer, 0) - ivec2(1), ivec2(0));
+        ivec2 attrMax = max(textureSize(AttrBuffer, 0) - ivec2(1), ivec2(0));
+        ivec2 maxCoord = min(depthMax, attrMax);
+        ivec2 coordU = clamp(coord + ivec2(0, -scale), ivec2(0), maxCoord);
+        ivec2 coordD = clamp(coord + ivec2(0, scale), ivec2(0), maxCoord);
+        ivec2 coordL = clamp(coord + ivec2(-scale, 0), ivec2(0), maxCoord);
+        ivec2 coordR = clamp(coord + ivec2(scale, 0), ivec2(0), maxCoord);
+        vec4 depthU = texelFetch(DepthBuffer, coordU, 0);
+        vec4 attrU = texelFetch(AttrBuffer, coordU, 0);
+        vec4 depthD = texelFetch(DepthBuffer, coordD, 0);
+        vec4 attrD = texelFetch(AttrBuffer, coordD, 0);
+        vec4 depthL = texelFetch(DepthBuffer, coordL, 0);
+        vec4 attrL = texelFetch(AttrBuffer, coordL, 0);
+        vec4 depthR = texelFetch(DepthBuffer, coordR, 0);
+        vec4 attrR = texelFetch(AttrBuffer, coordR, 0);
 
         if (isgood(attrU, depthU.r, polyid, depth.r)
             || isgood(attrD, depthD.r, polyid, depth.r)
