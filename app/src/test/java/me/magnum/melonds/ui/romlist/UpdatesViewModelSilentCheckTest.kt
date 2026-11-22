@@ -94,12 +94,36 @@ class UpdatesViewModelSilentCheckTest {
             viewModel.manualUpdateResult.collect { manualResults.add(it) }
         }
 
+        repo.recordedIgnorePreferences.clear()
         repo.nextResult = Result.success(null)
         viewModel.checkForUpdatesManually()
 
+        assertEquals(listOf(true), repo.recordedIgnorePreferences)
         assertEquals(2, manualResults.size)
         assertTrue(manualResults[0] is ManualUpdateResult.Checking)
         assertTrue(manualResults[1] is ManualUpdateResult.UpToDate)
+
+        manualJob.cancel()
+    }
+
+    @Test
+    fun checkForUpdatesManually_emitsCheckingAndErrorOnFailure() = runTest {
+        val repo = FakeUpdatesRepository()
+        val viewModel = UpdatesViewModel(repo, FakeUpdateInstallManager())
+
+        val manualResults = mutableListOf<ManualUpdateResult>()
+        val manualJob = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.manualUpdateResult.collect { manualResults.add(it) }
+        }
+
+        repo.recordedIgnorePreferences.clear()
+        repo.nextResult = Result.failure(RuntimeException("Network error"))
+        viewModel.checkForUpdatesManually()
+
+        assertEquals(listOf(true), repo.recordedIgnorePreferences)
+        assertEquals(2, manualResults.size)
+        assertTrue(manualResults[0] is ManualUpdateResult.Checking)
+        assertEquals(ManualUpdateResult.Error("Network error"), manualResults[1])
 
         manualJob.cancel()
     }

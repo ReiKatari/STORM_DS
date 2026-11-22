@@ -109,10 +109,9 @@ fun RomCheatsUi(
 
     fun refreshCheats() {
         refreshJob?.cancel()
+        isLoading = true
         refreshJob = coroutineScope.launch(Dispatchers.IO) {
-            isLoading = true
             val parsedInfo = parseRomInfoDeep(context, rom)
-            romInfo = parsedInfo
 
             val checksum = parsedInfo?.headerChecksumString() ?: ""
             val effectiveCode = parsedInfo?.gameCode?.takeIf { it.isNotBlank() }
@@ -138,26 +137,33 @@ fun RomCheatsUi(
                     Game(it.id, it.name, it.gameCode, it.gameChecksum, emptyList())
                 }
             }
-            game = foundGame
+            withContext(Dispatchers.Main) {
+                romInfo = parsedInfo
+                game = foundGame
+            }
 
             if (foundGame != null) {
                 cheatsRepository.getAllGameCheats(foundGame).collect { folders ->
                     if (folders.isEmpty()) {
                         EmbeddedActionReplayCheats.populateIfEmpty(database, effectiveCode, effectiveTitle, checksum)
                     }
-                    cheatFolders = folders
-                    folders.forEach { f ->
-                        f.id?.let { id ->
-                            if (!expandedFolders.containsKey(id)) {
-                                expandedFolders[id] = true
+                    withContext(Dispatchers.Main) {
+                        cheatFolders = folders
+                        folders.forEach { f ->
+                            f.id?.let { id ->
+                                if (!expandedFolders.containsKey(id)) {
+                                    expandedFolders[id] = true
+                                }
                             }
                         }
+                        isLoading = false
                     }
-                    isLoading = false
                 }
             } else {
-                cheatFolders = emptyList()
-                isLoading = false
+                withContext(Dispatchers.Main) {
+                    cheatFolders = emptyList()
+                    isLoading = false
+                }
             }
         }
     }
@@ -199,12 +205,15 @@ fun RomCheatsUi(
     }
 
     LaunchedEffect(rom) {
-        // Auto-check for cheat files in /storage/emulated/0/STORM DS/cheats/
+        // Auto-check for cheat files in /storage/emulated/0/STORM DS/cheats/ with internal fallback
         withContext(Dispatchers.IO) {
-            val rootBase = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS")
-            val cheatsDir = File(rootBase, "cheats").apply { mkdirs() }
-            val usrCheat = File(cheatsDir, "usrcheat.dat")
-            if (usrCheat.exists() && usrCheat.length() > 1024L) {
+            val extCheatsDir = runCatching {
+                File(android.os.Environment.getExternalStorageDirectory(), "STORM DS/cheats")
+            }.getOrNull()
+            val extUsrCheat = extCheatsDir?.let { File(it, "usrcheat.dat") }?.takeIf { it.exists() && it.canRead() }
+            val internalUsrCheat = File(context.filesDir, "cheats/usrcheat.dat").takeIf { it.exists() && it.canRead() }
+            val usrCheat = extUsrCheat ?: internalUsrCheat
+            if (usrCheat != null && usrCheat.exists() && usrCheat.length() > 1024L) {
                 val hasValidMagic = runCatching {
                     usrCheat.inputStream().use { ins ->
                         val hdr = ByteArray(12)
@@ -238,10 +247,9 @@ fun RomCheatsUi(
         if (uri != null) {
             coroutineScope.launch(Dispatchers.IO) {
                 var importedSig: String? = null
-                // Copy imported file to STORM DS/cheats/ for persistence
+                // Copy imported file to STORM DS/cheats/ (or internal fallback without MANAGE_EXTERNAL_STORAGE)
                 runCatching {
-                    val rootBase = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS")
-                    val cheatsDir = File(rootBase, "cheats").apply { mkdirs() }
+                    val cheatsDir = resolveWritableCheatsDir(context)
                     val fileName = runCatching {
                         androidx.documentfile.provider.DocumentFile.fromSingleUri(context, uri)?.name
                     }.getOrNull() ?: "usrcheat.dat"
@@ -297,8 +305,7 @@ fun RomCheatsUi(
                 .callTimeout(180, TimeUnit.SECONDS)
                 .build()
 
-            val rootBase = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS")
-            val cheatsDir = File(rootBase, "cheats").apply { mkdirs() }
+            val cheatsDir = resolveWritableCheatsDir(context)
             val targetCheatFile = File(cheatsDir, "usrcheat.dat")
             val tempCheatFile = File(cheatsDir, "usrcheat.dat.tmp")
 
@@ -691,6 +698,27 @@ fun RomCheatsUi(
             }
         }
     }
+}
+
+private fun resolveWritableCheatsDir(context: android.content.Context): File {
+    val extDir = runCatching {
+        File(android.os.Environment.getExternalStorageDirectory(), "STORM DS/cheats")
+    }.getOrNull()
+    if (extDir != null && isCheatsDirWritable(extDir)) {
+        return extDir
+    }
+    return File(context.filesDir, "cheats").apply { mkdirs() }
+}
+
+private fun isCheatsDirWritable(dir: File): Boolean {
+    if (!dir.exists() && !dir.mkdirs()) return false
+    if (!dir.isDirectory) return false
+    return runCatching {
+        val probe = File(dir, ".write_test_${System.nanoTime()}")
+        FileOutputStream(probe).use { it.write(0) }
+        probe.delete()
+        true
+    }.getOrDefault(false)
 }
 
 private fun extractDsiCode(rom: Rom): String {

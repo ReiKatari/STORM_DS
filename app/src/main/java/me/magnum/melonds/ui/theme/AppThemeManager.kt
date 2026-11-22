@@ -28,8 +28,15 @@ object AppThemeManager {
         get() = themeState.value
 
     fun applyNightMode(theme: Theme) {
-        if (AppCompatDelegate.getDefaultNightMode() != theme.nightMode) {
-            AppCompatDelegate.setDefaultNightMode(theme.nightMode)
+        val update = Runnable {
+            if (AppCompatDelegate.getDefaultNightMode() != theme.nightMode) {
+                AppCompatDelegate.setDefaultNightMode(theme.nightMode)
+            }
+        }
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+            update.run()
+        } else {
+            android.os.Handler(android.os.Looper.getMainLooper()).post(update)
         }
     }
 

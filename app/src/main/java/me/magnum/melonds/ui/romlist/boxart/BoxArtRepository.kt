@@ -11,8 +11,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -77,6 +80,15 @@ class BoxArtRepository @Inject constructor(
 
     private val _coverUpdates = MutableSharedFlow<Pair<String, String?>>(extraBufferCapacity = 32)
     val coverUpdates: SharedFlow<Pair<String, String?>> = _coverUpdates.asSharedFlow()
+
+    private val _indexReady = MutableStateFlow(false)
+    val indexReady: StateFlow<Boolean> = _indexReady.asStateFlow()
+
+    sealed interface BoxArtResult {
+        data class Found(val url: String) : BoxArtResult
+        data object NotFound : BoxArtResult
+        data object IndexPending : BoxArtResult
+    }
 
     private data class IndexEntry(val fullUrl: String, val normalized: String, val tokens: Set<String>)
 
@@ -208,7 +220,12 @@ class BoxArtRepository @Inject constructor(
         }
     }
 
-    suspend fun getBoxArtUrl(rom: Rom): String? = withContext(Dispatchers.IO) {
+    suspend fun getBoxArtUrl(rom: Rom): String? = when (val result = resolveBoxArt(rom)) {
+        is BoxArtResult.Found -> result.url
+        BoxArtResult.NotFound, BoxArtResult.IndexPending -> null
+    }
+
+    suspend fun resolveBoxArt(rom: Rom): BoxArtResult = withContext(Dispatchers.IO) {
         val key = rom.uri.toString()
 
         // 1. Check for local user custom cover first
@@ -216,27 +233,24 @@ class BoxArtRepository @Inject constructor(
         if (customCover != null && customCover.exists() && customCover.length() > 0) {
             val customUrl = "file://${customCover.absolutePath}?t=${customCover.lastModified()}"
             memoryCache[key] = customUrl
-            return@withContext customUrl
+            return@withContext BoxArtResult.Found(customUrl)
         }
 
         // 2. Instant in-memory check without lock
         val cached = memoryCache[key]
         if (cached != null) {
-            return@withContext if (cached == NO_MATCH) null else cached
+            return@withContext if (cached == NO_MATCH) BoxArtResult.NotFound else BoxArtResult.Found(cached)
         }
 
         if (!isMatchesLoaded) {
             loadMatches()
             val stored = memoryCache[key]
             if (stored != null) {
-                return@withContext if (stored == NO_MATCH) null else stored
+                return@withContext if (stored == NO_MATCH) BoxArtResult.NotFound else BoxArtResult.Found(stored)
             }
         }
 
-        val entries = indexEntries ?: run {
-            loadIndex()
-            return@withContext null
-        }
+        val entries = indexEntries ?: loadIndex() ?: return@withContext BoxArtResult.IndexPending
 
         val candidates = buildList {
             if (rom.name.isNotBlank()) add(rom.name)
@@ -247,13 +261,13 @@ class BoxArtRepository @Inject constructor(
 
         val match = findBestMatch(candidates, entries)
         if (entries.size < 500) {
-            return@withContext match?.fullUrl
+            return@withContext if (match != null) BoxArtResult.Found(match.fullUrl) else BoxArtResult.IndexPending
         }
         val matchValue = match?.fullUrl ?: NO_MATCH
         memoryCache[key] = matchValue
         schedulePersistMatches()
 
-        if (matchValue == NO_MATCH) null else matchValue
+        if (matchValue == NO_MATCH) BoxArtResult.NotFound else BoxArtResult.Found(matchValue)
     }
 
     suspend fun getAllCachedMatches(): Map<String, String> = withContext(Dispatchers.IO) {
@@ -410,6 +424,7 @@ class BoxArtRepository @Inject constructor(
             exactIndexMap.clear()
             exactIndexMap.putAll(newExactMap)
             indexEntries = entries
+            _indexReady.value = entries.size >= 500
         }
         return entries
     }

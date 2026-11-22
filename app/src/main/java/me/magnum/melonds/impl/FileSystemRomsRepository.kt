@@ -15,7 +15,9 @@ import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.BufferOverflow
@@ -104,6 +106,8 @@ class FileSystemRomsRepository(
     @Volatile private var hasUnavailableSearchDirectories = false
     private val scanMutex = Mutex()
     private val romDataMutex = Mutex()
+    private val romOptionsIoLock = Any()
+    @Volatile private var lastRomOptionsWriteJob: Job? = null
     private val initJob = coroutineScope.launch {
         loadDirectoryStates()
         ensureRomSearchDirectoriesInitialized()
@@ -350,20 +354,30 @@ class FileSystemRomsRepository(
 
     override fun updateRomConfig(rom: Rom, romConfig: RomConfig) {
         val installedTitleId = resolveInstalledDsiWareTitleId(rom)
-        if (installedTitleId != null && (rom.isInstalledDsiWareShortcut || rom.uri.scheme == Rom.INSTALLED_DSIWARE_URI_SCHEME)) {
-            writeInstalledDsiWareConfig(installedTitleId, romConfig)
-        }
-
         val romIndex = roms.indexOfFirst { it.hasSameFileAsRom(rom) }
-        if (romIndex < 0)
+        if (romIndex < 0) {
+            if (installedTitleId != null && (rom.isInstalledDsiWareShortcut || rom.uri.scheme == Rom.INSTALLED_DSIWARE_URI_SCHEME)) {
+                lastRomOptionsWriteJob = coroutineScope.launch(Dispatchers.IO) {
+                    synchronized(romOptionsIoLock) {
+                        writeInstalledDsiWareConfig(installedTitleId, romConfig)
+                    }
+                }
+            }
             return
+        }
 
         roms[romIndex].config = romConfig
-        if (installedTitleId != null) {
-            writeInstalledDsiWareConfig(installedTitleId, romConfig)
-        }
-        syncRomOptionsFile(roms[romIndex])
+        val romSnapshot = roms[romIndex].copy(config = romConfig)
         onRomsChanged()
+
+        lastRomOptionsWriteJob = coroutineScope.launch(Dispatchers.IO) {
+            synchronized(romOptionsIoLock) {
+                if (installedTitleId != null) {
+                    writeInstalledDsiWareConfig(installedTitleId, romConfig)
+                }
+                syncRomOptionsFile(romSnapshot)
+            }
+        }
     }
 
     override fun setRomLastPlayed(rom: Rom, lastPlayed: Date) {
@@ -490,8 +504,13 @@ class FileSystemRomsRepository(
         }
     }
 
-    private fun refreshRomConfigFromOptions(rom: Rom): Rom {
-        val optionsConfig = readRomOptionsConfig(rom) ?: return rom
+    private suspend fun refreshRomConfigFromOptions(rom: Rom): Rom {
+        lastRomOptionsWriteJob?.join()
+        val optionsConfig = withContext(Dispatchers.IO) {
+            synchronized(romOptionsIoLock) {
+                readRomOptionsConfig(rom)
+            }
+        } ?: return rom
         val updatedRom = applyRestoredRomMetadata(rom, optionsConfig)
         if (updatedRom == rom) {
             return rom

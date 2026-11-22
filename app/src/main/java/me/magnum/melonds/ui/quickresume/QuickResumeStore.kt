@@ -128,7 +128,7 @@ object QuickResumeStore {
                 quickSaveTimestamps[topUriString] = savedQuickTs
                 _quickSaveTimestampsFlow.value = quickSaveTimestamps.toMap()
             }
-            if (current == null || topPlayedMs > current.lastPlayedEpochMs) {
+            if (current == null || current.uriString != topUriString || topPlayedMs > current.lastPlayedEpochMs) {
                 val entry = LastRomEntry(
                     uriString = topUriString,
                     displayName = displayName,

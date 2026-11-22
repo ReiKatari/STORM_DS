@@ -28,7 +28,8 @@ class BackgroundsViewModel @Inject constructor(
     val currentSelectedBackground = _currentSelectedBackground.asStateFlow()
 
     init {
-        val initialBackgroundId = savedStateHandle.get<String?>(BackgroundsActivity.KEY_INITIAL_BACKGROUND_ID)?.let { UUID.fromString(it) }
+        val initialBackgroundId = savedStateHandle.get<String?>(BackgroundsActivity.KEY_INITIAL_BACKGROUND_ID)
+            ?.let { rawId -> runCatching { UUID.fromString(rawId) }.getOrNull() }
         _currentSelectedBackground.value = initialBackgroundId
 
         viewModelScope.launch {
@@ -49,6 +50,16 @@ class BackgroundsViewModel @Inject constructor(
         uriPermissionManager.persistFilePermissions(background.uri, Permission.READ)
         viewModelScope.launch {
             backgroundsRepository.addBackground(background)
+        }
+    }
+
+    fun restoreBackground(background: Background, reselect: Boolean) {
+        uriPermissionManager.persistFilePermissions(background.uri, Permission.READ)
+        viewModelScope.launch {
+            backgroundsRepository.addBackground(background)
+            if (reselect && _currentSelectedBackground.value == null) {
+                _currentSelectedBackground.value = background.id
+            }
         }
     }
 

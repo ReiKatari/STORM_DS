@@ -24,7 +24,6 @@
             android:title="@string/firmware_language"
             app:useSimpleSummaryProvider="true"
             app:iconSpaceReserved="false"
-            android:defaultValue="1"
             android:entries="@array/firmware_settings_language_options"
             android:entryValues="@array/firmware_settings_language_values" />
 

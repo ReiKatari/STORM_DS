@@ -58,6 +58,23 @@
                 android:entries="@array/arm9_overclock_options"
                 android:entryValues="@array/arm9_overclock_values"
                 android:defaultValue="1" />
+
+        <ListPreference
+                android:key="frameskip_mode"
+                android:title="@string/frameskip_mode"
+                android:summary="@string/frameskip_mode_summary"
+                app:iconSpaceReserved="false"
+                android:defaultValue="auto"
+                android:entries="@array/frameskip_mode_options"
+                android:entryValues="@array/frameskip_mode_values" />
+
+        <ListPreference
+                android:key="frameskip_manual_value"
+                android:title="@string/frameskip_manual_value"
+                app:iconSpaceReserved="false"
+                android:defaultValue="1"
+                android:entries="@array/frameskip_manual_value_options"
+                android:entryValues="@array/frameskip_manual_value_values" />
     </PreferenceCategory>
 
     <PreferenceCategory

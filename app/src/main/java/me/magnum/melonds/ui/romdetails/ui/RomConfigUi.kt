@@ -147,6 +147,8 @@ private fun Content(
     val videoFilteringDialogState = rememberSingleChoiceDialogState<VideoFiltering?>()
     val retroAchievementsDialogState = rememberSingleChoiceDialogState<Boolean?>()
     val dualScreenPresetDialogState = rememberSingleChoiceDialogState<me.magnum.melonds.domain.model.DualScreenPreset?>()
+    val dualScreenKeepAspectRatioDialogState = rememberSingleChoiceDialogState<Boolean?>()
+    val dualScreenIntegerScaleDialogState = rememberSingleChoiceDialogState<Boolean?>()
     val translatorSourceLangDialogState = rememberSingleChoiceDialogState<String?>()
     val arm9OverclockDialogState = rememberSingleChoiceDialogState<Int?>()
     val fastForwardSpeedDialogState = rememberSingleChoiceDialogState<Float?>()
@@ -253,6 +255,8 @@ private fun Content(
         if (romConfig.inputMode != RomInputMode.GLOBAL) count++
         if (romConfig.retroAchievementsEnabled != null) count++
         if (romConfig.dualScreenPreset != null) count++
+        if (romConfig.dualScreenKeepAspectRatio != null) count++
+        if (romConfig.dualScreenIntegerScale != null) count++
         if (romConfig.layoutId != null) count++
         if (romConfig.translatorSourceLang != null) count++
         if (romConfig.useHgEngineFix) count++
@@ -768,6 +772,41 @@ private fun Content(
                     )
                 },
             )
+            fun dualScreenBooleanLabel(value: Boolean?): String {
+                return when (value) {
+                    null -> useGlobal
+                    true -> context.getString(R.string.on)
+                    false -> context.getString(R.string.off)
+                }
+            }
+            ConfigRow(
+                title = stringResource(R.string.keep_ds_ratio),
+                value = dualScreenBooleanLabel(romConfig.dualScreenKeepAspectRatio),
+                showDivider = true,
+                onClick = {
+                    dualScreenKeepAspectRatioDialogState.show(
+                        title = context.getString(R.string.keep_ds_ratio),
+                        items = listOf(null, true, false),
+                        labelOf = { dualScreenBooleanLabel(it) },
+                        selected = romConfig.dualScreenKeepAspectRatio,
+                        onSelect = { onConfigUpdate(RomConfigUpdateEvent.DualScreenKeepAspectRatioUpdate(it)) },
+                    )
+                },
+            )
+            ConfigRow(
+                title = stringResource(R.string.dual_screen_integer_scale),
+                value = dualScreenBooleanLabel(romConfig.dualScreenIntegerScale),
+                showDivider = true,
+                onClick = {
+                    dualScreenIntegerScaleDialogState.show(
+                        title = context.getString(R.string.dual_screen_integer_scale),
+                        items = listOf(null, true, false),
+                        labelOf = { dualScreenBooleanLabel(it) },
+                        selected = romConfig.dualScreenIntegerScale,
+                        onSelect = { onConfigUpdate(RomConfigUpdateEvent.DualScreenIntegerScaleUpdate(it)) },
+                    )
+                },
+            )
         }
         }
 
@@ -911,6 +950,8 @@ private fun Content(
     SingleChoiceDialog(videoFilteringDialogState)
     SingleChoiceDialog(retroAchievementsDialogState)
     SingleChoiceDialog(dualScreenPresetDialogState)
+    SingleChoiceDialog(dualScreenKeepAspectRatioDialogState)
+    SingleChoiceDialog(dualScreenIntegerScaleDialogState)
     SingleChoiceDialog(translatorSourceLangDialogState)
     SingleChoiceDialog(arm9OverclockDialogState)
     SingleChoiceDialog(fastForwardSpeedDialogState)

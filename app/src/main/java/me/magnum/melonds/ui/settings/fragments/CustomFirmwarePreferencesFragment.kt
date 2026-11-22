@@ -342,16 +342,16 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
             val validFirmwareSizes = setOf(131072L, 262144L, 524288L)
 
             val dsRows = listOf(
-                inspectFile(dsDir, "DS bios7.bin", exactSize = 16384L, minSize = 16384L, required = true, candidateNames = arrayOf("bios7.bin", "ds_bios7.bin", "arm7.bin")),
-                inspectFile(dsDir, "DS bios9.bin", exactSize = 4096L, minSize = 4096L, required = true, candidateNames = arrayOf("bios9.bin", "ds_bios9.bin", "arm9.bin")),
-                inspectFile(dsDir, "DS firmware.bin", exactSize = null, minSize = 131072L, required = true, validSizes = validFirmwareSizes, candidateNames = arrayOf("firmware.bin", "ds_firmware.bin")),
+                inspectFile(dsDir, "DS bios7.bin", exactSize = 16384L, minSize = 16384L, required = true, candidateNames = arrayOf("bios7.bin", "ds_bios7.bin", "arm7.bin", "bios7_ds.bin")),
+                inspectFile(dsDir, "DS bios9.bin", exactSize = 4096L, minSize = 4096L, required = true, candidateNames = arrayOf("bios9.bin", "ds_bios9.bin", "arm9.bin", "bios9_ds.bin")),
+                inspectFile(dsDir, "DS firmware.bin", exactSize = null, minSize = 131072L, required = true, validSizes = validFirmwareSizes, candidateNames = arrayOf("firmware.bin", "ds_firmware.bin", "firmware_ds.bin")),
                 inspectFile(dsDir, "DS sd_card.bin", exactSize = null, minSize = 1024L, required = false, candidateNames = arrayOf("sd_card.bin", "dldi_sd_card.bin")),
             )
             val dsiRows = listOf(
-                inspectFile(dsiDir, "DSi bios7.bin", exactSize = 65536L, minSize = 65536L, required = true, candidateNames = arrayOf("bios7.bin", "dsi_bios7.bin", "arm7.bin", "bios7i.bin")),
-                inspectFile(dsiDir, "DSi bios9.bin", exactSize = 65536L, minSize = 65536L, required = true, candidateNames = arrayOf("bios9.bin", "dsi_bios9.bin", "arm9.bin", "bios9i.bin")),
-                inspectFile(dsiDir, "DSi firmware.bin", exactSize = null, minSize = 131072L, required = true, validSizes = validFirmwareSizes, candidateNames = arrayOf("firmware.bin", "dsi_firmware.bin")),
-                inspectFile(dsiDir, "DSi nand.bin", exactSize = null, minSize = 1024L * 1024L, required = true, candidateNames = arrayOf("nand.bin", "dsi_nand.bin")),
+                inspectFile(dsiDir, "DSi bios7.bin", exactSize = 65536L, minSize = 65536L, required = true, candidateNames = arrayOf("bios7i.bin", "dsi_bios7.bin", "bios7.bin", "arm7i.bin", "dsi_arm7.bin")),
+                inspectFile(dsiDir, "DSi bios9.bin", exactSize = 65536L, minSize = 65536L, required = true, candidateNames = arrayOf("bios9i.bin", "dsi_bios9.bin", "bios9.bin", "arm9i.bin", "dsi_arm9.bin")),
+                inspectFile(dsiDir, "DSi firmware.bin", exactSize = null, minSize = 131072L, required = true, validSizes = validFirmwareSizes, candidateNames = arrayOf("dsi_firmware.bin", "firmware.bin", "firmware_dsi.bin", "dsi_bios.bin")),
+                inspectFile(dsiDir, "DSi nand.bin", exactSize = null, minSize = 1024L * 1024L, required = true, candidateNames = arrayOf("dsi_nand.bin", "nand.bin", "nand_dsi.bin")),
                 inspectFile(dsiDir, "DSi sd_card.bin", exactSize = null, minSize = 1024L, required = false, candidateNames = arrayOf("sd_card.bin", "dsi_sd_card.bin")),
             )
 
@@ -489,9 +489,31 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
             }
         }.getOrNull() ?: return decodedPath
 
+        val fallbackBiosDir = java.io.File(android.os.Environment.getExternalStorageDirectory().resolve("STORM DS"), "bios")
+            .takeIf { it.exists() && it.isDirectory }
+            ?.let { androidx.documentfile.provider.DocumentFile.fromFile(it) }
+        val lowerIndexCache = HashMap<String, Map<String, androidx.documentfile.provider.DocumentFile>>()
+        fun indexDir(doc: androidx.documentfile.provider.DocumentFile): Map<String, androidx.documentfile.provider.DocumentFile> {
+            val key = doc.uri.toString()
+            lowerIndexCache[key]?.let { return it }
+            val index = LinkedHashMap<String, androidx.documentfile.provider.DocumentFile>()
+            runCatching { doc.listFiles() }.getOrNull()?.forEach { child ->
+                val childName = child.name
+                if (!childName.isNullOrBlank() && child.isFile) {
+                    index.putIfAbsent(childName.lowercase(java.util.Locale.ROOT), child)
+                }
+            }
+            lowerIndexCache[key] = index
+            return index
+        }
+
         fun findDoc(vararg names: String): androidx.documentfile.provider.DocumentFile? {
-            for (name in names) {
-                dirDoc.findFile(name)?.let { return it }
+            for (searchDir in listOfNotNull(dirDoc, fallbackBiosDir)) {
+                val indexed = indexDir(searchDir)
+                for (name in names) {
+                    indexed[name.lowercase(java.util.Locale.ROOT)]?.let { return it }
+                    searchDir.findFile(name)?.takeIf { it.isFile }?.let { return it }
+                }
             }
             return null
         }
@@ -510,11 +532,11 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
         val validFirmwareSizes = setOf(131072L, 262144L, 524288L)
         val sb = StringBuilder(decodedPath).append("\n")
         if (consoleType == ConsoleType.DS) {
-            val f7 = findDoc("bios7.bin", "ds_bios7.bin", "arm7.bin")
+            val f7 = findDoc("bios7.bin", "ds_bios7.bin", "arm7.bin", "bios7_ds.bin")
             val l7 = getLength(f7)
-            val f9 = findDoc("bios9.bin", "ds_bios9.bin", "arm9.bin")
+            val f9 = findDoc("bios9.bin", "ds_bios9.bin", "arm9.bin", "bios9_ds.bin")
             val l9 = getLength(f9)
-            val ff = findDoc("firmware.bin", "ds_firmware.bin")
+            val ff = findDoc("firmware.bin", "ds_firmware.bin", "firmware_ds.bin")
             val lf = getLength(ff)
 
             val s7 = if (l7 == 16384L) "DS BIOS7: 16 $unitKb ✓" else if (l7 > 0) "DS BIOS7: ${l7 / 1024} $unitKb ⚠ ($expectedWord 16 $unitKb)" else "DS BIOS7: $missingWord"
@@ -526,13 +548,13 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
             }
             sb.append(s7).append(" | ").append(s9).append(" | ").append(sf)
         } else {
-            val f7 = findDoc("bios7.bin", "dsi_bios7.bin", "arm7.bin", "bios7i.bin")
+            val f7 = findDoc("bios7i.bin", "dsi_bios7.bin", "bios7.bin", "arm7i.bin", "dsi_arm7.bin")
             val l7 = getLength(f7)
-            val f9 = findDoc("bios9.bin", "dsi_bios9.bin", "arm9.bin", "bios9i.bin")
+            val f9 = findDoc("bios9i.bin", "dsi_bios9.bin", "bios9.bin", "arm9i.bin", "dsi_arm9.bin")
             val l9 = getLength(f9)
-            val ff = findDoc("firmware.bin", "dsi_firmware.bin")
+            val ff = findDoc("dsi_firmware.bin", "firmware.bin", "firmware_dsi.bin", "dsi_bios.bin")
             val lf = getLength(ff)
-            val fn = findDoc("nand.bin", "dsi_nand.bin")
+            val fn = findDoc("dsi_nand.bin", "nand.bin", "nand_dsi.bin")
             val ln = getLength(fn)
 
             val s7 = if (l7 == 65536L) "DSi BIOS7: 64 $unitKb ✓" else if (l7 > 0) "DSi BIOS7: ${l7 / 1024} $unitKb ⚠ ($expectedWord 64 $unitKb)" else "DSi BIOS7: $missingWord"

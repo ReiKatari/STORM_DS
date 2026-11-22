@@ -4,6 +4,7 @@ import android.net.Uri
 import kotlinx.coroutines.flow.Flow
 import me.magnum.melonds.domain.model.Cheat
 import me.magnum.melonds.domain.model.ConsoleType
+import me.magnum.melonds.domain.model.FrameskipConfiguration
 import me.magnum.melonds.domain.model.emulator.EmulatorEvent
 import me.magnum.melonds.domain.model.emulator.FirmwareLaunchResult
 import me.magnum.melonds.domain.model.emulator.RomLaunchResult
@@ -51,6 +52,9 @@ interface EmulatorManager {
         expectedNativeSubmissionIds: List<Long>,
     ): Int
     suspend fun setRetroAchievementsSubmissionTransportSuspended(suspended: Boolean)
+    fun setFrameskipConfiguration(configuration: FrameskipConfiguration)
+    fun setVulkanDrsEnabled(enabled: Boolean)
+    fun getVulkanRenderedInternalResolution(): Int
     fun unloadRetroAchievementsData()
 
     suspend fun loadRewindState(rewindSaveState: RewindSaveState): Boolean

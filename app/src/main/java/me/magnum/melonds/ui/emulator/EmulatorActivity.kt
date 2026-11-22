@@ -386,9 +386,6 @@ class EmulatorActivity : AppCompatActivity() {
     private val sessionStartElapsedRealtime = android.os.SystemClock.elapsedRealtime()
     private var baseInternalResolutionScale = 1
     private var liveDrsScale = 1
-    private var drsLowFpsCounter = 0
-    private var drsStableFpsCounter = 0
-    private val drsScaleSteps = intArrayOf(16, 12, 8, 7, 6, 5, 4, 3, 2, 1)
     private val frontendInputHandler = object : FrontendInputHandler() {
         var fastForwardEnabled = false
             private set
@@ -553,6 +550,7 @@ class EmulatorActivity : AppCompatActivity() {
         }
         setupSustainedPerformanceMode()
         setupFpsCounter()
+        setupRenderedIrOverlay()
         setupResolutionHud()
         setupConsoleSkin()
         isExtendedPauseMenuState.value = settingsRepository.isExtendedPauseMenuEnabled()
@@ -909,6 +907,7 @@ class EmulatorActivity : AppCompatActivity() {
         }
 
         binding.textFps.visibility = View.INVISIBLE
+        binding.textRenderedIr.visibility = View.INVISIBLE
         binding.viewLayoutControls.setLayoutComponentViewBuilderFactory(RuntimeLayoutComponentViewBuilderFactory())
         binding.layoutRewind.setOnClickListener {
             closeRewindWindow()
@@ -1627,7 +1626,20 @@ class EmulatorActivity : AppCompatActivity() {
                     } else {
                         binding.textFps.text = getString(R.string.info_fps, it)
                     }
-                    handleDrsAndHudUpdate(it)
+                    updateResolutionHudText(it)
+                }
+            }
+        }
+        lifecycleScope.launch {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.renderedInternalResolution.collectLatest {
+                    if (it == null) {
+                        binding.textRenderedIr.text = null
+                    } else {
+                        liveDrsScale = it.first
+                        binding.textRenderedIr.text = getString(R.string.info_rendered_ir, it.first, it.second)
+                    }
+                    updateResolutionHudText(viewModel.currentFps.value)
                 }
             }
         }
@@ -1936,6 +1948,7 @@ class EmulatorActivity : AppCompatActivity() {
                             bootBoxArtUrl.value = null
                             binding.viewLayoutControls.isInvisible = true
                             binding.textFps.isGone = true
+                            binding.textRenderedIr.isGone = true
                             binding.textLoading.isGone = true
                             binding.progressLoading.isGone = true
                             binding.textLoadingDetail.isGone = true
@@ -1999,6 +2012,7 @@ class EmulatorActivity : AppCompatActivity() {
                             presentation?.setInfoOverlayContent(null)
                             setupSustainedPerformanceMode()
                             setupFpsCounter()
+                            setupRenderedIrOverlay()
                             setupResolutionHud()
                             binding.textLoading.isGone = true
                             binding.progressLoading.isGone = true
@@ -2020,6 +2034,7 @@ class EmulatorActivity : AppCompatActivity() {
                         is EmulatorState.RomLoadError -> {
                             binding.viewLayoutControls.isInvisible = true
                             binding.textFps.isGone = true
+                            binding.textRenderedIr.isGone = true
                             binding.textLoading.isGone = true
                             binding.progressLoading.isGone = true
                             binding.textLoadingDetail.isGone = true
@@ -2030,6 +2045,7 @@ class EmulatorActivity : AppCompatActivity() {
                         is EmulatorState.FirmwareLoadError -> {
                             binding.viewLayoutControls.isInvisible = true
                             binding.textFps.isGone = true
+                            binding.textRenderedIr.isGone = true
                             binding.textLoading.isGone = true
                             binding.progressLoading.isGone = true
                             binding.textLoadingDetail.isGone = true
@@ -2040,6 +2056,7 @@ class EmulatorActivity : AppCompatActivity() {
                         is EmulatorState.RomNotFoundError -> {
                             binding.viewLayoutControls.isInvisible = true
                             binding.textFps.isGone = true
+                            binding.textRenderedIr.isGone = true
                             binding.textLoading.isGone = true
                             binding.progressLoading.isGone = true
                             binding.textLoadingDetail.isGone = true
@@ -2085,6 +2102,7 @@ class EmulatorActivity : AppCompatActivity() {
         if (!bootRomReady.value) {
             binding.viewLayoutControls.isInvisible = true
             binding.textFps.isGone = true
+            binding.textRenderedIr.isGone = true
             binding.textLoading.isVisible = !showBootAnimation.value
             binding.progressLoading.isVisible = !showBootAnimation.value
             binding.textLoadingDetail.isGone = true
@@ -2528,6 +2546,7 @@ class EmulatorActivity : AppCompatActivity() {
                         activeOverlays.removeActiveOverlay(EmulatorOverlay.SWITCH_NEW_ROM_DIALOG)
                     }
                     .setOnCancelListener {
+                        me.magnum.melonds.ui.quickresume.QuickResumeRequest.clear()
                         viewModel.resumeEmulator()
                     }
                     .show()
@@ -2549,6 +2568,7 @@ class EmulatorActivity : AppCompatActivity() {
         }
         setupSustainedPerformanceMode()
         setupFpsCounter()
+        setupRenderedIrOverlay()
         setupResolutionHud()
         setupConsoleSkin()
         isExtendedPauseMenuState.value = settingsRepository.isExtendedPauseMenuEnabled()
@@ -2682,63 +2702,95 @@ class EmulatorActivity : AppCompatActivity() {
         if (position == FpsCounterPosition.HIDDEN || !bootRomReady.value) {
             binding.textFps.isGone = true
         } else {
-            val isSkin = isConsoleSkinActive()
-            val newParams = ConstraintLayout.LayoutParams(
-                ConstraintLayout.LayoutParams.WRAP_CONTENT,
-                ConstraintLayout.LayoutParams.WRAP_CONTENT
-            )
-            val density = resources.displayMetrics.density
-            val topMarginVal = if (isSkin) (6 * density).toInt() else (6 * density).toInt()
-            val bottomMarginVal = (6 * density).toInt()
-            val sideMarginVal = (18 * density).toInt()
-
-            when (position) {
-                FpsCounterPosition.TOP_LEFT -> {
-                    newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
-                    newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
-                    newParams.topMargin = topMarginVal
-                    newParams.leftMargin = sideMarginVal
-                }
-                FpsCounterPosition.TOP_CENTER -> {
-                    newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
-                    newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
-                    newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
-                    newParams.horizontalBias = 0.36f
-                    newParams.topMargin = topMarginVal
-                }
-                FpsCounterPosition.TOP_RIGHT -> {
-                    newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
-                    newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
-                    newParams.topMargin = topMarginVal
-                    newParams.rightMargin = sideMarginVal
-                }
-                FpsCounterPosition.BOTTOM_LEFT -> {
-                    newParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
-                    newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
-                    newParams.bottomMargin = bottomMarginVal
-                    newParams.leftMargin = sideMarginVal
-                }
-                FpsCounterPosition.BOTTOM_CENTER -> {
-                    newParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
-                    newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
-                    newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
-                    newParams.horizontalBias = 0.36f
-                    newParams.bottomMargin = bottomMarginVal
-                }
-                FpsCounterPosition.BOTTOM_RIGHT -> {
-                    newParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
-                    newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
-                    newParams.bottomMargin = bottomMarginVal
-                    newParams.rightMargin = sideMarginVal
-                }
-                FpsCounterPosition.HIDDEN -> { /* Do nothing here */ }
-            }
-            binding.textFps.layoutParams = newParams
-            binding.textFps.elevation = 999f
-            binding.textFps.bringToFront()
-            binding.textFps.isVisible = true
+            applyOverlayPosition(binding.textFps, position, horizontalBiasCenter = 0.36f)
         }
+        setupRenderedIrOverlay()
         setupResolutionHud()
+    }
+
+    private fun setupRenderedIrOverlay() {
+        val position = viewModel.getRenderedIrPosition()
+        if (position == FpsCounterPosition.HIDDEN || !bootRomReady.value) {
+            binding.textRenderedIr.isGone = true
+            return
+        }
+        val density = resources.displayMetrics.density
+        val isFpsVisible = binding.textFps.isVisible && binding.textFps.text?.isNotEmpty() == true
+        val fpsPos = viewModel.getFpsCounterPosition()
+        val extraOffset = if (isFpsVisible && fpsPos == position) (26 * density).toInt() else 0
+        applyOverlayPosition(
+            view = binding.textRenderedIr,
+            position = position,
+            extraTopOffsetPx = if (position == FpsCounterPosition.TOP_LEFT || position == FpsCounterPosition.TOP_RIGHT) extraOffset else 0,
+            extraBottomOffsetPx = if (position == FpsCounterPosition.BOTTOM_LEFT || position == FpsCounterPosition.BOTTOM_RIGHT) extraOffset else 0,
+            horizontalBiasCenter = 0.50f,
+        )
+    }
+
+    private fun applyOverlayPosition(
+        view: android.widget.TextView,
+        position: FpsCounterPosition,
+        extraTopOffsetPx: Int = 0,
+        extraBottomOffsetPx: Int = 0,
+        horizontalBiasCenter: Float = 0.36f,
+    ) {
+        val newParams = ConstraintLayout.LayoutParams(
+            ConstraintLayout.LayoutParams.WRAP_CONTENT,
+            ConstraintLayout.LayoutParams.WRAP_CONTENT
+        )
+        val density = resources.displayMetrics.density
+        val topMarginVal = (6 * density).toInt() + extraTopOffsetPx
+        val bottomMarginVal = (6 * density).toInt() + extraBottomOffsetPx
+        val sideMarginVal = (18 * density).toInt()
+
+        when (position) {
+            FpsCounterPosition.TOP_LEFT -> {
+                newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
+                newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
+                newParams.topMargin = topMarginVal
+                newParams.leftMargin = sideMarginVal
+            }
+            FpsCounterPosition.TOP_CENTER -> {
+                newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
+                newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
+                newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
+                newParams.horizontalBias = horizontalBiasCenter
+                newParams.topMargin = topMarginVal
+            }
+            FpsCounterPosition.TOP_RIGHT -> {
+                newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
+                newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
+                newParams.topMargin = topMarginVal
+                newParams.rightMargin = sideMarginVal
+            }
+            FpsCounterPosition.BOTTOM_LEFT -> {
+                newParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
+                newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
+                newParams.bottomMargin = bottomMarginVal
+                newParams.leftMargin = sideMarginVal
+            }
+            FpsCounterPosition.BOTTOM_CENTER -> {
+                newParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
+                newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
+                newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
+                newParams.horizontalBias = horizontalBiasCenter
+                newParams.bottomMargin = bottomMarginVal
+            }
+            FpsCounterPosition.BOTTOM_RIGHT -> {
+                newParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
+                newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
+                newParams.bottomMargin = bottomMarginVal
+                newParams.rightMargin = sideMarginVal
+            }
+            FpsCounterPosition.HIDDEN -> {
+                view.isGone = true
+                return
+            }
+        }
+        view.layoutParams = newParams
+        view.elevation = 999f
+        view.bringToFront()
+        view.isVisible = true
     }
 
     private fun setupResolutionHud() {
@@ -2750,11 +2802,11 @@ class EmulatorActivity : AppCompatActivity() {
         val configuredScale = currentRuntimeRendererConfiguration?.resolutionScaling
             ?: (prefs.getString("video_internal_resolution", "1")?.toIntOrNull() ?: 1)
         baseInternalResolutionScale = configuredScale.coerceIn(1, 16)
-        if (liveDrsScale <= 1 || liveDrsScale > baseInternalResolutionScale) {
-            liveDrsScale = if (renderer == VideoRenderer.SOFTWARE) 1 else baseInternalResolutionScale
+        liveDrsScale = if (renderer == VideoRenderer.SOFTWARE) {
+            1
+        } else {
+            viewModel.renderedInternalResolution.value?.first ?: baseInternalResolutionScale
         }
-        drsLowFpsCounter = 0
-        drsStableFpsCounter = 0
 
         val position = prefs.getString("resolution_hud_position", "hidden") ?: "hidden"
         cachedResolutionHudPosition = position
@@ -2794,124 +2846,30 @@ class EmulatorActivity : AppCompatActivity() {
             ).show()
         }
 
-        val isSkin = isConsoleSkinActive()
         val density = resources.displayMetrics.density
-        val topMarginVal = if (isSkin) (6 * density).toInt() else (6 * density).toInt()
-        val bottomMarginVal = (6 * density).toInt()
-        val sideMarginVal = (18 * density).toInt()
-
         val isFpsVisible = binding.textFps.isVisible && binding.textFps.text?.isNotEmpty() == true
         val fpsPos = viewModel.getFpsCounterPosition()
-
-        val newParams = ConstraintLayout.LayoutParams(
-            ConstraintLayout.LayoutParams.WRAP_CONTENT,
-            ConstraintLayout.LayoutParams.WRAP_CONTENT
+        val parsedPos = when (position) {
+            "top_left" -> FpsCounterPosition.TOP_LEFT
+            "top_center" -> FpsCounterPosition.TOP_CENTER
+            "top_right" -> FpsCounterPosition.TOP_RIGHT
+            "bottom_left" -> FpsCounterPosition.BOTTOM_LEFT
+            "bottom_center" -> FpsCounterPosition.BOTTOM_CENTER
+            "bottom_right" -> FpsCounterPosition.BOTTOM_RIGHT
+            else -> FpsCounterPosition.HIDDEN
+        }
+        if (parsedPos == FpsCounterPosition.HIDDEN) {
+            binding.textResolution.isGone = true
+            return
+        }
+        val extraOffset = if (isFpsVisible && fpsPos == parsedPos) (26 * density).toInt() else 0
+        applyOverlayPosition(
+            view = binding.textResolution,
+            position = parsedPos,
+            extraTopOffsetPx = if (parsedPos == FpsCounterPosition.TOP_LEFT || parsedPos == FpsCounterPosition.TOP_RIGHT) extraOffset else 0,
+            extraBottomOffsetPx = if (parsedPos == FpsCounterPosition.BOTTOM_LEFT || parsedPos == FpsCounterPosition.BOTTOM_RIGHT) extraOffset else 0,
+            horizontalBiasCenter = 0.64f,
         )
-        when (position) {
-            "top_left" -> {
-                newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.topMargin = if (isFpsVisible && fpsPos == FpsCounterPosition.TOP_LEFT) (topMarginVal + 26 * density).toInt() else topMarginVal
-                newParams.leftMargin = sideMarginVal
-            }
-            "top_center" -> {
-                newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.horizontalBias = 0.64f
-                newParams.topMargin = topMarginVal
-            }
-            "top_right" -> {
-                newParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.topMargin = if (isFpsVisible && fpsPos == FpsCounterPosition.TOP_RIGHT) (topMarginVal + 26 * density).toInt() else topMarginVal
-                newParams.rightMargin = sideMarginVal
-            }
-            "bottom_left" -> {
-                newParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.bottomMargin = if (isFpsVisible && fpsPos == FpsCounterPosition.BOTTOM_LEFT) (bottomMarginVal + 26 * density).toInt() else bottomMarginVal
-                newParams.leftMargin = sideMarginVal
-            }
-            "bottom_center" -> {
-                newParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.horizontalBias = 0.64f
-                newParams.bottomMargin = bottomMarginVal
-            }
-            "bottom_right" -> {
-                newParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
-                newParams.bottomMargin = if (isFpsVisible && fpsPos == FpsCounterPosition.BOTTOM_RIGHT) (bottomMarginVal + 26 * density).toInt() else bottomMarginVal
-                newParams.rightMargin = sideMarginVal
-            }
-            else -> {
-                binding.textResolution.isGone = true
-                return
-            }
-        }
-        binding.textResolution.layoutParams = newParams
-        binding.textResolution.isVisible = true
-        binding.textResolution.bringToFront()
-        binding.textResolution.elevation = 999f
-    }
-
-    private fun handleDrsAndHudUpdate(fps: Int?) {
-        if (!bootRomReady.value) return
-        val drsEnabled = viewModel.isDrsEnabled()
-        val renderer = currentRuntimeRendererConfiguration?.renderer ?: viewModel.getConfiguredVideoRenderer()
-        val supportsScaling = renderer != VideoRenderer.SOFTWARE
-        val effectiveMaxScale = if (isLowBatteryPowerSaverActive) {
-            minOf(baseInternalResolutionScale, 2).coerceAtLeast(1)
-        } else {
-            baseInternalResolutionScale
-        }
-
-        if (drsEnabled && supportsScaling && fps != null && fps > 0) {
-            if (liveDrsScale > effectiveMaxScale) {
-                liveDrsScale = effectiveMaxScale
-                viewModel.updateRuntimeResolutionScaling(liveDrsScale)
-            } else if (fps < 50) {
-                drsStableFpsCounter = 0
-                drsLowFpsCounter++
-                if (drsLowFpsCounter >= 2) {
-                    val currentStepIndex = drsScaleSteps.indexOfFirst { it <= liveDrsScale }.let { if (it == -1) 0 else it }
-                    val nextLowerIndex = drsScaleSteps.indices.firstOrNull { it > currentStepIndex && drsScaleSteps[it] < liveDrsScale }
-                    if (nextLowerIndex != null) {
-                        liveDrsScale = drsScaleSteps[nextLowerIndex]
-                        viewModel.updateRuntimeResolutionScaling(liveDrsScale)
-                    }
-                    drsLowFpsCounter = 0
-                }
-            } else if (fps >= 58) {
-                drsLowFpsCounter = 0
-                if (liveDrsScale < effectiveMaxScale) {
-                    drsStableFpsCounter++
-                    if (drsStableFpsCounter >= 4) {
-                        val currentStepIndex = drsScaleSteps.indexOfFirst { it <= liveDrsScale }.let { if (it == -1) drsScaleSteps.lastIndex else it }
-                        val nextHigherIndex = drsScaleSteps.indices.reversed().firstOrNull { it < currentStepIndex && drsScaleSteps[it] <= effectiveMaxScale }
-                        if (nextHigherIndex != null) {
-                            liveDrsScale = drsScaleSteps[nextHigherIndex]
-                            viewModel.updateRuntimeResolutionScaling(liveDrsScale)
-                        }
-                        drsStableFpsCounter = 0
-                    }
-                } else {
-                    drsStableFpsCounter = 0
-                }
-            } else {
-                drsLowFpsCounter = 0
-                drsStableFpsCounter = 0
-            }
-        } else if (!drsEnabled && liveDrsScale != effectiveMaxScale) {
-            liveDrsScale = effectiveMaxScale
-            viewModel.updateRuntimeResolutionScaling(liveDrsScale)
-            drsLowFpsCounter = 0
-            drsStableFpsCounter = 0
-        }
-
-        updateResolutionHudText(fps)
     }
 
     private fun updateResolutionHudText(fps: Int?) {
@@ -2923,7 +2881,12 @@ class EmulatorActivity : AppCompatActivity() {
 
         val renderer = currentRuntimeRendererConfiguration?.renderer ?: cachedFallbackVideoRenderer
 
-        val scale = if (renderer == VideoRenderer.SOFTWARE) 1 else liveDrsScale
+        val scale = if (renderer == VideoRenderer.SOFTWARE) {
+            1
+        } else {
+            (viewModel.renderedInternalResolution.value?.first ?: liveDrsScale).coerceIn(1, 16)
+        }
+        liveDrsScale = scale
         val rendererName = when (renderer) {
             VideoRenderer.SOFTWARE -> "Software"
             VideoRenderer.OPENGL -> "OpenGL"
@@ -2940,9 +2903,9 @@ class EmulatorActivity : AppCompatActivity() {
             "16.6ms"
         }
 
-        val drsPart = if (viewModel.isDrsEnabled() && renderer != VideoRenderer.SOFTWARE) {
-            if (liveDrsScale < baseInternalResolutionScale) {
-                " • DRS: ${liveDrsScale}x ⚡"
+        val drsPart = if (viewModel.isDrsEnabled() && renderer == VideoRenderer.VULKAN) {
+            if (scale < baseInternalResolutionScale) {
+                " • DRS: ${scale}x ⚡"
             } else {
                 " • DRS: AUTO"
             }
@@ -4036,7 +3999,7 @@ class EmulatorActivity : AppCompatActivity() {
             add(romSettingsMenuLabel(getString(R.string.internal_resolution), "${currentResolutionScale}x") to {
                 showRomInternalResolutionChoiceOverlay()
             })
-            val currentFfSpeed = prefs.getString("fast_forward_speed_multiplier", "-1") ?: "-1"
+            val currentFfSpeed = (rom.config.fastForwardSpeedMultiplier ?: settingsRepository.getFastForwardSpeedMultiplier()).toString()
             add(romSettingsMenuLabel(getString(R.string.fast_forward_speed), fastForwardMultiplierLabel(currentFfSpeed)) to {
                 showFastForwardMultiplierChoiceOverlay()
             })
@@ -4182,8 +4145,11 @@ class EmulatorActivity : AppCompatActivity() {
         val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
         val speedValues = resources.getStringArray(R.array.fast_forward_speed_multiplier_values)
         val labels = speedValues.map { fastForwardMultiplierLabel(it) }
-        val currentPref = prefs.getString("fast_forward_speed_multiplier", "-1") ?: "-1"
-        val currentIdx = speedValues.indexOf(currentPref).let { if (it < 0) 0 else it }
+        val runningRom = (viewModel.emulatorState.value as? EmulatorState.RunningRom)?.rom
+        val currentMultiplier = runningRom?.config?.fastForwardSpeedMultiplier
+            ?: (prefs.getString("fast_forward_speed_multiplier", "-1")?.toFloatOrNull() ?: -1f)
+        val currentIdx = speedValues.indexOfFirst { (it.toFloatOrNull() ?: -1f) == currentMultiplier }
+            .let { if (it < 0) 0 else it }
         pushConsoleOverlay(
             ConsoleOverlayNode.Choice(
                 title = getString(R.string.fast_forward_speed),
@@ -4191,8 +4157,12 @@ class EmulatorActivity : AppCompatActivity() {
                 selectedIndex = currentIdx,
                 onSelect = { which ->
                     val chosen = speedValues.getOrElse(which) { "-1" }
-                    prefs.edit().putString("fast_forward_speed_multiplier", chosen).apply()
-                    viewModel.onSettingsChanged(resumeWhenFinished = false)
+                    if (runningRom != null) {
+                        viewModel.onRunningRomFastForwardSpeedSelected(chosen.toFloatOrNull())
+                    } else {
+                        prefs.edit().putString("fast_forward_speed_multiplier", chosen).apply()
+                        viewModel.onSettingsChanged(resumeWhenFinished = false)
+                    }
                     handler.post { refreshRomSettingsMenuIfOpen() }
                 },
             ),
@@ -6693,6 +6663,12 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
 
     override fun onDestroy() {
         super.onDestroy()
+        if (isFinishing) {
+            runCatching {
+                MelonEmulator.stopLanSession()
+                MelonEmulator.stopLanDiscovery()
+            }
+        }
         if (isDebugCaptureReceiverRegistered) {
             runCatching { unregisterReceiver(debugCaptureReceiver) }
             isDebugCaptureReceiverRegistered = false

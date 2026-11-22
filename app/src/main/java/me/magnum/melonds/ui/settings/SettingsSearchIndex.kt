@@ -131,14 +131,67 @@ class SettingsSearchIndex(private val context: Context) {
                     if (eventType == XmlPullParser.START_TAG) {
                         val tagName = parser.name
                         if (tagName == "PreferenceScreen") {
+                            val isRootScreen = screenStack.isEmpty()
                             var screenKey: String? = null
+                            var title: String? = null
+                            var summary: String? = null
+                            var isVisible = true
                             for (i in 0 until parser.attributeCount) {
-                                if (parser.getAttributeName(i) == "key") {
-                                    screenKey = parser.getAttributeValue(i)
-                                    break
+                                when (parser.getAttributeName(i)) {
+                                    "key" -> screenKey = parser.getAttributeValue(i)
+                                    "title" -> {
+                                        val resId = parser.getAttributeResourceValue(i, 0)
+                                        title = if (resId != 0) {
+                                            runCatching { context.getString(resId) }.getOrNull()
+                                        } else {
+                                            parser.getAttributeValue(i)
+                                        }
+                                    }
+                                    "summary" -> {
+                                        val resId = parser.getAttributeResourceValue(i, 0)
+                                        summary = if (resId != 0) {
+                                            runCatching { context.getString(resId) }.getOrNull()
+                                        } else {
+                                            parser.getAttributeValue(i)
+                                        }
+                                    }
+                                    "isPreferenceVisible" -> {
+                                        val resId = parser.getAttributeResourceValue(i, 0)
+                                        isVisible = if (resId != 0) {
+                                            runCatching { context.resources.getBoolean(resId) }.getOrDefault(true)
+                                        } else {
+                                            parser.getAttributeBooleanValue(i, true)
+                                        }
+                                    }
                                 }
                             }
-                            screenStack.addLast(if (screenStack.isEmpty()) null else screenKey)
+                            val parentRootKey = screenStack.lastOrNull()
+                            if (!isRootScreen && isVisible && !title.isNullOrBlank() && !screenKey.isNullOrBlank() && screenKey !in excludedKeys) {
+                                val uniqueKey = "${screen.fragmentClass}::$screenKey"
+                                if (!seenKeys.contains(uniqueKey)) {
+                                    seenKeys.add(uniqueKey)
+                                    if (summary == "%s") summary = null
+                                    val baseSection = context.getString(screen.titleResId)
+                                    val fullSection = if (currentCategory != null && currentCategory != baseSection) {
+                                        "$baseSection › $currentCategory"
+                                    } else {
+                                        baseSection
+                                    }
+                                    items.add(
+                                        SearchPreferenceItem(
+                                            key = screenKey,
+                                            title = title,
+                                            summary = summary,
+                                            sectionTitle = fullSection,
+                                            fragmentClassName = screen.fragmentClass,
+                                            iconRes = screen.iconResId,
+                                            targetPreferenceKey = screenKey,
+                                            preferenceRootKey = parentRootKey,
+                                        )
+                                    )
+                                }
+                            }
+                            screenStack.addLast(if (isRootScreen) null else screenKey)
                         } else if (tagName == "PreferenceCategory") {
                             for (i in 0 until parser.attributeCount) {
                                 if (parser.getAttributeName(i) == "title") {
@@ -235,15 +288,189 @@ class SettingsSearchIndex(private val context: Context) {
         return items
     }
 
+    private fun buildDynamicHiddenKeys(): Set<String> {
+        val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
+        val hidden = HashSet<String>()
+
+        val renderer = prefs.getString("video_renderer", "opengl")?.lowercase(Locale.ROOT) ?: "opengl"
+        if (renderer != "vulkan") {
+            hidden.addAll(
+                listOf(
+                    "video_low_latency",
+                    "video_vulkan_drs",
+                    "rendered_ir_position",
+                    "video_vulkan_fastpath_enabled",
+                    "video_vulkan_compositor_mode",
+                    "video_vulkan_thick_edges",
+                    "video_vulkan_compat_autoselect",
+                    "video_vulkan_3d_depth_mode",
+                    "video_vulkan_3d_depth_strength",
+                    "video_vulkan_ssao",
+                    "video_ds_color_profile",
+                    "video_ds_lcd_grid",
+                    "video_vulkan_driver_manager",
+                    "video_vulkan_driver_mode",
+                    "video_vulkan_driver_import",
+                    "video_vulkan_driver_remove",
+                    "video_freedreno_settings",
+                    "video_freedreno_fd_dev_features",
+                    "video_freedreno_tu_debug",
+                    "video_freedreno_fd_mesa_debug",
+                )
+            )
+        } else if (!AdrenoVulkanDriverSupport.supportsFreedreno(context)) {
+            hidden.addAll(
+                listOf(
+                    "video_freedreno_settings",
+                    "video_freedreno_fd_dev_features",
+                    "video_freedreno_tu_debug",
+                    "video_freedreno_fd_mesa_debug",
+                )
+            )
+        }
+
+        if (renderer != "software") {
+            hidden.add("enable_threaded_rendering")
+        } else {
+            hidden.add("video_internal_resolution")
+            hidden.add("video_debug_3d_clear_magenta")
+        }
+        if (renderer == "compute") {
+            hidden.addAll(
+                listOf(
+                    "video_renderer_debug_tools_enabled",
+                    "video_renderer_debug_bgobj_enabled",
+                    "video_renderer_debug_latch_trace_enabled",
+                    "video_conservative_coverage_enabled",
+                    "video_conservative_coverage_px",
+                    "video_conservative_coverage_apply_repeat",
+                    "video_conservative_coverage_apply_clamp",
+                    "video_conservative_coverage_depth_bias",
+                )
+            )
+        }
+
+        if (prefs.getString("video_vulkan_3d_depth_mode", "off").equals("off", ignoreCase = true)) {
+            hidden.add("video_vulkan_3d_depth_strength")
+        }
+        if (!prefs.getBoolean("video_renderer_debug_tools_enabled", false)) {
+            hidden.addAll(
+                listOf(
+                    "video_renderer_debug_bgobj_enabled",
+                    "video_renderer_debug_latch_trace_enabled",
+                    "video_debug_3d_clear_magenta",
+                )
+            )
+        }
+        if (!prefs.getBoolean("video_conservative_coverage_enabled", false)) {
+            hidden.addAll(
+                listOf(
+                    "video_conservative_coverage_px",
+                    "video_conservative_coverage_apply_repeat",
+                    "video_conservative_coverage_apply_clamp",
+                    "video_conservative_coverage_depth_bias",
+                )
+            )
+        }
+        if (!prefs.getBoolean("video_console_skin_enabled", false)) {
+            hidden.add("video_console_skin_type")
+            hidden.add("video_console_skin_brightness")
+        }
+        if (prefs.getString("video_filtering", "quilez") != "retroarch") {
+            hidden.addAll(
+                listOf(
+                    "video_retroarch_shader_source",
+                    "video_retroarch_shader_preset",
+                    "video_retroarch_shader_root",
+                    "video_retroarch_shader_settings",
+                    "video_retroarch_shader_report",
+                    "video_retroarch_shader_manage",
+                    "video_retroarch_shader_parameters",
+                    "video_retroarch_shader_clear_history",
+                )
+            )
+        }
+        if (prefs.getString("dsi_camera_source", "physical_cameras") != "static_image") {
+            hidden.add("dsi_camera_static_image")
+        }
+        val wfcServer = prefs.getString("system_wfc_server", "none")
+        if (wfcServer != "custom") {
+            hidden.add("system_wfc_custom_dns")
+        }
+        if (wfcServer.isNullOrBlank() || wfcServer == "none") {
+            hidden.add("system_wfc_test_connection")
+        }
+        val vulkanDrsActive = renderer == "vulkan" && if (prefs.contains("video_vulkan_drs")) {
+            prefs.getBoolean("video_vulkan_drs", false)
+        } else {
+            prefs.getBoolean("video_drs_enabled", false)
+        }
+        if (vulkanDrsActive || prefs.getString("frameskip_mode", "auto") != "manual") {
+            hidden.add("frameskip_manual_value")
+        }
+        if (prefs.getString("save_state_location", "save_dir") != "custom_dir") {
+            hidden.add("save_state_custom_dir")
+        }
+        if (prefs.getBoolean("sram_in_rom_dir", false)) {
+            hidden.add("sram_dir")
+        }
+        if (prefs.getBoolean("internal_randomize_mac_address", false)) {
+            hidden.add("internal_mac_address")
+            hidden.add("internal_randomize_mac")
+        }
+        if (prefs.getBoolean("block_bios_download", false)) {
+            hidden.add("auto_download_ds_bios")
+            hidden.add("auto_download_dsi_bios")
+        }
+        if (!prefs.getBoolean("sound_enabled", true)) {
+            hidden.addAll(
+                listOf(
+                    "audio_interpolation",
+                    "audio_bitrate",
+                    "volume",
+                    "audio_latency",
+                    "audio_mute_on_fast_forward",
+                    "audio_soft_limiter_enabled",
+                    "audio_bass_boost_enabled",
+                    "audio_bass_boost_strength",
+                    "audio_spatial_audio_enabled",
+                    "audio_reverb_enabled",
+                )
+            )
+        }
+        if (!prefs.getBoolean("audio_bass_boost_enabled", false)) {
+            hidden.add("audio_bass_boost_strength")
+        }
+        if (prefs.getString("mic_source", "none") != "device") {
+            hidden.addAll(listOf("mic_gain", "mic_agc_noise_gate_enabled", "mic_noise_gate_threshold"))
+        } else if (!prefs.getBoolean("mic_agc_noise_gate_enabled", true)) {
+            hidden.add("mic_noise_gate_threshold")
+        }
+        if (!prefs.getBoolean("github_check_for_updates", true)) {
+            hidden.add("github_update_channel")
+        }
+        if (prefs.getBoolean("ra_hardcore_enabled", false)) {
+            hidden.add("frame_limit_speed_multiplier")
+        }
+        if (!prefs.getBoolean("rom_cover_enabled", true)) {
+            hidden.add("rom_cover_2d_enabled")
+            hidden.add("rom_cover_3d_enabled")
+        }
+        return hidden
+    }
+
     fun search(query: String): List<SearchPreferenceItem> {
         val q = normalize(query.trim())
         if (q.isEmpty()) return emptyList()
 
+        val dynamicHiddenKeys = buildDynamicHiddenKeys()
         return getIndex().filter { item ->
-            normalize(item.title).contains(q) ||
-                (item.summary != null && normalize(item.summary).contains(q)) ||
-                normalize(item.sectionTitle).contains(q) ||
-                normalize(item.key).contains(q)
+            item.key !in dynamicHiddenKeys && (
+                normalize(item.title).contains(q) ||
+                    (item.summary != null && normalize(item.summary).contains(q)) ||
+                    normalize(item.sectionTitle).contains(q) ||
+                    normalize(item.key).contains(q)
+                )
         }
     }
 

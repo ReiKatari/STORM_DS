@@ -68,6 +68,7 @@ class RomListActivity : AppCompatActivity() {
     private var downloadProgressDialog: AlertDialog? = null
     private var romBrowserDpadDownGate: (() -> Boolean)? = null
     private var hasPromptedStoragePermissionThisSession = false
+    private var hasPromptedNotificationPermissionThisSession = false
     private val externalInfoController by lazy { me.magnum.melonds.ui.common.ExternalInfoDisplayController(this) }
     private val highlightedRom = kotlinx.coroutines.flow.MutableStateFlow<Rom?>(null)
 
@@ -641,50 +642,49 @@ class RomListActivity : AppCompatActivity() {
     }
 
     private fun checkAndRequestStoragePermission() {
-        if (hasPromptedStoragePermissionThisSession) {
-            return
-        }
-        hasPromptedStoragePermissionThisSession = true
-
         val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (!android.os.Environment.isExternalStorageManager()) {
-                val alreadyPromptedAllFiles = prefs.getBoolean("storage_all_files_prompted", false)
-                if (!alreadyPromptedAllFiles) {
-                    prefs.edit().putBoolean("storage_all_files_prompted", true).apply()
-                    val intent = Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
-                        data = android.net.Uri.parse("package:$packageName")
-                    }
-                    if (runCatching { startActivity(intent) }.isFailure) {
-                        runCatching {
-                            startActivity(Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+        if (!hasPromptedStoragePermissionThisSession) {
+            hasPromptedStoragePermissionThisSession = true
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                if (!android.os.Environment.isExternalStorageManager()) {
+                    val alreadyPromptedAllFiles = prefs.getBoolean("storage_all_files_prompted", false)
+                    if (!alreadyPromptedAllFiles) {
+                        prefs.edit().putBoolean("storage_all_files_prompted", true).apply()
+                        val intent = Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                            data = android.net.Uri.parse("package:$packageName")
                         }
+                        if (runCatching { startActivity(intent) }.isFailure) {
+                            runCatching {
+                                startActivity(Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+                            }
+                        }
+                        return
                     }
-                    return
                 }
-            }
-        } else {
-            val writeGranted = androidx.core.content.ContextCompat.checkSelfPermission(
-                this,
-                android.Manifest.permission.WRITE_EXTERNAL_STORAGE
-            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-            if (!writeGranted) {
-                val alreadyPromptedLegacy = prefs.getBoolean("storage_legacy_prompted", false)
-                if (!alreadyPromptedLegacy) {
-                    prefs.edit().putBoolean("storage_legacy_prompted", true).apply()
-                    androidx.core.app.ActivityCompat.requestPermissions(
-                        this,
-                        arrayOf(
-                            android.Manifest.permission.READ_EXTERNAL_STORAGE,
-                            android.Manifest.permission.WRITE_EXTERNAL_STORAGE
-                        ),
-                        1001
-                    )
-                    return
+            } else {
+                val writeGranted = androidx.core.content.ContextCompat.checkSelfPermission(
+                    this,
+                    android.Manifest.permission.WRITE_EXTERNAL_STORAGE
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                if (!writeGranted) {
+                    val alreadyPromptedLegacy = prefs.getBoolean("storage_legacy_prompted", false)
+                    if (!alreadyPromptedLegacy) {
+                        prefs.edit().putBoolean("storage_legacy_prompted", true).apply()
+                        androidx.core.app.ActivityCompat.requestPermissions(
+                            this,
+                            arrayOf(
+                                android.Manifest.permission.READ_EXTERNAL_STORAGE,
+                                android.Manifest.permission.WRITE_EXTERNAL_STORAGE
+                            ),
+                            1001
+                        )
+                        return
+                    }
                 }
             }
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        if (!hasPromptedNotificationPermissionThisSession && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            hasPromptedNotificationPermissionThisSession = true
             val notifGranted = androidx.core.content.ContextCompat.checkSelfPermission(
                 this,
                 android.Manifest.permission.POST_NOTIFICATIONS

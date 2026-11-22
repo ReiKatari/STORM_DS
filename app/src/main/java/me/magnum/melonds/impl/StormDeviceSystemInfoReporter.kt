@@ -26,6 +26,26 @@ import java.util.Locale
 object StormDeviceSystemInfoReporter {
     private const val TAG = "StormSystemInfo"
     const val INFO_FILE_NAME = "STORM_INFO.txt"
+    const val CRASH_FILE_NAME = "STORM_CRASH.txt"
+
+    private fun isDirectoryWritable(dir: File): Boolean {
+        return runCatching {
+            if (!dir.exists() && !dir.mkdirs()) return@runCatching false
+            if (!dir.isDirectory || !dir.canWrite()) return@runCatching false
+            val probe = File.createTempFile(".storm_log_probe_", null, dir)
+            probe.delete()
+            true
+        }.getOrDefault(false)
+    }
+
+    fun resolveWritableLogsDir(context: Context): File? {
+        val candidates = listOfNotNull(
+            File(Environment.getExternalStorageDirectory(), "STORM DS/logs"),
+            context.getExternalFilesDir(null)?.let { File(it, "logs") },
+            File(context.filesDir, "logs"),
+        )
+        return candidates.firstOrNull { isDirectoryWritable(it) }
+    }
 
     fun isLoggingEnabled(context: Context): Boolean {
         return runCatching {
@@ -222,27 +242,19 @@ object StormDeviceSystemInfoReporter {
             appendLine("================================================================================")
         }
 
-        // Save system report to /storage/emulated/0/STORM DS/logs/STORM_INFO.txt
+        // Save system report to STORM DS/logs/STORM_INFO.txt (with extFiles/logs and filesDir/logs fallback)
         runCatching {
-            val rootLogsDir = File(Environment.getExternalStorageDirectory(), "STORM DS/logs").apply { mkdirs() }
-            val infoFile = File(rootLogsDir, INFO_FILE_NAME)
+            val logsDir = resolveWritableLogsDir(context)
+                ?: throw IllegalStateException("No writable logs directory")
+            val infoFile = File(logsDir, INFO_FILE_NAME)
             infoFile.writeText(report, Charsets.UTF_8)
 
-            if (rom == null) {
-                // Application startup: clean up stale game logs from previous sessions
-                rootLogsDir.listFiles()?.forEach { file ->
-                    if (file.name != INFO_FILE_NAME && file.name.endsWith(".txt")) {
+            // Clean up only obsolete legacy suffix files (*_DIRECT.txt, *_AUTO.txt, *_NAND.txt)
+            logsDir.listFiles()?.forEach { file ->
+                if (file.name != INFO_FILE_NAME && file.name != CRASH_FILE_NAME && file.name.endsWith(".txt")) {
+                    val base = file.name.substringBeforeLast(".txt")
+                    if (base.endsWith("_DIRECT") || base.endsWith("_AUTO") || base.endsWith("_NAND")) {
                         file.delete()
-                    }
-                }
-            } else {
-                // Clean up old legacy suffix files (*_DIRECT.txt, *_AUTO.txt, *_NAND.txt)
-                rootLogsDir.listFiles()?.forEach { file ->
-                    if (file.name != INFO_FILE_NAME && file.name.endsWith(".txt")) {
-                        val base = file.name.substringBeforeLast(".txt")
-                        if (base.endsWith("_DIRECT") || base.endsWith("_AUTO") || base.endsWith("_NAND")) {
-                            file.delete()
-                        }
                     }
                 }
             }
@@ -255,7 +267,7 @@ object StormDeviceSystemInfoReporter {
             }
             Log.i(TAG, "Successfully wrote unified system diagnostic report to ${infoFile.absolutePath}")
         }.onFailure {
-            Log.w(TAG, "Failed to write system report to STORM DS/logs", it)
+            Log.w(TAG, "Failed to write system report to logs directory", it)
         }
 
         return report
@@ -307,13 +319,14 @@ object StormDeviceSystemInfoReporter {
         }
 
         runCatching {
-            val rootLogsDir = File(Environment.getExternalStorageDirectory(), "STORM DS/logs").apply { mkdirs() }
+            val logsDir = resolveWritableLogsDir(context)
+                ?: throw IllegalStateException("No writable logs directory")
             // Delete any obsolete suffixed variants for this specific game
-            File(rootLogsDir, "${cleanFileName}_DIRECT.txt").delete()
-            File(rootLogsDir, "${cleanFileName}_AUTO.txt").delete()
-            File(rootLogsDir, "${cleanFileName}_NAND.txt").delete()
+            File(logsDir, "${cleanFileName}_DIRECT.txt").delete()
+            File(logsDir, "${cleanFileName}_AUTO.txt").delete()
+            File(logsDir, "${cleanFileName}_NAND.txt").delete()
 
-            val gameLogFile = File(rootLogsDir, logFileName)
+            val gameLogFile = File(logsDir, logFileName)
             gameLogFile.writeText(gameReport, Charsets.UTF_8)
 
             Log.i(TAG, "Successfully saved single game log to ${gameLogFile.absolutePath}")

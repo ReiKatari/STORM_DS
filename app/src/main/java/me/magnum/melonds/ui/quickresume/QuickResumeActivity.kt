@@ -34,6 +34,8 @@ class QuickResumeActivity : Activity() {
     }
 
     private val activityScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var requestedQuickResume = false
+    private var launchStarted = false
 
     companion object {
         const val ACTION_QUICK_RESUME = "me.magnum.melonds.action.QUICK_RESUME"
@@ -70,6 +72,7 @@ class QuickResumeActivity : Activity() {
         }
 
         val targetUri = targetUriString.toUri()
+        requestedQuickResume = true
         QuickResumeRequest.request(targetUri)
         QuickResumeShortcuts.reportUsed(this)
         val matchingEntry = lastEntry?.takeIf { it.uriString == targetUriString }
@@ -105,6 +108,7 @@ class QuickResumeActivity : Activity() {
 
             runCatching {
                 startActivity(emulatorIntent)
+                launchStarted = true
             }.onFailure {
                 QuickResumeRequest.clear()
                 Toast.makeText(this@QuickResumeActivity, R.string.feature_quick_resume_not_found, Toast.LENGTH_SHORT).show()
@@ -117,6 +121,9 @@ class QuickResumeActivity : Activity() {
     }
 
     override fun onDestroy() {
+        if (requestedQuickResume && !launchStarted) {
+            QuickResumeRequest.clear()
+        }
         activityScope.cancel()
         super.onDestroy()
     }

@@ -116,6 +116,7 @@ class RomDetailsActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         window.applyImmersiveFullscreen()
+        romDetailsViewModel.refreshRom()
         runCatching { romRetroAchievementsViewModel.refreshOfflineAchievementsStatus() }
     }
 

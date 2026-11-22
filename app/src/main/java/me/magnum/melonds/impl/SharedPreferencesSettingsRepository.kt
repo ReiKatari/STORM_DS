@@ -44,6 +44,8 @@ import me.magnum.melonds.domain.model.EmulatorConfiguration
 import me.magnum.melonds.domain.model.ExternalDisplayMode
 import me.magnum.melonds.domain.model.FirmwareConfiguration
 import me.magnum.melonds.domain.model.FpsCounterPosition
+import me.magnum.melonds.domain.model.FrameskipConfiguration
+import me.magnum.melonds.domain.model.FrameskipMode
 import me.magnum.melonds.domain.model.MacAddress
 import me.magnum.melonds.domain.model.MicSource
 import me.magnum.melonds.domain.model.RendererConfiguration
@@ -113,6 +115,23 @@ class SharedPreferencesSettingsRepository(
         private const val KEY_DUAL_SCREEN_EXTERNAL_VERTICAL_ALIGNMENT = "dual_screen_external_vertical_alignment"
         private const val GLES_3_2 = 0x30002
         private const val BIOS_INDEX_CACHE_TTL_MS = 10_000L
+
+        fun resolveDefaultFirmwareLanguage(preferences: SharedPreferences): Int {
+            val appLanguage = preferences.getString("app_language", "default") ?: "default"
+            val effectiveAppLang = if (appLanguage == "default") {
+                java.util.Locale.getDefault().language.lowercase()
+            } else {
+                appLanguage.lowercase()
+            }
+            return when {
+                effectiveAppLang.startsWith("ja") -> 0
+                effectiveAppLang.startsWith("fr") -> 2
+                effectiveAppLang.startsWith("de") -> 3
+                effectiveAppLang.startsWith("it") -> 4
+                effectiveAppLang.startsWith("es") -> 5
+                else -> 1
+            }
+        }
         private val EmptyRetroArchShaderConfiguration = RetroArchShaderConfiguration(
             presetPath = null,
             sourceResolution = RetroArchShaderSourceResolution.VULKAN_IR,
@@ -546,6 +565,9 @@ class SharedPreferencesSettingsRepository(
             internalDirectory = File(stormDsBase, "system").apply { mkdirs() }.absolutePath,
             fastForwardSpeedMultiplier = getFastForwardSpeedMultiplier(),
             frameLimitSpeedMultiplier = getFrameLimitSpeedMultiplier(),
+            frameskipMode = getFrameskipConfiguration().mode.nativeValue,
+            frameskipManualValue = getFrameskipConfiguration().manualValue,
+            vulkanDrsEnabled = isVulkanDrsActive(),
             rewindEnabled = isRewindEnabled(),
             rewindPeriodSeconds = getRewindPeriod(),
             rewindWindowSeconds = getRewindWindow(),
@@ -578,6 +600,7 @@ class SharedPreferencesSettingsRepository(
             audioSpatialAudioEnabled = preferences.getBoolean("audio_spatial_audio_enabled", false),
             audioReverbEnabled = preferences.getBoolean("audio_reverb_enabled", false),
             wfcDnsServerIp = getWfcDnsServerIp(),
+            lowLatencyEnabled = preferences.getBoolean("video_low_latency", false),
         )
     }
 
@@ -600,17 +623,27 @@ class SharedPreferencesSettingsRepository(
         val fpsPatchAllowed = safeProfile?.safeVisuals != true &&
             (activeGameCode.isNullOrBlank() && effectiveRomName.isNullOrBlank() ||
                 EnhancementCompatibility.supports60FpsUnlock(activeGameCode.orEmpty(), effectiveRomName.orEmpty()))
+        val romRendererConfig = buildRomRendererConfiguration(
+            baseConfiguration = globalConfiguration.rendererConfiguration,
+            romConfig = romConfig,
+            root = observeRetroArchShaderRootLocation().first(),
+            globalPresetRelativePath = observeRetroArchShaderPreset().first(),
+            globalParameterText = observeRetroArchShaderParameterText().first(),
+        )
+        val effectiveDrsActive = isVulkanDrsEnabled() && romRendererConfig.renderer == VideoRenderer.VULKAN
+        val effectiveFrameskipMode = if (effectiveDrsActive) {
+            FrameskipMode.OFF.nativeValue
+        } else {
+            getFrameskipMode().nativeValue
+        }
         return globalConfiguration.copy(
+            frameskipMode = effectiveFrameskipMode,
+            frameskipManualValue = getFrameskipManualValue(),
+            vulkanDrsEnabled = effectiveDrsActive,
             useJit = if (safeProfile?.disableJit == true) false else globalConfiguration.useJit,
             enable3dWidescreen = globalConfiguration.enable3dWidescreen && widescreenAllowed,
             enable60FpsPatch = globalConfiguration.enable60FpsPatch && fpsPatchAllowed,
-            rendererConfiguration = buildRomRendererConfiguration(
-                baseConfiguration = globalConfiguration.rendererConfiguration,
-                romConfig = romConfig,
-                root = observeRetroArchShaderRootLocation().first(),
-                globalPresetRelativePath = observeRetroArchShaderPreset().first(),
-                globalParameterText = observeRetroArchShaderParameterText().first(),
-            ),
+            rendererConfiguration = romRendererConfig,
         )
     }
 
@@ -633,7 +666,50 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun isDrsEnabled(): Boolean {
-        return preferences.getBoolean("video_drs_enabled", false)
+        return isVulkanDrsEnabled()
+    }
+
+    private fun getFrameskipMode(): FrameskipMode {
+        return FrameskipMode.fromPreferenceValue(
+            preferences.getString("frameskip_mode", FrameskipMode.AUTO.preferenceValue)
+        )
+    }
+
+    private fun getFrameskipManualValue(): Int {
+        val value = preferences.getString("frameskip_manual_value", "1")?.toIntOrNull() ?: 1
+        return value.coerceIn(FrameskipConfiguration.MANUAL_VALUE_MIN, FrameskipConfiguration.MANUAL_VALUE_MAX)
+    }
+
+    override fun getFrameskipConfiguration(): FrameskipConfiguration {
+        if (isVulkanDrsActive()) {
+            return FrameskipConfiguration(FrameskipMode.OFF, getFrameskipManualValue())
+        }
+        return FrameskipConfiguration(getFrameskipMode(), getFrameskipManualValue())
+    }
+
+    override fun observeFrameskipConfiguration(): Flow<FrameskipConfiguration> {
+        return combine(
+            getOrCreatePreferenceSharedFlow("frameskip_mode") { getFrameskipMode() },
+            getOrCreatePreferenceSharedFlow("frameskip_manual_value") { getFrameskipManualValue() },
+            observeVulkanDrsEnabled(),
+            getVideoRenderer(),
+        ) { _, _, _, _ -> getFrameskipConfiguration() }
+    }
+
+    override fun isVulkanDrsEnabled(): Boolean {
+        return if (preferences.contains("video_vulkan_drs")) {
+            preferences.getBoolean("video_vulkan_drs", false)
+        } else {
+            preferences.getBoolean("video_drs_enabled", false)
+        }
+    }
+
+    override fun observeVulkanDrsEnabled(): Flow<Boolean> {
+        return getOrCreatePreferenceSharedFlow("video_vulkan_drs") { isVulkanDrsEnabled() }
+    }
+
+    override fun isVulkanDrsActive(): Boolean {
+        return isVulkanDrsEnabled() && getCurrentVideoRenderer() == VideoRenderer.VULKAN
     }
 
     override fun isRewindEnabled(): Boolean {
@@ -759,25 +835,9 @@ class SharedPreferencesSettingsRepository(
             randomize
         }
 
-        val appLanguage = preferences.getString("app_language", "default") ?: "default"
-        val effectiveAppLang = if (appLanguage == "default") {
-            java.util.Locale.getDefault().language.lowercase()
-        } else {
-            appLanguage.lowercase()
-        }
-
         val userConfiguredLang = preferences.getString("firmware_settings_language", null)?.toIntOrNull()
-            ?.let { if (it in 0..7) it else 1 } // DS firmware languages are 0-7; legacy "8" (Russian) -> English
-        val effectiveLanguage = userConfiguredLang ?: when {
-            effectiveAppLang.startsWith("ru") -> 1 // Default English slot for Russian translated ROMs
-            effectiveAppLang.startsWith("ja") -> 0
-            effectiveAppLang.startsWith("fr") -> 2
-            effectiveAppLang.startsWith("de") -> 3
-            effectiveAppLang.startsWith("it") -> 4
-            effectiveAppLang.startsWith("es") -> 5
-            effectiveAppLang.startsWith("zh") -> 6
-            else -> 1
-        }
+            ?.let { if (it in 0..5) it else 1 } // DS firmware languages supported in UI are 0-5
+        val effectiveLanguage = userConfiguredLang ?: resolveDefaultFirmwareLanguage(preferences)
 
         return FirmwareConfiguration(
                 preferences.getString("firmware_settings_nickname", "Player")!!,
@@ -1777,6 +1837,10 @@ class SharedPreferencesSettingsRepository(
 
     override fun getFpsCounterPosition(): FpsCounterPosition {
         return getEnumPreference("fps_counter_position", FpsCounterPosition.HIDDEN)
+    }
+
+    override fun getRenderedIrPosition(): FpsCounterPosition {
+        return getEnumPreference("rendered_ir_position", FpsCounterPosition.HIDDEN)
     }
 
     override fun getExternalDisplayMode(): ExternalDisplayMode {

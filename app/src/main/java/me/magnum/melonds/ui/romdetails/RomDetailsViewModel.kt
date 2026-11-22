@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.preference.PreferenceManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.magnum.melonds.common.Permission
 import me.magnum.melonds.common.UriPermissionManager
 import me.magnum.melonds.domain.model.rom.Rom
@@ -184,6 +186,8 @@ class RomDetailsViewModel @Inject constructor(
             is RomConfigUpdateEvent.RetroArchShaderParametersUpdate -> currentRomConfig.copy(retroArchShaderParameters = event.parameters)
             is RomConfigUpdateEvent.RetroAchievementsEnabledUpdate -> currentRomConfig.copy(retroAchievementsEnabled = event.enabled)
             is RomConfigUpdateEvent.DualScreenPresetUpdate -> currentRomConfig.copy(dualScreenPreset = event.preset)
+            is RomConfigUpdateEvent.DualScreenKeepAspectRatioUpdate -> currentRomConfig.copy(dualScreenKeepAspectRatio = event.enabled)
+            is RomConfigUpdateEvent.DualScreenIntegerScaleUpdate -> currentRomConfig.copy(dualScreenIntegerScale = event.enabled)
             is RomConfigUpdateEvent.TranslatorSourceLangUpdate -> currentRomConfig.copy(translatorSourceLang = event.sourceLang)
             is RomConfigUpdateEvent.Arm9OverclockUpdate -> currentRomConfig.copy(arm9Overclock = event.arm9Overclock)
             is RomConfigUpdateEvent.FastForwardSpeedMultiplierUpdate -> currentRomConfig.copy(fastForwardSpeedMultiplier = event.speedMultiplier)
@@ -207,7 +211,9 @@ class RomDetailsViewModel @Inject constructor(
 
     fun refreshRom() {
         viewModelScope.launch {
-            val refreshedRom = romsRepository.getRomAtUri(_rom.value.uri) ?: return@launch
+            val refreshedRom = withContext(Dispatchers.IO) {
+                romsRepository.getRomAtUri(_rom.value.uri)
+            } ?: return@launch
             val currentConfig = _romConfig.value
             val refreshedConfig = if (isDefaultConfig(refreshedRom) && !isDefaultConfig(_rom.value.copy(config = currentConfig))) {
                 currentConfig
@@ -226,11 +232,14 @@ class RomDetailsViewModel @Inject constructor(
     }
 
     private fun saveRomConfig(newConfig: RomConfig) {
-        if (newConfig.gbaSlotConfig is RomGbaSlotConfig.GbaRom) {
-            newConfig.gbaSlotConfig.romPath?.let { uriPermissionManager.persistFilePermissions(it, Permission.READ) }
-            newConfig.gbaSlotConfig.savePath?.let { uriPermissionManager.persistFilePermissions(it, Permission.READ_WRITE) }
+        val currentRom = _rom.value
+        viewModelScope.launch(Dispatchers.IO) {
+            if (newConfig.gbaSlotConfig is RomGbaSlotConfig.GbaRom) {
+                newConfig.gbaSlotConfig.romPath?.let { uriPermissionManager.persistFilePermissions(it, Permission.READ) }
+                newConfig.gbaSlotConfig.savePath?.let { uriPermissionManager.persistFilePermissions(it, Permission.READ_WRITE) }
+            }
+            romsRepository.updateRomConfig(currentRom, newConfig)
         }
-        romsRepository.updateRomConfig(_rom.value, newConfig)
     }
 
     private data class GlobalRuntimeOverrides(

@@ -345,11 +345,16 @@ object PlayStatsStore {
         }.getOrDefault(emptyList())
     }
 
-    fun isDsiGame(gameCode: String, displayName: String): Boolean {
+    private val dsiWordRegex = Regex("\\bDSi\\b", RegexOption.IGNORE_CASE)
+
+    fun isDsiGame(gameCode: String, displayName: String, rom: Rom? = null): Boolean {
+        if (rom != null) {
+            return rom.isDsiWareTitle || rom.isInstalledDsiWareShortcut || rom.isDsiEnhanced
+        }
         val upperCode = gameCode.trim().uppercase(Locale.US)
         val firstChar = upperCode.firstOrNull()
-        val codeMatch = firstChar == 'T' || firstChar == 'H' || firstChar == 'K'
-        val nameMatch = displayName.contains("DSi", ignoreCase = true)
+        val codeMatch = firstChar == 'H' || firstChar == 'K'
+        val nameMatch = dsiWordRegex.containsMatchIn(displayName)
         return codeMatch || nameMatch
     }
 
@@ -360,7 +365,7 @@ object PlayStatsStore {
         cal.set(Calendar.MINUTE, 0)
         cal.set(Calendar.SECOND, 0)
         cal.set(Calendar.MILLISECOND, 0)
-        return cal.timeInMillis / 86_400_000L
+        return (cal.timeInMillis + cal.get(Calendar.ZONE_OFFSET) + cal.get(Calendar.DST_OFFSET)) / 86_400_000L
     }
 
     fun buildSummary(context: Context, roms: List<Rom>): PlayerStatsSummary {
@@ -458,7 +463,7 @@ object PlayStatsStore {
                 0f
             }
             val avg = item.playTimeMs / item.launchCount.coerceAtLeast(1)
-            val dsi = isDsiGame(item.gameCode, item.displayName)
+            val dsi = isDsiGame(item.gameCode, item.displayName, item.rom)
             item.copy(
                 sharePercent = share,
                 avgSessionMs = avg,
@@ -559,7 +564,7 @@ object PlayStatsStore {
                 val dotKey = SimpleDateFormat("dd.MM.yyyy", Locale.US).format(date)
                 val isoKey = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(date)
                 val dayLabel = SimpleDateFormat("dd.MM", Locale.getDefault()).format(date)
-                val dayNum = c.timeInMillis / 86_400_000L
+                val dayNum = toDayNumber(c.timeInMillis)
 
                 val matchingSessions = allSessions.filter { sess ->
                     sess.dayKey == dotKey || sess.dayKey == isoKey || toDayNumber(sess.startedAtMs) == dayNum

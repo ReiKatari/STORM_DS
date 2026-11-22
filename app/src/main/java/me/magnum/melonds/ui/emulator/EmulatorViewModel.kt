@@ -507,6 +507,9 @@ class EmulatorViewModel @Inject constructor(
     private val _currentFps = MutableStateFlow<Int?>(null)
     val currentFps = _currentFps.asStateFlow()
 
+    private val _renderedInternalResolution = MutableStateFlow<Pair<Int, Int>?>(null)
+    val renderedInternalResolution = _renderedInternalResolution.asStateFlow()
+
     private val _toastEvent = EventSharedFlow<ToastEvent>()
     val toastEvent = _toastEvent.asSharedFlow()
 
@@ -582,6 +585,21 @@ class EmulatorViewModel @Inject constructor(
         viewModelScope.launch {
             _layout.filterNotNull().collect {
                 uiLayoutProvider.setCurrentLayoutConfiguration(it)
+            }
+        }
+
+        viewModelScope.launch {
+            settingsRepository.observeFrameskipConfiguration().collectLatest {
+                emulatorManager.setFrameskipConfiguration(it)
+            }
+        }
+
+        viewModelScope.launch {
+            kotlinx.coroutines.flow.combine(
+                settingsRepository.observeVulkanDrsEnabled(),
+                settingsRepository.getVideoRenderer(),
+            ) { _, _ -> settingsRepository.isVulkanDrsActive() }.collectLatest {
+                emulatorManager.setVulkanDrsEnabled(it)
             }
         }
 
@@ -3090,6 +3108,7 @@ class EmulatorViewModel @Inject constructor(
         leaderboardTrackerUpdateLogLimiter.resetAll()
         emulatorSession.reset()
         _currentFps.value = null
+        _renderedInternalResolution.value = null
         _emulatorState.value = newState
         _mainScreenBackground.value = RuntimeBackground.None
         _secondaryScreenBackground.value = RuntimeBackground.None
@@ -3402,12 +3421,30 @@ class EmulatorViewModel @Inject constructor(
         return settingsRepository.getFpsCounterPosition()
     }
 
+    fun getRenderedIrPosition(): FpsCounterPosition {
+        return settingsRepository.getRenderedIrPosition()
+    }
+
     fun isMuteOnFastForwardEnabled(): Boolean {
         return settingsRepository.isMuteOnFastForwardEnabled()
     }
 
     fun isDrsEnabled(): Boolean {
-        return settingsRepository.isDrsEnabled()
+        return settingsRepository.isVulkanDrsActive()
+    }
+
+    fun onRunningRomFastForwardSpeedSelected(multiplier: Float?) {
+        val runningRom = (_emulatorState.value as? EmulatorState.RunningRom)?.rom ?: currentRom ?: return
+        val updatedRom = runningRom.copy(
+            config = runningRom.config.copy(fastForwardSpeedMultiplier = multiplier)
+        )
+        updateRunningRom(updatedRom)
+        sessionCoroutineScope.launch {
+            withContext(Dispatchers.IO) {
+                romsRepository.updateRomConfig(runningRom, updatedRom.config)
+            }
+            emulatorManager.updateRomEmulatorConfiguration(updatedRom)
+        }
     }
 
     fun updateRuntimeResolutionScaling(scaling: Int) {
@@ -3421,6 +3458,9 @@ class EmulatorViewModel @Inject constructor(
             )
             updateRunningRom(updatedRom)
             sessionCoroutineScope.launch {
+                withContext(Dispatchers.IO) {
+                    romsRepository.updateRomConfig(runningRom, updatedRom.config)
+                }
                 emulatorManager.updateRomEmulatorConfiguration(updatedRom)
             }
         }
@@ -6689,6 +6729,16 @@ class EmulatorViewModel @Inject constructor(
             while (isActive) {
                 delay(1.seconds)
                 _currentFps.value = emulatorManager.getFps().roundToInt()
+                val configuration = _runtimeRendererConfiguration.value
+                if (configuration != null) {
+                    val configuredIr = configuration.resolutionScaling
+                    val renderedIr = if (configuration.renderer == VideoRenderer.VULKAN) {
+                        emulatorManager.getVulkanRenderedInternalResolution().takeIf { it > 0 } ?: configuredIr
+                    } else {
+                        configuredIr
+                    }
+                    _renderedInternalResolution.value = renderedIr to configuredIr
+                }
                 if (!markerCleared && _emulatorState.value is EmulatorState.RunningRom) {
                     stableSeconds += 1
                     if (stableSeconds >= GameCompatibilityManager.STABLE_EMULATION_SECONDS) {

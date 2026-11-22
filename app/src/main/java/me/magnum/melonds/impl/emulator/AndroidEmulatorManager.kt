@@ -35,6 +35,7 @@ import me.magnum.melonds.utils.NdsHeaderParser
 import me.magnum.melonds.domain.model.Cheat
 import me.magnum.melonds.domain.model.ConsoleType
 import me.magnum.melonds.domain.model.EmulatorConfiguration
+import me.magnum.melonds.domain.model.FrameskipConfiguration
 import me.magnum.melonds.domain.model.MicSource
 import me.magnum.melonds.domain.model.VideoRenderer
 import me.magnum.melonds.domain.model.ConfigurationDirResult
@@ -76,12 +77,15 @@ class AndroidEmulatorManager(
     private val shaderCompileTimeStore: ShaderCompileTimeStore,
     private val configurationDirectoryVerifier: me.magnum.melonds.domain.services.ConfigurationDirectoryVerifier,
 ) : EmulatorManager {
-    private companion object {
+    companion object {
         private const val TAG = "AndroidEmulatorManager"
         private const val RA_SUBMISSION_TAG = "RASubmission"
         private const val GBAModeNotSupported = 2
         private const val BadExceptionRegion = 3
         private const val PowerOff = 4
+
+        fun shouldUseCustomBios(baseUseCustomBios: Boolean, consoleType: ConsoleType): Boolean =
+            baseUseCustomBios || consoleType == ConsoleType.DSi
     }
 
     private class RetroAchievementsSetupException : RuntimeException("RetroAchievements runtime setup failed")
@@ -1490,6 +1494,18 @@ class AndroidEmulatorManager(
         }
     }
 
+    override fun setFrameskipConfiguration(configuration: FrameskipConfiguration) {
+        MelonEmulator.setFrameskipMode(configuration.mode.nativeValue, configuration.manualValue)
+    }
+
+    override fun setVulkanDrsEnabled(enabled: Boolean) {
+        MelonEmulator.setVulkanDrsEnabled(enabled)
+    }
+
+    override fun getVulkanRenderedInternalResolution(): Int {
+        return MelonEmulator.getVulkanRenderedInternalResolution()
+    }
+
     override fun unloadRetroAchievementsData() {
         leaderboardDiagnosticsEnabled = false
         leaderboardTrackerUpdateLogLimiter.resetAll()
@@ -1756,7 +1772,7 @@ class AndroidEmulatorManager(
         } else {
             candidateConsoleType
         }
-        val mustUseCustomBios = baseConfiguration.useCustomBios || (consoleType == ConsoleType.DSi) || (rom.config.runtimeConsoleType != RuntimeConsoleType.DEFAULT)
+        val mustUseCustomBios = shouldUseCustomBios(baseConfiguration.useCustomBios, consoleType)
 
         return baseConfiguration.copy(
             useCustomBios = mustUseCustomBios,

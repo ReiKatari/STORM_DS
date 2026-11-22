@@ -75,7 +75,7 @@ class SettingsActivity :
 
     private val externalTitleListener = androidx.fragment.app.FragmentManager.OnBackStackChangedListener {
         binding.root.post {
-            externalSettingsTitle.value = supportActionBar?.title?.toString() ?: ""
+            updateTitle()
             focusedPreference.value = null
         }
     }
@@ -304,6 +304,7 @@ class SettingsActivity :
             getString(R.string.settings)
         }
         supportActionBar?.title = ""
+        externalSettingsTitle.value = title
 
         val (iconRes, subtitle) = getMetadataForFragment(fragment, title)
         binding.textSettingsTitle.text = title

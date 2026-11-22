@@ -38,6 +38,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.preference.PreferenceManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -197,12 +198,24 @@ fun NetplayLobbyDialog(
             withContext(Dispatchers.IO) {
                 runCatching { MelonEmulator.startLanDiscovery() }
             }
-            while (true) {
-                val raw = withContext(Dispatchers.IO) {
-                    runCatching { MelonEmulator.getLanDiscoveredSessions() }.getOrDefault(emptyArray())
+            try {
+                while (true) {
+                    val raw = withContext(Dispatchers.IO) {
+                        runCatching { MelonEmulator.getLanDiscoveredSessions() }.getOrDefault(emptyArray())
+                    }
+                    discoveredRooms = parseDiscoveredLanRooms(context, raw, romTitle)
+                    delay(1200L)
                 }
-                discoveredRooms = parseDiscoveredLanRooms(context, raw, romTitle)
-                delay(1200L)
+            } finally {
+                if (!joinedSessionRef.get() || !isHostingSessionRef.get()) {
+                    withContext(NonCancellable + Dispatchers.IO) {
+                        runCatching { MelonEmulator.stopLanDiscovery() }
+                    }
+                }
+            }
+        } else {
+            withContext(Dispatchers.IO) {
+                runCatching { MelonEmulator.stopLanDiscovery() }
             }
         }
     }

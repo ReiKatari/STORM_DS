@@ -81,6 +81,15 @@ class RomListViewModel @Inject constructor(
                 }
             }
         }
+        viewModelScope.launch(Dispatchers.IO) {
+            boxArtRepository.indexReady
+                .collect { ready ->
+                    if (ready && pendingBoxArtRoms.isNotEmpty()) {
+                        val toRetry = pendingBoxArtRoms.keys.toList().mapNotNull { pendingBoxArtRoms.remove(it) }
+                        toRetry.forEach { requestBoxArt(it) }
+                    }
+                }
+        }
     }
 
     val isRaCoverEnabled: StateFlow<Boolean> = settingsRepository.observeRaCoverEnabled()
@@ -89,6 +98,7 @@ class RomListViewModel @Inject constructor(
     val boxArtByUri: StateFlow<Map<String, String>> = _boxArtByUri.asStateFlow()
 
     private val boxArtRequestsInFlight = mutableSetOf<String>()
+    private val pendingBoxArtRoms = java.util.concurrent.ConcurrentHashMap<String, Rom>()
     private val raCoverRequestsInFlight = mutableSetOf<String>()
     private val raCoverAttemptedHashes = mutableSetOf<String>()
     private val boxArtSemaphore = Semaphore(12)
@@ -141,10 +151,27 @@ class RomListViewModel @Inject constructor(
                 if (shouldFetchBoxArt) {
                     viewModelScope.launch(Dispatchers.IO) {
                         try {
-                            val url = boxArtSemaphore.withPermit {
-                                runCatching { boxArtRepository.getBoxArtUrl(rom) }.getOrNull()
+                            val result = boxArtSemaphore.withPermit {
+                                runCatching { boxArtRepository.resolveBoxArt(rom) }.getOrNull()
                             }
-                            _boxArtByUri.update { it + (key to (url ?: "")) }
+                            when (result) {
+                                is me.magnum.melonds.ui.romlist.boxart.BoxArtRepository.BoxArtResult.Found -> {
+                                    pendingBoxArtRoms.remove(key)
+                                    _boxArtByUri.update { it + (key to result.url) }
+                                }
+                                me.magnum.melonds.ui.romlist.boxart.BoxArtRepository.BoxArtResult.NotFound -> {
+                                    pendingBoxArtRoms.remove(key)
+                                    _boxArtByUri.update { it + (key to "") }
+                                }
+                                me.magnum.melonds.ui.romlist.boxart.BoxArtRepository.BoxArtResult.IndexPending, null -> {
+                                    if (!boxArtRepository.indexReady.value) {
+                                        pendingBoxArtRoms[key] = rom
+                                        if (boxArtRepository.indexReady.value) {
+                                            pendingBoxArtRoms.remove(key)?.let { requestBoxArt(it) }
+                                        }
+                                    }
+                                }
+                            }
                         } finally {
                             synchronized(boxArtRequestsInFlight) {
                                 boxArtRequestsInFlight.remove(key)
@@ -261,7 +288,12 @@ class RomListViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            romsRepository.getRoms().collect { romList ->
+            combine(
+                romsRepository.getRoms(),
+                RomDisplayNameManager.modeFlow,
+            ) { romList, _ ->
+                romList
+            }.collect { romList ->
                 val romsWithDocIds = withContext(Dispatchers.Default) {
                     romList.map { rom ->
                         val parentDocId = rom.parentTreeUri?.let { uri ->
@@ -292,7 +324,8 @@ class RomListViewModel @Inject constructor(
             romsWithParents,
             _sortingMode,
             _sortingOrder,
-        ) { roms, mode, order ->
+            RomDisplayNameManager.modeFlow,
+        ) { roms, mode, order, _ ->
             withContext(Dispatchers.Default) {
                 Triple(sortRoms(roms, mode, order), mode, order)
             }

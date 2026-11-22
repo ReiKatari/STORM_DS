@@ -193,12 +193,7 @@ class CheatsPreferencesViewModel @Inject constructor(
             .readTimeout(40, TimeUnit.SECONDS)
             .build()
 
-        val targetDir = runCatching {
-            val extDir = File(Environment.getExternalStorageDirectory(), "STORM DS/cheats")
-            if (extDir.exists() || extDir.mkdirs()) extDir else File(appContext.filesDir, "cheats").apply { mkdirs() }
-        }.getOrElse {
-            File(appContext.filesDir, "cheats").apply { mkdirs() }
-        }
+        val targetDir = resolveWritableCheatsDir(appContext)
         val targetFile = File(targetDir, "usrcheat.dat")
         val tempFile = File(targetDir, "usrcheat.dat.tmp")
 
@@ -254,6 +249,27 @@ class CheatsPreferencesViewModel @Inject constructor(
         } else {
             OnlineCheatsDownloadResult.Failed
         }
+    }
+
+    private fun resolveWritableCheatsDir(context: Context): File {
+        val extDir = runCatching {
+            File(Environment.getExternalStorageDirectory(), "STORM DS/cheats")
+        }.getOrNull()
+        if (extDir != null && isDirectoryWritable(extDir)) {
+            return extDir
+        }
+        return File(context.filesDir, "cheats").apply { mkdirs() }
+    }
+
+    private fun isDirectoryWritable(dir: File): Boolean {
+        if (!dir.exists() && !dir.mkdirs()) return false
+        if (!dir.isDirectory) return false
+        return runCatching {
+            val probe = File(dir, ".write_test_${System.nanoTime()}")
+            FileOutputStream(probe).use { it.write(0) }
+            probe.delete()
+            true
+        }.getOrDefault(false)
     }
 
     fun areCheatsBeingImported(): Boolean {

@@ -1,12 +1,14 @@
 package me.magnum.melonds.ui.settings.fragments
 
 import android.os.Bundle
+import androidx.preference.ListPreference
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
 import dagger.hilt.android.AndroidEntryPoint
 import me.magnum.melonds.R
 import me.magnum.melonds.common.DirectoryAccessValidator
 import me.magnum.melonds.common.UriPermissionManager
+import me.magnum.melonds.impl.SharedPreferencesSettingsRepository
 import me.magnum.melonds.ui.settings.PreferenceFragmentHelper
 import me.magnum.melonds.ui.settings.PreferenceFragmentTitleProvider
 import javax.inject.Inject
@@ -21,8 +23,14 @@ class FirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFragment
         setPreferencesFromResource(R.xml.pref_internal_firmware_settings, rootKey)
         helper.bindPreferenceSummaryToValue(findPreference("firmware_settings_birthday"))
 
-        val macPref = findPreference<Preference>("internal_mac_address")
         val prefs = preferenceManager.sharedPreferences
+        findPreference<ListPreference>("firmware_settings_language")?.let { languagePref ->
+            if (prefs != null && !prefs.contains("firmware_settings_language")) {
+                languagePref.value = SharedPreferencesSettingsRepository.resolveDefaultFirmwareLanguage(prefs).toString()
+            }
+        }
+
+        val macPref = findPreference<Preference>("internal_mac_address")
         if (prefs?.getString("internal_mac_address", null).isNullOrBlank()) {
             val defaultMac = me.magnum.melonds.domain.model.MacAddress.randomDsAddress().toString()
             prefs?.edit()?.putString("internal_mac_address", defaultMac)?.apply()

@@ -147,6 +147,23 @@
                 android:visibility="gone"
                 tools:text="OpenGL | 512x768 (2x)"/>
 
+        <TextView
+                android:id="@+id/textRenderedIr"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp"
+                android:alpha="0.85"
+                android:background="@drawable/bg_resolution_hud"
+                android:textColor="#F59E0B"
+                android:fontFamily="monospace"
+                android:textSize="11sp"
+                android:elevation="999dp"
+                android:visibility="gone"
+                tools:text="IR 4x / 8x"/>
+
     </androidx.constraintlayout.widget.ConstraintLayout>
 
     <androidx.compose.ui.platform.ComposeView

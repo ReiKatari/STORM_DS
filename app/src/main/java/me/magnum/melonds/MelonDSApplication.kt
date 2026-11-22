@@ -350,7 +350,7 @@ class MelonDSApplication : Application(), Configuration.Provider {
                         copyAssetFile("bios/dsi/firmware.bin", File(dsiDir, "firmware.bin"))
 
                         val nandFile = File(dsiDir, "nand.bin")
-                        if (nandFile.exists() && (nandFile.length() == 251658240L || nandFile.length() < 1024 * 1024L)) {
+                        if (nandFile.exists() && !me.magnum.melonds.impl.bios.BiosDownloadManager.isValidDsiNandImage(nandFile)) {
                             runCatching { nandFile.delete() }
                         }
 
@@ -410,16 +410,18 @@ class MelonDSApplication : Application(), Configuration.Provider {
         runCatching { System.setProperty("http.agent", "melonDS/0.9.5") }
         installCrashHandler()
         runCatching { giveLibrashaderACacheDirectory() }
-        runCatching { migrateConfigJsonFilesSynchronously(this) }
-        runCatching { settingsBackupManager.initializeMirror() }
         runCatching { ButtonThemeManager.init(this) }
         runCatching { AppThemeManager.init(this) }
         runCatching { RomDisplayNameManager.init(this) }
-        runCatching { me.magnum.melonds.impl.StormDeviceSystemInfoReporter.saveUnifiedReport(this) }
         runCatching { createNotificationChannels() }
         runCatching { applyTheme() }
         runCatching { performMigrations() }
-        runCatching { migrateStorageToRoot(this) }
+        migrationScope.launch {
+            runCatching { migrateConfigJsonFilesSynchronously(this@MelonDSApplication) }
+            runCatching { settingsBackupManager.initializeMirror() }
+            runCatching { me.magnum.melonds.impl.StormDeviceSystemInfoReporter.saveUnifiedReport(this@MelonDSApplication) }
+            runCatching { migrateStorageToRoot(this@MelonDSApplication) }
+        }
         runCatching { appLogFileRecorder.start() }
         runCatching { recoverUnexpectedHardcoreOfflineLossIfNeeded() }
         runCatching {
@@ -463,7 +465,7 @@ class MelonDSApplication : Application(), Configuration.Provider {
                             File(filesDir, "logs").apply { mkdirs() }
                         }
                     }
-                    val crashFile = File(logsDir, "STORM_INFO.txt")
+                    val crashFile = File(logsDir, me.magnum.melonds.impl.StormDeviceSystemInfoReporter.CRASH_FILE_NAME)
                     crashFile.appendText("\n\n$report")
                 }
             }

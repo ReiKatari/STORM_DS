@@ -35,6 +35,42 @@ class BiosDownloadManager @Inject constructor(
             "https://github.com/melonds-emu/melonDS/releases/download/bios/dsi_bios.zip",
             "https://archive.org/download/nds_bios_firmware/nds_bios_firmware.zip"
         )
+
+        fun isValidDsiNandImage(nand: File): Boolean {
+            if (!nand.exists() || nand.length() < 1024 * 1024L) {
+                return false
+            }
+            return try {
+                RandomAccessFile(nand, "r").use { raf ->
+                    val len = raf.length()
+                    if (len >= 0x40) {
+                        raf.seek(len - 0x40)
+                        val footer = ByteArray(16)
+                        raf.readFully(footer)
+                        val str = String(footer, Charsets.US_ASCII)
+                        if (str.startsWith("DSi eMMC CID/CPU")) {
+                            return@use true
+                        }
+                    }
+                    if (len >= 0x000FF800 + 16) {
+                        raf.seek(0x000FF800)
+                        val footer = ByteArray(16)
+                        raf.readFully(footer)
+                        val str = String(footer, Charsets.US_ASCII)
+                        if (str.startsWith("DSi eMMC CID/CPU")) {
+                            return@use true
+                        }
+                    }
+                    raf.seek(0)
+                    val mbr = ByteArray(512)
+                    raf.readFully(mbr)
+                    val hasMbrSignature = mbr[0x1FE] == 0x55.toByte() && mbr[0x1FF] == 0xAA.toByte()
+                    hasMbrSignature || mbr.any { it != 0.toByte() }
+                }
+            } catch (_: Throwable) {
+                false
+            }
+        }
     }
 
     private fun isBiosDownloadBlocked(): Boolean {
@@ -334,40 +370,7 @@ class BiosDownloadManager @Inject constructor(
         }
     }
 
-    private fun isValidNandFile(nand: File): Boolean {
-        if (!nand.exists() || nand.length() < 1024 * 1024L) {
-            return false
-        }
-        return try {
-            RandomAccessFile(nand, "r").use { raf ->
-                val len = raf.length()
-                if (len >= 0x40) {
-                    raf.seek(len - 0x40)
-                    val footer = ByteArray(16)
-                    raf.readFully(footer)
-                    val str = String(footer, Charsets.US_ASCII)
-                    if (str.startsWith("DSi eMMC CID/CPU")) {
-                        return@use true
-                    }
-                }
-                if (len >= 0x000FF800 + 16) {
-                    raf.seek(0x000FF800)
-                    val footer = ByteArray(16)
-                    raf.readFully(footer)
-                    val str = String(footer, Charsets.US_ASCII)
-                    if (str.startsWith("DSi eMMC CID/CPU")) {
-                        return@use true
-                    }
-                }
-                raf.seek(0)
-                val testBuf = ByteArray(512)
-                raf.readFully(testBuf)
-                testBuf.any { it != 0.toByte() }
-            }
-        } catch (_: Throwable) {
-            false
-        }
-    }
+    private fun isValidNandFile(nand: File): Boolean = isValidDsiNandImage(nand)
 
     private fun hasValidDsiFiles(dir: File): Boolean {
         if (!hasValidDsiCoreFiles(dir)) {

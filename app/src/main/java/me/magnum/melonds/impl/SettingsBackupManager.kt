@@ -51,6 +51,7 @@ class SettingsBackupManager @Inject constructor(
             "bios_dir",
             "dsi_bios_dir",
             SETTINGS_MIRROR_FALLBACK_URI,
+            SETTINGS_MIRROR_ENABLED,
         )
         private val SENSITIVE_PREF_KEYS = setOf(
             "ra_token",
@@ -316,10 +317,7 @@ class SettingsBackupManager @Inject constructor(
                     }
                 }
 
-                runCatching { me.magnum.melonds.ui.theme.AppThemeManager.init(context) }
-                runCatching { me.magnum.melonds.ui.common.views.ButtonThemeManager.init(context) }
-                runCatching { me.magnum.melonds.ui.romlist.RomDisplayNameManager.init(context) }
-                runCatching { me.magnum.melonds.common.AppLocaleSync.syncFromPreferences(context) }
+                applyRestoredManagersOnMainThread()
             } finally {
                 isRestoringMirror.set(false)
             }
@@ -669,10 +667,7 @@ class SettingsBackupManager @Inject constructor(
                 throw java.io.FileNotFoundException("No valid backup file found in selected folder")
             }
 
-            runCatching { me.magnum.melonds.ui.theme.AppThemeManager.init(context) }
-            runCatching { me.magnum.melonds.ui.common.views.ButtonThemeManager.init(context) }
-            runCatching { me.magnum.melonds.ui.romlist.RomDisplayNameManager.init(context) }
-            runCatching { me.magnum.melonds.common.AppLocaleSync.syncFromPreferences(context) }
+            applyRestoredManagersOnMainThread()
         } finally {
             isRestoringMirror.set(false)
         }
@@ -683,10 +678,7 @@ class SettingsBackupManager @Inject constructor(
         isRestoringMirror.set(true)
         try {
             restoreBackupJsonInternal(json, includeLocalKeys = true)
-            runCatching { me.magnum.melonds.ui.theme.AppThemeManager.init(context) }
-            runCatching { me.magnum.melonds.ui.common.views.ButtonThemeManager.init(context) }
-            runCatching { me.magnum.melonds.ui.romlist.RomDisplayNameManager.init(context) }
-            runCatching { me.magnum.melonds.common.AppLocaleSync.syncFromPreferences(context) }
+            applyRestoredManagersOnMainThread()
         } finally {
             isRestoringMirror.set(false)
         }
@@ -706,12 +698,14 @@ class SettingsBackupManager @Inject constructor(
         val editor = preferences.edit()
         for (existingKey in preferences.all.keys) {
             if (isSensitivePrefKey(existingKey)) continue
+            if (existingKey == SETTINGS_MIRROR_ENABLED) continue
             if (!includeLocalKeys && existingKey in EXCLUDED_PREF_KEYS) continue
             if (includeLocalKeys && existingKey in EXCLUDED_PREF_KEYS && !json.has(existingKey)) continue
             editor.remove(existingKey)
         }
         for (key in json.keys()) {
             if (isSensitivePrefKey(key)) continue
+            if (key == SETTINGS_MIRROR_ENABLED) continue
             if (!includeLocalKeys && key in EXCLUDED_PREF_KEYS) continue
             val value = json.get(key)
             when (value) {
@@ -1071,10 +1065,7 @@ class SettingsBackupManager @Inject constructor(
                     }
                 }
 
-                runCatching { me.magnum.melonds.ui.theme.AppThemeManager.init(context) }
-                runCatching { me.magnum.melonds.ui.common.views.ButtonThemeManager.init(context) }
-                runCatching { me.magnum.melonds.ui.romlist.RomDisplayNameManager.init(context) }
-                runCatching { me.magnum.melonds.common.AppLocaleSync.syncFromPreferences(context) }
+                applyRestoredManagersOnMainThread()
             } finally {
                 isRestoringMirror.set(false)
             }
@@ -1084,6 +1075,20 @@ class SettingsBackupManager @Inject constructor(
         }.onFailure {
             Log.w(TAG, "Failed to restore snapshot ${snapshot.id}", it)
         }.getOrDefault(false)
+    }
+
+    private fun applyRestoredManagersOnMainThread() {
+        val action = Runnable {
+            runCatching { me.magnum.melonds.ui.theme.AppThemeManager.init(context) }
+            runCatching { me.magnum.melonds.ui.common.views.ButtonThemeManager.init(context) }
+            runCatching { me.magnum.melonds.ui.romlist.RomDisplayNameManager.init(context) }
+            runCatching { me.magnum.melonds.common.AppLocaleSync.syncFromPreferences(context) }
+        }
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+            action.run()
+        } else {
+            android.os.Handler(android.os.Looper.getMainLooper()).post(action)
+        }
     }
 
     fun exportLayoutsToStormFolder(): File? {

@@ -26,6 +26,8 @@ sealed class RomConfigUpdateEvent {
     data class RetroArchShaderParametersUpdate(val parameters: String?) : RomConfigUpdateEvent()
     data class RetroAchievementsEnabledUpdate(val enabled: Boolean?) : RomConfigUpdateEvent()
     data class DualScreenPresetUpdate(val preset: me.magnum.melonds.domain.model.DualScreenPreset?) : RomConfigUpdateEvent()
+    data class DualScreenKeepAspectRatioUpdate(val enabled: Boolean?) : RomConfigUpdateEvent()
+    data class DualScreenIntegerScaleUpdate(val enabled: Boolean?) : RomConfigUpdateEvent()
     data class TranslatorSourceLangUpdate(val sourceLang: String?) : RomConfigUpdateEvent()
     data class Arm9OverclockUpdate(val arm9Overclock: Int?) : RomConfigUpdateEvent()
     data class FastForwardSpeedMultiplierUpdate(val speedMultiplier: Float?) : RomConfigUpdateEvent()

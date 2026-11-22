@@ -99,6 +99,12 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         const val FREEDRENO_SETTINGS_KEY = "video_freedreno_settings"
         const val SHADER_SETTINGS_KEY = "video_retroarch_shader_settings"
         const val HEAVY_PRESET_BADGE_THRESHOLD_MS = 60_000L
+        const val PENDING_DSLITE_PRESET = "pending_dslite_preset"
+        val DSLITE_PRESETS = listOf(
+            R.string.video_dslite_color to "handheld/color-mod/dslite-color.slangp",
+            R.string.video_dslite_lcd to "presets/handheld-plus-color-mod/lcd-grid-v2-dslite-color.slangp",
+            R.string.video_dslite_motionblur to "presets/handheld-plus-color-mod/lcd-grid-v2-dslite-color-motionblur.slangp",
+        )
     }
 
     private val helper by lazy { PreferenceFragmentHelper(this, uriPermissionManager, directoryAccessValidator) }
@@ -130,6 +136,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
     private var shaderInstallProgressBar: ProgressBar? = null
     private var shaderInstallPhaseText: TextView? = null
     private var shaderInstallDetailText: TextView? = null
+    private var pendingDsLitePreset: String? = null
     private val vulkanDriverImportLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@registerForActivityResult
         handleVulkanDriverImport(uri)
@@ -137,6 +144,8 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.pref_video, rootKey)
+        pendingDsLitePreset = savedInstanceState?.getString(PENDING_DSLITE_PRESET)
+            ?.takeIf { path -> DSLITE_PRESETS.any { it.second == path } }
 
         if (rootKey == FREEDRENO_SETTINGS_KEY) {
             setupFreedrenoSettingsSubScreen()
@@ -156,6 +165,16 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         listOf(rendererPreference, internalResolutionPreference).forEach {
             it.isInGameLocked = launchedInGame
             it.inGameLockedMessageRes = R.string.video_setting_cannot_change_ingame
+        }
+        findPreference<InGameLockedSwitchPreference>("video_low_latency")?.apply {
+            isInGameLocked = launchedInGame
+            inGameLockedMessageRes = R.string.video_setting_cannot_change_ingame
+        }
+        val prefs = preferenceManager.sharedPreferences
+        if (prefs != null && !prefs.contains("video_vulkan_drs") && prefs.contains("video_drs_enabled")) {
+            val migratedDrs = prefs.getBoolean("video_drs_enabled", false)
+            prefs.edit().putBoolean("video_vulkan_drs", migratedDrs).apply()
+            findPreference<SwitchPreference>("video_vulkan_drs")?.isChecked = migratedDrs
         }
         internalResolutionPreference.addOnPreferenceChangeListener { pref, newValue ->
             val listPref = pref as ListPreference
@@ -324,6 +343,13 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         val videoFilteringPreference = findPreference<InGameLockedListPreference>("video_filtering")!!
         videoFilteringPreference.isInGameLocked = lockVideoFiltering
         videoFilteringPreference.inGameLockedMessageRes = R.string.cannot_change_use_rom_settings
+        findPreference<Preference>("video_dslite_preset")?.apply {
+            isEnabled = !lockVideoFiltering
+            setOnPreferenceClickListener {
+                showDsLitePresetDialog()
+                true
+            }
+        }
         val dsiCameraSourcePreference = findPreference<ListPreference>("dsi_camera_source")!!
         val dsiCameraImagePreference = findPreference<StoragePickerPreference>("dsi_camera_static_image")!!
         val retroArchShaderRootPreference = findPreference<StoragePickerPreference>("video_retroarch_shader_root")!!
@@ -388,6 +414,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                     allFilteringValues = allFilteringValues,
                     allFilteringEntries = allFilteringEntries,
                 )
+                updateVulkanDrsPreferenceState(newRenderer)
                 updateVulkanDriverPreferenceState(
                     renderer = newRenderer,
                     category = vulkanDriverCategory,
@@ -437,6 +464,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         helper.setupStoragePickerPreference(retroArchShaderRootPreference)
         helper.bindPreferenceSummaryToValue(retroArchShaderPresetPreference)
         retroArchShaderParametersPreference?.let { helper.bindPreferenceSummaryToValue(it) }
+        updateVulkanDrsPreferenceState(enumValueOfIgnoreCase(rendererPreference.value))
         setupVulkanDriverPreferences(
             renderer = enumValueOfIgnoreCase(rendererPreference.value),
             category = vulkanDriverCategory,
@@ -519,6 +547,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         updateAiUpscaleSummary()
 
         videoFilteringPreference.setOnPreferenceChangeListener { _, newValue ->
+            pendingDsLitePreset = null
             val newFilteringValue = newValue as String
             val aiSelected = newFilteringValue.equals("ai_upscale", ignoreCase = true)
             if (aiUpscaleSwitch != null && aiUpscaleSwitch.isChecked != aiSelected) {
@@ -712,6 +741,10 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             removePreference = removePreference,
             launchedInGame = launchedInGame,
         )
+    }
+
+    private fun updateVulkanDrsPreferenceState(renderer: VideoRenderer) {
+        findPreference<PreferenceCategory>("video_vulkan_category")?.isVisible = renderer == VideoRenderer.VULKAN
     }
 
     private fun updateVulkanDriverPreferenceState(
@@ -1515,6 +1548,13 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         val isInternalSource = source == RetroArchShaderSource.INTERNAL
         val hasLibrary = isFolderSource || (isInternalSource && shaderLibraryManager.isInstalled())
 
+        val dsLitePreset = DSLITE_PRESETS.firstOrNull {
+            retroArchEnabled && isInternalSource && it.second == retroArchShaderPresetPreference.value
+        }
+        findPreference<Preference>("video_dslite_preset")?.setSummary(
+            dsLitePreset?.first ?: R.string.video_dslite_preset_summary,
+        )
+
         if (::shaderSourcePreference.isInitialized) {
             shaderSourcePreference.isVisible = retroArchEnabled
             shaderSourcePreference.summary = when (source) {
@@ -1876,9 +1916,14 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                                 refreshShaderPreferenceVisibility()
                                 updateAiUpscaleSummary()
                                 WorkManager.getInstance(requireContext()).pruneWork()
+                                pendingDsLitePreset?.let { preset ->
+                                    pendingDsLitePreset = null
+                                    selectDsLitePreset(preset, allowDownload = false)
+                                }
                             }
                         }
                         WorkInfo.State.FAILED -> {
+                            pendingDsLitePreset = null
                             dismissShaderInstallProgressDialog()
                             if (handledTerminalShaderWorkId != info.id) {
                                 handledTerminalShaderWorkId = info.id
@@ -1895,6 +1940,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                             }
                         }
                         WorkInfo.State.CANCELLED -> {
+                            pendingDsLitePreset = null
                             dismissShaderInstallProgressDialog()
                             if (handledTerminalShaderWorkId != info.id) {
                                 handledTerminalShaderWorkId = info.id
@@ -2028,10 +2074,76 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
     }
 
     private fun applyRetroArchPresetSelection(preference: ListPreference, selectedPreset: String) {
+        pendingDsLitePreset = null
         preference.value = selectedPreset
         preference.entries = arrayOf(selectedPreset)
         preference.entryValues = arrayOf(selectedPreset)
         preference.summary = selectedPreset
+        refreshShaderPreferenceVisibility()
+    }
+
+    private fun showDsLitePresetDialog() {
+        val preferences = preferenceManager.sharedPreferences
+        val currentPreset = preferences?.getString("video_retroarch_shader_preset", null)
+        val enabled = preferences?.getString("video_filtering", "none") == "retroarch" &&
+            resolveShaderSource() == RetroArchShaderSource.INTERNAL
+        val selectedIndex = DSLITE_PRESETS.indexOfFirst { enabled && it.second == currentPreset }
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.video_dslite_preset_title)
+            .setSingleChoiceItems(DSLITE_PRESETS.map { getString(it.first) }.toTypedArray(), selectedIndex) { dialog, which ->
+                dialog.dismiss()
+                pendingDsLitePreset = null
+                selectDsLitePreset(DSLITE_PRESETS[which].second)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun selectDsLitePreset(preset: String, allowDownload: Boolean = true) {
+        if (DSLITE_PRESETS.none { it.second == preset }) {
+            return
+        }
+        lifecycleScope.launch {
+            val available = withContext(Dispatchers.IO) {
+                shaderLibraryManager.libraryRoot?.let { File(it, preset).isFile } == true
+            }
+            if (!isAdded) return@launch
+            if (available) {
+                preferenceManager.sharedPreferences?.edit()
+                    ?.putString("video_retroarch_shader_source", RetroArchShaderSource.INTERNAL.preferenceValue)
+                    ?.putString("video_retroarch_shader_preset", preset)
+                    ?.putString("video_filtering", "retroarch")
+                    ?.putBoolean("video_ai_upscale_enabled", false)
+                    ?.remove("video_retroarch_shader_parameters")
+                    ?.putBoolean("video_retroarch_shader_clear_history", false)
+                    ?.apply()
+                findPreference<ListPreference>("video_filtering")?.value = "retroarch"
+                findPreference<androidx.preference.TwoStatePreference>("video_ai_upscale_enabled")?.isChecked = false
+                findPreference<EditTextPreference>("video_retroarch_shader_parameters")?.text = null
+                findPreference<SwitchPreference>("video_retroarch_shader_clear_history")?.isChecked = false
+                if (::shaderPresetPreference.isInitialized) {
+                    applyRetroArchPresetSelection(shaderPresetPreference, preset)
+                } else {
+                    refreshShaderPreferenceVisibility()
+                }
+            } else if (allowDownload) {
+                AlertDialog.Builder(requireContext())
+                    .setMessage(R.string.video_dslite_download)
+                    .setPositiveButton(R.string.video_retroarch_shader_install_title) { _, _ ->
+                        pendingDsLitePreset = preset
+                        startShaderInstall()
+                    }
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show()
+            } else {
+                Toast.makeText(requireContext(), R.string.video_dslite_unavailable, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString(PENDING_DSLITE_PRESET, pendingDsLitePreset)
     }
 
     private fun showVulkanUnavailableDialog() {
@@ -2464,6 +2576,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             putBoolean("video_widescreen_3d", false)
             putBoolean("video_60fps_patch", false)
             putBoolean("video_drs_enabled", false)
+            putBoolean("video_vulkan_drs", false)
             putBoolean("video_oled_battery_saver", false)
             putBoolean("video_low_battery_saver", false)
             putString("video_vulkan_compositor_mode", "precise")
@@ -2506,7 +2619,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         updateAiUpscaleSummary()
         findPreference<androidx.preference.TwoStatePreference>("video_widescreen_3d")?.isChecked = false
         findPreference<androidx.preference.TwoStatePreference>("video_60fps_patch")?.isChecked = false
-        findPreference<androidx.preference.TwoStatePreference>("video_drs_enabled")?.isChecked = false
+        findPreference<androidx.preference.TwoStatePreference>("video_vulkan_drs")?.isChecked = false
         findPreference<androidx.preference.TwoStatePreference>("video_oled_battery_saver")?.isChecked = false
         findPreference<androidx.preference.TwoStatePreference>("video_low_battery_saver")?.isChecked = false
         findPreference<ListPreference>("video_vulkan_compositor_mode")?.let {

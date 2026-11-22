@@ -247,6 +247,7 @@ fun BackgroundListScreen(
                     onPreviewBackgroundClick(it)
                 },
                 onDeleteBackgroundClick = {
+                    val wasSelected = it.id != null && it.id == selectedBackgroundId
                     viewModel.deleteBackground(it)
                     coroutineScope.launch {
                         val result = scaffoldState.snackbarHostState.showSnackbar(
@@ -256,7 +257,7 @@ fun BackgroundListScreen(
                         )
 
                         if (result == SnackbarResult.ActionPerformed) {
-                            viewModel.addBackground(it)
+                            viewModel.restoreBackground(it, reselect = wasSelected)
                         }
                     }
                 },

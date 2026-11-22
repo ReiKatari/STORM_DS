@@ -7,6 +7,8 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.flow.flowOf
+import me.magnum.melonds.domain.model.DownloadProgress
 import me.magnum.melonds.domain.repositories.UpdatesRepository
 import me.magnum.melonds.domain.services.UpdateInstallManager
 import me.magnum.melonds.github.services.GitHubUpdateInstallManager
@@ -29,6 +31,15 @@ object PlayStoreModule {
     @Provides
     @Singleton
     fun provideUpdateInstallManager(@ApplicationContext context: Context): UpdateInstallManager {
-        return GitHubUpdateInstallManager(context)
+        val delegate = GitHubUpdateInstallManager(context)
+        return UpdateInstallManager { update ->
+            val hasUpdateProvider = context.packageManager
+                .resolveContentProvider("${context.packageName}.provider", 0) != null
+            if (!hasUpdateProvider) {
+                flowOf(DownloadProgress.DownloadFailed)
+            } else {
+                delegate.downloadAndInstallUpdate(update)
+            }
+        }
     }
 }

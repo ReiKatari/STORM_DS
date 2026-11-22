@@ -3,19 +3,30 @@ package me.magnum.melonds.ui.romlist
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.preference.PreferenceManager
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 object RomDisplayNameManager {
-    var currentMode: String = "file_name"
-        private set
+    private val _modeFlow = MutableStateFlow("file_name")
+    val modeFlow: StateFlow<String> = _modeFlow.asStateFlow()
+
+    val currentMode: String
+        get() = _modeFlow.value
+
+    private var preferenceListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
 
     fun init(context: Context) {
         val prefs = PreferenceManager.getDefaultSharedPreferences(context)
-        currentMode = prefs.getString("rom_display_name_mode", "file_name") ?: "file_name"
+        _modeFlow.value = prefs.getString("rom_display_name_mode", "file_name") ?: "file_name"
 
-        prefs.registerOnSharedPreferenceChangeListener { sp: SharedPreferences, key: String? ->
+        preferenceListener?.let { prefs.unregisterOnSharedPreferenceChangeListener(it) }
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { sp, key ->
             if (key == "rom_display_name_mode") {
-                currentMode = sp.getString("rom_display_name_mode", "file_name") ?: "file_name"
+                _modeFlow.value = sp.getString("rom_display_name_mode", "file_name") ?: "file_name"
             }
         }
+        preferenceListener = listener
+        prefs.registerOnSharedPreferenceChangeListener(listener)
     }
 }

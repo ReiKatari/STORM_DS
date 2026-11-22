@@ -21,6 +21,11 @@ interface SettingsRepository {
     fun getFrameLimitSpeedMultiplier(): Float
     fun isMuteOnFastForwardEnabled(): Boolean
     fun isDrsEnabled(): Boolean
+    fun getFrameskipConfiguration(): FrameskipConfiguration
+    fun observeFrameskipConfiguration(): Flow<FrameskipConfiguration>
+    fun isVulkanDrsEnabled(): Boolean
+    fun observeVulkanDrsEnabled(): Flow<Boolean>
+    fun isVulkanDrsActive(): Boolean
     fun isRewindEnabled(): Boolean
     fun isSustainedPerformanceModeEnabled(): Boolean
     fun isAppLogFileEnabled(): Boolean
@@ -98,6 +103,7 @@ interface SettingsRepository {
     fun isRendererDebugBgObjEnabled(): Flow<Boolean>
     fun isRendererDebugLatchTraceEnabled(): Flow<Boolean>
     fun getFpsCounterPosition(): FpsCounterPosition
+    fun getRenderedIrPosition(): FpsCounterPosition
     fun observeRetroArchShaderRootValid(): Flow<Boolean>
     fun observeRetroArchShaderPresetPath(): Flow<String?>
     fun observeRetroArchShaderParametersText(): Flow<String?>

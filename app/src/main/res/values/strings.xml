@@ -1782,4 +1782,36 @@
     <string name="input_setup_waiting_hint">Press a gamepad button, key, stick axis, or hold 2 keys for a chord</string>
     <string name="device_microphone_gain">Device microphone gain</string>
     <string name="device_microphone_gain_summary">1x keeps the original level. Increase for quiet microphones.</string>
+
+    <!-- Phase 3: Wave 2 Vulkan DRS, Frameskip, Low Latency, DS Lite Presets -->
+    <string name="video_vulkan_category">Vulkan Hacks</string>
+    <string name="video_low_latency">Low latency</string>
+    <string name="video_low_latency_summary">Prioritizes control response. May reduce performance and smoothness. Applies when starting a game.</string>
+    <string name="video_vulkan_drs">Dynamic internal resolution</string>
+    <string name="video_vulkan_drs_summary">The game targets the selected internal resolution, but under heavy load it renders at a lower internal resolution to keep a stable 60 fps. While enabled, Frameskip is off.</string>
+    <string name="rendered_ir_position">Show rendered IR</string>
+    <string name="info_rendered_ir">IR %1$dx / %2$dx</string>
+    <string name="frameskip_mode">Frameskip</string>
+    <string name="frameskip_mode_summary">%s. Only applies to the Vulkan renderer. In games that alternate 3D between screens the real cadence is lower.</string>
+    <string name="frameskip_manual_value">Frames to skip</string>
+    <string name="frameskip_mode_disabled_by_drs">DRS is active; to use Frameskip, disable dynamic internal resolution in Video settings.</string>
+    <string name="video_dslite_preset_title">DS Lite presets</string>
+    <string name="video_dslite_preset_summary">DS Lite colors with optional LCD grid and motion blur</string>
+    <string name="video_dslite_color">DS Lite color</string>
+    <string name="video_dslite_lcd">DS Lite color + LCD grid</string>
+    <string name="video_dslite_motionblur">DS Lite color + LCD grid + motion blur</string>
+    <string name="video_dslite_download">These presets use the official shader library. Download or update it now?</string>
+    <string name="video_dslite_unavailable">This preset is missing from the installed shader library. Try updating the library.</string>
+    <string-array name="frameskip_mode_options">
+        <item>Off</item>
+        <item>Manual</item>
+        <item>Auto</item>
+    </string-array>
+    <string-array name="frameskip_manual_value_options">
+        <item>0 (never skip)</item>
+        <item>1 (draw 1, skip 1)</item>
+        <item>2 (draw 1, skip 2)</item>
+        <item>3 (draw 1, skip 3)</item>
+        <item>4 (draw 1, skip 4)</item>
+    </string-array>
 </resources>

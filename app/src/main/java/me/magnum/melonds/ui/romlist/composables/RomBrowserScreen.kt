@@ -62,8 +62,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -259,6 +261,18 @@ fun RomBrowserScreen(
                 pinToTop = false
             }
         }
+    }
+
+    // Continuously track scroll position so flings/momentum away from top disable pinToTop.
+    LaunchedEffect(state.viewMode) {
+        snapshotFlow { isCurrentlyAtTop }
+            .distinctUntilChanged()
+            .collect { atTop ->
+                if (!atTop && !userRefreshPending) {
+                    userHasScrolledManually = true
+                    pinToTop = false
+                }
+            }
     }
 
     // When at top and not dragging, keep top pinned and clear manual scroll flag
@@ -971,6 +985,7 @@ private fun GridContent(
         }
     }
     val anyCoversEnabled = isScraperEnabled || isGameTdb2dEnabled || isGameTdb3dEnabled || isRaCoversEnabled
+    val displayNameMode by me.magnum.melonds.ui.romlist.RomDisplayNameManager.modeFlow.collectAsState()
 
     RomListOverscrollProvider {
         LazyVerticalGrid(
@@ -1023,7 +1038,8 @@ private fun GridContent(
                 LaunchedEffect(entry.rom.uri) {
                     onRomVisible(entry.rom)
                 }
-                RomGridCard(
+                key(displayNameMode) {
+                    RomGridCard(
                     rom = entry.rom,
                     coverUrl = coverByHash[entry.rom.retroAchievementsHash],
                     boxArtUrl = boxArtByUri[entry.rom.uri.toString()]?.takeIf { it.isNotEmpty() },
@@ -1041,6 +1057,7 @@ private fun GridContent(
                         onFocusedEntryIndexChanged = onFocusedEntryIndexChanged,
                     ).cancelDpadDownIf(entryIndex >= firstRomEntryIndexInLastGridRow),
                 )
+                }
             }
         }
     }
@@ -1095,6 +1112,7 @@ private fun ListContent(
         }
     }
     val anyCoversEnabled = isScraperEnabled || isGameTdb2dEnabled || isGameTdb3dEnabled || isRaCoversEnabled
+    val displayNameMode by me.magnum.melonds.ui.romlist.RomDisplayNameManager.modeFlow.collectAsState()
 
     RomListOverscrollProvider {
         LazyColumn(
@@ -1143,6 +1161,7 @@ private fun ListContent(
                         LaunchedEffect(entry.rom.uri) {
                             onRomVisible(entry.rom)
                         }
+                        key(displayNameMode) {
                         RomListRow(
                             rom = entry.rom,
                             coverUrl = coverByHash[entry.rom.retroAchievementsHash],
@@ -1163,6 +1182,7 @@ private fun ListContent(
                                 onFocusedEntryIndexChanged = onFocusedEntryIndexChanged,
                             ).cancelDpadDownIf(index == state.entries.lastIndex),
                         )
+                        }
                     }
                 }
             }

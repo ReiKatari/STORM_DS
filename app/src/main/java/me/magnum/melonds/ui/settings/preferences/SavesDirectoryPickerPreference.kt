@@ -9,6 +9,13 @@ import android.widget.Toast
 import androidx.core.net.toUri
 import androidx.core.view.isGone
 import androidx.preference.PreferenceViewHolder
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.magnum.melonds.R
 import me.magnum.melonds.common.Permission
 import java.io.File
@@ -24,6 +31,12 @@ class SavesDirectoryPickerPreference(context: Context, attrs: AttributeSet?) : S
 
     private var buttonResetDefault: ImageView? = null
     private var imageViewStatus: ImageView? = null
+    private var ioScope: CoroutineScope? = null
+    private var attachJob: Job? = null
+
+    private fun ensureScope(): CoroutineScope {
+        return ioScope ?: CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate).also { ioScope = it }
+    }
 
     private fun getDefaultDirectory(): File {
         val subFolder = if (key == "save_state_custom_dir") "quicksaves" else "saves"
@@ -42,12 +55,22 @@ class SavesDirectoryPickerPreference(context: Context, attrs: AttributeSet?) : S
     override fun onAttached() {
         super.onAttached()
         val persisted = getPersistedStringSet(emptySet()).firstOrNull()
-        val defaultDir = getDefaultDirectory()
-        val defaultUri = Uri.fromFile(defaultDir)
         if (persisted == null || persisted.contains("data/user/0") || persisted.contains("files/saves")) {
-            persistStringSet(setOf(defaultUri.toString()))
-            summary = defaultDir.absolutePath
+            attachJob?.cancel()
+            attachJob = ensureScope().launch {
+                val defaultDir = withContext(Dispatchers.IO) { getDefaultDirectory() }
+                val defaultUri = Uri.fromFile(defaultDir)
+                persistStringSet(setOf(defaultUri.toString()))
+                summary = defaultDir.absolutePath
+            }
         }
+    }
+
+    override fun onDetached() {
+        attachJob?.cancel()
+        ioScope?.cancel()
+        ioScope = null
+        super.onDetached()
     }
 
     override fun onBindViewHolder(holder: PreferenceViewHolder) {
@@ -60,15 +83,17 @@ class SavesDirectoryPickerPreference(context: Context, attrs: AttributeSet?) : S
 
         buttonResetDefault?.isGone = !isEnabled
         buttonResetDefault?.setOnClickListener {
-            val defaultDir = getDefaultDirectory()
-            val defaultUri = Uri.fromFile(defaultDir)
-            onDirectoryPicked(defaultUri)
-            summary = defaultDir.absolutePath
-            Toast.makeText(
-                context,
-                "${context.getString(R.string.reset_to_default)}: ${defaultDir.absolutePath}",
-                Toast.LENGTH_SHORT
-            ).show()
+            ensureScope().launch {
+                val defaultDir = withContext(Dispatchers.IO) { getDefaultDirectory() }
+                val defaultUri = Uri.fromFile(defaultDir)
+                onDirectoryPicked(defaultUri)
+                summary = defaultDir.absolutePath
+                Toast.makeText(
+                    context,
+                    "${context.getString(R.string.reset_to_default)}: ${defaultDir.absolutePath}",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
         }
     }
 }

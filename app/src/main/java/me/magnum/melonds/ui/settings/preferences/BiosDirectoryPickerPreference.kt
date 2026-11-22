@@ -13,6 +13,13 @@ import androidx.core.view.isGone
 import androidx.core.widget.ImageViewCompat
 import androidx.preference.Preference
 import androidx.preference.PreferenceViewHolder
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.magnum.melonds.R
 import me.magnum.melonds.common.Permission
 import me.magnum.melonds.domain.model.ConfigurationDirResult
@@ -37,6 +44,13 @@ class BiosDirectoryPickerPreference(context: Context, attrs: AttributeSet?) : St
 
     private var imageViewStatus: ImageView? = null
     private var buttonResetDefault: ImageView? = null
+    private var ioScope: CoroutineScope? = null
+    private var validationJob: Job? = null
+    private var attachJob: Job? = null
+
+    private fun ensureScope(): CoroutineScope {
+        return ioScope ?: CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate).also { ioScope = it }
+    }
 
     override fun onDirectoryPicked(uri: Uri?) {
         super.onDirectoryPicked(uri)
@@ -62,6 +76,7 @@ class BiosDirectoryPickerPreference(context: Context, attrs: AttributeSet?) : St
 
     private fun validateDirectory(uri: Uri?) {
         if (!isEnabled) {
+            validationJob?.cancel()
             imageViewStatus?.isGone = true
             buttonResetDefault?.isGone = true
             return
@@ -70,8 +85,18 @@ class BiosDirectoryPickerPreference(context: Context, attrs: AttributeSet?) : St
         imageViewStatus?.isGone = false
         buttonResetDefault?.isGone = false
 
-        currentValidationResult = biosDirectoryValidator?.getBiosDirectoryValidationResult(consoleType!!, uri)
-        updateStatusView()
+        val validator = biosDirectoryValidator ?: return
+        val type = consoleType ?: return
+        validationJob?.cancel()
+        validationJob = ensureScope().launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching { validator.getBiosDirectoryValidationResult(type, uri) }.getOrNull()
+            }
+            if (result != null) {
+                currentValidationResult = result
+                updateStatusView()
+            }
+        }
     }
 
     override fun initAttributes(attrs: AttributeSet?) {
@@ -87,21 +112,37 @@ class BiosDirectoryPickerPreference(context: Context, attrs: AttributeSet?) : St
     override fun onAttached() {
         super.onAttached()
         val persisted = getPersistedStringSet(emptySet()).firstOrNull()
-        val subFolder = if (consoleType == ConsoleType.DSi) "bios/dsi" else "bios/ds"
-        val baseDir = android.os.Environment.getExternalStorageDirectory().resolve("STORM DS")
-        val defaultDir = java.io.File(baseDir, subFolder)
-        if (persisted == null || persisted.contains("data/user/0") || persisted.contains("files/bios")) {
-            defaultDir.mkdirs()
-            val defaultUri = Uri.fromFile(defaultDir)
-            persistStringSet(setOf(defaultUri.toString()))
-            summary = defaultDir.absolutePath
-            validateDirectory(defaultUri)
-        } else {
-            val uri = persisted.toUri()
-            val rawPath = me.magnum.melonds.utils.FileUtils.getAbsolutePathFromSAFUri(context, uri) ?: uri.path ?: persisted
-            summary = Uri.decode(rawPath)
-            validateDirectory(uri)
+        val type = consoleType
+        attachJob?.cancel()
+        attachJob = ensureScope().launch {
+            val resolved = withContext(Dispatchers.IO) {
+                val subFolder = if (type == ConsoleType.DSi) "bios/dsi" else "bios/ds"
+                val baseDir = android.os.Environment.getExternalStorageDirectory().resolve("STORM DS")
+                val defaultDir = java.io.File(baseDir, subFolder)
+                if (persisted == null || persisted.contains("data/user/0") || persisted.contains("files/bios")) {
+                    defaultDir.mkdirs()
+                    Triple(Uri.fromFile(defaultDir), defaultDir.absolutePath, true)
+                } else {
+                    val uri = persisted.toUri()
+                    val rawPath = me.magnum.melonds.utils.FileUtils.getAbsolutePathFromSAFUri(context, uri) ?: uri.path ?: persisted
+                    Triple(uri, Uri.decode(rawPath), false)
+                }
+            }
+            val (targetUri, resolvedSummary, shouldPersist) = resolved
+            if (shouldPersist) {
+                persistStringSet(setOf(targetUri.toString()))
+            }
+            summary = resolvedSummary
+            validateDirectory(targetUri)
         }
+    }
+
+    override fun onDetached() {
+        validationJob?.cancel()
+        attachJob?.cancel()
+        ioScope?.cancel()
+        ioScope = null
+        super.onDetached()
     }
 
     override fun onBindViewHolder(holder: PreferenceViewHolder) {
@@ -111,14 +152,19 @@ class BiosDirectoryPickerPreference(context: Context, attrs: AttributeSet?) : St
         buttonResetDefault = holder.findViewById(R.id.buttonResetDefault) as? ImageView
 
         buttonResetDefault?.setOnClickListener {
-            val subFolder = if (consoleType == ConsoleType.DSi) "bios/dsi" else "bios/ds"
-            val baseDir = android.os.Environment.getExternalStorageDirectory().resolve("STORM DS")
-            val defaultDir = java.io.File(baseDir, subFolder).apply { mkdirs() }
-            val defaultUri = Uri.fromFile(defaultDir)
-            onDirectoryPicked(defaultUri)
-            summary = defaultDir.absolutePath
-            validateDirectory(defaultUri)
-            android.widget.Toast.makeText(context, "${context.getString(R.string.reset_to_default)}: ${defaultDir.absolutePath}", android.widget.Toast.LENGTH_SHORT).show()
+            val type = consoleType
+            ensureScope().launch {
+                val (defaultDir, defaultUri) = withContext(Dispatchers.IO) {
+                    val subFolder = if (type == ConsoleType.DSi) "bios/dsi" else "bios/ds"
+                    val baseDir = android.os.Environment.getExternalStorageDirectory().resolve("STORM DS")
+                    val dir = java.io.File(baseDir, subFolder).apply { mkdirs() }
+                    dir to Uri.fromFile(dir)
+                }
+                onDirectoryPicked(defaultUri)
+                summary = defaultDir.absolutePath
+                validateDirectory(defaultUri)
+                android.widget.Toast.makeText(context, "${context.getString(R.string.reset_to_default)}: ${defaultDir.absolutePath}", android.widget.Toast.LENGTH_SHORT).show()
+            }
         }
 
         updateStatusView()

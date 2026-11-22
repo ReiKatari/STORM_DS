@@ -46,45 +46,95 @@ class AppLogFileRecorder @Inject constructor(
         scope.cancel()
     }
 
-    private fun resolveWritableLogFile(): Triple<java.io.File, java.io.File, java.io.FileOutputStream>? {
-        val candidates = buildList {
-            val rootBase = android.os.Environment.getExternalStorageDirectory()
-            add(java.io.File(rootBase, "STORM DS/logs"))
-            context.getExternalFilesDir(null)?.let { extFiles ->
-                add(java.io.File(extFiles, "logs"))
+    private data class LogTarget(
+        val logsDir: java.io.File,
+        val logFile: java.io.File,
+        val isPrimaryExternal: Boolean,
+    )
+
+    private fun resolvePrimaryLogsDir(): java.io.File {
+        return java.io.File(android.os.Environment.getExternalStorageDirectory(), "STORM DS/logs")
+    }
+
+    private fun canWritePrimaryExternalDir(): Boolean {
+        val hasPerm = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            android.os.Environment.isExternalStorageManager()
+        } else {
+            androidx.core.content.ContextCompat.checkSelfPermission(
+                context,
+                android.Manifest.permission.WRITE_EXTERNAL_STORAGE,
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+        if (!hasPerm) return false
+        val primaryDir = resolvePrimaryLogsDir()
+        return runCatching {
+            (primaryDir.exists() || primaryDir.mkdirs()) && primaryDir.isDirectory && primaryDir.canWrite()
+        }.getOrDefault(false)
+    }
+
+    private fun rotateIfNeeded(logFile: java.io.File) {
+        if (logFile.exists() && logFile.length() >= MAX_LOG_FILE_BYTES) {
+            val rotated = java.io.File(logFile.parentFile, "$LOG_FILE_NAME.1")
+            runCatching {
+                if (rotated.exists()) rotated.delete()
+                logFile.renameTo(rotated)
             }
         }
-        for (logsDir in candidates) {
-            val logFile = java.io.File(logsDir, LOG_FILE_NAME)
+    }
+
+    private fun resolveWritableLogFile(): Pair<LogTarget, java.io.FileOutputStream>? {
+        val primaryDir = resolvePrimaryLogsDir()
+        val candidates = buildList {
+            add(LogTarget(primaryDir, java.io.File(primaryDir, LOG_FILE_NAME), isPrimaryExternal = true))
+            context.getExternalFilesDir(null)?.let { extFiles ->
+                val dir = java.io.File(extFiles, "logs")
+                add(LogTarget(dir, java.io.File(dir, LOG_FILE_NAME), isPrimaryExternal = false))
+            }
+            val internalDir = java.io.File(context.filesDir, "logs")
+            add(LogTarget(internalDir, java.io.File(internalDir, LOG_FILE_NAME), isPrimaryExternal = false))
+        }
+        for (target in candidates) {
             val stream = runCatching {
-                logsDir.mkdirs()
-                java.io.FileOutputStream(logFile, true)
+                target.logsDir.mkdirs()
+                rotateIfNeeded(target.logFile)
+                java.io.FileOutputStream(target.logFile, true)
             }.getOrNull()
             if (stream != null) {
-                return Triple(logsDir, logFile, stream)
+                return target to stream
             }
         }
         return null
     }
 
     private suspend fun recordLogcat() {
-        val opened = resolveWritableLogFile()
-        if (opened == null) {
-            Log.w(TAG, "Could not open app log file in external storage or app-specific fallback dir")
-            return
-        }
-        val (logsDir, logFile, outputStream) = opened
+        val coroutineContext = currentCoroutineContext()
+        while (coroutineContext.isActive) {
+            val opened = resolveWritableLogFile()
+            if (opened == null) {
+                Log.w(TAG, "Could not open app log file in external storage or app-specific fallback dir")
+                return
+            }
+            var (target, outputStream) = opened
+            var switchToPrimary = false
 
-        try {
-            outputStream.use { stream ->
-                BufferedWriter(OutputStreamWriter(stream)).use { writer ->
-                    writer.appendLine()
-                    writer.appendLine("STORM DS app log")
-                    writer.appendLine("started=${DATE_FORMAT.format(Date())}")
-                    writer.appendLine("pid=${Process.myPid()}")
-                    writer.appendLine("logsDirectory=${logsDir.absolutePath}")
-                    writer.appendLine()
-                    writer.flush()
+            try {
+                outputStream.use { stream ->
+                    var writer = BufferedWriter(OutputStreamWriter(stream))
+                    var currentFileStream: java.io.FileOutputStream = stream
+                    var bytesWrittenApprox = target.logFile.length()
+                    var linesSinceCheck = 0
+
+                    fun writeHeader(w: BufferedWriter, dir: java.io.File) {
+                        w.appendLine()
+                        w.appendLine("STORM DS app log")
+                        w.appendLine("started=${DATE_FORMAT.format(Date())}")
+                        w.appendLine("pid=${Process.myPid()}")
+                        w.appendLine("logsDirectory=${dir.absolutePath}")
+                        w.appendLine()
+                        w.flush()
+                    }
+
+                    writeHeader(writer, target.logsDir)
 
                     val logcatProcess = ProcessBuilder(
                         "logcat",
@@ -97,7 +147,6 @@ class AppLogFileRecorder @Inject constructor(
                         .redirectErrorStream(true)
                         .start()
 
-                    val coroutineContext = currentCoroutineContext()
                     val cancellationHandle = coroutineContext.job.invokeOnCompletion {
                         logcatProcess.destroy()
                     }
@@ -108,10 +157,30 @@ class AppLogFileRecorder @Inject constructor(
                                     break
                                 }
                                 writer.appendLine(line)
-                                writer.flush()
+                                bytesWrittenApprox += line.length + 1L
+                                linesSinceCheck++
+
+                                if (linesSinceCheck >= CHECK_INTERVAL_LINES) {
+                                    linesSinceCheck = 0
+                                    writer.flush()
+                                    if (!target.isPrimaryExternal && canWritePrimaryExternalDir()) {
+                                        switchToPrimary = true
+                                        break
+                                    }
+                                    if (bytesWrittenApprox >= MAX_LOG_FILE_BYTES || target.logFile.length() >= MAX_LOG_FILE_BYTES) {
+                                        runCatching { writer.close() }
+                                        rotateIfNeeded(target.logFile)
+                                        currentFileStream = java.io.FileOutputStream(target.logFile, true)
+                                        writer = BufferedWriter(OutputStreamWriter(currentFileStream))
+                                        bytesWrittenApprox = target.logFile.length()
+                                        writeHeader(writer, target.logsDir)
+                                    }
+                                }
                             }
                         }
                     } finally {
+                        runCatching { writer.flush() }
+                        runCatching { if (currentFileStream !== stream) currentFileStream.close() }
                         logcatProcess.destroy()
                         runCatching {
                             logcatProcess.waitFor()
@@ -119,15 +188,22 @@ class AppLogFileRecorder @Inject constructor(
                         cancellationHandle.dispose()
                     }
                 }
+            } catch (e: Throwable) {
+                Log.w(TAG, "Could not open app log file for writing: ${target.logFile.absolutePath}", e)
+                return
             }
-        } catch (e: Throwable) {
-            Log.w(TAG, "Could not open app log file for writing: ${logFile.absolutePath}", e)
+
+            if (!switchToPrimary) {
+                return
+            }
         }
     }
 
     private companion object {
         const val TAG = "AppLogFileRecorder"
         const val LOG_FILE_NAME = "STORM_DS.log"
+        const val MAX_LOG_FILE_BYTES = 2L * 1024L * 1024L
+        const val CHECK_INTERVAL_LINES = 100
         val DATE_FORMAT = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS Z", Locale.US)
     }
 }
