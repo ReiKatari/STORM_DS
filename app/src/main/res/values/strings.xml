@@ -1284,15 +1284,15 @@
     </string-array>
 
     <string name="about_app_title">About and credits</string>
-    <string name="about_app_description">High-performance fork of WatermelonDS (powered by melonDS core) for Android, featuring Vulkan 3D, RetroArch shaders, and RetroAchievements.</string>
-    <string name="about_app_summary">STORM DS, melonDS, WatermelonDS, authors and open source licenses</string>
-    <string name="about_fork_info_title">Project base: WatermelonDS fork</string>
-    <string name="about_fork_info_summary">STORM DS is an advanced fork of WatermelonDS (developed by SapphireRhodonite and contributors), which is an Android port of the melonDS core (StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura and team). Includes extensive Slot-1 DSiWare direct boot fixes, NAND/Firmware integrity protection, RetroAchievements offline play and sync, external dual display on TV/monitors via USB-C/HDMI, fast ROM scanner, HUD positioning, and custom themes.</string>
+    <string name="about_app_description">High-performance fork of STORM DS (powered by melonDS core) for Android, featuring Vulkan 3D, RetroArch shaders, and RetroAchievements.</string>
+    <string name="about_app_summary">STORM DS, melonDS, STORM DS, authors and open source licenses</string>
+    <string name="about_fork_info_title">Project base: STORM DS fork</string>
+    <string name="about_fork_info_summary">STORM DS is an advanced fork of STORM DS (developed by SapphireRhodonite and contributors), which is an Android port of the melonDS core (StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura and team). Includes extensive Slot-1 DSiWare direct boot fixes, NAND/Firmware integrity protection, RetroAchievements offline play and sync, external dual display on TV/monitors via USB-C/HDMI, fast ROM scanner, HUD positioning, and custom themes.</string>
     <string name="about_version_title">Version</string>
     <string name="about_credits_title">Credits and acknowledgements</string>
     <string name="about_credits_jpeacekeeper_title">JPeacekeeper (4PDA)</string>
     <string name="about_credits_jpeacekeeper_summary">Invaluable testing contributions, detailed DSi bug reports, frame rate standardization, and ongoing project improvements</string>
-    <string name="about_credits_watermelonds_title">WatermelonDS (Android port)</string>
+    <string name="about_credits_watermelonds_title">STORM DS (Android port)</string>
     <string name="about_credits_watermelonds_summary">SapphireRhodonite, rafaelvcaetano and contributors - Android port, Vulkan rendering fastpaths, librashader integration, modern UI and touch controls</string>
     <string name="about_credits_melonds_title">melonDS (original core)</string>
     <string name="about_credits_melonds_summary">StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura and melonDS team - original high-accuracy Nintendo DS / DSi core emulator</string>
@@ -1820,14 +1820,14 @@
     <string name="button_mode_normal">Normal (hold)</string>
     <string name="button_mode_toggle">Toggle (tap to hold or release)</string>
     <string name="button_mode_turbo">Turbo (hold for 10 presses/s)</string>
-    <string name="button_mode_value">Mode: %1</string>
+    <string name="button_mode_value">Mode: %1$s</string>
     <string name="cycle_layouts">Layouts for cycling</string>
     <string name="cycle_layouts_summary">Choose the layouts used by the Cycle layout shortcut, in library order. No selection disables cycling.</string>
     <string name="dsi_profile_initial">Current DSi setup</string>
     <string name="emulator_stop_wireless_unsupported">This wireless mode is not supported in this multiplayer room.</string>
     <string name="hint_search_cheats">Search cheats</string>
     <string name="input_combo">Combo</string>
-    <string name="input_combo_conflict">This combination is already assigned to %1. Clear that assignment first, or choose a different pair.</string>
+    <string name="input_combo_conflict">This combination is already assigned to %1$s. Clear that assignment first, or choose a different pair.</string>
     <string name="input_cycle_layout">Cycle layout</string>
     <string name="input_exit_game">Exit game</string>
     <string name="input_slot2_analog">Slot-2 analog stick</string>

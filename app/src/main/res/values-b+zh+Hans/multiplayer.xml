@@ -1,0 +1,238 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="multiplayer_title">多人联机</string>
+    <string name="multiplayer_back">返回</string>
+    <string name="multiplayer_direct_failed">无法创建直连房间。请检查 Wi-Fi 并关闭其他 Wi-Fi Direct 群组。本设备必须支持 5 GHz 群组。</string>
+    <string name="multiplayer_direct_stop_failed">无法确认直连网络是否已关闭。请检查 Android Wi-Fi 设置。</string>
+    <string name="multiplayer_finish_game">更改多人联机连接前请先退出游戏。</string>
+    <string name="multiplayer_connection_failed">无法连接。请检查 Wi-Fi 是否已开启，以及直连房间是否仍然开放。</string>
+    <string name="multiplayer_operation_unavailable">本地多人联机期间无法使用即时存档和快进功能。</string>
+    <string name="multiplayer_interrupted_message">由于游戏暂停超过 3 秒，多人联机连接已断开。请退出游戏并重新加入房间以继续游玩。</string>
+    <string name="mp_create_title">创建房间</string>
+    <string name="mp_code_title">房间码</string>
+    <string name="mp_nearby">附近的房间</string>
+    <string name="mp_searching">正在搜索…</string>
+    <string name="mp_nearby_empty">附近暂无房间。请向房主索要房间码，或自行创建房间。</string>
+    <string name="mp_room_of">%1$s 的房间</string>
+    <string name="mp_invite_title">%1$s 在附近创建了房间</string>
+    <string name="mp_join">加入</string>
+    <string name="mp_hint_create">创建</string>
+    <string name="mp_hint_library">游戏库</string>
+    <string name="mp_profile_cd">您的 DS 个人资料：%1$s</string>
+    <string name="mp_play_rom">每人都有游戏</string>
+    <string name="mp_play_download">DS 下载游玩</string>
+    <string name="mp_play_chat">PictoChat</string>
+    <string name="mp_play_rom_desc">每台主机各自打开同一款游戏。</string>
+    <string name="mp_play_download_desc">仅您拥有游戏，其他玩家通过传输接收。</string>
+    <string name="mp_play_chat_desc">聊天与涂鸦。无需任何游戏。</string>
+    <string name="mp_how_play">选择游玩方式</string>
+    <string name="mp_pick_game">选择游戏</string>
+    <string name="mp_no_games">您的游戏库中还没有 DS 游戏。</string>
+    <string name="mp_filter_recent">最近</string>
+    <string name="mp_filter_all">全部</string>
+    <string name="mp_net_direct">直连房间</string>
+    <string name="mp_hint_choose">选择</string>
+    <string name="mp_next">下一步</string>
+    <string name="mp_direct_permission">Android 需要“附近设备”权限才能创建直连房间。</string>
+    <string name="mp_open_room">开放房间</string>
+    <string name="mp_save_game">保存</string>
+    <string name="mp_tag_direct">直连</string>
+    <string name="mp_tag_wifi">WI-FI</string>
+    <string name="mp_tag_host">房主</string>
+    <string name="mp_tag_connecting">连接中</string>
+    <string name="mp_tag_left">已断开</string>
+    <string name="mp_tag_you">您</string>
+    <string name="mp_tag_ping">%1$d MS</string>
+    <string name="mp_tag_in_game">游戏中</string>
+    <string name="mp_free">空闲</string>
+    <string name="mp_tag_waiting">等待中</string>
+    <string name="mp_code_label">房间码</string>
+    <string name="mp_code_for">用于加入</string>
+    <string name="mp_game_change">%1$s · 更改</string>
+    <string name="mp_game_pick">选择游戏</string>
+    <string name="mp_start">开始 · %1$d</string>
+    <string name="mp_waiting">等待中…</string>
+    <string name="mp_hint_game">游戏</string>
+    <string name="mp_hint_close">关闭</string>
+    <string name="mp_hint_details">详情</string>
+    <string name="mp_joined">%1$s 已加入</string>
+    <string name="mp_left">%1$s 已断开</string>
+    <string name="mp_details">房间详情</string>
+    <string name="mp_details_body">如果主机无法自动加入，请在 Android Wi-Fi 中连接到此网络，然后通过 IP 加入。</string>
+    <string name="mp_close_title">关闭房间？</string>
+    <string name="mp_close_body">房间内的所有玩家都将断开连接。</string>
+    <string name="mp_close_room">关闭房间</string>
+    <string name="mp_keep_open">保持开放</string>
+    <string name="mp_stay">留下</string>
+    <string name="mp_leave_title">离开房间？</string>
+    <string name="mp_leave_body">房间开放期间，您仍可使用房间码重新加入。</string>
+    <string name="mp_leave">离开</string>
+    <string name="mp_duplicate">房间里已有另一个“%1$s”。请更改您的 DS 昵称以免混淆。</string>
+    <string name="mp_have_game">您已拥有 · 将在 %1$s 开始时打开</string>
+    <string name="mp_open_now">立即打开</string>
+    <string name="mp_missing_game">您的游戏库中没有此游戏。</string>
+    <string name="mp_download_guest">您将通过 DS 下载游玩接收游戏</string>
+    <string name="mp_chat_guest">从 DS 主菜单打开 PictoChat</string>
+    <string name="mp_waiting_host">正在等待 %1$s 选择游戏</string>
+    <string name="mp_pause_warning">暂停超过 3 秒将断开连接</string>
+    <string name="mp_host_closed">房主已关闭房间。</string>
+    <string name="mp_hint_open">打开游戏</string>
+    <string name="mp_hint_leave">离开</string>
+    <string name="mp_bios_needed">需要 DS BIOS 和固件 · 去设置</string>
+    <string name="mp_join_title">加入房间</string>
+    <string name="mp_tab_code">房间码</string>
+    <string name="mp_tab_ip">IP</string>
+    <string name="mp_code_hint">输入房主房间界面中显示的房间码。</string>
+    <string name="mp_code_missing">附近没有使用该房间码的房间。</string>
+    <string name="mp_enter">进入</string>
+    <string name="mp_ip_hint">若房间未自动显示，请使用此方式。房主可在「房间详情」中查看 IP。</string>
+    <string name="mp_ip_label">房主 IP</string>
+    <string name="mp_hint_type">输入</string>
+    <string name="mp_hint_erase">删除</string>
+    <string name="mp_entering">正在进入 %1$s</string>
+    <string name="mp_you">您</string>
+    <string name="mp_found">已找到房间</string>
+    <string name="mp_joining_network">正在加入 %1$s 的网络</string>
+    <string name="mp_joining_network_sub">无需密码，您原有的 Wi-Fi 将保持连接。</string>
+    <string name="mp_entering_room">正在进入房间</string>
+    <string name="mp_cancel">取消</string>
+    <string name="mp_fail_title">无法自动加入</string>
+    <string name="mp_fail_closer">请靠近 %1$s 的主机。</string>
+    <string name="mp_fail_wifi">请检查 Wi-Fi 是否已开启。</string>
+    <string name="mp_fail_plan_b">部分主机无法自动加入，请使用备用方案。</string>
+    <string name="mp_retry">重试</string>
+    <string name="mp_plan_b">备用方案 · 手动加入</string>
+    <string name="mp_plan_b_body">在 Android Wi-Fi 中选择此网络并输入密码，然后返回此处：</string>
+    <string name="mp_network">网络</string>
+    <string name="mp_password">密码</string>
+    <string name="mp_open_wifi">打开 Android Wi-Fi</string>
+    <string name="mp_join_ip">已连接 · 加入</string>
+    <string name="mp_perm_title">与附近主机联机</string>
+    <string name="mp_perm_body">Android 将请求「%1$s」权限。STORM DS 仅将其用于联机房间。</string>
+    <string name="mp_continue">继续</string>
+    <string name="mp_not_now">暂不</string>
+    <string name="mp_perm_without">创建或加入直连房间需要「附近设备」权限。</string>
+    <string name="mp_profile_title">DS 个人资料</string>
+    <string name="mp_profile_sub">房间与游戏可见</string>
+    <string name="mp_message">个性签名</string>
+    <string name="mp_birthday">生日</string>
+    <string name="mp_colour">喜欢的颜色</string>
+    <string name="mp_symbol">标志</string>
+    <string name="mp_save">保存</string>
+    <string name="mp_profile_firmware_note">DS 主菜单和 PictoChat 会使用您自己的 DS 固件中保存的名称。</string>
+    <string name="mp_profile_room_note">新名称将在您下次加入房间时生效。</string>
+    <string name="mp_hint_colour">颜色</string>
+    <string-array name="mp_colour_names">
+        <item>灰色</item>
+        <item>棕色</item>
+        <item>红色</item>
+        <item>粉色</item>
+        <item>橙色</item>
+        <item>黄色</item>
+        <item>酸橙绿</item>
+        <item>绿色</item>
+        <item>深绿色</item>
+        <item>青绿色</item>
+        <item>浅蓝色</item>
+        <item>蓝色</item>
+        <item>深蓝色</item>
+        <item>紫色</item>
+        <item>紫罗兰</item>
+        <item>洋红色</item>
+    </string-array>
+    <string-array name="mp_symbol_names">
+        <item>首字母</item>
+        <item>星形</item>
+        <item>心形</item>
+        <item>音符</item>
+        <item>闪电</item>
+        <item>月亮</item>
+        <item>皇冠</item>
+        <item>笑脸</item>
+        <item>花朵</item>
+        <item>树叶</item>
+        <item>菱形</item>
+        <item>手柄</item>
+    </string-array>
+    <string-array name="mp_months">
+        <item>1月</item>
+        <item>2月</item>
+        <item>3月</item>
+        <item>4月</item>
+        <item>5月</item>
+        <item>6月</item>
+        <item>7月</item>
+        <item>8月</item>
+        <item>9月</item>
+        <item>10月</item>
+        <item>11月</item>
+        <item>12月</item>
+    </string-array>
+    <string name="mp_back_room">返回房间</string>
+    <string name="mp_birthday_value">%2$s%1$d日</string>
+    <string name="mp_change_name">更改名称</string>
+    <string name="mp_each_needs">每台主机所需条件</string>
+    <string name="mp_enter_code">输入房间码</string>
+    <string name="mp_filter_favorites">★ 收藏</string>
+    <string name="mp_first_time">首次使用</string>
+    <string name="mp_hint_choose_next">选择 · 再按一次进入下一项</string>
+    <string name="mp_hint_code_ip">房间码 / IP</string>
+    <string name="mp_hint_edit">编辑</string>
+    <string name="mp_hint_letter">字母</string>
+    <string name="mp_host_ip">房主 IP</string>
+    <string name="mp_max">最多 %1$d 人</string>
+    <string name="mp_meta_chat">最多 16 名玩家 · DS 主菜单</string>
+    <string name="mp_meta_chat_locked">需要您的 DS BIOS 和固件 · 去设置</string>
+    <string name="mp_meta_download">最多 8 名玩家 · 访客需要 DS BIOS</string>
+    <string name="mp_meta_rom">最多 8 名玩家 · 无需 BIOS</string>
+    <string name="mp_name">名称</string>
+    <string name="mp_need_menu">DS 主菜单</string>
+    <string name="mp_need_receives">接收</string>
+    <string name="mp_net_wifi">Wi-Fi 房间</string>
+    <string name="mp_notice">提示</string>
+    <string name="mp_notice_name">重名提示</string>
+    <string name="mp_perm_direct">无需密码即可开放直连房间</string>
+    <string name="mp_perm_direct_sub">您当前的 Wi-Fi 会保持连接</string>
+    <string name="mp_perm_find">查找您附近的房间</string>
+    <string name="mp_perm_find_sub">仅在打开多人联机界面时启用</string>
+    <string name="mp_perm_location">位置信息</string>
+    <string name="mp_perm_nearby">附近设备</string>
+    <string name="mp_perm_private">无需互联网</string>
+    <string name="mp_perm_private_sub">绝不会读取您的位置信息</string>
+    <string name="mp_perm_radar">您 · 附近主机</string>
+    <string name="mp_plan_step_back">返回 · 通过 IP %1$s 加入</string>
+    <string name="mp_plan_step_pick">选择 %1$s 并输入密码</string>
+    <string name="mp_plan_step_wifi">打开 Android Wi-Fi (Y)</string>
+    <string name="mp_players_of">%1$d/%2$d 玩家</string>
+    <string name="mp_search_empty">没有匹配搜索条件的游戏。</string>
+    <string name="mp_search_games">搜索 %1$d 款游戏</string>
+    <string name="mp_step_mode">模式</string>
+    <string name="mp_step_of">第 %1$d/%2$d 步</string>
+    <string name="mp_tag_download">下载游玩</string>
+    <string name="mp_tag_not_connected">未连接</string>
+    <string name="mp_wifi_short">Android Wi-Fi</string>
+    <plurals name="mp_count_favorites">
+        <item quantity="other">%d 个收藏</item>
+    </plurals>
+    <plurals name="mp_count_found">
+        <item quantity="other">找到 %d 个</item>
+    </plurals>
+    <plurals name="mp_count_games">
+        <item quantity="other">%d 款游戏</item>
+    </plurals>
+    <plurals name="mp_count_recent">
+        <item quantity="other">%d 个最近游玩</item>
+    </plurals>
+    <plurals name="mp_rooms">
+        <item quantity="other">%d 个房间</item>
+    </plurals>
+    <string name="mp_hint_symbol">标志</string>
+    <string name="mp_hint_profile">个人资料</string>
+    <string name="mp_filter_library">游戏库</string>
+    <string name="mp_show_all">显示全部</string>
+    <string name="mp_reading_headers">正在读取卡带文件头…</string>
+    <string name="mp_no_games_for_mode">没有匹配的游戏。请选择「显示全部」浏览您的游戏库。</string>
+    <string name="mp_wfc_mode_unconfirmed">WFC · 本地模式未确认</string>
+    <string name="mp_mode_unconfirmed">模式未确认</string>
+    <string name="mp_selection_changed">所选卡带已更改。请从列表中重新选择游戏。</string>
+</resources>

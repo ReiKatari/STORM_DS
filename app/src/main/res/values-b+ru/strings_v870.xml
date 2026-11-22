@@ -297,9 +297,9 @@
     <string name="v870_input_gyro_dpad">Наклон руля D-Pad (Гонки)</string>
     <string name="v870_input_gyro_paddle">Аналоговый сенсор Slot-2</string>
     <string name="v870_translator_engine_google">Google Translate (Онлайн, быстрый)</string>
-    <string name="v870_translator_engine_mlkit">Google ML Kit (100% Офлайн нейросеть)</string>
+    <string name="v870_translator_engine_mlkit" formatted="false">Google ML Kit (100% Офлайн нейросеть)</string>
     <string name="v870_translator_engine_deepl">DeepL Neural API (Ключ API)</string>
-    <string name="v870_translator_tts_speed_percent">Скорость речи озвучки (%)</string>
+    <string name="v870_translator_tts_speed_percent" formatted="false">Скорость речи озвучки (%)</string>
     <plurals name="v870_stats_session_count">
         <item quantity="one">%1$d сессия</item>
         <item quantity="few">%1$d сессии</item>

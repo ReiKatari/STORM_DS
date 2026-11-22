@@ -1,0 +1,243 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="multiplayer_title">Mehrspieler</string>
+    <string name="multiplayer_back">Zurück</string>
+    <string name="multiplayer_direct_failed">Direkt-Raum konnte nicht erstellt werden. Prüfe WLAN und schließe andere Wi-Fi-Direct-Gruppen. Dieses Gerät muss eine 5-GHz-Gruppe unterstützen.</string>
+    <string name="multiplayer_direct_stop_failed">Es konnte nicht bestätigt werden, dass das direkte Netzwerk geschlossen wurde. Prüfe die Android-WLAN-Einstellungen.</string>
+    <string name="multiplayer_finish_game">Beende das Spiel, bevor du die Mehrspieler-Verbindung änderst.</string>
+    <string name="multiplayer_connection_failed">Verbindung fehlgeschlagen. Prüfe, ob WLAN aktiviert und der Direkt-Raum noch geöffnet ist.</string>
+    <string name="multiplayer_operation_unavailable">Speicherstände und Schnellvorlauf sind im lokalen Mehrspieler-Modus nicht verfügbar.</string>
+    <string name="multiplayer_interrupted_message">Die Mehrspieler-Verbindung wurde geschlossen, nachdem das Spiel 3 Sekunden lang pausiert war. Beende das Spiel und tritt dem Raum erneut bei, um weiterzuspielen.</string>
+    <string name="mp_create_title">Raum erstellen</string>
+    <string name="mp_code_title">Code</string>
+    <string name="mp_nearby">Räume in der Nähe</string>
+    <string name="mp_searching">Suche…</string>
+    <string name="mp_nearby_empty">Noch keine Räume in der Nähe. Frage den Host nach dem Raumcode oder erstelle einen eigenen Raum.</string>
+    <string name="mp_room_of">Raum von %1$s</string>
+    <string name="mp_invite_title">%1$s hat einen Raum in der Nähe geöffnet</string>
+    <string name="mp_join">Beitreten</string>
+    <string name="mp_hint_create">Erstellen</string>
+    <string name="mp_hint_library">Bibliothek</string>
+    <string name="mp_profile_cd">Dein DS-Profil: %1$s</string>
+    <string name="mp_play_rom">Alle haben das Spiel</string>
+    <string name="mp_play_download">DS-Download-Spiel</string>
+    <string name="mp_play_chat">PictoChat</string>
+    <string name="mp_play_rom_desc">Jede Konsole öffnet ihre eigene Kopie desselben Spiels.</string>
+    <string name="mp_play_download_desc">Nur du hast das Spiel. Die anderen empfangen es.</string>
+    <string name="mp_play_chat_desc">Chatten und zeichnen. Niemand braucht ein Spiel.</string>
+    <string name="mp_how_play">Wie möchtest du spielen?</string>
+    <string name="mp_pick_game">Spiel auswählen</string>
+    <string name="mp_no_games">Deine Bibliothek enthält noch keine DS-Spiele.</string>
+    <string name="mp_filter_recent">ZULETZT</string>
+    <string name="mp_filter_all">ALLE</string>
+    <string name="mp_net_direct">Direkt-Raum</string>
+    <string name="mp_hint_choose">Wählen</string>
+    <string name="mp_next">Weiter</string>
+    <string name="mp_direct_permission">Android benötigt die Berechtigung für Geräte in der Nähe, um einen Direkt-Raum zu öffnen.</string>
+    <string name="mp_open_room">Raum öffnen</string>
+    <string name="mp_save_game">Speichern</string>
+    <string name="mp_tag_direct">DIREKT</string>
+    <string name="mp_tag_wifi">WI-FI</string>
+    <string name="mp_tag_host">HOST</string>
+    <string name="mp_tag_connecting">VERBINDET</string>
+    <string name="mp_tag_left">GETRENNT</string>
+    <string name="mp_tag_you">DU</string>
+    <string name="mp_tag_ping">%1$d MS</string>
+    <string name="mp_tag_in_game">IM SPIEL</string>
+    <string name="mp_free">Frei</string>
+    <string name="mp_tag_waiting">WARTET</string>
+    <string name="mp_code_label">CODE</string>
+    <string name="mp_code_for">zum Beitreten</string>
+    <string name="mp_game_change">%1$s · Ändern</string>
+    <string name="mp_game_pick">Spiel wählen</string>
+    <string name="mp_start">Start · %1$d</string>
+    <string name="mp_waiting">Warte…</string>
+    <string name="mp_hint_game">Spiel</string>
+    <string name="mp_hint_close">Schließen</string>
+    <string name="mp_hint_details">Details</string>
+    <string name="mp_joined">%1$s ist beigetreten</string>
+    <string name="mp_left">%1$s getrennt</string>
+    <string name="mp_details">Raumdetails</string>
+    <string name="mp_details_body">Wenn eine Konsole nicht von selbst beitreten kann, verbinde sie im Android-WLAN mit diesem Netzwerk und tritt per IP bei.</string>
+    <string name="mp_close_title">Raum schließen?</string>
+    <string name="mp_close_body">Alle im Raum werden getrennt.</string>
+    <string name="mp_close_room">Raum schließen</string>
+    <string name="mp_keep_open">Geöffnet lassen</string>
+    <string name="mp_stay">Bleiben</string>
+    <string name="mp_leave_title">Raum verlassen?</string>
+    <string name="mp_leave_body">Du kannst mit dem Code erneut beitreten, solange der Raum geöffnet ist.</string>
+    <string name="mp_leave">Verlassen</string>
+    <string name="mp_duplicate">Es gibt bereits ein anderes „%1$s“. Ändere deinen DS-Namen, damit niemand verwechselt wird.</string>
+    <string name="mp_have_game">Vorhanden · startet, sobald %1$s beginnt</string>
+    <string name="mp_open_now">Jetzt öffnen</string>
+    <string name="mp_missing_game">Dieses Spiel befindet sich nicht in deiner Bibliothek.</string>
+    <string name="mp_download_guest">Du erhältst es über DS-Download-Spiel</string>
+    <string name="mp_chat_guest">Öffnet PictoChat über das DS-Menü</string>
+    <string name="mp_waiting_host">Warte darauf, dass %1$s das Spiel wählt</string>
+    <string name="mp_pause_warning">Eine Pause von mehr als 3 s beendet die Verbindung</string>
+    <string name="mp_host_closed">Der Host hat den Raum geschlossen.</string>
+    <string name="mp_hint_open">Spiel öffnen</string>
+    <string name="mp_hint_leave">Verlassen</string>
+    <string name="mp_bios_needed">Benötigt DS-BIOS und Firmware · Einrichten</string>
+    <string name="mp_join_title">Einem Raum beitreten</string>
+    <string name="mp_tab_code">CODE</string>
+    <string name="mp_tab_ip">IP</string>
+    <string name="mp_code_hint">Gib den Code ein, der im Raum des Hosts angezeigt wird.</string>
+    <string name="mp_code_missing">Kein Raum in der Nähe hat diesen Code.</string>
+    <string name="mp_enter">Betreten</string>
+    <string name="mp_ip_hint">Nutze dies, wenn der Raum nicht von selbst erscheint. Der Host sieht seine IP unter „Raumdetails“.</string>
+    <string name="mp_ip_label">Host-IP</string>
+    <string name="mp_hint_type">Eingabe</string>
+    <string name="mp_hint_erase">Löschen</string>
+    <string name="mp_entering">Betrete %1$s</string>
+    <string name="mp_you">Du</string>
+    <string name="mp_found">Raum gefunden</string>
+    <string name="mp_joining_network">Verbinde mit dem Netzwerk von %1$s</string>
+    <string name="mp_joining_network_sub">Keine Passwörter. Dein gewohntes WLAN bleibt verbunden.</string>
+    <string name="mp_entering_room">Raum wird betreten</string>
+    <string name="mp_cancel">Abbrechen</string>
+    <string name="mp_fail_title">Automatischer Beitritt fehlgeschlagen</string>
+    <string name="mp_fail_closer">Geh näher an die Konsole von %1$s heran.</string>
+    <string name="mp_fail_wifi">Prüfe, ob WLAN eingeschaltet ist.</string>
+    <string name="mp_fail_plan_b">Einige Konsolen können nicht von selbst beitreten. Nutze Plan B.</string>
+    <string name="mp_retry">Erneut versuchen</string>
+    <string name="mp_plan_b">PLAN B · MANUELL BEITRETEN</string>
+    <string name="mp_plan_b_body">Wähle im Android-WLAN dieses Netzwerk, gib das Passwort ein und kehre dann zurück:</string>
+    <string name="mp_network">Netzwerk</string>
+    <string name="mp_password">Passwort</string>
+    <string name="mp_open_wifi">Android-WLAN öffnen</string>
+    <string name="mp_join_ip">Ich bin verbunden · Beitreten</string>
+    <string name="mp_perm_title">Mit Konsolen in der Nähe spielen</string>
+    <string name="mp_perm_body">Android fragt nach „%1$s“. STORM DS nutzt dies nur für Räume.</string>
+    <string name="mp_continue">Weiter</string>
+    <string name="mp_not_now">Nicht jetzt</string>
+    <string name="mp_perm_without">Die Berechtigung für Geräte in der Nähe ist erforderlich, um einem Direkt-Raum beizutreten oder einen zu erstellen.</string>
+    <string name="mp_profile_title">DS-Profil</string>
+    <string name="mp_profile_sub">Für Räume und Spiele sichtbar</string>
+    <string name="mp_message">Nachricht</string>
+    <string name="mp_birthday">Geburtstag</string>
+    <string name="mp_colour">Lieblingsfarbe</string>
+    <string name="mp_symbol">Symbol</string>
+    <string name="mp_save">Speichern</string>
+    <string name="mp_profile_firmware_note">Das DS-Menü und PictoChat verwenden den in deiner eigenen DS-Firmware gespeicherten Namen.</string>
+    <string name="mp_profile_room_note">Ein neuer Name wird beim nächsten Raumbeitritt verwendet.</string>
+    <string name="mp_hint_colour">Farbe</string>
+    <string-array name="mp_colour_names">
+        <item>Grau</item>
+        <item>Braun</item>
+        <item>Rot</item>
+        <item>Rosa</item>
+        <item>Orange</item>
+        <item>Gelb</item>
+        <item>Limette</item>
+        <item>Grün</item>
+        <item>Dunkelgrün</item>
+        <item>Türkis</item>
+        <item>Hellblau</item>
+        <item>Blau</item>
+        <item>Dunkelblau</item>
+        <item>Purpur</item>
+        <item>Violett</item>
+        <item>Fuchsia</item>
+    </string-array>
+    <string-array name="mp_symbol_names">
+        <item>Initiale</item>
+        <item>Stern</item>
+        <item>Herz</item>
+        <item>Note</item>
+        <item>Blitz</item>
+        <item>Mond</item>
+        <item>Krone</item>
+        <item>Lächeln</item>
+        <item>Blume</item>
+        <item>Blatt</item>
+        <item>Karo</item>
+        <item>Controller</item>
+    </string-array>
+    <string-array name="mp_months">
+        <item>Januar</item>
+        <item>Februar</item>
+        <item>März</item>
+        <item>April</item>
+        <item>Mai</item>
+        <item>Juni</item>
+        <item>Juli</item>
+        <item>August</item>
+        <item>September</item>
+        <item>Oktober</item>
+        <item>November</item>
+        <item>Dezember</item>
+    </string-array>
+    <string name="mp_back_room">Zurück zum Raum</string>
+    <string name="mp_birthday_value">%1$d. %2$s</string>
+    <string name="mp_change_name">Namen ändern</string>
+    <string name="mp_each_needs">WAS JEDE KONSOLE BRAUCHT</string>
+    <string name="mp_enter_code">Code eingeben</string>
+    <string name="mp_filter_favorites">★ FAVORITEN</string>
+    <string name="mp_first_time">ERSTES MAL</string>
+    <string name="mp_hint_choose_next">Wählen · nochmal: weiter</string>
+    <string name="mp_hint_code_ip">Code / IP</string>
+    <string name="mp_hint_edit">Bearbeiten</string>
+    <string name="mp_hint_letter">Buchstabe</string>
+    <string name="mp_host_ip">Host-IP</string>
+    <string name="mp_max">MAX. %1$d</string>
+    <string name="mp_meta_chat">Bis zu 16 Spieler · DS-Menü</string>
+    <string name="mp_meta_chat_locked">Benötigt dein DS-BIOS und Firmware · Einrichten</string>
+    <string name="mp_meta_download">Bis zu 8 Spieler · Gäste benötigen DS-BIOS</string>
+    <string name="mp_meta_rom">Bis zu 8 Spieler · Kein BIOS nötig</string>
+    <string name="mp_name">Name</string>
+    <string name="mp_need_menu">DS-MENÜ</string>
+    <string name="mp_need_receives">EMPFÄNGT</string>
+    <string name="mp_net_wifi">WLAN-Raum</string>
+    <string name="mp_notice">HINWEIS</string>
+    <string name="mp_notice_name">GLEICHER NAME</string>
+    <string name="mp_perm_direct">Direkt-Raum ohne Passwörter öffnen</string>
+    <string name="mp_perm_direct_sub">Dein WLAN bleibt verbunden</string>
+    <string name="mp_perm_find">Räume in deiner Umgebung finden</string>
+    <string name="mp_perm_find_sub">Nur solange du im Mehrspieler-Bereich bist</string>
+    <string name="mp_perm_location">Standort</string>
+    <string name="mp_perm_nearby">Geräte in der Nähe</string>
+    <string name="mp_perm_private">Kein Internet erforderlich</string>
+    <string name="mp_perm_private_sub">Dein Standort wird niemals ausgelesen</string>
+    <string name="mp_perm_radar">DU · KONSOLEN IN DER NÄHE</string>
+    <string name="mp_plan_step_back">Zurückkehren · Per IP %1$s beitreten</string>
+    <string name="mp_plan_step_pick">%1$s wählen, Passwort eingeben</string>
+    <string name="mp_plan_step_wifi">Android-WLAN öffnen (Y)</string>
+    <string name="mp_players_of">%1$d/%2$d SPIELER</string>
+    <string name="mp_search_empty">Keine Spiele entsprechen deiner Suche.</string>
+    <string name="mp_search_games">%1$d Spiele durchsuchen</string>
+    <string name="mp_step_mode">MODUS</string>
+    <string name="mp_step_of">SCHRITT %1$d/%2$d</string>
+    <string name="mp_tag_download">DOWNLOAD</string>
+    <string name="mp_tag_not_connected">NICHT VERBUNDEN</string>
+    <string name="mp_wifi_short">Android-WLAN</string>
+    <plurals name="mp_count_favorites">
+        <item quantity="one">%d Favorit</item>
+        <item quantity="other">%d Favoriten</item>
+    </plurals>
+    <plurals name="mp_count_found">
+        <item quantity="one">%d gefunden</item>
+        <item quantity="other">%d gefunden</item>
+    </plurals>
+    <plurals name="mp_count_games">
+        <item quantity="one">%d Spiel</item>
+        <item quantity="other">%d Spiele</item>
+    </plurals>
+    <plurals name="mp_count_recent">
+        <item quantity="one">%d kürzlich</item>
+        <item quantity="other">%d kürzlich</item>
+    </plurals>
+    <plurals name="mp_rooms">
+        <item quantity="one">%d Raum</item>
+        <item quantity="other">%d Räume</item>
+    </plurals>
+    <string name="mp_hint_symbol">Symbol</string>
+    <string name="mp_hint_profile">Profil</string>
+    <string name="mp_filter_library">Bibliothek</string>
+    <string name="mp_show_all">Alle anzeigen</string>
+    <string name="mp_reading_headers">Lese Modul-Header…</string>
+    <string name="mp_no_games_for_mode">Keine passenden Spiele. Wähle „Alle anzeigen“, um deine Bibliothek zu durchsuchen.</string>
+    <string name="mp_wfc_mode_unconfirmed">WFC · lokaler Modus unbestätigt</string>
+    <string name="mp_mode_unconfirmed">Modus unbestätigt</string>
+    <string name="mp_selection_changed">Das ausgewählte Modul hat sich geändert. Wähle ein Spiel aus der Liste.</string>
+</resources>

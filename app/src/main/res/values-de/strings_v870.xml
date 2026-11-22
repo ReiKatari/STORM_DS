@@ -297,9 +297,9 @@
     <string name="v870_input_gyro_dpad">D-Pad-Lenkung (Rennen)</string>
     <string name="v870_input_gyro_paddle">Slot-2-Analogsensor</string>
     <string name="v870_translator_engine_google">Google Übersetzer (Online, schnell)</string>
-    <string name="v870_translator_engine_mlkit">Google ML Kit (100% Offline-KI)</string>
+    <string name="v870_translator_engine_mlkit" formatted="false">Google ML Kit (100% Offline-KI)</string>
     <string name="v870_translator_engine_deepl">DeepL Neural API (API-Schlüssel)</string>
-    <string name="v870_translator_tts_speed_percent">Sprechgeschwindigkeit (%)</string>
+    <string name="v870_translator_tts_speed_percent" formatted="false">Sprechgeschwindigkeit (%)</string>
     <plurals name="v870_stats_session_count">
         <item quantity="one">%1$d Sitzung</item>
         <item quantity="other">%1$d Sitzungen</item>

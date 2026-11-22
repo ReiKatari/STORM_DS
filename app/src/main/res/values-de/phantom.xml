@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="phantom_title">Mit einem temporären Klon spielen</string>
+    <string name="phantom_ds_only">Wähle ein DS-Modul im DS-Modus mit getrennter DLDI-Karte und getrenntem GBA-Modul.</string>
+    <string name="phantom_conflict">Der Spielstand wurde außerhalb dieser Sitzung geändert. Beide Kopien wurden aufbewahrt.</string>
+    <string name="phantom_busy">Schließe das laufende Spiel, bevor du eine Klon-Sitzung öffnest oder speicherst.</string>
+    <string name="phantom_save_failed">Der geschriebene Spielstand konnte nicht überprüft werden. Der vorherige Spielstand und das Ergebnis stehen zur Wiederherstellung bereit.</string>
+    <string name="phantom_link_error">Die beiden Spieler konnten nicht verbunden werden (Code %1$d).</string>
+    <string name="phantom_to_peer">Haupt → Klon</string>
+    <string name="phantom_to_primary">Klon → Haupt</string>
+    <string name="phantom_playing_main">Spielt auf Hauptinstanz</string>
+    <string name="phantom_playing_clone">Spielt auf Klon</string>
+    <string name="phantom_unavailable">Ein Spieler hat die Verbindung getrennt, bevor die Sitzung beendet war.</string>
+    <string name="phantom_result_title">Möchtest du den Spielstand behalten?</string>
+    <string name="phantom_result_body">Dein ursprünglicher Spielstand wurde noch nicht verändert. Wähle „Hauptspiel behalten“, um ihn mit dem Spielstand des Hauptspielers zu überschreiben. Der Spielstand des Klons wird immer verworfen.</string>
+    <string name="phantom_keep">Hauptspiel behalten</string>
+    <string name="phantom_discard">Sitzung verwerfen</string>
+    <string name="phantom_kept">Hauptspielstand bestätigt</string>
+    <string name="phantom_discarded">Sitzung verworfen</string>
+</resources>

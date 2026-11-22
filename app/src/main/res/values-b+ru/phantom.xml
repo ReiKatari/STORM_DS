@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="phantom_title">Игра с временным клоном</string>
+    <string name="phantom_ds_only">Выберите картридж DS в режиме DS с отключенными картой DLDI и картриджем GBA.</string>
+    <string name="phantom_conflict">Сохранение изменилось вне этой сессии. Обе копии сохранены.</string>
+    <string name="phantom_busy">Закройте запущенную игру перед открытием или сохранением сессии клона.</string>
+    <string name="phantom_save_failed">Не удалось проверить записанное сохранение. Предыдущее сохранение и результат доступны для восстановления.</string>
+    <string name="phantom_link_error">Не удалось соединить двух игроков (код %1$d).</string>
+    <string name="phantom_to_peer">Основной → Клон</string>
+    <string name="phantom_to_primary">Клон → Основной</string>
+    <string name="phantom_playing_main">Игра на основном</string>
+    <string name="phantom_playing_clone">Игра на клоне</string>
+    <string name="phantom_unavailable">Игрок отключился до завершения сессии.</string>
+    <string name="phantom_result_title">Оставить сохранение?</string>
+    <string name="phantom_result_body">Ваше исходное сохранение еще не изменено. Нажмите «Оставить основную игру», чтобы перезаписать его внутриигровым сохранением основного игрока. Сохранение клона всегда удаляется.</string>
+    <string name="phantom_keep">Оставить основную игру</string>
+    <string name="phantom_discard">Сбросить сессию</string>
+    <string name="phantom_kept">Основное сохранение проверено</string>
+    <string name="phantom_discarded">Сессия сброшена</string>
+</resources>

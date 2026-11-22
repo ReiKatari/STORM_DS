@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="phantom_title">Jouer avec un clone temporaire</string>
+    <string name="phantom_ds_only">Choisissez une cartouche DS en mode DS avec la carte DLDI et la cartouche GBA déconnectées.</string>
+    <string name="phantom_conflict">La sauvegarde a été modifiée en dehors de cette session. Les deux copies ont été conservées.</string>
+    <string name="phantom_busy">Fermez le jeu en cours avant d\'ouvrir ou d\'enregistrer une session clone.</string>
+    <string name="phantom_save_failed">Impossible de vérifier la sauvegarde écrite. La sauvegarde précédente et le résultat sont disponibles pour récupération.</string>
+    <string name="phantom_link_error">Impossible de connecter les deux joueurs (code %1$d).</string>
+    <string name="phantom_to_peer">Principal → Clone</string>
+    <string name="phantom_to_primary">Clone → Principal</string>
+    <string name="phantom_playing_main">Jeu sur le principal</string>
+    <string name="phantom_playing_clone">Jeu sur le clone</string>
+    <string name="phantom_unavailable">Un joueur s\'est déconnecté avant la fin de la session.</string>
+    <string name="phantom_result_title">Voulez-vous conserver la sauvegarde ?</string>
+    <string name="phantom_result_body">Votre sauvegarde d\'origine n\'a pas encore été modifiée. Choisissez Conserver le jeu principal pour l\'écraser avec la sauvegarde en jeu du joueur principal. La sauvegarde du clone est toujours supprimée.</string>
+    <string name="phantom_keep">Conserver le jeu principal</string>
+    <string name="phantom_discard">Annuler la session</string>
+    <string name="phantom_kept">Sauvegarde principale vérifiée</string>
+    <string name="phantom_discarded">Session annulée</string>
+</resources>

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="phantom_busy">Tutup game yang sedang berjalan sebelum membuka atau menyimpan sesi klon.</string>
+    <string name="phantom_conflict">Data simpan berubah di luar sesi ini. Kedua salinan telah disimpan.</string>
+    <string name="phantom_discard">Buang sesi</string>
+    <string name="phantom_discarded">Sesi dibuang</string>
+    <string name="phantom_ds_only">Pilih kartrid DS dalam mode DS dengan kartu DLDI dan kartrid GBA terlepas.</string>
+    <string name="phantom_keep">Pertahankan game utama</string>
+    <string name="phantom_kept">Data simpan utama terverifikasi</string>
+    <string name="phantom_link_error">Tidak dapat menghubungkan kedua pemain (kode %1$d).</string>
+    <string name="phantom_playing_clone">Bermain di klon</string>
+    <string name="phantom_playing_main">Bermain di utama</string>
+    <string name="phantom_result_body">Data simpan asli Anda belum diubah. Pilih Pertahankan game utama untuk menimpanya dengan data simpan dalam game milik pemain utama. Data simpan klon selalu dibuang.</string>
+    <string name="phantom_result_title">Apakah Anda ingin menyimpan progres?</string>
+    <string name="phantom_save_failed">Tidak dapat memverifikasi data simpan yang ditulis. Data simpan sebelumnya dan hasilnya tersedia untuk pemulihan.</string>
+    <string name="phantom_title">Bermain dengan klon sementara</string>
+    <string name="phantom_to_peer">Utama → Klon</string>
+    <string name="phantom_to_primary">Klon → Utama</string>
+    <string name="phantom_unavailable">Salah satu pemain terputus sebelum sesi berakhir.</string>
+</resources>

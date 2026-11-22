@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="phantom_title">使用临时克隆游玩</string>
+    <string name="phantom_ds_only">请在 DS 模式下选择一个 DS 卡带，并断开 DLDI 存储卡和 GBA 卡带。</string>
+    <string name="phantom_conflict">存档在本次会话之外发生了更改。两份副本均已保留。</string>
+    <string name="phantom_busy">打开或保存克隆会话前，请先关闭正在运行的游戏。</string>
+    <string name="phantom_save_failed">无法验证写入的存档。先前的存档与本次结果均已保留以便恢复。</string>
+    <string name="phantom_link_error">无法连接两名玩家（错误代码 %1$d）。</string>
+    <string name="phantom_to_peer">主端 → 克隆</string>
+    <string name="phantom_to_primary">克隆 → 主端</string>
+    <string name="phantom_playing_main">正在主端游玩</string>
+    <string name="phantom_playing_clone">正在克隆端游玩</string>
+    <string name="phantom_unavailable">有玩家在会话结束前断开了连接。</string>
+    <string name="phantom_result_title">要保留存档吗？</string>
+    <string name="phantom_result_body">您的原始存档尚未被修改。选择「保留主游戏」将以主玩家的游戏内存档覆盖原存档。克隆端的存档始终会被丢弃。</string>
+    <string name="phantom_keep">保留主游戏</string>
+    <string name="phantom_discard">丢弃会话</string>
+    <string name="phantom_kept">已验证主存档</string>
+    <string name="phantom_discarded">已丢弃会话</string>
+</resources>

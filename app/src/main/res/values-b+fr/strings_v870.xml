@@ -297,9 +297,9 @@
     <string name="v870_input_gyro_dpad">Inclinaison D-Pad (Course)</string>
     <string name="v870_input_gyro_paddle">Capteur analogique Slot-2</string>
     <string name="v870_translator_engine_google">Google Traduction (En ligne, rapide)</string>
-    <string name="v870_translator_engine_mlkit">Google ML Kit (100% hors ligne)</string>
+    <string name="v870_translator_engine_mlkit" formatted="false">Google ML Kit (100% hors ligne)</string>
     <string name="v870_translator_engine_deepl">DeepL Neural API (Clé API)</string>
-    <string name="v870_translator_tts_speed_percent">Vitesse de la voix (%)</string>
+    <string name="v870_translator_tts_speed_percent" formatted="false">Vitesse de la voix (%)</string>
     <plurals name="v870_stats_session_count">
         <item quantity="one">%1$d session</item>
         <item quantity="other">%1$d sessions</item>

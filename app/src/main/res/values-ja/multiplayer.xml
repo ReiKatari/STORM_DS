@@ -1,0 +1,238 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="multiplayer_title">マルチプレイ</string>
+    <string name="multiplayer_back">戻る</string>
+    <string name="multiplayer_direct_failed">Direct ルームを作成できませんでした。Wi-Fi を確認し、他の Wi-Fi Direct グループを閉じてください。この端末は 5 GHz グループに対応している必要があります。</string>
+    <string name="multiplayer_direct_stop_failed">Direct ネットワークが終了したことを確認できませんでした。Android の Wi-Fi 設定を確認してください。</string>
+    <string name="multiplayer_finish_game">マルチプレイ接続を変更する前にゲームを終了してください。</string>
+    <string name="multiplayer_connection_failed">接続できませんでした。Wi-Fi がオンになっており、Direct ルームがまだ開いているか確認してください。</string>
+    <string name="multiplayer_operation_unavailable">ローカルマルチプレイ中はステートセーブと早送りを使用できません。</string>
+    <string name="multiplayer_interrupted_message">ゲームが 3 秒間一時停止状態のままだったため、マルチプレイ接続を終了しました。もう一度プレイするにはゲームを終了してルームに入り直してください。</string>
+    <string name="mp_create_title">ルームを作成</string>
+    <string name="mp_code_title">コード</string>
+    <string name="mp_nearby">近くのルーム</string>
+    <string name="mp_searching">検索中…</string>
+    <string name="mp_nearby_empty">近くにルームが見つかりません。ホストにルームコードを聞くか、新しいルームを作成してください。</string>
+    <string name="mp_room_of">%1$s のルーム</string>
+    <string name="mp_invite_title">%1$s が近くでルームを開きました</string>
+    <string name="mp_join">参加</string>
+    <string name="mp_hint_create">作成</string>
+    <string name="mp_hint_library">ライブラリ</string>
+    <string name="mp_profile_cd">あなたの DS プロフィール: %1$s</string>
+    <string name="mp_play_rom">全員がゲームを所持</string>
+    <string name="mp_play_download">DS ダウンロードプレイ</string>
+    <string name="mp_play_chat">ピクトチャット</string>
+    <string name="mp_play_rom_desc">各自が同じゲームの ROM を開いてプレイします。</string>
+    <string name="mp_play_download_desc">ホストのみがゲームを所持し、他のプレイヤーに配信します。</string>
+    <string name="mp_play_chat_desc">チャットやお絵描きを楽しみます。ゲームは不要です。</string>
+    <string name="mp_how_play">プレイ方法を選択</string>
+    <string name="mp_pick_game">ゲームを選択</string>
+    <string name="mp_no_games">ライブラリに DS ゲームがまだありません。</string>
+    <string name="mp_filter_recent">最近</string>
+    <string name="mp_filter_all">すべて</string>
+    <string name="mp_net_direct">Direct ルーム</string>
+    <string name="mp_hint_choose">選択</string>
+    <string name="mp_next">次へ</string>
+    <string name="mp_direct_permission">Direct ルームを開くには、Android の「付近のデバイス」権限が必要です。</string>
+    <string name="mp_open_room">ルームを開く</string>
+    <string name="mp_save_game">保存</string>
+    <string name="mp_tag_direct">DIRECT</string>
+    <string name="mp_tag_wifi">WI-FI</string>
+    <string name="mp_tag_host">ホスト</string>
+    <string name="mp_tag_connecting">接続中</string>
+    <string name="mp_tag_left">切断</string>
+    <string name="mp_tag_you">あなた</string>
+    <string name="mp_tag_ping">%1$d MS</string>
+    <string name="mp_tag_in_game">プレイ中</string>
+    <string name="mp_free">空き</string>
+    <string name="mp_tag_waiting">待機中</string>
+    <string name="mp_code_label">コード</string>
+    <string name="mp_code_for">参加用コード</string>
+    <string name="mp_game_change">%1$s · 変更</string>
+    <string name="mp_game_pick">ゲームを選択</string>
+    <string name="mp_start">開始・%1$d</string>
+    <string name="mp_waiting">待機中…</string>
+    <string name="mp_hint_game">ゲーム</string>
+    <string name="mp_hint_close">閉じる</string>
+    <string name="mp_hint_details">詳細</string>
+    <string name="mp_joined">%1$s が参加しました</string>
+    <string name="mp_left">%1$s が切断しました</string>
+    <string name="mp_details">ルーム詳細</string>
+    <string name="mp_details_body">端末が自動で参加できない場合は、Android の Wi-Fi 設定でこのネットワークに接続し、IP 指定で参加してください。</string>
+    <string name="mp_close_title">ルームを閉じますか？</string>
+    <string name="mp_close_body">ルーム内の全員が切断されます。</string>
+    <string name="mp_close_room">ルームを閉じる</string>
+    <string name="mp_keep_open">開いたままにする</string>
+    <string name="mp_stay">とどまる</string>
+    <string name="mp_leave_title">ルームを退出しますか？</string>
+    <string name="mp_leave_body">ルームが開いている間は、コードを使っていつでも再参加できます。</string>
+    <string name="mp_leave">退出</string>
+    <string name="mp_duplicate">同じ名前の「%1$s」がいます。区別できるよう DS 名を変更してください。</string>
+    <string name="mp_have_game">所持済み・%1$s が開始すると自動で開きます</string>
+    <string name="mp_open_now">今すぐ開く</string>
+    <string name="mp_missing_game">このゲームはライブラリにありません。</string>
+    <string name="mp_download_guest">DS ダウンロードプレイで受信します</string>
+    <string name="mp_chat_guest">DS メニューからピクトチャットを開きます</string>
+    <string name="mp_waiting_host">%1$s がゲームを選択するのを待っています</string>
+    <string name="mp_pause_warning">3秒以上一時停止すると接続が切断されます</string>
+    <string name="mp_host_closed">ホストがルームを閉じました。</string>
+    <string name="mp_hint_open">ゲームを開く</string>
+    <string name="mp_hint_leave">退出</string>
+    <string name="mp_bios_needed">DS BIOS とファームウェアが必要です・設定</string>
+    <string name="mp_join_title">ルームに参加</string>
+    <string name="mp_tab_code">コード</string>
+    <string name="mp_tab_ip">IP</string>
+    <string name="mp_code_hint">ホストのルームに表示されているコードを入力してください。</string>
+    <string name="mp_code_missing">そのコードの近くのルームが見つかりません。</string>
+    <string name="mp_enter">決定</string>
+    <string name="mp_ip_hint">ルームが自動表示されない場合に使用します。ホストは「ルーム詳細」で自分の IP を確認できます。</string>
+    <string name="mp_ip_label">ホスト IP</string>
+    <string name="mp_hint_type">入力</string>
+    <string name="mp_hint_erase">消去</string>
+    <string name="mp_entering">%1$s に入室中</string>
+    <string name="mp_you">あなた</string>
+    <string name="mp_found">ルームが見つかりました</string>
+    <string name="mp_joining_network">%1$s のネットワークに接続中</string>
+    <string name="mp_joining_network_sub">パスワード不要。通常の Wi-Fi 接続も維持されます。</string>
+    <string name="mp_entering_room">ルームに入室中</string>
+    <string name="mp_cancel">キャンセル</string>
+    <string name="mp_fail_title">自動参加できませんでした</string>
+    <string name="mp_fail_closer">%1$s の端末にもう少し近づいてください。</string>
+    <string name="mp_fail_wifi">Wi-Fi がオンになっているか確認してください。</string>
+    <string name="mp_fail_plan_b">一部の端末は自動参加に対応していません。プランBをお試しください。</string>
+    <string name="mp_retry">再試行</string>
+    <string name="mp_plan_b">プランB・手動で参加</string>
+    <string name="mp_plan_b_body">Android の Wi-Fi 設定でこのネットワークを選択してパスワードを入力し、戻ってください:</string>
+    <string name="mp_network">ネットワーク</string>
+    <string name="mp_password">パスワード</string>
+    <string name="mp_open_wifi">Android Wi-Fi を開く</string>
+    <string name="mp_join_ip">接続済み・参加する</string>
+    <string name="mp_perm_title">近くの端末とプレイ</string>
+    <string name="mp_perm_body">Android が「%1$s」の許可を求めます。STORM DS はルーム接続にのみ使用します。</string>
+    <string name="mp_continue">続行</string>
+    <string name="mp_not_now">今はしない</string>
+    <string name="mp_perm_without">Direct ルームを作成または参加するには「付近のデバイス」権限が必要です。</string>
+    <string name="mp_profile_title">DS プロフィール</string>
+    <string name="mp_profile_sub">ルームやゲーム内で表示されます</string>
+    <string name="mp_message">コメント</string>
+    <string name="mp_birthday">誕生日</string>
+    <string name="mp_colour">お気に入りの色</string>
+    <string name="mp_symbol">シンボル</string>
+    <string name="mp_save">保存</string>
+    <string name="mp_profile_firmware_note">DS メニューとピクトチャットでは、お持ちの DS ファームウェアに保存された名前が使用されます。</string>
+    <string name="mp_profile_room_note">新しい名前は次回ルームに参加したときから反映されます。</string>
+    <string name="mp_hint_colour">色</string>
+    <string-array name="mp_colour_names">
+        <item>グレー</item>
+        <item>ブラウン</item>
+        <item>レッド</item>
+        <item>ピンク</item>
+        <item>オレンジ</item>
+        <item>イエロー</item>
+        <item>ライム</item>
+        <item>グリーン</item>
+        <item>ダークグリーン</item>
+        <item>ターコイズ</item>
+        <item>ライトブルー</item>
+        <item>ブルー</item>
+        <item>ダークブルー</item>
+        <item>パープル</item>
+        <item>バイオレット</item>
+        <item>フューシャ</item>
+    </string-array>
+    <string-array name="mp_symbol_names">
+        <item>イニシャル</item>
+        <item>星</item>
+        <item>ハート</item>
+        <item>音符</item>
+        <item>稲妻</item>
+        <item>月</item>
+        <item>王冠</item>
+        <item>スマイル</item>
+        <item>花</item>
+        <item>葉</item>
+        <item>ダイヤ</item>
+        <item>コントローラー</item>
+    </string-array>
+    <string-array name="mp_months">
+        <item>1月</item>
+        <item>2月</item>
+        <item>3月</item>
+        <item>4月</item>
+        <item>5月</item>
+        <item>6月</item>
+        <item>7月</item>
+        <item>8月</item>
+        <item>9月</item>
+        <item>10月</item>
+        <item>11月</item>
+        <item>12月</item>
+    </string-array>
+    <string name="mp_back_room">ルームに戻る</string>
+    <string name="mp_birthday_value">%2$s%1$d日</string>
+    <string name="mp_change_name">名前を変更</string>
+    <string name="mp_each_needs">各端末に必要なもの</string>
+    <string name="mp_enter_code">コードを入力</string>
+    <string name="mp_filter_favorites">★ お気に入り</string>
+    <string name="mp_first_time">初回設定</string>
+    <string name="mp_hint_choose_next">選択・もう一度で次へ</string>
+    <string name="mp_hint_code_ip">コード / IP</string>
+    <string name="mp_hint_edit">編集</string>
+    <string name="mp_hint_letter">文字</string>
+    <string name="mp_host_ip">ホスト IP</string>
+    <string name="mp_max">最大 %1$d</string>
+    <string name="mp_meta_chat">最大 16 人・DS メニュー</string>
+    <string name="mp_meta_chat_locked">DS BIOS とファームウェアが必要・設定</string>
+    <string name="mp_meta_download">最大 8 人・ゲストは DS BIOS が必要</string>
+    <string name="mp_meta_rom">最大 8 人・BIOS 不要</string>
+    <string name="mp_name">名前</string>
+    <string name="mp_need_menu">DS メニュー</string>
+    <string name="mp_need_receives">受信</string>
+    <string name="mp_net_wifi">Wi-Fi ルーム</string>
+    <string name="mp_notice">注意</string>
+    <string name="mp_notice_name">名前の重複</string>
+    <string name="mp_perm_direct">パスワード不要で Direct ルームを開く</string>
+    <string name="mp_perm_direct_sub">既存の Wi-Fi 接続は維持されます</string>
+    <string name="mp_perm_find">周囲のルームを探す</string>
+    <string name="mp_perm_find_sub">マルチプレイ画面を開いている間のみ</string>
+    <string name="mp_perm_location">位置情報</string>
+    <string name="mp_perm_nearby">付近のデバイス</string>
+    <string name="mp_perm_private">インターネット不要</string>
+    <string name="mp_perm_private_sub">位置情報が読み取られることはありません</string>
+    <string name="mp_perm_radar">あなた・近くの端末</string>
+    <string name="mp_plan_step_back">戻る・IP %1$s で参加</string>
+    <string name="mp_plan_step_pick">%1$s を選び、パスワードを入力</string>
+    <string name="mp_plan_step_wifi">Android Wi-Fi を開く (Y)</string>
+    <string name="mp_players_of">%1$d/%2$d プレイヤー</string>
+    <string name="mp_search_empty">検索条件に一致するゲームがありません。</string>
+    <string name="mp_search_games">%1$d 本のゲームを検索</string>
+    <string name="mp_step_mode">モード</string>
+    <string name="mp_step_of">ステップ %1$d/%2$d</string>
+    <string name="mp_tag_download">ダウンロード</string>
+    <string name="mp_tag_not_connected">未接続</string>
+    <string name="mp_wifi_short">Android Wi-Fi</string>
+    <plurals name="mp_count_favorites">
+        <item quantity="other">お気に入り %d 件</item>
+    </plurals>
+    <plurals name="mp_count_found">
+        <item quantity="other">%d 件見つかりました</item>
+    </plurals>
+    <plurals name="mp_count_games">
+        <item quantity="other">%d 本のゲーム</item>
+    </plurals>
+    <plurals name="mp_count_recent">
+        <item quantity="other">最近 %d 件</item>
+    </plurals>
+    <plurals name="mp_rooms">
+        <item quantity="other">%d ルーム</item>
+    </plurals>
+    <string name="mp_hint_symbol">シンボル</string>
+    <string name="mp_hint_profile">プロフィール</string>
+    <string name="mp_filter_library">ライブラリ</string>
+    <string name="mp_show_all">すべて表示</string>
+    <string name="mp_reading_headers">カートリッジヘッダーを読み込み中…</string>
+    <string name="mp_no_games_for_mode">一致するゲームがありません。「すべて表示」を選んでライブラリを参照してください。</string>
+    <string name="mp_wfc_mode_unconfirmed">WFC・ローカルモード未確認</string>
+    <string name="mp_mode_unconfirmed">モード未確認</string>
+    <string name="mp_selection_changed">選択したカートリッジが変更されました。リストからゲームを選び直してください。</string>
+</resources>

@@ -1,0 +1,238 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="mp_count_favorites">
+        <item quantity="other">%d favorit</item>
+    </plurals>
+    <plurals name="mp_count_found">
+        <item quantity="other">%d ditemukan</item>
+    </plurals>
+    <plurals name="mp_count_games">
+        <item quantity="other">%d game</item>
+    </plurals>
+    <plurals name="mp_count_recent">
+        <item quantity="other">%d terbaru</item>
+    </plurals>
+    <plurals name="mp_rooms">
+        <item quantity="other">%d ruang</item>
+    </plurals>
+    <string name="mp_back_room">Kembali ke ruang</string>
+    <string name="mp_bios_needed">Perlu BIOS dan firmware DS · Atur</string>
+    <string name="mp_birthday">Ulang tahun</string>
+    <string name="mp_birthday_value">%1$d %2$s</string>
+    <string name="mp_cancel">Batal</string>
+    <string name="mp_change_name">Ubah nama</string>
+    <string name="mp_chat_guest">Membuka PictoChat dari menu DS</string>
+    <string name="mp_close_body">Semua orang di ruang ini akan terputus.</string>
+    <string name="mp_close_room">Tutup ruang</string>
+    <string name="mp_close_title">Tutup ruang?</string>
+    <string name="mp_code_for">untuk bergabung</string>
+    <string name="mp_code_hint">Ketik kode yang ditampilkan di ruang host.</string>
+    <string name="mp_code_label">KODE</string>
+    <string name="mp_code_missing">Tidak ada ruang di sekitar dengan kode tersebut.</string>
+    <string name="mp_code_title">Kode</string>
+    <string name="mp_colour">Warna favorit</string>
+    <string name="mp_continue">Lanjutkan</string>
+    <string name="mp_create_title">Buat ruang</string>
+    <string name="mp_details">Detail ruang</string>
+    <string name="mp_details_body">Jika konsol tidak dapat bergabung sendiri, hubungkan ke jaringan ini di Wi-Fi Android dan bergabung lewat IP.</string>
+    <string name="mp_direct_permission">Android memerlukan izin perangkat terdekat untuk membuka ruang langsung.</string>
+    <string name="mp_download_guest">Anda akan menerimanya melalui DS Download Play</string>
+    <string name="mp_duplicate">Ada pemain lain bernama «%1$s». Ubah nama DS Anda agar tidak tertukar.</string>
+    <string name="mp_each_needs">YANG DIBUTUHKAN SETIAP KONSOL</string>
+    <string name="mp_enter">Masuk</string>
+    <string name="mp_enter_code">Masukkan kode</string>
+    <string name="mp_entering">Memasuki %1$s</string>
+    <string name="mp_entering_room">Memasuki ruang</string>
+    <string name="mp_fail_closer">Mendekatlah ke konsol %1$s.</string>
+    <string name="mp_fail_plan_b">Beberapa konsol tidak dapat bergabung sendiri. Gunakan rencana B.</string>
+    <string name="mp_fail_title">Tidak dapat bergabung otomatis</string>
+    <string name="mp_fail_wifi">Pastikan Wi-Fi aktif.</string>
+    <string name="mp_filter_all">SEMUA</string>
+    <string name="mp_filter_favorites">★ FAVORIT</string>
+    <string name="mp_filter_library">Pustaka</string>
+    <string name="mp_filter_recent">TERBARU</string>
+    <string name="mp_first_time">PERTAMA KALI</string>
+    <string name="mp_found">Ruang ditemukan</string>
+    <string name="mp_free">Kosong</string>
+    <string name="mp_game_change">%1$s · Ganti</string>
+    <string name="mp_game_pick">Pilih game</string>
+    <string name="mp_have_game">Sudah ada · terbuka saat %1$s mulai</string>
+    <string name="mp_hint_choose">Pilih</string>
+    <string name="mp_hint_choose_next">Pilih · lagi: berikutnya</string>
+    <string name="mp_hint_close">Tutup</string>
+    <string name="mp_hint_code_ip">Kode / IP</string>
+    <string name="mp_hint_colour">Warna</string>
+    <string name="mp_hint_create">Buat</string>
+    <string name="mp_hint_details">Detail</string>
+    <string name="mp_hint_edit">Ubah</string>
+    <string name="mp_hint_erase">Hapus</string>
+    <string name="mp_hint_game">Game</string>
+    <string name="mp_hint_leave">Keluar</string>
+    <string name="mp_hint_letter">Huruf</string>
+    <string name="mp_hint_library">Pustaka</string>
+    <string name="mp_hint_open">Buka game</string>
+    <string name="mp_hint_profile">Profil</string>
+    <string name="mp_hint_symbol">Simbol</string>
+    <string name="mp_hint_type">Ketik</string>
+    <string name="mp_host_closed">Host menutup ruang.</string>
+    <string name="mp_host_ip">IP Host</string>
+    <string name="mp_how_play">Bagaimana Anda akan bermain?</string>
+    <string name="mp_invite_title">%1$s membuka ruang di sekitar</string>
+    <string name="mp_ip_hint">Gunakan jika ruang tidak muncul sendiri. Host melihat IP-nya di «Detail ruang».</string>
+    <string name="mp_ip_label">IP Host</string>
+    <string name="mp_join">Gabung</string>
+    <string name="mp_join_ip">Sudah terhubung · Gabung</string>
+    <string name="mp_join_title">Gabung ke ruang</string>
+    <string name="mp_joined">%1$s bergabung</string>
+    <string name="mp_joining_network">Bergabung ke jaringan %1$s</string>
+    <string name="mp_joining_network_sub">Tanpa kata sandi. Wi-Fi biasa Anda tetap terhubung.</string>
+    <string name="mp_keep_open">Biarkan terbuka</string>
+    <string name="mp_leave">Keluar</string>
+    <string name="mp_leave_body">Anda dapat bergabung lagi dengan kode selama ruang masih terbuka.</string>
+    <string name="mp_leave_title">Keluar dari ruang?</string>
+    <string name="mp_left">%1$s terputus</string>
+    <string name="mp_max">MAKS %1$d</string>
+    <string name="mp_message">Pesan</string>
+    <string name="mp_meta_chat">Hingga 16 pemain · menu DS</string>
+    <string name="mp_meta_chat_locked">Perlu BIOS dan firmware DS Anda · Atur</string>
+    <string name="mp_meta_download">Hingga 8 pemain · Tamu memerlukan BIOS DS</string>
+    <string name="mp_meta_rom">Hingga 8 pemain · Tidak perlu BIOS</string>
+    <string name="mp_missing_game">Game ini tidak ada di pustaka Anda.</string>
+    <string name="mp_mode_unconfirmed">Mode belum dikonfirmasi</string>
+    <string name="mp_name">Nama</string>
+    <string name="mp_nearby">Ruang terdekat</string>
+    <string name="mp_nearby_empty">Belum ada ruang di sekitar. Minta kode ruang kepada host, atau buat ruang Anda sendiri.</string>
+    <string name="mp_need_menu">MENU DS</string>
+    <string name="mp_need_receives">MENERIMA</string>
+    <string name="mp_net_direct">Ruang langsung</string>
+    <string name="mp_net_wifi">Ruang Wi-Fi</string>
+    <string name="mp_network">Jaringan</string>
+    <string name="mp_next">Berikutnya</string>
+    <string name="mp_no_games">Pustaka Anda belum memiliki game DS.</string>
+    <string name="mp_no_games_for_mode">Tidak ada game yang cocok. Pilih Tampilkan semua untuk menelusuri pustaka.</string>
+    <string name="mp_not_now">Nanti saja</string>
+    <string name="mp_notice">PERHATIAN</string>
+    <string name="mp_notice_name">NAMA SAMA</string>
+    <string name="mp_open_now">Buka sekarang</string>
+    <string name="mp_open_room">Buka ruang</string>
+    <string name="mp_open_wifi">Buka Wi-Fi Android</string>
+    <string name="mp_password">Kata sandi</string>
+    <string name="mp_pause_warning">Jeda lebih dari 3 dtk akan memutus koneksi</string>
+    <string name="mp_perm_body">Android akan meminta izin «%1$s». STORM DS hanya menggunakannya untuk ruang bermain.</string>
+    <string name="mp_perm_direct">Buka ruang langsung, tanpa kata sandi</string>
+    <string name="mp_perm_direct_sub">Wi-Fi Anda tetap terhubung</string>
+    <string name="mp_perm_find">Temukan ruang di sekitar Anda</string>
+    <string name="mp_perm_find_sub">Hanya saat Anda berada di Multipemain</string>
+    <string name="mp_perm_location">Lokasi</string>
+    <string name="mp_perm_nearby">Perangkat terdekat</string>
+    <string name="mp_perm_private">Tidak perlu internet</string>
+    <string name="mp_perm_private_sub">Lokasi Anda tidak pernah dibaca</string>
+    <string name="mp_perm_radar">ANDA · KONSOL TERDEKAT</string>
+    <string name="mp_perm_title">Bermain dengan konsol terdekat</string>
+    <string name="mp_perm_without">Izin perangkat terdekat diperlukan untuk bergabung atau membuat ruang Langsung.</string>
+    <string name="mp_pick_game">Pilih game</string>
+    <string name="mp_plan_b">RENCANA B · GABUNG MANUAL</string>
+    <string name="mp_plan_b_body">Di Wi-Fi Android pilih jaringan ini lalu ketik kata sandinya, kemudian kembali:</string>
+    <string name="mp_plan_step_back">Kembali · Gabung lewat IP %1$s</string>
+    <string name="mp_plan_step_pick">Pilih %1$s, ketik kata sandinya</string>
+    <string name="mp_plan_step_wifi">Buka Wi-Fi Android (Y)</string>
+    <string name="mp_play_chat">PictoChat</string>
+    <string name="mp_play_chat_desc">Mengobrol dan menggambar. Tidak ada yang perlu memiliki game.</string>
+    <string name="mp_play_download">DS Download Play</string>
+    <string name="mp_play_download_desc">Hanya Anda yang memiliki game. Pemain lain menerimanya.</string>
+    <string name="mp_play_rom">Semua memiliki game</string>
+    <string name="mp_play_rom_desc">Setiap konsol membuka salinan game yang sama.</string>
+    <string name="mp_players_of">%1$d/%2$d PEMAIN</string>
+    <string name="mp_profile_cd">Profil DS Anda: %1$s</string>
+    <string name="mp_profile_firmware_note">Menu DS dan PictoChat menggunakan nama yang tersimpan di firmware DS Anda sendiri.</string>
+    <string name="mp_profile_room_note">Nama baru akan digunakan saat Anda bergabung ke ruang berikutnya.</string>
+    <string name="mp_profile_sub">Ruang dan game melihatnya</string>
+    <string name="mp_profile_title">Profil DS</string>
+    <string name="mp_reading_headers">Membaca header kartrid…</string>
+    <string name="mp_retry">Coba lagi</string>
+    <string name="mp_room_of">Ruang %1$s</string>
+    <string name="mp_save">Simpan</string>
+    <string name="mp_save_game">Simpan</string>
+    <string name="mp_search_empty">Tidak ada game yang cocok dengan pencarian Anda.</string>
+    <string name="mp_search_games">Cari %1$d game</string>
+    <string name="mp_searching">Mencari…</string>
+    <string name="mp_selection_changed">Kartrid yang dipilih berubah. Pilih game dari daftar.</string>
+    <string name="mp_show_all">Tampilkan semua</string>
+    <string name="mp_start">Mulai · %1$d</string>
+    <string name="mp_stay">Tetap di sini</string>
+    <string name="mp_step_mode">MODE</string>
+    <string name="mp_step_of">LANGKAH %1$d/%2$d</string>
+    <string name="mp_symbol">Simbol</string>
+    <string name="mp_tab_code">KODE</string>
+    <string name="mp_tab_ip">IP</string>
+    <string name="mp_tag_connecting">MENGHUBUNGKAN</string>
+    <string name="mp_tag_direct">LANGSUNG</string>
+    <string name="mp_tag_download">UNDUH</string>
+    <string name="mp_tag_host">HOST</string>
+    <string name="mp_tag_in_game">DALAM GAME</string>
+    <string name="mp_tag_left">TERPUTUS</string>
+    <string name="mp_tag_not_connected">TIDAK TERHUBUNG</string>
+    <string name="mp_tag_ping">%1$d MS</string>
+    <string name="mp_tag_waiting">MENUNGGU</string>
+    <string name="mp_tag_wifi">WI-FI</string>
+    <string name="mp_tag_you">ANDA</string>
+    <string name="mp_waiting">Menunggu…</string>
+    <string name="mp_waiting_host">Menunggu %1$s memilih game</string>
+    <string name="mp_wfc_mode_unconfirmed">WFC · mode lokal belum dikonfirmasi</string>
+    <string name="mp_wifi_short">Wi-Fi Android</string>
+    <string name="mp_you">Anda</string>
+    <string name="multiplayer_back">Kembali</string>
+    <string name="multiplayer_connection_failed">Tidak dapat terhubung. Pastikan Wi-Fi aktif dan ruang Langsung masih terbuka.</string>
+    <string name="multiplayer_direct_failed">Tidak dapat membuat ruang langsung. Periksa Wi-Fi dan tutup grup Wi-Fi Direct lainnya. Perangkat ini harus mendukung grup 5 GHz.</string>
+    <string name="multiplayer_direct_stop_failed">Tidak dapat memastikan jaringan langsung telah tertutup. Periksa pengaturan Wi-Fi Android.</string>
+    <string name="multiplayer_finish_game">Keluar dari game sebelum mengubah koneksi multipemain.</string>
+    <string name="multiplayer_interrupted_message">Koneksi multipemain ditutup setelah game dijeda selama 3 detik. Keluar dari game lalu masuk kembali ke ruang untuk bermain lagi.</string>
+    <string name="multiplayer_operation_unavailable">Save state dan percepat maju tidak tersedia selama multipemain lokal.</string>
+    <string name="multiplayer_title">Multipemain</string>
+    <string-array name="mp_colour_names">
+        <item>Abu-abu</item>
+        <item>Cokelat</item>
+        <item>Merah</item>
+        <item>Merah muda</item>
+        <item>Oranye</item>
+        <item>Kuning</item>
+        <item>Hijau limau</item>
+        <item>Hijau</item>
+        <item>Hijau tua</item>
+        <item>Biru kehijauan</item>
+        <item>Biru muda</item>
+        <item>Biru</item>
+        <item>Biru tua</item>
+        <item>Ungu</item>
+        <item>Violet</item>
+        <item>Fuchsia</item>
+    </string-array>
+    <string-array name="mp_months">
+        <item>Januari</item>
+        <item>Februari</item>
+        <item>Maret</item>
+        <item>April</item>
+        <item>Mei</item>
+        <item>Juni</item>
+        <item>Juli</item>
+        <item>Agustus</item>
+        <item>September</item>
+        <item>Oktober</item>
+        <item>November</item>
+        <item>Desember</item>
+    </string-array>
+    <string-array name="mp_symbol_names">
+        <item>Inisial</item>
+        <item>Bintang</item>
+        <item>Hati</item>
+        <item>Nada</item>
+        <item>Petir</item>
+        <item>Bulan</item>
+        <item>Mahkota</item>
+        <item>Senyum</item>
+        <item>Bunga</item>
+        <item>Daun</item>
+        <item>Berlian</item>
+        <item>Kontroler</item>
+    </string-array>
+</resources>

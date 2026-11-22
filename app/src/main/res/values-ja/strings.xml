@@ -1022,15 +1022,15 @@
     <string name="shader_compatibility_report_no_rom_folder">保存先のROMフォルダが設定されていません。</string>
     <string name="shader_compatibility_report_clear">クリア</string>
     <string name="about_app_title">アプリ情報とクレジット</string>
-    <string name="about_app_description">Vulkan 3D、RetroArchシェーダー、RetroAchievementsを搭載したAndroid向けWatermelonDS (melonDSコア) 高パフォーマンスフォーク。</string>
-    <string name="about_app_summary">STORM DS、melonDS、WatermelonDS、開発者およびオープンソースライセンス</string>
-    <string name="about_fork_info_title">プロジェクトベース: WatermelonDS フォーク</string>
-    <string name="about_fork_info_summary">STORM DSは、melonDSコア (StapleButter、Nadia、RSDuck、genericretrogeek、Arisoturaおよびチーム) のAndroid移植版であるWatermelonDS (SapphireRhodoniteおよびコントリビューター) の高度なフォークです。Slot-1 DSiWareダイレクトブート修正、NAND/ファームウェア整合性保護、RetroAchievementsオフラインプレイと同期、USB-C/HDMIによるテレビやモニターへの外部デュアルディスプレイ出力、高速ROMスキャナー、HUD配置、カスタムテーマを搭載しています。</string>
+    <string name="about_app_description">Vulkan 3D、RetroArchシェーダー、RetroAchievementsを搭載したAndroid向けSTORM DS (melonDSコア) 高パフォーマンスフォーク。</string>
+    <string name="about_app_summary">STORM DS、melonDS、STORM DS、開発者およびオープンソースライセンス</string>
+    <string name="about_fork_info_title">プロジェクトベース: STORM DS フォーク</string>
+    <string name="about_fork_info_summary">STORM DSは、melonDSコア (StapleButter、Nadia、RSDuck、genericretrogeek、Arisoturaおよびチーム) のAndroid移植版であるSTORM DS (SapphireRhodoniteおよびコントリビューター) の高度なフォークです。Slot-1 DSiWareダイレクトブート修正、NAND/ファームウェア整合性保護、RetroAchievementsオフラインプレイと同期、USB-C/HDMIによるテレビやモニターへの外部デュアルディスプレイ出力、高速ROMスキャナー、HUD配置、カスタムテーマを搭載しています。</string>
     <string name="about_version_title">バージョン</string>
     <string name="about_credits_title">謝辞とクレジット</string>
     <string name="about_credits_jpeacekeeper_title">JPeacekeeper (4PDA)</string>
     <string name="about_credits_jpeacekeeper_summary">貴重なテスト貢献、詳細なDSiバグ報告、フレームレート標準化、継続的なプロジェクト改善に感謝します</string>
-    <string name="about_credits_watermelonds_title">WatermelonDS (Android移植版)</string>
+    <string name="about_credits_watermelonds_title">STORM DS (Android移植版)</string>
     <string name="about_credits_watermelonds_summary">SapphireRhodonite、rafaelvcaetanoおよびコントリビューター - Android移植、VulkanレンダリングFastpath、librashader統合、最新UIとタッチ操作</string>
     <string name="about_credits_melonds_title">melonDS (オリジナルコア)</string>
     <string name="about_credits_melonds_summary">StapleButter、Nadia、RSDuck、genericretrogeek、ArisoturaおよびmelonDSチーム - オリジナルの高精度Nintendo DS / DSiコアエミュレータ</string>
@@ -1342,6 +1342,8 @@
         <item>振動パック</item>
         <item>メモリー拡張パック</item>
         <item>アナログ入力</item>
+        <item>モーションパック (自作)</item>
+        <item>モーションパック (製品版)</item>
     </string-array>
 
     <string-array name="console_type_options">
@@ -1685,4 +1687,79 @@
     <string name="cheats_import_finished">チートデータベースのインポートが完了しました</string>
     <string name="cheats_import_failed">チートデータベースのインポートに失敗しました</string>
     <string name="rom_search_dir_saf_fallback_hint">ディレクトリにアクセスできませんでした。もう一度選択してください</string>
+    <string name="achievements_failed_load_tip_response_too_large">実績を読み込めませんでした: このゲームのサーバー応答がアプリの上限 (16 MiB) を超えています。</string>
+    <string name="button_mode">ボタンモード</string>
+    <string name="button_mode_normal">通常 (長押し)</string>
+    <string name="button_mode_toggle">トグル (タップで押下維持と解除を切替)</string>
+    <string name="button_mode_turbo">連射 (長押しで毎秒10回入力)</string>
+    <string name="button_mode_value">モード: %1$s</string>
+    <string name="cycle_layouts">切替対象レイアウト</string>
+    <string name="cycle_layouts_summary">「レイアウト切替」ショートカットでライブラリ順に巡回するレイアウトを選択します。未選択時は切替が無効になります。</string>
+    <string name="device_microphone_gain">端末マイクゲイン</string>
+    <string name="device_microphone_gain_summary">1x で元の音量を維持します。マイク入力が小さい場合は上げてください。</string>
+    <string name="dsi_profile_initial">現在の DSi 設定</string>
+    <string name="emulator_stop_wireless_unsupported">このワイヤレスモードはこのマルチプレイ ルームではサポートされていません。</string>
+    <string name="frameskip_manual_value">スキップするフレーム数</string>
+    <string name="frameskip_mode">フレームスキップ</string>
+    <string name="frameskip_mode_disabled_by_drs">DRS が有効です。フレームスキップを使うには、ビデオ設定で動的内部解像度を無効にしてください。</string>
+    <string name="frameskip_mode_summary">%s。Vulkan レンダラーにのみ適用されます。上下画面で 3D を交互に描画するゲームでは、実際のフレーム間隔が低くなります。</string>
+    <string name="freedreno_default">ドライバーのデフォルト</string>
+    <string name="freedreno_invalid">改行なしの ASCII 文字 2048 文字以内で入力してください。</string>
+    <string name="freedreno_restart">この変更を保存して適用するには STORM DS を再起動してください。</string>
+    <string name="freedreno_restart_button">再起動</string>
+    <string name="freedreno_save_failed">設定を保存できませんでした。「再起動」をタップしてもう一度お試しください。</string>
+    <string name="freedreno_settings">Freedreno 設定</string>
+    <string name="freedreno_summary">Turnip/Freedreno の詳細オプション。空欄にするとドライバーのデフォルトを使用します。変更の反映にはアプリの再起動が必要です。未対応のオプションはドライバー側で無視される場合があります。</string>
+    <string name="hint_search_cheats">チートを検索</string>
+    <string name="info_rendered_ir">IR %1$dx / %2$dx</string>
+    <string name="input_combo">コンボ</string>
+    <string name="input_combo_conflict">この組み合わせは既に %1$s に割り当てられています。先にその割り当てを解除するか、別の組み合わせを選択してください。</string>
+    <string name="input_cycle_layout">レイアウト切替</string>
+    <string name="input_exit_game">ゲームを終了</string>
+    <string name="input_group_system_special">システムと特殊操作</string>
+    <string name="input_setup_auto_map_short">自動割当</string>
+    <string name="input_setup_clear_all_short">全解除</string>
+    <string name="input_setup_mapped_count">%1$d / %2$d 割当済み</string>
+    <string name="input_setup_waiting_hint">ゲームパッドのボタン・キー・スティック軸を入力、または2キー長押しでコンボ登録</string>
+    <string name="input_slot2_analog">Slot-2 アナログスティック</string>
+    <string name="no_cheats_found_from_search">一致するチートがありません</string>
+    <string name="rendered_ir_position">実際の描画解像度 (IR) を表示</string>
+    <string name="rom_ndz_unsupported_base_patch">ベース ROM に対する .ndz パッチ (.delta.ndz) です。まだサポートされていません。</string>
+    <string name="rom_ndz_unsupported_corrupt">破損または途中で切れた .ndz ファイルです。</string>
+    <string name="rom_ndz_unsupported_legacy">旧形式の .ndz レイアウト (LZ4 またはフラット) です。ndz-studio (zstd) で再パックしてください。</string>
+    <string name="rom_ndz_unsupported_pair">複数の ROM を含む .ndz コンテナです。まだサポートされていません。</string>
+    <string name="rom_ndz_unsupported_trained_dict">廃止された学習済み辞書形式の .ndz です。ndz-studio で再パックしてください。</string>
+    <string name="v882_comp_desc_button_single">A・B・X・Y の各ボタンを個別に配置でき、トグルや連射モードにも対応します</string>
+    <string name="v882_comp_desc_slot2_analog">対応する自作ソフトやアナログモーションパッチ向けの仮想 GBA Slot-2 アナログスティック</string>
+    <string name="video_dslite_color">DS Lite カラー</string>
+    <string name="video_dslite_download">これらのプリセットは公式シェーダーライブラリを使用します。今すぐダウンロードまたは更新しますか？</string>
+    <string name="video_dslite_lcd">DS Lite カラー + LCD グリッド</string>
+    <string name="video_dslite_motionblur">DS Lite カラー + LCD グリッド + モーションブラー</string>
+    <string name="video_dslite_preset_summary">DS Lite の発色と任意の LCD グリッド・モーションブラー</string>
+    <string name="video_dslite_preset_title">DS Lite プリセット</string>
+    <string name="video_dslite_unavailable">インストール済みのシェーダーライブラリにこのプリセットが見つかりません。ライブラリの更新をお試しください。</string>
+    <string name="video_low_latency">低遅延</string>
+    <string name="video_low_latency_summary">操作レスポンスを優先します。パフォーマンスや滑らかさが低下する場合があります。ゲーム起動時に適用されます。</string>
+    <string name="video_vulkan_category">Vulkan ハック</string>
+    <string name="video_vulkan_drs">動的内部解像度</string>
+    <string name="video_vulkan_drs_summary">選択した内部解像度を目標にしつつ、高負荷時は内部解像度を下げて安定した 60 fps を維持します。有効時はフレームスキップが無効になります。</string>
+    <string name="vulkan_driver_mali_api_or_kernel_desc">%1$s を検出しましたが、malisx2 PanVK には Android 10 (API 29) 以上、64ビットプロセス、および /dev/mali0 カーネルノードが必要です。システム GPU ドライバーを使用します (手動 ZIP インポートは利用可能です)。</string>
+    <string name="vulkan_driver_mali_midgard_v6_desc">%1$s (Midgard / Bifrost v6) を検出しました。malisx2 PanVK には Mali Bifrost v7 (G31/G51/G52/G76) から 5th Gen v12 (G620/G720) までが必要です。システム GPU ドライバーを使用します (手動 ZIP インポートは利用可能です)。</string>
+    <string name="vulkan_driver_mali_panvk_advice">Arm Mali (%1$s): 最大の互換性にはシステム GPU ドライバーを使用してください。対応する Mali Bifrost v7 から 5th Gen v12 の GPU では malisx2 PanVK ビルドも試せます。</string>
+    <string name="vulkan_driver_mali_supported_desc">Android %2$d 以上の 64ビット /dev/mali0 カーネルドライバーと %1$s を検出しました。malisx2 PanVK ビルドはクラウドリポジトリから入手できるほか、互換性のある ZIP を手動インポートすることもできます。</string>
+    <string name="vulkan_driver_mali_supported_title">Arm Mali PanVK 対応 (%1$s)</string>
+    <string name="vulkan_driver_mali_v13_plus_desc">%1$s (v13+ / Immortalis-G925) を検出しました。現在 malisx2 PanVK は Mali 5th Gen v12 (G720) まで対応しています。システム GPU ドライバーを使用します (手動 ZIP インポートは利用可能です)。</string>
+    <string name="waiting_for_combo">同じコントローラー上の異なる2つのボタンを長押ししてください。組み合わせ完了前に1つ目のボタンが反応することがあるため、修飾キーには未割り当てのボタンの使用をおすすめします。</string>
+    <string-array name="frameskip_manual_value_options">
+        <item>0 (スキップなし)</item>
+        <item>1 (1描画・1スキップ)</item>
+        <item>2 (1描画・2スキップ)</item>
+        <item>3 (1描画・3スキップ)</item>
+        <item>4 (1描画・4スキップ)</item>
+    </string-array>
+    <string-array name="frameskip_mode_options">
+        <item>オフ</item>
+        <item>手動</item>
+        <item>自動</item>
+    </string-array>
 </resources>

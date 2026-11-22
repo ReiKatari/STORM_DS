@@ -297,9 +297,9 @@
     <string name="v870_input_gyro_dpad">Kemiringan D-Pad (Balap)</string>
     <string name="v870_input_gyro_paddle">Sensor Analog Slot-2</string>
     <string name="v870_translator_engine_google">Google Terjemahan (Online, cepat)</string>
-    <string name="v870_translator_engine_mlkit">Google ML Kit (100% Offline Neural)</string>
+    <string name="v870_translator_engine_mlkit" formatted="false">Google ML Kit (100% Offline Neural)</string>
     <string name="v870_translator_engine_deepl">DeepL Neural API (Kunci API)</string>
-    <string name="v870_translator_tts_speed_percent">Kecepatan suara (%)</string>
+    <string name="v870_translator_tts_speed_percent" formatted="false">Kecepatan suara (%)</string>
     <plurals name="v870_stats_session_count">
         <item quantity="other">%1$d sesi</item>
     </plurals>

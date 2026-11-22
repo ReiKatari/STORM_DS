@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="phantom_title">一時クローンでプレイ</string>
+    <string name="phantom_ds_only">DLDIカードとGBAカートリッジを外した状態で、DSモードのDSカートリッジを選択してください。</string>
+    <string name="phantom_conflict">このセッション外でセーブデータが変更されました。両方のコピーが保持されています。</string>
+    <string name="phantom_busy">クローンセッションを開く、または保存する前に、実行中のゲームを終了してください。</string>
+    <string name="phantom_save_failed">書き込まれたセーブデータを検証できませんでした。以前のセーブデータと結果は復旧用として残っています。</string>
+    <string name="phantom_link_error">2人のプレイヤーを接続できませんでした (コード %1$d)。</string>
+    <string name="phantom_to_peer">メイン → クローン</string>
+    <string name="phantom_to_primary">クローン → メイン</string>
+    <string name="phantom_playing_main">メインでプレイ中</string>
+    <string name="phantom_playing_clone">クローンでプレイ中</string>
+    <string name="phantom_unavailable">セッション終了前にプレイヤーが切断されました。</string>
+    <string name="phantom_result_title">セーブデータを保持しますか？</string>
+    <string name="phantom_result_body">元のセーブデータはまだ変更されていません。「メインゲームを保持」を選ぶと、メインプレイヤーのゲーム内セーブで上書きします。クローンのセーブは常に破棄されます。</string>
+    <string name="phantom_keep">メインゲームを保持</string>
+    <string name="phantom_discard">セッションを破棄</string>
+    <string name="phantom_kept">メインセーブを検証しました</string>
+    <string name="phantom_discarded">セッションを破棄しました</string>
+</resources>

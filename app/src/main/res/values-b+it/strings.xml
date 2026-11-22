@@ -381,6 +381,8 @@
         <item>Rumble Pak</item>
         <item>Espansione di memoria</item>
         <item>Input analogico</item>
+        <item>Motion Pak (Homebrew)</item>
+        <item>Motion Pak (Commerciale)</item>
     </string-array>
     <string-array name="console_type_options">
         <item>@string/console_ds</item>
@@ -1173,15 +1175,15 @@ Importarli in STORM DS?</string>
     <string name="shader_compatibility_report_no_rom_folder">Nessuna cartella ROM configurata per il salvataggio.</string>
     <string name="shader_compatibility_report_clear">Cancella</string>
     <string name="about_app_title">Informazioni e riconoscimenti</string>
-    <string name="about_app_description">Fork ad alte prestazioni di WatermelonDS (basato sul core melonDS) per Android, con Vulkan 3D, shader RetroArch e RetroAchievements.</string>
-    <string name="about_app_summary">STORM DS, melonDS, WatermelonDS, autori e licenze open source</string>
-    <string name="about_fork_info_title">Project Base: WatermelonDS Fork</string>
-    <string name="about_fork_info_summary">STORM DS è un fork avanzato di WatermelonDS (sviluppato da SapphireRhodonite e collaboratori), basato sul porting Android del core melonDS (StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura e team). Include correzioni per l\'avvio diretto DSiWare su Slot-1, protezione dell\'integrità di NAND e firmware, modalità offline e sincronizzazione RetroAchievements, doppio schermo esterno su TV/monitor tramite USB-C/HDMI, scanner ROM veloce, posizionamento HUD e temi personalizzati.</string>
+    <string name="about_app_description">Fork ad alte prestazioni di STORM DS (basato sul core melonDS) per Android, con Vulkan 3D, shader RetroArch e RetroAchievements.</string>
+    <string name="about_app_summary">STORM DS, melonDS, STORM DS, autori e licenze open source</string>
+    <string name="about_fork_info_title">Project Base: STORM DS Fork</string>
+    <string name="about_fork_info_summary">STORM DS è un fork avanzato di STORM DS (sviluppato da SapphireRhodonite e collaboratori), basato sul porting Android del core melonDS (StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura e team). Include correzioni per l\'avvio diretto DSiWare su Slot-1, protezione dell\'integrità di NAND e firmware, modalità offline e sincronizzazione RetroAchievements, doppio schermo esterno su TV/monitor tramite USB-C/HDMI, scanner ROM veloce, posizionamento HUD e temi personalizzati.</string>
     <string name="about_version_title">Versione</string>
     <string name="about_credits_title">Crediti e ringraziamenti</string>
     <string name="about_credits_jpeacekeeper_title">JPeacekeeper (4PDA)</string>
     <string name="about_credits_jpeacekeeper_summary">Preziosi contributi ai test, segnalazioni dettagliate di bug DSi, standardizzazione del frame rate e miglioramenti continui al progetto</string>
-    <string name="about_credits_watermelonds_title">WatermelonDS (Android Port)</string>
+    <string name="about_credits_watermelonds_title">STORM DS (Android Port)</string>
     <string name="about_credits_watermelonds_summary">SapphireRhodonite, rafaelvcaetano e collaboratori - porting Android, rendering rapido Vulkan, integrazione librashader, interfaccia moderna e controlli touch</string>
     <string name="about_credits_melonds_title">melonDS (Original Core)</string>
     <string name="about_credits_melonds_summary">StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura e il team melonDS - emulatore originale ad alta precisione per Nintendo DS / DSi</string>
@@ -1580,4 +1582,79 @@ Importarli in STORM DS?</string>
     <string name="cheats_import_finished">Database dei trucchi importato correttamente</string>
     <string name="cheats_import_failed">Errore durante l\'importazione del database dei trucchi</string>
     <string name="rom_search_dir_saf_fallback_hint">Impossibile accedere alla directory, selezionala nuovamente</string>
+    <string name="achievements_failed_load_tip_response_too_large">Impossibile caricare gli obiettivi: la risposta del server per questo gioco supera il limite dell\'app (16 MiB).</string>
+    <string name="button_mode">Modalità pulsante</string>
+    <string name="button_mode_normal">Normale (tieni premuto)</string>
+    <string name="button_mode_toggle">Interruttore (tocca per tenere premuto o rilasciare)</string>
+    <string name="button_mode_turbo">Turbo (tieni premuto per 10 pressioni/s)</string>
+    <string name="button_mode_value">Modalità: %1$s</string>
+    <string name="cycle_layouts">Layout da alternare</string>
+    <string name="cycle_layouts_summary">Scegli i layout usati dalla scorciatoia Cambia layout, nell\'ordine della libreria. Nessuna selezione disattiva il cambio.</string>
+    <string name="device_microphone_gain">Guadagno microfono del dispositivo</string>
+    <string name="device_microphone_gain_summary">1x mantiene il livello originale. Aumenta per microfoni con volume basso.</string>
+    <string name="dsi_profile_initial">Configurazione DSi attuale</string>
+    <string name="emulator_stop_wireless_unsupported">Questa modalità wireless non è supportata in questa stanza multigiocatore.</string>
+    <string name="frameskip_manual_value">Fotogrammi da saltare</string>
+    <string name="frameskip_mode">Salto fotogrammi</string>
+    <string name="frameskip_mode_disabled_by_drs">Il DRS è attivo; per usare il salto fotogrammi, disattiva la risoluzione interna dinamica nelle impostazioni video.</string>
+    <string name="frameskip_mode_summary">%s. Si applica solo al renderer Vulkan. Nei giochi che alternano il 3D tra gli schermi la cadenza reale è inferiore.</string>
+    <string name="freedreno_default">Predefinito del driver</string>
+    <string name="freedreno_invalid">Usa al massimo 2048 caratteri ASCII senza interruzioni di riga.</string>
+    <string name="freedreno_restart">Riavvia STORM DS per salvare e applicare questa modifica.</string>
+    <string name="freedreno_restart_button">Riavvia</string>
+    <string name="freedreno_save_failed">Impossibile salvare l\'impostazione. Tocca Riavvia per riprovare.</string>
+    <string name="freedreno_settings">Impostazioni Freedreno</string>
+    <string name="freedreno_summary">Opzioni avanzate Turnip/Freedreno. Lascia vuoto per i valori predefiniti del driver. Le modifiche richiedono il riavvio dell\'app. Le opzioni non supportate potrebbero essere ignorate dal driver.</string>
+    <string name="hint_search_cheats">Cerca trucchi</string>
+    <string name="info_rendered_ir">IR %1$dx / %2$dx</string>
+    <string name="input_combo">Combo</string>
+    <string name="input_combo_conflict">Questa combinazione è già assegnata a %1$s. Cancella prima quell\'assegnazione oppure scegli una coppia diversa.</string>
+    <string name="input_cycle_layout">Cambia layout</string>
+    <string name="input_exit_game">Esci dal gioco</string>
+    <string name="input_group_system_special">Sistema e speciali</string>
+    <string name="input_setup_auto_map_short">Mappa auto</string>
+    <string name="input_setup_clear_all_short">Cancella tutto</string>
+    <string name="input_setup_mapped_count">%1$d / %2$d mappati</string>
+    <string name="input_setup_waiting_hint">Premi un pulsante del gamepad, un tasto, un asse dello stick o tieni premuti 2 tasti per una combinazione</string>
+    <string name="input_slot2_analog">Stick analogico Slot-2</string>
+    <string name="no_cheats_found_from_search">Nessun trucco corrispondente</string>
+    <string name="rendered_ir_position">Mostra IR renderizzata</string>
+    <string name="rom_ndz_unsupported_base_patch">Patch .ndz su una ROM di base (.delta.ndz). Non ancora supportata.</string>
+    <string name="rom_ndz_unsupported_corrupt">File .ndz danneggiato o troncato.</string>
+    <string name="rom_ndz_unsupported_legacy">Vecchio formato .ndz (LZ4 o flat). Ricompattalo con ndz-studio (zstd).</string>
+    <string name="rom_ndz_unsupported_pair">Contenitore .ndz con più ROM. Non ancora supportato.</string>
+    <string name="rom_ndz_unsupported_trained_dict">File .ndz con dizionario addestrato (variante ritirata). Ricompattalo con ndz-studio.</string>
+    <string name="v882_comp_desc_button_single">Singolo pulsante frontale (A, B, X o Y) per posizionamento autonomo flessibile e modalità Interruttore o Turbo</string>
+    <string name="v882_comp_desc_slot2_analog">Stick analogico virtuale GBA Slot-2 per homebrew compatibili e patch di movimento analogico</string>
+    <string name="video_dslite_color">Colore DS Lite</string>
+    <string name="video_dslite_download">Questi preset usano la libreria ufficiale di shader. Scaricarla o aggiornarla ora?</string>
+    <string name="video_dslite_lcd">Colore DS Lite + griglia LCD</string>
+    <string name="video_dslite_motionblur">Colore DS Lite + griglia LCD + motion blur</string>
+    <string name="video_dslite_preset_summary">Colori DS Lite con griglia LCD e motion blur opzionali</string>
+    <string name="video_dslite_preset_title">Preset DS Lite</string>
+    <string name="video_dslite_unavailable">Questo preset manca nella libreria di shader installata. Prova ad aggiornare la libreria.</string>
+    <string name="video_low_latency">Bassa latenza</string>
+    <string name="video_low_latency_summary">Dà priorità alla risposta dei comandi. Può ridurre prestazioni e fluidità. Si applica all\'avvio di un gioco.</string>
+    <string name="video_vulkan_category">Vulkan Hacks</string>
+    <string name="video_vulkan_drs">Risoluzione interna dinamica</string>
+    <string name="video_vulkan_drs_summary">Il gioco punta alla risoluzione interna selezionata, ma sotto carico elevato esegue il rendering a una risoluzione interna inferiore per mantenere 60 fps stabili. Quando è attiva, il salto fotogrammi è disattivato.</string>
+    <string name="vulkan_driver_mali_api_or_kernel_desc">Rilevato %1$s, ma malisx2 PanVK richiede Android 10 (API 29)+, processo a 64 bit e nodo kernel /dev/mali0. In uso il driver GPU di sistema; l\'importazione manuale di ZIP resta sbloccata.</string>
+    <string name="vulkan_driver_mali_midgard_v6_desc">Rilevato %1$s (Midgard / Bifrost v6). malisx2 PanVK richiede Mali Bifrost v7 (G31/G51/G52/G76) fino alla 5a gen. v12 (G620/G720). In uso il driver GPU di sistema; l\'importazione manuale di ZIP resta sbloccata.</string>
+    <string name="vulkan_driver_mali_panvk_advice">Arm Mali (%1$s): usa il driver GPU di sistema per la massima compatibilità, oppure prova le build malisx2 PanVK sulle GPU Mali supportate da Bifrost v7 alla 5a gen. v12.</string>
+    <string name="vulkan_driver_mali_supported_desc">Rilevato %1$s con driver kernel /dev/mali0 a 64 bit su Android %2$d+. Le build malisx2 PanVK sono disponibili nei Repository cloud, oppure puoi importare manualmente uno ZIP compatibile.</string>
+    <string name="vulkan_driver_mali_supported_title">Arm Mali PanVK supportato (%1$s)</string>
+    <string name="vulkan_driver_mali_v13_plus_desc">Rilevato %1$s (v13+ / Immortalis-G925). malisx2 PanVK attualmente supporta fino a Mali 5a gen. v12 (G720). In uso il driver GPU di sistema; l\'importazione manuale di ZIP resta sbloccata.</string>
+    <string name="waiting_for_combo">Tieni premuti due pulsanti diversi sullo stesso controller. Il primo pulsante può attivarsi prima che la combo sia completa; usa un pulsante non assegnato come modificatore per evitarlo.</string>
+    <string-array name="frameskip_manual_value_options">
+        <item>0 (non saltare mai)</item>
+        <item>1 (disegna 1, salta 1)</item>
+        <item>2 (disegna 1, salta 2)</item>
+        <item>3 (disegna 1, salta 3)</item>
+        <item>4 (disegna 1, salta 4)</item>
+    </string-array>
+    <string-array name="frameskip_mode_options">
+        <item>Disattivato</item>
+        <item>Manuale</item>
+        <item>Automatico</item>
+    </string-array>
 </resources>

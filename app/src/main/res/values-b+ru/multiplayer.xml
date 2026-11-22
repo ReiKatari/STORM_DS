@@ -1,0 +1,253 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="multiplayer_title">Мультиплеер</string>
+    <string name="multiplayer_back">Назад</string>
+    <string name="multiplayer_direct_failed">Не удалось создать прямую комнату. Проверьте Wi-Fi и закройте другие группы Wi-Fi Direct. Устройство должно поддерживать группу 5 ГГц.</string>
+    <string name="multiplayer_direct_stop_failed">Не удалось подтвердить закрытие прямой сети. Проверьте настройки Wi-Fi Android.</string>
+    <string name="multiplayer_finish_game">Выйдите из игры перед изменением сетевого подключения.</string>
+    <string name="multiplayer_connection_failed">Не удалось подключиться. Проверьте, что Wi-Fi включен и прямая комната еще открыта.</string>
+    <string name="multiplayer_operation_unavailable">Быстрые сохранения и ускорение времени недоступны в локальном мультиплеере.</string>
+    <string name="multiplayer_interrupted_message">Сетевое подключение было закрыто после того, как игра оставалась на паузе 3 секунды. Выйдите из игры и снова войдите в комнату, чтобы продолжить.</string>
+    <string name="mp_create_title">Создать комнату</string>
+    <string name="mp_code_title">Код</string>
+    <string name="mp_nearby">Комнаты рядом</string>
+    <string name="mp_searching">Поиск…</string>
+    <string name="mp_nearby_empty">Комнат рядом пока нет. Спросите код комнаты у хоста или создайте свою.</string>
+    <string name="mp_room_of">Комната %1$s</string>
+    <string name="mp_invite_title">%1$s открыл комнату рядом</string>
+    <string name="mp_join">Войти</string>
+    <string name="mp_hint_create">Создать</string>
+    <string name="mp_hint_library">Библиотека</string>
+    <string name="mp_profile_cd">Ваш профиль DS: %1$s</string>
+    <string name="mp_play_rom">У всех есть игра</string>
+    <string name="mp_play_download">DS Download Play</string>
+    <string name="mp_play_chat">PictoChat</string>
+    <string name="mp_play_rom_desc">Каждая консоль открывает собственную копию одной и той же игры.</string>
+    <string name="mp_play_download_desc">Игра есть только у вас. Остальные получат ее.</string>
+    <string name="mp_play_chat_desc">Общайтесь и рисуйте. Игра никому не нужна.</string>
+    <string name="mp_how_play">Как будете играть?</string>
+    <string name="mp_pick_game">Выберите игру</string>
+    <string name="mp_no_games">В вашей библиотеке пока нет игр DS.</string>
+    <string name="mp_filter_recent">НЕДАВНИЕ</string>
+    <string name="mp_filter_all">ВСЕ</string>
+    <string name="mp_net_direct">Прямая комната</string>
+    <string name="mp_hint_choose">Выбрать</string>
+    <string name="mp_next">Далее</string>
+    <string name="mp_direct_permission">Чтобы открыть прямую комнату, Android требуется разрешение на поиск устройств рядом.</string>
+    <string name="mp_open_room">Открыть комнату</string>
+    <string name="mp_save_game">Сохранить</string>
+    <string name="mp_tag_direct">ПРЯМАЯ</string>
+    <string name="mp_tag_wifi">WI-FI</string>
+    <string name="mp_tag_host">ХОСТ</string>
+    <string name="mp_tag_connecting">ПОДКЛЮЧЕНИЕ</string>
+    <string name="mp_tag_left">ОТКЛЮЧИЛСЯ</string>
+    <string name="mp_tag_you">ВЫ</string>
+    <string name="mp_tag_ping">%1$d МС</string>
+    <string name="mp_tag_in_game">В ИГРЕ</string>
+    <string name="mp_free">Свободно</string>
+    <string name="mp_tag_waiting">ОЖИДАНИЕ</string>
+    <string name="mp_code_label">КОД</string>
+    <string name="mp_code_for">для входа</string>
+    <string name="mp_game_change">%1$s · Изменить</string>
+    <string name="mp_game_pick">Выбрать игру</string>
+    <string name="mp_start">Старт · %1$d</string>
+    <string name="mp_waiting">Ожидание…</string>
+    <string name="mp_hint_game">Игра</string>
+    <string name="mp_hint_close">Закрыть</string>
+    <string name="mp_hint_details">Детали</string>
+    <string name="mp_joined">%1$s вошел</string>
+    <string name="mp_left">%1$s отключился</string>
+    <string name="mp_details">Детали комнаты</string>
+    <string name="mp_details_body">Если консоль не может войти сама, подключите ее к этой сети в настройках Wi-Fi Android и войдите по IP.</string>
+    <string name="mp_close_title">Закрыть комнату?</string>
+    <string name="mp_close_body">Все участники комнаты будут отключены.</string>
+    <string name="mp_close_room">Закрыть комнату</string>
+    <string name="mp_keep_open">Оставить открытой</string>
+    <string name="mp_stay">Остаться</string>
+    <string name="mp_leave_title">Выйти из комнаты?</string>
+    <string name="mp_leave_body">Вы сможете снова войти по коду, пока комната открыта.</string>
+    <string name="mp_leave">Выйти</string>
+    <string name="mp_duplicate">Здесь уже есть «%1$s». Измените имя DS, чтобы никого не путать.</string>
+    <string name="mp_have_game">Есть у вас · откроется, когда запустит %1$s</string>
+    <string name="mp_open_now">Открыть сейчас</string>
+    <string name="mp_missing_game">Этой игры нет в вашей библиотеке.</string>
+    <string name="mp_download_guest">Вы получите ее через Загрузку DS</string>
+    <string name="mp_chat_guest">Открывает PictoChat из меню DS</string>
+    <string name="mp_waiting_host">Ожидание, пока %1$s выберет игру</string>
+    <string name="mp_pause_warning">Пауза дольше 3 с разрывает соединение</string>
+    <string name="mp_host_closed">Хост закрыл комнату.</string>
+    <string name="mp_hint_open">Открыть игру</string>
+    <string name="mp_hint_leave">Выйти</string>
+    <string name="mp_bios_needed">Нужны DS BIOS и прошивка · Настроить</string>
+    <string name="mp_join_title">Войти в комнату</string>
+    <string name="mp_tab_code">КОД</string>
+    <string name="mp_tab_ip">IP</string>
+    <string name="mp_code_hint">Введите код, показанный в комнате хоста.</string>
+    <string name="mp_code_missing">Рядом нет комнаты с таким кодом.</string>
+    <string name="mp_enter">Войти</string>
+    <string name="mp_ip_hint">Используйте, если комната не появляется сама. Хост видит свой IP в разделе «Детали комнаты».</string>
+    <string name="mp_ip_label">IP хоста</string>
+    <string name="mp_hint_type">Ввод</string>
+    <string name="mp_hint_erase">Стереть</string>
+    <string name="mp_entering">Вход в %1$s</string>
+    <string name="mp_you">Вы</string>
+    <string name="mp_found">Комната найдена</string>
+    <string name="mp_joining_network">Подключение к сети %1$s</string>
+    <string name="mp_joining_network_sub">Без паролей. Ваш обычный Wi-Fi останется подключенным.</string>
+    <string name="mp_entering_room">Вход в комнату</string>
+    <string name="mp_cancel">Отмена</string>
+    <string name="mp_fail_title">Не удалось войти автоматически</string>
+    <string name="mp_fail_closer">Подойдите ближе к консоли %1$s.</string>
+    <string name="mp_fail_wifi">Проверьте, что Wi-Fi включен.</string>
+    <string name="mp_fail_plan_b">Некоторые консоли не могут подключиться сами. Используйте план Б.</string>
+    <string name="mp_retry">Повторить</string>
+    <string name="mp_plan_b">ПЛАН Б · ПОДКЛЮЧЕНИЕ ВРУЧНУЮ</string>
+    <string name="mp_plan_b_body">В настройках Wi-Fi Android выберите эту сеть и введите пароль, затем вернитесь:</string>
+    <string name="mp_network">Сеть</string>
+    <string name="mp_password">Пароль</string>
+    <string name="mp_open_wifi">Открыть Wi-Fi Android</string>
+    <string name="mp_join_ip">Я подключен · Войти</string>
+    <string name="mp_perm_title">Играйте с консолями рядом</string>
+    <string name="mp_perm_body">Android запросит «%1$s». STORM DS использует это только для комнат.</string>
+    <string name="mp_continue">Продолжить</string>
+    <string name="mp_not_now">Не сейчас</string>
+    <string name="mp_perm_without">Для создания прямой комнаты или входа в нее требуется разрешение на поиск устройств рядом.</string>
+    <string name="mp_profile_title">Профиль DS</string>
+    <string name="mp_profile_sub">Его видят комнаты и игры</string>
+    <string name="mp_message">Сообщение</string>
+    <string name="mp_birthday">День рождения</string>
+    <string name="mp_colour">Любимый цвет</string>
+    <string name="mp_symbol">Символ</string>
+    <string name="mp_save">Сохранить</string>
+    <string name="mp_profile_firmware_note">Меню DS и PictoChat используют имя, сохраненное в вашей собственной прошивке DS.</string>
+    <string name="mp_profile_room_note">Новое имя будет использоваться при следующем входе в комнату.</string>
+    <string name="mp_hint_colour">Цвет</string>
+    <string-array name="mp_colour_names">
+        <item>Серый</item>
+        <item>Коричневый</item>
+        <item>Красный</item>
+        <item>Розовый</item>
+        <item>Оранжевый</item>
+        <item>Желтый</item>
+        <item>Лаймовый</item>
+        <item>Зеленый</item>
+        <item>Темно-зеленый</item>
+        <item>Бирюзовый</item>
+        <item>Голубой</item>
+        <item>Синий</item>
+        <item>Темно-синий</item>
+        <item>Пурпурный</item>
+        <item>Фиолетовый</item>
+        <item>Фуксия</item>
+    </string-array>
+    <string-array name="mp_symbol_names">
+        <item>Инициал</item>
+        <item>Звезда</item>
+        <item>Сердце</item>
+        <item>Нота</item>
+        <item>Молния</item>
+        <item>Луна</item>
+        <item>Корона</item>
+        <item>Улыбка</item>
+        <item>Цветок</item>
+        <item>Лист</item>
+        <item>Ромб</item>
+        <item>Контроллер</item>
+    </string-array>
+    <string-array name="mp_months">
+        <item>Январь</item>
+        <item>Февраль</item>
+        <item>Март</item>
+        <item>Апрель</item>
+        <item>Май</item>
+        <item>Июнь</item>
+        <item>Июль</item>
+        <item>Август</item>
+        <item>Сентябрь</item>
+        <item>Октябрь</item>
+        <item>Ноябрь</item>
+        <item>Декабрь</item>
+    </string-array>
+    <string name="mp_back_room">Назад в комнату</string>
+    <string name="mp_birthday_value">%1$d %2$s</string>
+    <string name="mp_change_name">Изменить имя</string>
+    <string name="mp_each_needs">ЧТО НУЖНО КАЖДОЙ КОНСОЛИ</string>
+    <string name="mp_enter_code">Ввести код</string>
+    <string name="mp_filter_favorites">★ ИЗБРАННОЕ</string>
+    <string name="mp_first_time">ПЕРВЫЙ ЗАПУСК</string>
+    <string name="mp_hint_choose_next">Выбрать · еще раз: далее</string>
+    <string name="mp_hint_code_ip">Код / IP</string>
+    <string name="mp_hint_edit">Изменить</string>
+    <string name="mp_hint_letter">Буква</string>
+    <string name="mp_host_ip">IP хоста</string>
+    <string name="mp_max">МАКС. %1$d</string>
+    <string name="mp_meta_chat">До 16 игроков · меню DS</string>
+    <string name="mp_meta_chat_locked">Нужны ваши DS BIOS и прошивка · Настроить</string>
+    <string name="mp_meta_download">До 8 игроков · гостям нужен DS BIOS</string>
+    <string name="mp_meta_rom">До 8 игроков · BIOS не нужен</string>
+    <string name="mp_name">Имя</string>
+    <string name="mp_need_menu">МЕНЮ DS</string>
+    <string name="mp_need_receives">ПОЛУЧАЕТ</string>
+    <string name="mp_net_wifi">Комната Wi-Fi</string>
+    <string name="mp_notice">ВНИМАНИЕ</string>
+    <string name="mp_notice_name">ОДИНАКОВОЕ ИМЯ</string>
+    <string name="mp_perm_direct">Открывайте прямую комнату без паролей</string>
+    <string name="mp_perm_direct_sub">Ваш Wi-Fi остается подключенным</string>
+    <string name="mp_perm_find">Находите комнаты вокруг вас</string>
+    <string name="mp_perm_find_sub">Только пока вы в мультиплеере</string>
+    <string name="mp_perm_location">Геолокация</string>
+    <string name="mp_perm_nearby">Устройства рядом</string>
+    <string name="mp_perm_private">Интернет не нужен</string>
+    <string name="mp_perm_private_sub">Ваше местоположение никогда не считывается</string>
+    <string name="mp_perm_radar">ВЫ · КОНСОЛИ РЯДОМ</string>
+    <string name="mp_plan_step_back">Вернитесь · Войти по IP %1$s</string>
+    <string name="mp_plan_step_pick">Выберите %1$s, введите пароль</string>
+    <string name="mp_plan_step_wifi">Откройте Wi-Fi Android (Y)</string>
+    <string name="mp_players_of">%1$d/%2$d ИГРОКОВ</string>
+    <string name="mp_search_empty">Нет игр, соответствующих поиску.</string>
+    <string name="mp_search_games">Поиск среди %1$d игр</string>
+    <string name="mp_step_mode">РЕЖИМ</string>
+    <string name="mp_step_of">ШАГ %1$d/%2$d</string>
+    <string name="mp_tag_download">ЗАГРУЗКА</string>
+    <string name="mp_tag_not_connected">НЕ ПОДКЛЮЧЕН</string>
+    <string name="mp_wifi_short">Wi-Fi Android</string>
+    <plurals name="mp_count_favorites">
+        <item quantity="one">%d избранная</item>
+        <item quantity="few">%d избранные</item>
+        <item quantity="many">%d избранных</item>
+        <item quantity="other">%d избранных</item>
+    </plurals>
+    <plurals name="mp_count_found">
+        <item quantity="one">%d найдено</item>
+        <item quantity="few">%d найдено</item>
+        <item quantity="many">%d найдено</item>
+        <item quantity="other">%d найдено</item>
+    </plurals>
+    <plurals name="mp_count_games">
+        <item quantity="one">%d игра</item>
+        <item quantity="few">%d игры</item>
+        <item quantity="many">%d игр</item>
+        <item quantity="other">%d игр</item>
+    </plurals>
+    <plurals name="mp_count_recent">
+        <item quantity="one">%d недавняя</item>
+        <item quantity="few">%d недавние</item>
+        <item quantity="many">%d недавних</item>
+        <item quantity="other">%d недавних</item>
+    </plurals>
+    <plurals name="mp_rooms">
+        <item quantity="one">%d комната</item>
+        <item quantity="few">%d комнаты</item>
+        <item quantity="many">%d комнат</item>
+        <item quantity="other">%d комнат</item>
+    </plurals>
+    <string name="mp_hint_symbol">Символ</string>
+    <string name="mp_hint_profile">Профиль</string>
+    <string name="mp_filter_library">Библиотека</string>
+    <string name="mp_show_all">Показать все</string>
+    <string name="mp_reading_headers">Чтение заголовков картриджей…</string>
+    <string name="mp_no_games_for_mode">Нет подходящих игр. Выберите «Показать все», чтобы просмотреть библиотеку.</string>
+    <string name="mp_wfc_mode_unconfirmed">WFC · локальный режим не подтвержден</string>
+    <string name="mp_mode_unconfirmed">Режим не подтвержден</string>
+    <string name="mp_selection_changed">Выбранный картридж изменился. Выберите игру из списка.</string>
+</resources>

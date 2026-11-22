@@ -717,6 +717,8 @@
         <item>震动包</item>
         <item>内存扩展卡</item>
         <item>模拟输入</item>
+        <item>体感包 (自制)</item>
+        <item>体感包 (零售版)</item>
     </string-array>
     <string-array name="console_type_options">
         <item>@string/console_ds</item>
@@ -1182,15 +1184,15 @@
     <string name="shader_compatibility_report_no_rom_folder">尚未配置用于保存的 ROM 文件夹。</string>
     <string name="shader_compatibility_report_clear">清空</string>
     <string name="about_app_title">关于与致谢</string>
-    <string name="about_app_description">基于 melonDS 核心的高性能 Android 端 WatermelonDS 分支模拟器，支持 Vulkan 3D、RetroArch 着色器与 RetroAchievements。</string>
-    <string name="about_app_summary">STORM DS, melonDS, WatermelonDS, 作者与开源许可</string>
-    <string name="about_fork_info_title">Project Base: WatermelonDS Fork</string>
-    <string name="about_fork_info_summary">STORM DS is an advanced fork of WatermelonDS (developed by SapphireRhodonite 与贡献者), which is an Android port of the melonDS core (StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura 与团队). Includes extensive Slot-1 DSiWare direct boot fixes, NAND/Firmware integrity protection, RetroAchievements offline play 和 sync, external dual display on TV/monitors via USB-C/HDMI, fast ROM scanner, HUD positioning, and custom themes.</string>
+    <string name="about_app_description">基于 melonDS 核心的高性能 Android 端 STORM DS 分支模拟器，支持 Vulkan 3D、RetroArch 着色器与 RetroAchievements。</string>
+    <string name="about_app_summary">STORM DS, melonDS, STORM DS, 作者与开源许可</string>
+    <string name="about_fork_info_title">Project Base: STORM DS Fork</string>
+    <string name="about_fork_info_summary">STORM DS is an advanced fork of STORM DS (developed by SapphireRhodonite 与贡献者), which is an Android port of the melonDS core (StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura 与团队). Includes extensive Slot-1 DSiWare direct boot fixes, NAND/Firmware integrity protection, RetroAchievements offline play 和 sync, external dual display on TV/monitors via USB-C/HDMI, fast ROM scanner, HUD positioning, and custom themes.</string>
     <string name="about_version_title">版本</string>
     <string name="about_credits_title">致谢与鸣谢</string>
     <string name="about_credits_jpeacekeeper_title">JPeacekeeper (4PDA)</string>
     <string name="about_credits_jpeacekeeper_summary">宝贵的测试贡献、详尽的 DSi 错误报告、帧率标准化以及持续的项目改进建议</string>
-    <string name="about_credits_watermelonds_title">WatermelonDS (Android Port)</string>
+    <string name="about_credits_watermelonds_title">STORM DS (Android Port)</string>
     <string name="about_credits_watermelonds_summary">SapphireRhodonite, rafaelvcaetano 与 contributors - Android port, Vulkan rendering fastpaths, librashader integration, modern UI 和触控</string>
     <string name="about_credits_melonds_title">melonDS (Original Core)</string>
     <string name="about_credits_melonds_summary">StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura 与 melonDS 团队 - original high-accuracy Nintendo DS / DSi core emulator</string>
@@ -1614,4 +1616,79 @@
     <string name="cheats_import_finished">金手指数据库导入成功</string>
     <string name="cheats_import_failed">金手指数据库导入失败</string>
     <string name="rom_search_dir_saf_fallback_hint">无法访问该目录，请重新选择</string>
+    <string name="achievements_failed_load_tip_response_too_large">无法加载成就：服务器返回的此游戏数据超过了应用的大小限制（16 MiB）。</string>
+    <string name="button_mode">按键模式</string>
+    <string name="button_mode_normal">普通（按住）</string>
+    <string name="button_mode_toggle">切换（点击保持或松开）</string>
+    <string name="button_mode_turbo">连发（按住时每秒 10 次）</string>
+    <string name="button_mode_value">模式：%1$s</string>
+    <string name="cycle_layouts">循环切换的布局</string>
+    <string name="cycle_layouts_summary">选择通过切换布局快捷键按布局库顺序循环切换的布局。不选择任何布局将禁用循环切换。</string>
+    <string name="device_microphone_gain">设备麦克风增益</string>
+    <string name="device_microphone_gain_summary">1x 保持原始音量。若麦克风音量过小可调高此值。</string>
+    <string name="dsi_profile_initial">当前 DSi 设置</string>
+    <string name="emulator_stop_wireless_unsupported">此多人联机房间不支持该无线模式。</string>
+    <string name="frameskip_manual_value">跳过的帧数</string>
+    <string name="frameskip_mode">跳帧</string>
+    <string name="frameskip_mode_disabled_by_drs">动态分辨率已启用。若要使用跳帧，请先在视频设置中关闭动态内部分辨率。</string>
+    <string name="frameskip_mode_summary">%s。仅适用于 Vulkan 渲染器。游戏在两个屏幕之间交替渲染 3D 画面时，实际显示帧率会更低。</string>
+    <string name="freedreno_default">驱动默认值</string>
+    <string name="freedreno_invalid">最多输入 2048 个 ASCII 字符，不可换行。</string>
+    <string name="freedreno_restart">重启 STORM DS 以保存并应用此更改。</string>
+    <string name="freedreno_restart_button">重启</string>
+    <string name="freedreno_save_failed">无法保存设置。点击重启以重试。</string>
+    <string name="freedreno_settings">Freedreno 设置</string>
+    <string name="freedreno_summary">Turnip/Freedreno 高级选项。留空以使用驱动默认值。更改后需要重启应用。驱动可能忽略不支持的选项。</string>
+    <string name="hint_search_cheats">搜索金手指</string>
+    <string name="info_rendered_ir">IR %1$dx / %2$dx</string>
+    <string name="input_combo">组合键</string>
+    <string name="input_combo_conflict">此组合已分配给 %1$s。请先清除原分配，或选择其他按键组合。</string>
+    <string name="input_cycle_layout">切换布局</string>
+    <string name="input_exit_game">退出游戏</string>
+    <string name="input_group_system_special">系统和特殊操作</string>
+    <string name="input_setup_auto_map_short">自动映射</string>
+    <string name="input_setup_clear_all_short">全部清除</string>
+    <string name="input_setup_mapped_count">已映射 %1$d / %2$d</string>
+    <string name="input_setup_waiting_hint">按下手柄按键、键盘按键、摇杆轴，或同时按住 2 个键设置组合键</string>
+    <string name="input_slot2_analog">Slot-2 模拟摇杆</string>
+    <string name="no_cheats_found_from_search">没有匹配的金手指</string>
+    <string name="rendered_ir_position">显示实际渲染分辨率</string>
+    <string name="rom_ndz_unsupported_base_patch">此 .ndz 是基于原始 ROM 的补丁（.delta.ndz），目前尚不支持。</string>
+    <string name="rom_ndz_unsupported_corrupt">.ndz 文件已损坏或不完整。</string>
+    <string name="rom_ndz_unsupported_legacy">旧版 .ndz 格式（LZ4 或平铺格式）。请使用 ndz-studio（zstd）重新打包。</string>
+    <string name="rom_ndz_unsupported_pair">此 .ndz 容器包含多个 ROM，目前尚不支持。</string>
+    <string name="rom_ndz_unsupported_trained_dict">此 .ndz 使用已停用的训练字典格式。请使用 ndz-studio 重新打包。</string>
+    <string name="v882_comp_desc_button_single">独立的功能按键（A、B、X 或 Y），支持灵活自由摆放以及切换或连发模式</string>
+    <string name="v882_comp_desc_slot2_analog">用于兼容自制程序和模拟体感补丁的虚拟 GBA Slot-2 模拟摇杆</string>
+    <string name="video_dslite_color">DS Lite 色彩</string>
+    <string name="video_dslite_download">这些预设使用官方着色器库。是否立即下载或更新？</string>
+    <string name="video_dslite_lcd">DS Lite 色彩 + LCD 网格</string>
+    <string name="video_dslite_motionblur">DS Lite 色彩 + LCD 网格 + 动态模糊</string>
+    <string name="video_dslite_preset_summary">DS Lite 色彩搭配可选的 LCD 网格和动态模糊</string>
+    <string name="video_dslite_preset_title">DS Lite 预设</string>
+    <string name="video_dslite_unavailable">已安装的着色器库中缺少此预设。请尝试更新着色器库。</string>
+    <string name="video_low_latency">低延迟</string>
+    <string name="video_low_latency_summary">优先降低操作延迟。可能会降低性能和流畅度。启动游戏时生效。</string>
+    <string name="video_vulkan_category">Vulkan 高级设置</string>
+    <string name="video_vulkan_drs">动态内部分辨率</string>
+    <string name="video_vulkan_drs_summary">以选定的内部分辨率为目标，在高负载时降低渲染分辨率，以维持稳定的 60 fps。启用时会关闭跳帧。</string>
+    <string name="vulkan_driver_mali_api_or_kernel_desc">检测到 %1$s，但 malisx2 PanVK 需要 Android 10 (API 29) 及以上版本、64 位进程以及 /dev/mali0 内核节点。当前使用系统 GPU 驱动，手动 ZIP 导入已解锁。</string>
+    <string name="vulkan_driver_mali_midgard_v6_desc">检测到 %1$s（Midgard / Bifrost v6）。malisx2 PanVK 需要 Mali Bifrost v7 (G31/G51/G52/G76) 至第 5 代 v12 (G620/G720) GPU。当前使用系统 GPU 驱动，手动 ZIP 导入已解锁。</string>
+    <string name="vulkan_driver_mali_panvk_advice">Arm Mali (%1$s)：建议使用系统 GPU 驱动以获得最佳兼容性，或在受支持的 Mali Bifrost v7 至第 5 代 v12 GPU 上测试 malisx2 PanVK 版本。</string>
+    <string name="vulkan_driver_mali_supported_desc">检测到 %1$s，运行于 Android %2$d+ 64 位 /dev/mali0 内核驱动。可在云端仓库获取 malisx2 PanVK 版本，也可手动导入兼容的 ZIP 驱动包。</string>
+    <string name="vulkan_driver_mali_supported_title">支持 Arm Mali PanVK (%1$s)</string>
+    <string name="vulkan_driver_mali_v13_plus_desc">检测到 %1$s（v13+ / Immortalis-G925）。malisx2 PanVK 目前最高支持到 Mali 第 5 代 v12 (G720)。当前使用系统 GPU 驱动，手动 ZIP 导入已解锁。</string>
+    <string name="waiting_for_combo">同时按住同一控制器上的两个不同按键。组合完成前，第一个按键仍可能触发原有功能；使用未分配功能的按键作为修饰键可避免此情况。</string>
+    <string-array name="frameskip_manual_value_options">
+        <item>0（不跳帧）</item>
+        <item>1（渲染 1 帧，跳过 1 帧）</item>
+        <item>2（渲染 1 帧，跳过 2 帧）</item>
+        <item>3（渲染 1 帧，跳过 3 帧）</item>
+        <item>4（渲染 1 帧，跳过 4 帧）</item>
+    </string-array>
+    <string-array name="frameskip_mode_options">
+        <item>关闭</item>
+        <item>手动</item>
+        <item>自动</item>
+    </string-array>
 </resources>

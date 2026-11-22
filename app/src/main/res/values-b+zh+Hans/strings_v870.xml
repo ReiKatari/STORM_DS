@@ -297,9 +297,9 @@
     <string name="v870_input_gyro_dpad">十字键倾斜转向（赛车）</string>
     <string name="v870_input_gyro_paddle">Slot-2 模拟传感器</string>
     <string name="v870_translator_engine_google">Google 翻译（在线，快速）</string>
-    <string name="v870_translator_engine_mlkit">Google ML Kit（100% 离线神经网络）</string>
+    <string name="v870_translator_engine_mlkit" formatted="false">Google ML Kit（100% 离线神经网络）</string>
     <string name="v870_translator_engine_deepl">DeepL 神经网络 API（需密钥）</string>
-    <string name="v870_translator_tts_speed_percent">语音语速 (%)</string>
+    <string name="v870_translator_tts_speed_percent" formatted="false">语音语速 (%)</string>
     <plurals name="v870_stats_session_count">
         <item quantity="other">%1$d 次会话</item>
     </plurals>

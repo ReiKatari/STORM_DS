@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="phantom_busy">Feche o jogo em execução antes de abrir ou salvar uma sessão de clone.</string>
+    <string name="phantom_conflict">O salvamento foi alterado fora desta sessão. Ambas as cópias foram preservadas.</string>
+    <string name="phantom_discard">Descartar sessão</string>
+    <string name="phantom_discarded">Sessão descartada</string>
+    <string name="phantom_ds_only">Escolha um cartucho de DS no modo DS com o cartão DLDI e o cartucho de GBA desconectados.</string>
+    <string name="phantom_keep">Manter jogo principal</string>
+    <string name="phantom_kept">Salvamento principal verificado</string>
+    <string name="phantom_link_error">Não foi possível conectar os dois jogadores (código %1$d).</string>
+    <string name="phantom_playing_clone">Jogando no clone</string>
+    <string name="phantom_playing_main">Jogando no principal</string>
+    <string name="phantom_result_body">Seu salvamento original ainda não foi alterado. Escolha Manter jogo principal para sobrescrevê-lo com o salvamento feito no jogo pelo jogador principal. O salvamento do clone é sempre descartado.</string>
+    <string name="phantom_result_title">Deseja manter o salvamento?</string>
+    <string name="phantom_save_failed">Não foi possível verificar o salvamento gravado. O salvamento anterior e o resultado estão disponíveis para recuperação.</string>
+    <string name="phantom_title">Jogar com um clone temporário</string>
+    <string name="phantom_to_peer">Principal → Clone</string>
+    <string name="phantom_to_primary">Clone → Principal</string>
+    <string name="phantom_unavailable">Um jogador se desconectou antes do fim da sessão.</string>
+</resources>

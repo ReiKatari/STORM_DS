@@ -65,6 +65,8 @@
         <item>Rumble Pak</item>
         <item>Expansão de memória</item>
         <item>Entrada analógica</item>
+        <item>Motion Pak (Homebrew)</item>
+        <item>Motion Pak (Comercial)</item>
     </string-array>
     <string-array name="video_renderer_options" tools:ignore="InconsistentArrays">
         <item>Software</item>

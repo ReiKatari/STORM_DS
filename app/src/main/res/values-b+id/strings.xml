@@ -483,6 +483,8 @@
         <item>Pak Getaran</item>
         <item>Ekspansi memori</item>
         <item>Masukan analog</item>
+        <item>Motion Pak (Homebrew)</item>
+        <item>Motion Pak (Ritel)</item>
     </string-array>
     <string-array name="console_type_options">
         <item>@string/console_ds</item>
@@ -1190,15 +1192,15 @@ Impor ke STORM DS?</string>
     <string name="shader_compatibility_report_no_rom_folder">Belum ada folder ROM yang dikonfigurasi untuk menyimpan.</string>
     <string name="shader_compatibility_report_clear">Bersihkan</string>
     <string name="about_app_title">Tentang dan kredit</string>
-    <string name="about_app_description">Fork berperforma tinggi dari WatermelonDS (ditenagai inti melonDS) untuk Android, dilengkapi Vulkan 3D, shader RetroArch, dan RetroAchievements.</string>
-    <string name="about_app_summary">STORM DS, melonDS, WatermelonDS, pembuat dan lisensi sumber terbuka</string>
-    <string name="about_fork_info_title">Project Base: WatermelonDS Fork</string>
-    <string name="about_fork_info_summary">STORM DS adalah fork lanjutan dari WatermelonDS (dikembangkan oleh SapphireRhodonite dan kontributor), yang merupakan port Android dari inti melonDS (StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura dan tim). Mencakup perbaikan boot langsung Slot-1 DSiWare, perlindungan integritas NAND/Firmware, mode offline dan sinkronisasi RetroAchievements, tampilan layar ganda eksternal di TV/monitor melalui USB-C/HDMI, pemindai ROM cepat, pengaturan posisi HUD, serta tema kustom.</string>
+    <string name="about_app_description">Fork berperforma tinggi dari STORM DS (ditenagai inti melonDS) untuk Android, dilengkapi Vulkan 3D, shader RetroArch, dan RetroAchievements.</string>
+    <string name="about_app_summary">STORM DS, melonDS, STORM DS, pembuat dan lisensi sumber terbuka</string>
+    <string name="about_fork_info_title">Project Base: STORM DS Fork</string>
+    <string name="about_fork_info_summary">STORM DS adalah fork lanjutan dari STORM DS (dikembangkan oleh SapphireRhodonite dan kontributor), yang merupakan port Android dari inti melonDS (StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura dan tim). Mencakup perbaikan boot langsung Slot-1 DSiWare, perlindungan integritas NAND/Firmware, mode offline dan sinkronisasi RetroAchievements, tampilan layar ganda eksternal di TV/monitor melalui USB-C/HDMI, pemindai ROM cepat, pengaturan posisi HUD, serta tema kustom.</string>
     <string name="about_version_title">Versi</string>
     <string name="about_credits_title">Kredit dan ucapan terima kasih</string>
     <string name="about_credits_jpeacekeeper_title">JPeacekeeper (4PDA)</string>
     <string name="about_credits_jpeacekeeper_summary">Kontribusi pengujian yang sangat berharga, laporan bug DSi yang mendetail, standardisasi frame rate, dan peningkatan proyek berkelanjutan</string>
-    <string name="about_credits_watermelonds_title">WatermelonDS (Android Port)</string>
+    <string name="about_credits_watermelonds_title">STORM DS (Android Port)</string>
     <string name="about_credits_watermelonds_summary">SapphireRhodonite, rafaelvcaetano dan kontributor - port Android, jalur cepat rendering Vulkan, integrasi librashader, UI modern dan kontrol sentuh</string>
     <string name="about_credits_melonds_title">melonDS (Original Core)</string>
     <string name="about_credits_melonds_summary">StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura dan tim melonDS - emulator inti Nintendo DS / DSi asli berakurasi tinggi</string>
@@ -1596,4 +1598,80 @@ Impor ke STORM DS?</string>
     <string name="cheats_import_finished">Basis data cheat berhasil diimpor</string>
     <string name="cheats_import_failed">Gagal mengimpor basis data cheat</string>
     <string name="rom_search_dir_saf_fallback_hint">Tidak dapat mengakses direktori, silakan pilih lagi</string>
+
+    <string name="achievements_failed_load_tip_response_too_large">Pencapaian tidak dapat dimuat: respons server untuk game ini lebih besar dari batas aplikasi (16 MiB).</string>
+    <string name="button_mode">Mode tombol</string>
+    <string name="button_mode_normal">Normal (tahan)</string>
+    <string name="button_mode_toggle">Saklar (ketuk untuk tahan atau lepas)</string>
+    <string name="button_mode_turbo">Turbo (tahan untuk 10 tekan/dtk)</string>
+    <string name="button_mode_value">Mode: %1$s</string>
+    <string name="cycle_layouts">Tata letak untuk pergantian</string>
+    <string name="cycle_layouts_summary">Pilih tata letak yang digunakan oleh pintasan Ganti tata letak, sesuai urutan pustaka. Tanpa pilihan, pergantian dinonaktifkan.</string>
+    <string name="device_microphone_gain">Penguatan mikrofon perangkat</string>
+    <string name="device_microphone_gain_summary">1x mempertahankan level asli. Tingkatkan untuk mikrofon yang pelan.</string>
+    <string name="dsi_profile_initial">Pengaturan DSi saat ini</string>
+    <string name="emulator_stop_wireless_unsupported">Mode nirkabel ini tidak didukung di ruang multipemain ini.</string>
+    <string name="frameskip_manual_value">Bingkai untuk dilewati</string>
+    <string name="frameskip_mode">Lewati bingkai</string>
+    <string name="frameskip_mode_disabled_by_drs">DRS sedang aktif; untuk menggunakan Lewati bingkai, nonaktifkan resolusi internal dinamis di pengaturan Video.</string>
+    <string name="frameskip_mode_summary">%s. Hanya berlaku untuk perender Vulkan. Pada game yang mengganti 3D antar-layar, irama sebenarnya lebih rendah.</string>
+    <string name="freedreno_default">Bawaan driver</string>
+    <string name="freedreno_invalid">Gunakan maksimal 2048 karakter ASCII tanpa baris baru.</string>
+    <string name="freedreno_restart">Mulai ulang STORM DS untuk menyimpan dan menerapkan perubahan ini.</string>
+    <string name="freedreno_restart_button">Mulai ulang</string>
+    <string name="freedreno_save_failed">Tidak dapat menyimpan pengaturan. Ketuk Mulai ulang untuk mencoba lagi.</string>
+    <string name="freedreno_settings">Pengaturan Freedreno</string>
+    <string name="freedreno_summary">Opsi lanjutan Turnip/Freedreno. Kosongkan untuk bawaan driver. Perubahan memerlukan mulai ulang aplikasi. Opsi yang tidak didukung dapat diabaikan oleh driver Anda.</string>
+    <string name="hint_search_cheats">Cari kode cheat</string>
+    <string name="info_rendered_ir">IR %1$dx / %2$dx</string>
+    <string name="input_combo">Kombinasi</string>
+    <string name="input_combo_conflict">Kombinasi ini sudah ditetapkan ke %1$s. Hapus penetapan tersebut terlebih dahulu, atau pilih pasangan lain.</string>
+    <string name="input_cycle_layout">Ganti tata letak</string>
+    <string name="input_exit_game">Keluar dari game</string>
+    <string name="input_group_system_special">Sistem dan khusus</string>
+    <string name="input_setup_auto_map_short">Petakan otomatis</string>
+    <string name="input_setup_clear_all_short">Hapus semua</string>
+    <string name="input_setup_mapped_count">%1$d / %2$d dipetakan</string>
+    <string name="input_setup_waiting_hint">Tekan tombol gamepad, tombol keyboard, sumbu stik, atau tahan 2 tombol untuk kombinasi</string>
+    <string name="input_slot2_analog">Stik analog Slot-2</string>
+    <string name="no_cheats_found_from_search">Tidak ada kode cheat yang cocok</string>
+    <string name="rendered_ir_position">Tampilkan IR yang dirender</string>
+    <string name="rom_ndz_unsupported_base_patch">Patch .ndz terhadap ROM dasar (.delta.ndz). Belum didukung.</string>
+    <string name="rom_ndz_unsupported_corrupt">Berkas .ndz rusak atau terpotong.</string>
+    <string name="rom_ndz_unsupported_legacy">Format .ndz lama (LZ4 atau datar). Kemas ulang dengan ndz-studio (zstd).</string>
+    <string name="rom_ndz_unsupported_pair">Wadah .ndz dengan beberapa ROM. Belum didukung.</string>
+    <string name="rom_ndz_unsupported_trained_dict">.ndz dengan kamus terlatih (varian usang). Kemas ulang dengan ndz-studio.</string>
+    <string name="v882_comp_desc_button_single">Tombol aksi tunggal (A, B, X, atau Y) untuk penempatan bebas yang fleksibel serta mode Saklar atau Turbo</string>
+    <string name="v882_comp_desc_slot2_analog">Stik analog virtual GBA Slot-2 untuk homebrew yang kompatibel dan patch gerak analog</string>
+    <string name="video_dslite_color">Warna DS Lite</string>
+    <string name="video_dslite_download">Prasetel ini menggunakan pustaka shader resmi. Unduh atau perbarui sekarang?</string>
+    <string name="video_dslite_lcd">Warna DS Lite + kisi LCD</string>
+    <string name="video_dslite_motionblur">Warna DS Lite + kisi LCD + buram gerak</string>
+    <string name="video_dslite_preset_summary">Warna DS Lite dengan opsi kisi LCD dan buram gerak</string>
+    <string name="video_dslite_preset_title">Prasetel DS Lite</string>
+    <string name="video_dslite_unavailable">Prasetel ini tidak ada di pustaka shader yang terpasang. Coba perbarui pustaka.</string>
+    <string name="video_low_latency">Latensi rendah</string>
+    <string name="video_low_latency_summary">Memprioritaskan respons kontrol. Dapat mengurangi performa dan kehalusan. Berlaku saat memulai game.</string>
+    <string name="video_vulkan_category">Peretasan Vulkan</string>
+    <string name="video_vulkan_drs">Resolusi internal dinamis</string>
+    <string name="video_vulkan_drs_summary">Game menargetkan resolusi internal yang dipilih, tetapi saat beban berat merender pada resolusi internal lebih rendah agar tetap stabil di 60 fps. Saat aktif, Lewati bingkai mati.</string>
+    <string name="vulkan_driver_mali_api_or_kernel_desc">%1$s terdeteksi, tetapi malisx2 PanVK memerlukan Android 10 (API 29)+, proses 64-bit, dan node kernel /dev/mali0. Menggunakan driver GPU sistem; impor ZIP manual tetap terbuka.</string>
+    <string name="vulkan_driver_mali_midgard_v6_desc">%1$s terdeteksi (Midgard / Bifrost v6). malisx2 PanVK memerlukan Mali Bifrost v7 (G31/G51/G52/G76) hingga 5th Gen v12 (G620/G720). Menggunakan driver GPU sistem; impor ZIP manual tetap terbuka.</string>
+    <string name="vulkan_driver_mali_panvk_advice">Arm Mali (%1$s): Gunakan driver GPU sistem untuk kompatibilitas maksimal, atau uji build malisx2 PanVK pada GPU Mali Bifrost v7 hingga 5th Gen v12 yang didukung.</string>
+    <string name="vulkan_driver_mali_supported_desc">%1$s terdeteksi dengan driver kernel /dev/mali0 64-bit pada Android %2$d+. Build malisx2 PanVK tersedia di Repositori Cloud, atau Anda dapat mengimpor ZIP yang kompatibel secara manual.</string>
+    <string name="vulkan_driver_mali_supported_title">Arm Mali PanVK didukung (%1$s)</string>
+    <string name="vulkan_driver_mali_v13_plus_desc">%1$s terdeteksi (v13+ / Immortalis-G925). malisx2 PanVK saat ini mendukung hingga Mali 5th Gen v12 (G720). Menggunakan driver GPU sistem; impor ZIP manual tetap terbuka.</string>
+    <string name="waiting_for_combo">Tahan dua tombol berbeda pada kontroler yang sama. Tombol pertama dapat bereaksi sebelum kombinasi selesai; gunakan tombol yang belum ditetapkan sebagai pengubah untuk mencegahnya.</string>
+    <string-array name="frameskip_manual_value_options">
+        <item>0 (tidak pernah lewati)</item>
+        <item>1 (gambar 1, lewati 1)</item>
+        <item>2 (gambar 1, lewati 2)</item>
+        <item>3 (gambar 1, lewati 3)</item>
+        <item>4 (gambar 1, lewati 4)</item>
+    </string-array>
+    <string-array name="frameskip_mode_options">
+        <item>Mati</item>
+        <item>Manual</item>
+        <item>Otomatis</item>
+    </string-array>
 </resources>
