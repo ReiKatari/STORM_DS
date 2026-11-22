@@ -199,7 +199,7 @@ class RomListFragment : Fragment() {
                         onRefresh = {
                             romListViewModel.refreshRoms()
                             if (!isShortcutPickerMode) {
-                                (activity as? RomListActivity)?.checkForUpdatesManually()
+                                (activity as? RomListActivity)?.checkForUpdatesSilently()
                             }
                         },
                         onSearchQueryChanged = { query ->

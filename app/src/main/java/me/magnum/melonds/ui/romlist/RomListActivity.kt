@@ -197,7 +197,7 @@ class RomListActivity : AppCompatActivity() {
                         is ManualUpdateResult.UpToDate -> {
                             val curVer = runCatching {
                                 packageManager.getPackageInfo(packageName, 0).versionName
-                            }.getOrNull() ?: "8.6.0"
+                            }.getOrNull() ?: "8.8.1"
                             AlertDialog.Builder(this@RomListActivity)
                                 .setTitle(R.string.v800_update_up_to_date_title)
                                 .setMessage(getString(R.string.v800_update_up_to_date_msg, curVer))
@@ -356,7 +356,7 @@ class RomListActivity : AppCompatActivity() {
             }
             R.id.action_rom_list_refresh -> {
                 viewModel.refreshRoms()
-                updatesViewModel.checkForUpdatesManually()
+                updatesViewModel.checkForUpdatesSilently()
                 return true
             }
             R.id.action_player_stats -> {
@@ -397,6 +397,10 @@ class RomListActivity : AppCompatActivity() {
 
     fun checkForUpdatesManually() {
         updatesViewModel.checkForUpdatesManually()
+    }
+
+    fun checkForUpdatesSilently() {
+        updatesViewModel.checkForUpdatesSilently()
     }
 
     internal fun bootFirmware(consoleType: ConsoleType) {

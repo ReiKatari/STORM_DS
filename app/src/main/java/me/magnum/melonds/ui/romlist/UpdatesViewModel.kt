@@ -65,6 +65,17 @@ class UpdatesViewModel @Inject constructor(
         }
     }
 
+    fun checkForUpdatesSilently() {
+        viewModelScope.launch {
+            val result = updatesRepository.checkNewUpdate(ignorePreferences = true)
+            result.onSuccess { update ->
+                if (update != null) {
+                    _appUpdate.send(update)
+                }
+            }
+        }
+    }
+
     fun downloadUpdate(update: AppUpdate) {
         viewModelScope.launch {
             updateInstallManager.downloadAndInstallUpdate(update).collectLatest {
