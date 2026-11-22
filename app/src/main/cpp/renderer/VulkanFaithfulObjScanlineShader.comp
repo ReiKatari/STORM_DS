@@ -1,0 +1,523 @@
+#version 450
+
+layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
+
+layout(std430, binding = 1) readonly buffer RegsBuffer {
+    uint regs[];
+};
+
+layout(std430, binding = 2) readonly buffer AtlasBuffer {
+    uint atlas[];
+};
+
+layout(std430, binding = 5) buffer ObjLineaBuf {
+    uint objLinea[];
+};
+
+layout(push_constant) uniform Empuje {
+    uint modoSalida;
+    uint escala;
+    uint mezcla;
+} pc;
+
+const uint kAtlasAOBJ        = 0x0A0000u;
+const uint kAtlasBOBJ        = 0x0E0000u;
+const uint kAtlasAOBJExtPal  = 0x110000u;
+const uint kAtlasBOBJExtPal  = 0x112000u;
+const uint kAtlasPalette     = 0x114000u;
+const uint kAtlasOAM         = 0x114800u;
+const uint kAtlasVivo        = 0x26D000u;
+
+uint gRegBase = 0u;
+uint gAtlasBase = 0u;
+
+uint leerByte(uint off)
+{
+    off += gAtlasBase;
+    return (atlas[off >> 2u] >> ((off & 3u) * 8u)) & 0xFFu;
+}
+
+uint leerU16(uint off)
+{
+    return leerByte(off) | (leerByte(off + 1u) << 8u);
+}
+
+uint reg(uint eng, uint linea, uint word)
+{
+    return regs[gRegBase + (eng * 192u + linea) * 32u + word];
+}
+
+ivec3 c555a666(uint color)
+{
+    return ivec3((color & 0x1Fu) << 1u,
+                 (color & 0x3E0u) >> 4u,
+                 (color & 0x7C00u) >> 9u);
+}
+
+shared uvec4 objShared[128];
+
+shared int objMatrixCoefficient[128];
+
+shared uint objCandidateList[4u * 128u];
+shared uint objCandidateCount[4];
+
+shared uint objPrioCount[16];
+shared uint objPrioCursor[16];
+
+void objDimensions(uint attr0, uint attr1,
+                   out uint width, out uint height)
+{
+    uint shape = (attr0 >> 14u) & 0x3u;
+    uint size = (attr1 >> 14u) & 0x3u;
+    width = 8u;
+    height = 8u;
+    if (shape == 0u)
+    {
+        width = 8u << size;
+        height = width;
+    }
+    else if (shape == 1u)
+    {
+        width = size == 0u ? 16u : size == 1u ? 32u
+            : size == 2u ? 32u : 64u;
+        height = size == 0u ? 8u : size == 1u ? 8u
+            : size == 2u ? 16u : 32u;
+    }
+    else
+    {
+
+        height = size == 0u ? 16u : size == 1u ? 32u
+            : size == 2u ? 32u : 64u;
+        width = size == 0u ? 8u : size == 1u ? 8u
+            : size == 2u ? 16u : 32u;
+    }
+}
+
+uint objPackGeometry(uint attr0, uint attr1, uint linea)
+{
+    bool affine = (attr0 & 0x100u) != 0u;
+    bool enabled = affine || (attr0 & 0x200u) == 0u;
+    uint width;
+    uint height;
+    objDimensions(attr0, attr1, width, height);
+    uint boundWidth = width;
+    uint boundHeight = height;
+    if (affine && (attr0 & 0x200u) != 0u)
+    {
+        boundWidth <<= 1u;
+        boundHeight <<= 1u;
+    }
+    uint dy = (linea - (attr0 & 0xFFu)) & 0xFFu;
+    bool valid = enabled && dy < boundHeight;
+    return dy | (width << 8u) | (height << 15u)
+        | (boundWidth << 22u) | (valid ? (1u << 30u) : 0u);
+}
+
+uint objGeometryDy(uint geometry) { return geometry & 0xFFu; }
+uint objGeometryWidth(uint geometry) { return (geometry >> 8u) & 0x7Fu; }
+uint objGeometryHeight(uint geometry) { return (geometry >> 15u) & 0x7Fu; }
+uint objGeometryBoundWidth(uint geometry) { return (geometry >> 22u) & 0xFFu; }
+
+uint objCandidateAt(uint block, uint candidate)
+{
+    return objCandidateList[block * 128u + candidate];
+}
+
+uint evaluarObjPixel(uint eng, uint linea, uint x, uint dispcnt)
+{
+    uint block = x >> 6u;
+    uint candidateCount = objCandidateCount[block];
+    bool objVentana = false;
+    if ((dispcnt & 0x8000u) != 0u && (dispcnt & 0x1000u) != 0u)
+    {
+        uint atlasOW = eng == 0u ? kAtlasAOBJ : kAtlasBOBJ;
+        uint maskOW = eng == 0u ? 0x3FFFFu : 0x1FFFFu;
+        bool mapa1DW = (dispcnt & 0x10u) != 0u;
+        uint fronteraW = 5u + ((dispcnt >> 20u) & 0x3u);
+        for (uint candidato = 0u;
+             candidato < candidateCount && !objVentana;
+             candidato++)
+        {
+            uint o = objCandidateAt(block, candidato);
+            uvec4 sharedObj = objShared[o];
+            uint a01 = sharedObj.x;
+            if (((a01 >> 10u) & 0x3u) != 2u)
+                continue;
+            uint a1 = sharedObj.y;
+            uint a2 = sharedObj.z;
+            uint geometry = sharedObj.w;
+            bool afinW = (a01 & 0x100u) != 0u;
+            if (!afinW && (a01 & 0x200u) != 0u)
+                continue;
+            uint wpx = objGeometryWidth(geometry);
+            uint hpx = objGeometryHeight(geometry);
+            uint bw = objGeometryBoundWidth(geometry);
+            uint dy = objGeometryDy(geometry);
+            int ox = int(a1 & 0x1FFu);
+            if (ox >= 256)
+                ox -= 512;
+            int dxi = int(x) - ox;
+            if (dxi < 0 || dxi >= int(bw))
+                continue;
+            uint dx = uint(dxi);
+            if (afinW)
+            {
+                uint group = (a1 >> 9u) & 0x1Fu;
+                uint matrixBase = group * 4u;
+                int pA = objMatrixCoefficient[matrixBase + 0u];
+                int pB = objMatrixCoefficient[matrixBase + 1u];
+                int pC = objMatrixCoefficient[matrixBase + 2u];
+                int pD = objMatrixCoefficient[matrixBase + 3u];
+                int cx = int(bw >> 1u);
+                uint bh = hpx;
+                if ((a01 & 0x200u) != 0u)
+                    bh <<= 1u;
+                int cy = int(bh >> 1u);
+                int rX = (dxi - cx) * pA + (int(dy) - cy) * pB
+                    + int(wpx << 7u);
+                int rY = (dxi - cx) * pC + (int(dy) - cy) * pD
+                    + int(hpx << 7u);
+                if (uint(rX) >= (wpx << 8u)
+                    || uint(rY) >= (hpx << 8u))
+                    continue;
+                dx = uint(rX) >> 8u;
+                dy = uint(rY) >> 8u;
+            }
+            else
+            {
+                if ((a1 & 0x1000u) != 0u)
+                    dx = wpx - 1u - dx;
+                if ((a1 & 0x2000u) != 0u)
+                    dy = hpx - 1u - dy;
+            }
+            uint tileW = a2 & 0x3FFu;
+            bool bpp8W = (a01 & 0x2000u) != 0u;
+            uint dirW;
+            uint idxW;
+            if (bpp8W)
+            {
+                if (mapa1DW)
+                    dirW = (tileW << fronteraW)
+                        + (dy >> 3u) * (wpx << 3u)
+                        + ((dy & 7u) << 3u) + (dx >> 3u) * 64u
+                        + (dx & 7u);
+                else
+                    dirW = ((tileW & 0x3FEu) << 5u)
+                        + (dy >> 3u) * 1024u + ((dy & 7u) << 3u)
+                        + (dx >> 3u) * 64u + (dx & 7u);
+                idxW = leerByte(atlasOW + (dirW & maskOW));
+            }
+            else
+            {
+                if (mapa1DW)
+                    dirW = (tileW << fronteraW)
+                        + (dy >> 3u) * (wpx << 2u)
+                        + ((dy & 7u) << 2u) + (dx >> 3u) * 32u
+                        + ((dx & 7u) >> 1u);
+                else
+                    dirW = (tileW << 5u) + (dy >> 3u) * 1024u
+                        + ((dy & 7u) << 2u) + (dx >> 3u) * 32u
+                        + ((dx & 7u) >> 1u);
+                uint packedIndex = leerByte(atlasOW + (dirW & maskOW));
+                idxW = (dx & 1u) != 0u ? packedIndex >> 4u
+                                       : packedIndex & 0xFu;
+            }
+            if (idxW != 0u)
+                objVentana = true;
+        }
+    }
+
+    bool objHay = false;
+    uint objPrio = 3u;
+    ivec3 objColor = ivec3(0);
+    bool objSemi = false;
+    bool objBitmap = false;
+    uint objAlpha = 0u;
+    bool objCaptura = false;
+    if ((dispcnt & 0x1000u) != 0u)
+    {
+        uint atlasOBJ = eng == 0u ? kAtlasAOBJ : kAtlasBOBJ;
+        uint maskOBJ = eng == 0u ? 0x3FFFFu : 0x1FFFFu;
+        uint palOBJ = kAtlasPalette + eng * 0x400u + 0x200u;
+        uint extPalOBJ = eng == 0u ? kAtlasAOBJExtPal : kAtlasBOBJExtPal;
+        bool mapa1D = (dispcnt & 0x10u) != 0u;
+        uint frontera = 5u + ((dispcnt >> 20u) & 0x3u);
+        for (uint candidato = 0u;
+             candidato < candidateCount && !objHay;
+             candidato++)
+        {
+            uint o = objCandidateAt(block, candidato);
+            uvec4 sharedObj = objShared[o];
+            uint a01 = sharedObj.x;
+            uint a1 = sharedObj.y;
+            uint a2 = sharedObj.z;
+            uint geometry = sharedObj.w;
+            uint modoObj = (a01 >> 10u) & 0x3u;
+            bool afin = (a01 & 0x100u) != 0u;
+            if (!afin && (a01 & 0x200u) != 0u)
+                continue;
+            if (modoObj == 2u)
+                continue;
+            uint wpx = objGeometryWidth(geometry);
+            uint hpx = objGeometryHeight(geometry);
+            uint bw = objGeometryBoundWidth(geometry);
+            uint dy = objGeometryDy(geometry);
+            int ox = int(a1 & 0x1FFu);
+            if (ox >= 256)
+                ox -= 512;
+            int dxi = int(x) - ox;
+            if (dxi < 0 || dxi >= int(bw))
+                continue;
+            uint dx = uint(dxi);
+            if (afin)
+            {
+                uint group = (a1 >> 9u) & 0x1Fu;
+                uint matrixBase = group * 4u;
+                int pA = objMatrixCoefficient[matrixBase + 0u];
+                int pB = objMatrixCoefficient[matrixBase + 1u];
+                int pC = objMatrixCoefficient[matrixBase + 2u];
+                int pD = objMatrixCoefficient[matrixBase + 3u];
+                int cx = int(bw >> 1u);
+                uint bh = hpx;
+                if ((a01 & 0x200u) != 0u)
+                    bh <<= 1u;
+                int cy = int(bh >> 1u);
+                int rX = (dxi - cx) * pA + (int(dy) - cy) * pB
+                    + int(wpx << 7u);
+                int rY = (dxi - cx) * pC + (int(dy) - cy) * pD
+                    + int(hpx << 7u);
+                if (uint(rX) >= (wpx << 8u)
+                    || uint(rY) >= (hpx << 8u))
+                    continue;
+                dx = uint(rX) >> 8u;
+                dy = uint(rY) >> 8u;
+            }
+            else
+            {
+                if ((a1 & 0x1000u) != 0u)
+                    dx = wpx - 1u - dx;
+                if ((a1 & 0x2000u) != 0u)
+                    dy = hpx - 1u - dy;
+            }
+            uint tile = a2 & 0x3FFu;
+            uint priority = (a2 >> 10u) & 0x3u;
+            bool bpp8 = (a01 & 0x2000u) != 0u;
+            if (modoObj == 3u)
+            {
+                uint alpha = (a2 >> 12u) & 0xFu;
+                if (alpha == 0u)
+                    continue;
+                uint dir3;
+                uint stride;
+                if ((dispcnt & 0x40u) != 0u)
+                {
+                    if ((dispcnt & 0x20u) != 0u)
+                        continue;
+                    dir3 = tile << (7u + ((dispcnt >> 22u) & 0x1u));
+                    stride = wpx * 2u;
+                }
+                else if ((dispcnt & 0x20u) != 0u)
+                {
+                    dir3 = ((tile & 0x1Fu) << 4u)
+                        + ((tile & 0x3E0u) << 7u);
+                    stride = 512u;
+                }
+                else
+                {
+                    dir3 = ((tile & 0x0Fu) << 4u)
+                        + ((tile & 0x3F0u) << 7u);
+                    stride = 256u;
+                }
+                uint dirObj = (dir3 + dy * stride + dx * 2u) & maskOBJ;
+                uint color = leerU16(atlasOBJ + dirObj);
+                if ((color & 0x8000u) == 0u)
+                    continue;
+                objColor = c555a666(color);
+                objPrio = priority;
+                objHay = true;
+                objBitmap = true;
+                objSemi = false;
+                objAlpha = alpha + 1u;
+                if (eng == 1u)
+                {
+                    uint captureBegin = regs[2u * 192u * 32u + 7u];
+                    if (captureBegin != 0xFFFFFFFFu
+                        && dirObj == (((captureBegin & 0x3FFFFFFFu)
+                            + (linea * 256u + x) * 2u) & maskOBJ))
+                    {
+                        objCaptura = true;
+                    }
+                }
+                continue;
+            }
+            uint address;
+            if (bpp8)
+            {
+                if (mapa1D)
+                    address = (tile << frontera)
+                        + (dy >> 3u) * (wpx << 3u)
+                        + ((dy & 7u) << 3u) + (dx >> 3u) * 64u
+                        + (dx & 7u);
+                else
+                    address = ((tile & 0x3FEu) << 5u)
+                        + (dy >> 3u) * 1024u + ((dy & 7u) << 3u)
+                        + (dx >> 3u) * 64u + (dx & 7u);
+                uint index = leerByte(atlasOBJ + (address & maskOBJ));
+                if (index == 0u)
+                    continue;
+                uint paletteOffset = (dispcnt & 0x80000000u) != 0u
+                    ? extPalOBJ + ((a2 >> 12u) * 0x200u) + index * 2u
+                    : palOBJ + index * 2u;
+                objColor = c555a666(leerU16(paletteOffset));
+            }
+            else
+            {
+                if (mapa1D)
+                    address = (tile << frontera)
+                        + (dy >> 3u) * (wpx << 2u)
+                        + ((dy & 7u) << 2u) + (dx >> 3u) * 32u
+                        + ((dx & 7u) >> 1u);
+                else
+                    address = (tile << 5u) + (dy >> 3u) * 1024u
+                        + ((dy & 7u) << 2u) + (dx >> 3u) * 32u
+                        + ((dx & 7u) >> 1u);
+                uint packedIndex = leerByte(atlasOBJ + (address & maskOBJ));
+                uint index = (dx & 1u) != 0u ? packedIndex >> 4u
+                                             : packedIndex & 0xFu;
+                if (index == 0u)
+                    continue;
+                objColor = c555a666(leerU16(
+                    palOBJ + ((a2 >> 12u) * 16u + index) * 2u));
+            }
+            objPrio = priority;
+            objHay = true;
+            objSemi = modoObj == 1u;
+            objBitmap = false;
+        }
+    }
+
+    uint package = uint(objColor.r & 0x3F)
+        | (uint(objColor.g & 0x3F) << 6u)
+        | (uint(objColor.b & 0x3F) << 12u)
+        | (objPrio << 18u);
+    if (objCaptura) package |= 1u << 29u;
+    if (objHay) package |= 1u << 20u;
+    if (objSemi) package |= 1u << 21u;
+    if (objBitmap) package |= 1u << 22u;
+    package |= (objAlpha & 0x1Fu) << 23u;
+    if (objVentana) package |= 1u << 28u;
+    return package;
+}
+
+void main()
+{
+    uint filaSalida = gl_WorkGroupID.y;
+    if (gl_WorkGroupID.x != 0u || filaSalida >= 384u)
+        return;
+
+    uint eng = filaSalida / 192u;
+    uint linea = filaSalida % 192u;
+    if (pc.mezcla != 0u)
+    {
+        gRegBase = 2u * 192u * 32u + 16u;
+        gAtlasBase = kAtlasVivo;
+    }
+
+    uint dispcnt = reg(eng, linea, 0u);
+    uint lane = gl_LocalInvocationID.x;
+
+    if ((dispcnt & 0x1000u) == 0u)
+    {
+        objLinea[filaSalida * 256u + lane] = 3u << 18u;
+        objLinea[filaSalida * 256u + lane + 128u] = 3u << 18u;
+        return;
+    }
+
+    uint oamByteBase = gAtlasBase + kAtlasOAM + eng * 0x400u;
+    uint wordBase = (oamByteBase + lane * 8u) >> 2u;
+    uint raw01 = atlas[wordBase + 0u];
+    uint raw23 = atlas[wordBase + 1u];
+    uint attr0 = raw01 & 0xFFFFu;
+    uint attr1 = raw01 >> 16u;
+    uint attr2 = raw23 & 0xFFFFu;
+    uint attr3 = raw23 >> 16u;
+    objShared[lane] = uvec4(
+        attr0, attr1, attr2, objPackGeometry(attr0, attr1, linea));
+    objMatrixCoefficient[lane] = int(attr3 << 16u) >> 16;
+    barrier();
+
+    if (lane < 16u)
+        objPrioCount[lane] = 0u;
+    barrier();
+    uvec4 mine = objShared[lane];
+    bool mineVisible = (mine.w & (1u << 30u)) != 0u;
+    uint minePrio = (mine.z >> 10u) & 0x3u;
+    int mineOx = int(mine.y & 0x1FFu);
+    if (mineOx >= 256)
+        mineOx -= 512;
+    int mineEnd = mineOx + int(objGeometryBoundWidth(mine.w));
+    uint mineBlocks = 0u;
+    uvec4 mineRank = uvec4(0u);
+    if (mineVisible)
+    {
+        for (uint block = 0u; block < 4u; block++)
+        {
+            int blockBegin = int(block * 64u);
+            if (mineOx < blockBegin + 64 && mineEnd > blockBegin)
+            {
+                mineBlocks |= 1u << block;
+                atomicAdd(objPrioCount[block * 4u + minePrio], 1u);
+            }
+        }
+        for (uint o = 0u; o < lane; o++)
+        {
+            uvec4 other = objShared[o];
+            if ((other.w & (1u << 30u)) == 0u
+                || ((other.z >> 10u) & 0x3u) != minePrio)
+                continue;
+            int ox = int(other.y & 0x1FFu);
+            if (ox >= 256)
+                ox -= 512;
+            int boundEnd = ox + int(objGeometryBoundWidth(other.w));
+            for (uint block = 0u; block < 4u; block++)
+            {
+                int blockBegin = int(block * 64u);
+                if ((mineBlocks & (1u << block)) != 0u
+                    && ox < blockBegin + 64 && boundEnd > blockBegin)
+                    mineRank[block]++;
+            }
+        }
+    }
+    barrier();
+    if (lane == 0u)
+    {
+        for (uint block = 0u; block < 4u; block++)
+        {
+            uint acc = 0u;
+            for (uint prio = 0u; prio < 4u; prio++)
+            {
+                objPrioCursor[block * 4u + prio] = acc;
+                acc += objPrioCount[block * 4u + prio];
+            }
+            objCandidateCount[block] = acc;
+        }
+    }
+    barrier();
+    if (mineVisible)
+    {
+        for (uint block = 0u; block < 4u; block++)
+        {
+            if ((mineBlocks & (1u << block)) != 0u)
+                objCandidateList[block * 128u
+                    + objPrioCursor[block * 4u + minePrio] + mineRank[block]] = lane;
+        }
+    }
+    barrier();
+
+    uint x0 = lane;
+    uint x1 = lane + 128u;
+    objLinea[filaSalida * 256u + x0] =
+        evaluarObjPixel(eng, linea, x0, dispcnt);
+    objLinea[filaSalida * 256u + x1] =
+        evaluarObjPixel(eng, linea, x1, dispcnt);
+}

@@ -6,6 +6,7 @@ import android.view.Surface
 import me.magnum.melonds.common.camera.DSiCameraSource
 import me.magnum.melonds.domain.model.Cheat
 import me.magnum.melonds.domain.model.EmulatorConfiguration
+import me.magnum.melonds.domain.model.VideoRenderer
 import me.magnum.melonds.domain.model.Input
 import me.magnum.melonds.domain.model.retroachievements.RASimpleAchievement
 import me.magnum.melonds.domain.model.retroachievements.RASimpleLeaderboard
@@ -49,9 +50,74 @@ object MelonEmulator {
         RUMBLE_PAK,
         MEMORY_EXPANSION,
         ANALOG_INPUT,
+        MOTION_PAK_HOMEBREW,
+        MOTION_PAK_RETAIL,
     }
 
-    external fun setupEmulator(
+    enum class VulkanPresentationResult(val nativeValue: Int) {
+        PRESENTED(0),
+        NO_SURFACE(1),
+        NO_PRODUCT(2),
+        GPU_NOT_READY(3),
+        WSI_NOT_READY(4),
+        GENERATION_CHANGED(5),
+        STOPPED(6),
+        RECOVERABLE_SURFACE_ERROR(7),
+        FATAL_ERROR(8);
+
+        companion object {
+            fun fromNative(nativeValue: Int): VulkanPresentationResult =
+                when (nativeValue) {
+                    0 -> PRESENTED
+                    1 -> NO_SURFACE
+                    2 -> NO_PRODUCT
+                    3 -> GPU_NOT_READY
+                    4 -> WSI_NOT_READY
+                    5 -> GENERATION_CHANGED
+                    6 -> STOPPED
+                    7 -> RECOVERABLE_SURFACE_ERROR
+                    8 -> FATAL_ERROR
+                    else -> FATAL_ERROR
+                }
+        }
+    }
+
+    enum class VulkanPresentationWaitResult {
+        PRODUCT_READY,
+        TIMED_OUT,
+        GENERATION_CHANGED,
+        STOPPED;
+
+        companion object {
+            fun fromNative(nativeValue: Int): VulkanPresentationWaitResult =
+                when (nativeValue) {
+                    0 -> PRODUCT_READY
+                    1 -> TIMED_OUT
+                    2 -> GENERATION_CHANGED
+                    3 -> STOPPED
+                    else -> STOPPED
+                }
+        }
+    }
+
+    @Volatile
+    var isLowLatencyEnabled: Boolean = false
+        private set
+
+    fun setupEmulator(
+        emulatorConfiguration: EmulatorConfiguration,
+        dsiCameraSource: DSiCameraSource?,
+        screenshotBuffer: ByteBuffer,
+    ) {
+        val configuration = emulatorConfiguration.copy(
+            lowLatencyEnabled = emulatorConfiguration.lowLatencyEnabled
+                && emulatorConfiguration.rendererConfiguration.renderer == VideoRenderer.VULKAN,
+        )
+        setupEmulatorInternal(configuration, dsiCameraSource, screenshotBuffer)
+        isLowLatencyEnabled = configuration.lowLatencyEnabled
+    }
+
+    private external fun setupEmulatorInternal(
         emulatorConfiguration: EmulatorConfiguration,
         dsiCameraSource: DSiCameraSource?,
         screenshotBuffer: ByteBuffer,
@@ -76,6 +142,8 @@ object MelonEmulator {
 
     external fun getRuntimeSubsetIds(): LongArray
 
+    external fun getRetroAchievementsSetupFailureReason(): Int
+
     external fun retryPendingRetroAchievementsSubmissions(
         expectedNativeSubmissionIds: LongArray,
     ): LongArray?
@@ -87,8 +155,6 @@ object MelonEmulator {
     ): Int
 
     external fun setRetroAchievementsSubmissionTransportSuspended(suspended: Boolean)
-
-    external fun setRetroAchievementsHardcoreEnabled(enabled: Boolean)
 
     fun loadRom(romUri: Uri, sramUri: Uri, gbaSlotType: GbaSlotType, gbaRomUri: Uri?, gbaSramUri: Uri?): LoadResult {
         val loadResult = loadRomInternal(romUri.toString(), sramUri.toString(), gbaSlotType.ordinal, gbaRomUri?.toString(), gbaSramUri?.toString())
@@ -110,13 +176,9 @@ object MelonEmulator {
 
     private external fun bootFirmwareInternal(): Int
 
-    @JvmStatic
-    external fun startBootDiagnosticCapture()
-
-    @JvmStatic
-    external fun stopAndGetBootDiagnostic(): String
-
 	external fun startEmulation(startPaused: Boolean)
+    external fun startAudioOutputPcmCapture(durationMs: Int): String?
+    external fun dumpAudioOutputPcmCapture(finalDirectory: String): String?
     external fun precompileVulkanPipelines(
         videoFilteringOrdinal: Int,
         retroShaderPresetPath: String?,
@@ -147,9 +209,47 @@ object MelonEmulator {
     external fun resizeVulkanSurface(surfaceId: Int, width: Int, height: Int)
     external fun configureVulkanSurface(surfaceId: Int, presentationConfig: VulkanPresentationConfig, backgroundBitmap: Bitmap?)
     external fun detachVulkanSurface(surfaceId: Int)
-    external fun presentVulkanFrame(deadlineNs: Long, budgetDeadlineNs: Long)
+    private external fun presentVulkanFrameNative(
+        deadlineNs: Long,
+        budgetDeadlineNs: Long,
+        expectedWaitEpoch: Long,
+    ): Int
+    private external fun captureVulkanPresentationWaitEpochNative(): Long
+    private external fun waitForVulkanPresentationProductNative(
+        expectedWaitEpoch: Long,
+        timeoutNs: Long,
+    ): Int
+    private external fun cancelVulkanPresentationWaitsNative()
+
+    fun presentVulkanFrame(
+        deadlineNs: Long,
+        budgetDeadlineNs: Long,
+        expectedWaitEpoch: Long,
+    ): VulkanPresentationResult = VulkanPresentationResult.fromNative(
+        presentVulkanFrameNative(
+            deadlineNs,
+            budgetDeadlineNs,
+            expectedWaitEpoch,
+        ),
+    )
+
+    fun captureVulkanPresentationWaitEpoch(): Long =
+        captureVulkanPresentationWaitEpochNative()
+
+    fun waitForVulkanPresentationProduct(
+        expectedWaitEpoch: Long,
+        timeoutNs: Long,
+    ): VulkanPresentationWaitResult = VulkanPresentationWaitResult.fromNative(
+        waitForVulkanPresentationProductNative(expectedWaitEpoch, timeoutNs),
+    )
+
+    fun cancelVulkanPresentationWaits() {
+        cancelVulkanPresentationWaitsNative()
+    }
 
 	external fun getFPS(): Float
+
+    external fun getVulkanFrameskipStats(): String
 
     external fun getCurrentRenderer(): Int
 
@@ -157,7 +257,11 @@ object MelonEmulator {
 
 	external fun resumeEmulation()
 
+    external fun requestRtcSync()
+
     external fun debugStepFrame(): Boolean
+
+    external fun debugStepFrames(frames: Int): Boolean
 
     external fun resetEmulation()
 
@@ -177,15 +281,17 @@ object MelonEmulator {
 
     external fun loadRewindState(rewindSaveState: RewindSaveState): Boolean
 
-    external fun setRewindActive(active: Boolean)
-
-    external fun flushPendingSaveStateWrites()
-
     external fun getRewindWindow(): RewindWindow
 
 	external fun onScreenTouch(x: Int, y: Int)
 
 	external fun onScreenRelease()
+
+    external fun armExactLiveGuide(anchorFrame: Long, x: Int, y: Int): String?
+
+    external fun getExactLiveGuideStatus(): String?
+
+    external fun abortExactLiveGuide(): String?
 
 	fun onInputDown(input: Input) {
         onKeyPress(input.keyCode)
@@ -199,20 +305,46 @@ object MelonEmulator {
 
     private external fun onKeyRelease(key: Int)
 
+    external fun updateMotionData(ax: Float, ay: Float, az: Float, rx: Float, ry: Float, rz: Float)
     external fun setSlot2AnalogInput(x: Float, y: Float)
 
-    external fun takeScreenshot(): Boolean
+    external fun takeScreenshot(): IntArray?
 
     external fun setFastForwardEnabled(enabled: Boolean)
-    external fun setMuteOnFastForwardEnabled(enabled: Boolean)
+
+    external fun isFastForwardEnabled(): Boolean
 
     external fun setFrameLimitSpeedMultiplier(multiplier: Float)
 
+    external fun setFrameskipMode(mode: Int, manualValue: Int)
+
+    external fun setVulkanDrsEnabled(enabled: Boolean)
+
+    external fun setMuteOnFastForward(enabled: Boolean)
+
+    external fun getVulkanRenderedInternalResolution(): Int
+
     external fun setMicrophoneEnabled(enabled: Boolean)
 
-    external fun getDetailedEmulationDiagnostic(): String
-
     external fun updateEmulatorConfiguration(emulatorConfiguration: EmulatorConfiguration)
+
+    external fun setRetroAchievementsHardcoreEnabled(enabled: Boolean)
+
+    @JvmStatic
+    external fun startBootDiagnosticCapture()
+
+    @JvmStatic
+    external fun stopAndGetBootDiagnostic(): String
+
+    external fun setRewindActive(active: Boolean)
+
+    external fun flushPendingSaveStateWrites()
+
+    external fun flushSramSaves()
+
+    external fun setMuteOnFastForwardEnabled(enabled: Boolean)
+
+    external fun getDetailedEmulationDiagnostic(): String
 
     external fun startLanHost(playerName: String, maxPlayers: Int): Boolean
 
@@ -294,4 +426,5 @@ object MelonEmulator {
 
     @JvmStatic
     external fun setVulkanPipelineCacheFile(filePath: String)
+
 }

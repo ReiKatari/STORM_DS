@@ -36,6 +36,12 @@
 #include "FreeBIOS.h"
 #include "Args.h"
 #include "version.h"
+#include "WMServiceTrace.h"
+#include "WMService.h"
+
+#ifdef __ANDROID__
+#include <sys/system_properties.h>
+#endif
 
 #include "DSi.h"
 #include "DSi_SPI_TSC.h"
@@ -129,10 +135,12 @@ NDS::NDS(NDSArgs&& args, int type, void* userdata) noexcept :
     MainRAM = JIT.Memory.GetMainRAM();
     SharedWRAM = JIT.Memory.GetSharedWRAM();
     ARM7WRAM = JIT.Memory.GetARM7WRAM();
+    WM = std::make_unique<WMService>(*this);
 }
 
 NDS::~NDS() noexcept
 {
+    FlushWMTrace(4);
     UnregisterEventFuncs(Event_Div);
     UnregisterEventFuncs(Event_Sqrt);
     // The destructor for each component is automatically called by the compiler
@@ -365,7 +373,6 @@ void NDS::SetupDirectBoot()
     ARM7BIOSProt = 0x1204;
 
     SPI.GetFirmwareMem()->SetupDirectBoot();
-    NDSCartSlot.WriteSPICnt(0x8000);
 
     ARM9.CP15Write(0x100, 0x00012078);
     ARM9.CP15Write(0x200, 0x00000042);
@@ -400,23 +407,20 @@ void NDS::SetupDirectBoot(const std::string& romname)
 
     NDSCartSlot.SetupDirectBoot(romname);
 
-    if (ConsoleType != 1)
-    {
-        ARM9.R[12] = header.ARM9EntryAddress;
-        ARM9.R[13] = 0x03002F7C;
-        ARM9.R[14] = header.ARM9EntryAddress;
-        ARM9.R_IRQ[0] = 0x03003F80;
-        ARM9.R_SVC[0] = 0x03003FC0;
+    ARM9.R[12] = header.ARM9EntryAddress;
+    ARM9.R[13] = 0x03002F7C;
+    ARM9.R[14] = header.ARM9EntryAddress;
+    ARM9.R_IRQ[0] = 0x03003F80;
+    ARM9.R_SVC[0] = 0x03003FC0;
 
-        ARM7.R[12] = header.ARM7EntryAddress;
-        ARM7.R[13] = 0x0380FD80;
-        ARM7.R[14] = header.ARM7EntryAddress;
-        ARM7.R_IRQ[0] = 0x0380FF80;
-        ARM7.R_SVC[0] = 0x0380FFC0;
+    ARM7.R[12] = header.ARM7EntryAddress;
+    ARM7.R[13] = 0x0380FD80;
+    ARM7.R[14] = header.ARM7EntryAddress;
+    ARM7.R_IRQ[0] = 0x0380FF80;
+    ARM7.R_SVC[0] = 0x0380FFC0;
 
-        ARM9.JumpTo(header.ARM9EntryAddress);
-        ARM7.JumpTo(header.ARM7EntryAddress);
-    }
+    ARM9.JumpTo(header.ARM9EntryAddress);
+    ARM7.JumpTo(header.ARM7EntryAddress);
 
     PostFlag9 = 0x01;
     PostFlag7 = 0x01;
@@ -436,6 +440,8 @@ void NDS::SetupDirectBoot(const std::string& romname)
 
 void NDS::Reset()
 {
+    FlushWMTrace(2);
+    WM->Reset();
     Platform::FileHandle* f;
     u32 i;
 
@@ -534,6 +540,7 @@ void NDS::Reset()
         evt.Param = 0;
     }
     SchedListMask = 0;
+    NextEventTimestampDirty = true;
 
     KeyInput = 0x007F03FF;
     KeyCnt[0] = 0;
@@ -587,6 +594,8 @@ static const char* StopReasonName(Platform::StopReason reason)
             return "GBAModeNotSupported";
         case Platform::StopReason::BadExceptionRegion:
             return "BadExceptionRegion";
+        case Platform::StopReason::WirelessUnsupported:
+            return "WirelessUnsupported";
         default:
             return "Unknown";
     }
@@ -603,6 +612,7 @@ void NDS::Stop(Platform::StopReason reason)
             break;
         case Platform::StopReason::GBAModeNotSupported:
         case Platform::StopReason::BadExceptionRegion:
+        case Platform::StopReason::WirelessUnsupported:
             level = LogLevel::Error;
             break;
         default:
@@ -612,6 +622,10 @@ void NDS::Stop(Platform::StopReason reason)
 
     Log(level, "Stopping emulated console (Reason: %s)\n", StopReasonName(reason));
     Running = false;
+    if (reason == Platform::StopReason::WirelessUnsupported && IsWMTraceActive() && !(WMTrace->File.Flags & 2))
+        SnapshotWMTrace();
+    FlushWMTrace(3);
+    WM->Reset();
     Platform::SignalStop(reason, UserData);
     GPU.Stop();
     SPU.Stop();
@@ -630,6 +644,11 @@ u32 NDS::GetSavestateConfig()
 
 bool NDS::DoSavestate(Savestate* file)
 {
+    if (WM->Active())
+    {
+        Log(LogLevel::Error, "savestate: active WM service cannot be serialized\n");
+        return false;
+    }
     file->Section("NDSG");
 
     u32 config = GetSavestateConfig();
@@ -709,6 +728,7 @@ bool NDS::DoSavestate(Savestate* file)
         file->Var32(&evt.Param);
     }
     file->Var32(&SchedListMask);
+    NextEventTimestampDirty = true;
     file->Var64(&ARM9Timestamp);
     file->Var64(&ARM9Target);
     file->Var64(&ARM7Timestamp);
@@ -732,7 +752,9 @@ bool NDS::DoSavestate(Savestate* file)
     {
         // 'dept of redundancy dept'
         // but we do need to update the mappings
-        MapSharedWRAM(WRAMCnt);
+        u8 wramCnt = WRAMCnt;
+        WRAMCnt ^= 1;
+        MapSharedWRAM(wramCnt);
 
         InitTimings();
         SetGBASlotTimings();
@@ -817,25 +839,24 @@ void NDS::SetARM9BIOS(const std::array<u8, ARM9BIOSSize>& bios) noexcept
 
 u64 NDS::NextTarget()
 {
-    u64 minEvent = UINT64_MAX;
-
-    u32 mask = SchedListMask;
-    for (int i = 0; i < Event_MAX; i++)
+    if (NextEventTimestampDirty)
     {
-        if (!mask) break;
-        if (mask & 0x1)
+        NextEventTimestamp = UINT64_MAX;
+        static_assert(Event_MAX > 0 && Event_MAX < 32);
+        u32 mask = SchedListMask & ((1u << Event_MAX) - 1u);
+        for (; mask; mask &= mask - 1u)
         {
-            if (SchedList[i].Timestamp < minEvent)
-                minEvent = SchedList[i].Timestamp;
+            const unsigned i = __builtin_ctz(mask);
+            if (SchedList[i].Timestamp < NextEventTimestamp)
+                NextEventTimestamp = SchedList[i].Timestamp;
         }
-
-        mask >>= 1;
+        NextEventTimestampDirty = false;
     }
 
     u64 max = SysTimestamp + kMaxIterationCycles;
 
-    if (minEvent < max + kIterationCycleMargin)
-        return minEvent;
+    if (NextEventTimestamp < max + kIterationCycleMargin)
+        return NextEventTimestamp;
 
     return max;
 }
@@ -844,24 +865,24 @@ void NDS::RunSystem(u64 timestamp)
 {
     SysTimestamp = timestamp;
 
-    u32 mask = SchedListMask;
-    for (int i = 0; i < Event_MAX; i++)
+    if (!NextEventTimestampDirty && timestamp < NextEventTimestamp)
+        return;
+
+    NextEventTimestampDirty = true;
+
+    u32 mask = SchedListMask & ((1u << Event_MAX) - 1u);
+    for (; mask; mask &= mask - 1u)
     {
-        if (!mask) break;
-        if (mask & 0x1)
+        const unsigned i = __builtin_ctz(mask);
+        SchedEvent& evt = SchedList[i];
+
+        if (evt.Timestamp <= SysTimestamp)
         {
-            SchedEvent& evt = SchedList[i];
+            SchedListMask &= ~(1u << i);
 
-            if (evt.Timestamp <= SysTimestamp)
-            {
-                SchedListMask &= ~(1<<i);
-
-                EventFunc func = evt.Funcs[evt.FuncID];
-                func(evt.That, evt.Param);
-            }
+            EventFunc func = evt.Funcs[evt.FuncID];
+            func(evt.That, evt.Param);
         }
-
-        mask >>= 1;
     }
 }
 
@@ -892,6 +913,7 @@ void NDS::RunSystemSleep(u64 timestamp)
 {
     u64 offset = timestamp - SysTimestamp;
     SysTimestamp = timestamp;
+    NextEventTimestampDirty = true;
 
     u32 mask = SchedListMask;
     for (int i = 0; i < Event_MAX; i++)
@@ -924,10 +946,391 @@ void NDS::RunSystemSleep(u64 timestamp)
     }
 }
 
+void NDS::TraceWMFrameBoundary(const std::string& directory)
+{
+#ifdef __ANDROID__
+    char requested[PROP_VALUE_MAX]{};
+    __system_property_get("debug.melonds.wm_trace", requested);
+    const bool enabled = WMServiceTrace::ValidId(requested);
+    if (!enabled)
+        requested[0] = '\0';
+    if (!WMTrace)
+    {
+        if (!enabled)
+            return;
+        WMTrace.reset(new (std::nothrow) WMServiceTrace);
+        if (!WMTrace)
+            return;
+    }
+    if (WMTrace->LastRequest != requested)
+    {
+        FlushWMTrace(enabled ? 1 : 0);
+        WMTrace->LastRequest = requested;
+        if (enabled)
+        {
+            if (ConsoleType != 0 || directory.empty()
+                || !WMTrace->Begin(directory, requested, reinterpret_cast<uintptr_t>(this),
+                    ConsoleType, IsJITEnabled(), NumFrames, SysTimestamp))
+            {
+                Log(LogLevel::Error, "WMTRACE begin failed id=%s console=%d\n", requested, ConsoleType);
+                return;
+            }
+            char apiText[PROP_VALUE_MAX]{};
+            __system_property_get("debug.melonds.wm_snapshot_api", apiText);
+            unsigned api = 0;
+            char extra;
+            WMTrace->SnapshotAPI = sscanf(apiText, "%u%c", &api, &extra) == 1 && api < 0x80 ? api : ~u32{0};
+            Log(LogLevel::Info, "WMTRACE begin id=%s epoch=%" PRIu64 " frame=%u capacity=%u path=%s\n",
+                requested, WMTrace->File.Epoch, NumFrames, WMServiceTrace::Capacity, WMTrace->Path.c_str());
+        }
+    }
+    if (!WMTrace->Active || (WMTrace->File.Flags & 2))
+        return;
+    char snapshot[PROP_VALUE_MAX]{};
+    __system_property_get("debug.melonds.wm_snapshot", snapshot);
+    if (!std::strcmp(snapshot, WMTrace->File.CaptureId))
+        SnapshotWMTrace();
+#else
+    (void)directory;
+#endif
+}
+
+bool NDS::IsWMTraceActive() const
+{
+    return WMTrace && WMTrace->Active;
+}
+
+void NDS::FlushWMTrace(u32 reason)
+{
+    if (!WMTrace || !WMTrace->Active)
+        return;
+    const bool ok = WMTrace->Finish(NumFrames, SysTimestamp, reason);
+    Log(ok ? LogLevel::Info : LogLevel::Error,
+        "WMTRACE end ok=%u id=%s epoch=%" PRIu64 " events=%" PRIu64 " dropped=%" PRIu64
+        " invalid_buffers=%" PRIu64 " invalid_payloads=%" PRIu64 " truncated_payloads=%" PRIu64
+        " snapshot_bytes=%" PRIu64 " path=%s\n",
+        ok ? 1u : 0u, WMTrace->File.CaptureId, WMTrace->File.Epoch,
+        WMTrace->File.EventCount, WMTrace->File.Dropped, WMTrace->File.InvalidBuffers,
+        WMTrace->File.InvalidPayloads, WMTrace->File.TruncatedPayloads,
+        WMTrace->File.SnapshotBytes, WMTrace->Path.c_str());
+}
+
+u32 NDS::ReadWMTraceMemory(u32 cpu, u32 addr, u8* output, u32 length)
+{
+    if (ConsoleType != 0 || length > UINT32_MAX - addr)
+        return 0;
+    for (u32 i = 0; i < length; ++i, ++addr)
+    {
+        if (cpu == 0 && addr < ARM9.ITCMSize)
+            output[i] = ARM9.ITCM[addr & (ITCMPhysicalSize - 1)];
+        else if (cpu == 0 && (addr & ARM9.DTCMMask) == ARM9.DTCMBase)
+            output[i] = ARM9.DTCM[addr & (DTCMPhysicalSize - 1)];
+        else if ((addr & 0xFF000000) == 0x02000000)
+            output[i] = MainRAM[addr & MainRAMMask];
+        else if ((addr & 0xFF000000) == 0x03000000)
+        {
+            if (cpu == 0)
+            {
+                if (!SWRAM_ARM9.Mem)
+                    return i;
+                output[i] = SWRAM_ARM9.Mem[addr & SWRAM_ARM9.Mask];
+            }
+            else if (addr < 0x03800000 && SWRAM_ARM7.Mem)
+                output[i] = SWRAM_ARM7.Mem[addr & SWRAM_ARM7.Mask];
+            else
+                output[i] = ARM7WRAM[addr & (ARM7WRAMSize - 1)];
+        }
+        else if ((addr & 0xFF000000) == 0x06000000)
+        {
+            if (cpu == 1)
+                output[i] = GPU.ReadVRAM_ARM7<u8>(addr);
+            else
+            {
+                switch (addr & 0x00E00000)
+                {
+                case 0x00000000: output[i] = GPU.ReadVRAM_ABG<u8>(addr); break;
+                case 0x00200000: output[i] = GPU.ReadVRAM_BBG<u8>(addr); break;
+                case 0x00400000: output[i] = GPU.ReadVRAM_AOBJ<u8>(addr); break;
+                case 0x00600000: output[i] = GPU.ReadVRAM_BOBJ<u8>(addr); break;
+                default: output[i] = GPU.ReadVRAM_LCDC<u8>(addr); break;
+                }
+            }
+        }
+        else
+            return i;
+    }
+    return length;
+}
+
+u64 NDS::TraceWMServiceEvent(const WMServiceTraceMetadata& metadata, const u8* data, u32 length,
+                              const u8* extra, u32 extraLength)
+{
+    return TraceWMEvent(WMServiceTrace::Service, 0, &metadata, data, length, extra, extraLength);
+}
+
+u64 NDS::TraceWMEvent(u32 kind, u32 word, const WMServiceTraceMetadata* metadata,
+                     const u8* data, u32 dataLength, const u8* extra, u32 extraLength)
+{
+    if (!IsWMTraceActive() || (kind <= WMServiceTrace::ARM9Receive && (word & 0x1F) != 0xA))
+        return ~u64{0};
+    auto& trace = *WMTrace;
+    auto* entry = trace.Reserve();
+    if (!entry) return ~u64{0};
+    auto& event = *entry;
+    event.HostNanoseconds = WMServiceTrace::Now();
+    event.SystemTimestamp = SysTimestamp;
+    event.ARM9Timestamp = ARM9Timestamp;
+    event.ARM7Timestamp = ARM7Timestamp;
+    event.Frame = NumFrames;
+    event.Kind = kind;
+    event.PC9 = ARM9.R[15]; event.LR9 = ARM9.R[14]; event.SP9 = ARM9.R[13]; event.CPSR9 = ARM9.CPSR;
+    event.PC7 = ARM7.R[15]; event.LR7 = ARM7.R[14]; event.SP7 = ARM7.R[13]; event.CPSR7 = ARM7.CPSR;
+    event.FIFOCnt9 = IPCFIFOCnt9; event.FIFOCnt7 = IPCFIFOCnt7;
+    event.FIFOLevel9 = IPCFIFO9.Level(); event.FIFOLevel7 = IPCFIFO7.Level();
+    event.CurCPU = CurCPU;
+    event.WRAMCnt = WRAMCnt;
+    event.Flags = IsJITEnabled() ? WMServiceTrace::ApproximateRegisters : 0;
+    if (kind == WMServiceTrace::Service)
+    {
+        WMServiceTrace::Metadata(event, *metadata, dataLength, extraLength);
+        if (metadata->RecordFlags & WMServiceTrace::InvalidData) trace.Flag(event, WMServiceTrace::InvalidData);
+        if (metadata->RecordFlags & WMServiceTrace::TruncatedData) trace.Flag(event, WMServiceTrace::TruncatedData);
+        const u64 total = u64(dataLength) + extraLength;
+        event.DataLength = static_cast<u32>(std::min<u64>(total, ~u32{0}));
+        if (total > ~u32{0}) trace.Flag(event, WMServiceTrace::InvalidData);
+        if (total > sizeof(event.Data)) trace.Flag(event, WMServiceTrace::TruncatedData);
+        const u32 first = std::min(dataLength, static_cast<u32>(sizeof(event.Data)));
+        if (first && !data)
+        {
+            trace.Flag(event, WMServiceTrace::InvalidData);
+            return event.Sequence;
+        }
+        if (first) std::memcpy(event.Data, data, first);
+        event.DataCopied = first;
+        const u32 second = std::min(extraLength, static_cast<u32>(sizeof(event.Data)) - first);
+        if (second && !extra) trace.Flag(event, WMServiceTrace::InvalidData);
+        else if (second)
+        {
+            std::memcpy(event.Data + first, extra, second);
+            event.DataCopied += second;
+        }
+        return event.Sequence;
+    }
+    if (kind == WMServiceTrace::Descriptor)
+    {
+        auto details = *metadata;
+        event.DataAddress = word;
+        const u32 cpu = details.SourceKind == WMServiceTrace::ARM9Receive ? 0 : 1;
+        u8 prefix[2]{};
+        const u32 prefixLength = ReadWMTraceMemory(cpu, word, prefix, sizeof(prefix));
+        if (prefixLength != sizeof(prefix))
+        {
+            trace.Flag(event, WMServiceTrace::InvalidData);
+            event.DataLength = sizeof(prefix);
+            event.DataCopied = prefixLength;
+            std::copy_n(prefix, prefixLength, event.Data);
+        }
+        else
+        {
+            const u32 declared = (prefix[0] | (u32(prefix[1]) << 8)) * 2;
+            details.DeclaredLength = declared;
+            details.Valid |= WMServiceTraceMetadata::LengthValid;
+            if (declared < 64 || declared > 192) trace.Flag(event, WMServiceTrace::InvalidData);
+            if (declared > 192) trace.Flag(event, WMServiceTrace::TruncatedData);
+            event.DataLength = std::max<u32>(2, declared);
+            const u32 length = std::min<u32>(event.DataLength, 192);
+            event.DataCopied = ReadWMTraceMemory(cpu, word, event.Data, length);
+            if (event.DataCopied != length) trace.Flag(event, WMServiceTrace::InvalidData);
+        }
+        WMServiceTrace::Metadata(event, details, event.DataLength, 0);
+        return event.Sequence;
+    }
+    event.Word = word;
+    event.BufferAddress = word >> 6;
+    const u32 cpu = (kind == WMServiceTrace::ARM9Send || kind == WMServiceTrace::ARM9Receive) ? 0 : 1;
+    const bool enabled = ((cpu == 0 ? IPCFIFOCnt9 : IPCFIFOCnt7) & 0x8000) != 0;
+    const bool available = kind == WMServiceTrace::ARM9Send ? !IPCFIFO9.IsFull()
+        : kind == WMServiceTrace::ARM7Receive ? !IPCFIFO9.IsEmpty()
+        : kind == WMServiceTrace::ARM7Send ? !IPCFIFO7.IsFull() : !IPCFIFO7.IsEmpty();
+    event.Flags |= (enabled ? WMServiceTrace::Enabled : 0)
+        | (available ? WMServiceTrace::Available : 0)
+        | (enabled && available ? WMServiceTrace::Accepted : 0)
+        | ((word & 0x20) ? WMServiceTrace::PXIError : 0);
+    event.BufferCopied = ReadWMTraceMemory(cpu, event.BufferAddress, event.Buffer, sizeof(event.Buffer));
+    if (event.BufferCopied != sizeof(event.Buffer)) trace.Flag(event, WMServiceTrace::InvalidBuffer);
+    if (event.BufferCopied < 0x28 || (event.Flags & WMServiceTrace::PXIError))
+        return event.Sequence;
+    const auto read16 = [&](u32 offset) {
+        return static_cast<u32>(event.Buffer[offset]) | (static_cast<u32>(event.Buffer[offset + 1]) << 8);
+    };
+    if (kind == WMServiceTrace::ARM9Send && (event.Flags & WMServiceTrace::Accepted)
+        && read16(0) == trace.SnapshotAPI && !(trace.File.Flags & 2))
+        SnapshotWMTrace();
+    const auto read32 = [&](u32 offset) { return read16(offset) | (read16(offset + 2) << 16); };
+    const u32 api = read16(0);
+    if (kind <= WMServiceTrace::ARM7Receive && api == 0xF)
+    {
+        event.PayloadFormat = 1;
+        event.DataAddress = read32(4);
+        event.DataLength = read32(8);
+    }
+    else if (kind >= WMServiceTrace::ARM7Send && api == 0x81)
+    {
+        event.PayloadFormat = 2;
+        event.DataAddress = read32(0x14);
+        event.DataLength = read16(0x18);
+    }
+    else if (kind >= WMServiceTrace::ARM7Send && api == 0x82)
+    {
+        event.PayloadFormat = 3;
+        event.DataAddress = read32(0xC);
+        event.DataLength = read16(0x10);
+    }
+    else if (kind <= WMServiceTrace::ARM7Receive && api == 24)
+    {
+        event.PayloadFormat = 4;
+        event.DataAddress = read32(4);
+        event.DataLength = read16(8);
+    }
+    if (event.DataLength > sizeof(event.Data)) trace.Flag(event, WMServiceTrace::TruncatedData);
+    const u32 length = std::min(event.DataLength, static_cast<u32>(sizeof(event.Data)));
+    event.DataCopied = ReadWMTraceMemory(cpu, event.DataAddress, event.Data, length);
+    if (event.DataCopied != length) trace.Flag(event, WMServiceTrace::InvalidData);
+    if (kind >= WMServiceTrace::ARM7Send && api == 38)
+    {
+        const u32 count = read16(14);
+        if (count > 16)
+        {
+            trace.Flag(event, WMServiceTrace::InvalidData);
+            trace.Flag(event, WMServiceTrace::TruncatedData);
+        }
+        for (u32 i = 0; i < std::min<u32>(count, 16); ++i)
+        {
+            if (16 + i * 4 + 4 > event.BufferCopied)
+            {
+                trace.Flag(event, WMServiceTrace::InvalidData);
+                trace.Flag(event, WMServiceTrace::TruncatedData);
+                break;
+            }
+            WMServiceTraceMetadata details(WMServiceTraceMetadata::Stage::Descriptor,
+                WMServiceTraceMetadata::Reason::None, ~u32{0}, event.Sequence);
+            details.Valid |= WMServiceTraceMetadata::DescriptorValid | WMServiceTraceMetadata::RequestValid;
+            details.RequestAddress = event.BufferAddress;
+            details.API = api;
+            details.Index = i;
+            details.Count = count;
+            details.SourceKind = kind;
+            TraceWMEvent(WMServiceTrace::Descriptor, read32(16 + i * 4), &details);
+        }
+    }
+    return event.Sequence;
+}
+
+void NDS::SnapshotWMTrace()
+{
+    auto& trace = *WMTrace;
+    trace.File.Flags |= 2;
+    auto& snap = trace.SnapshotMeta;
+    snap = {};
+    snap.HostNanoseconds = WMServiceTrace::Now();
+    snap.SystemTimestamp = SysTimestamp;
+    snap.ARM9Timestamp = ARM9Timestamp;
+    snap.ARM7Timestamp = ARM7Timestamp;
+    snap.NextSequence = trace.File.Seen;
+    snap.Frame = NumFrames;
+    snap.CPUStop = CPUStop;
+    snap.ARM9ClockShift = ARM9ClockShift;
+    snap.WRAMCnt = WRAMCnt;
+    snap.MainRAMMask = MainRAMMask;
+    snap.Shared9Offset = SWRAM_ARM9.Mem ? static_cast<u32>(SWRAM_ARM9.Mem - SharedWRAM) : UINT32_MAX;
+    snap.Shared9Mask = SWRAM_ARM9.Mask;
+    snap.Shared7Offset = SWRAM_ARM7.Mem ? static_cast<u32>(SWRAM_ARM7.Mem - SharedWRAM) : UINT32_MAX;
+    snap.Shared7Mask = SWRAM_ARM7.Mask;
+    snap.CP15Control = ARM9.CP15Control;
+    snap.ITCMSetting = ARM9.ITCMSetting; snap.DTCMSetting = ARM9.DTCMSetting;
+    snap.ITCMSize = ARM9.ITCMSize; snap.DTCMBase = ARM9.DTCMBase; snap.DTCMMask = ARM9.DTCMMask;
+    snap.FIFOCnt[0] = IPCFIFOCnt9; snap.FIFOCnt[1] = IPCFIFOCnt7;
+    snap.FIFOLevel[0] = IPCFIFO9.Level(); snap.FIFOLevel[1] = IPCFIFO7.Level();
+    snap.IPCSync[0] = IPCSync9; snap.IPCSync[1] = IPCSync7;
+    for (u32 i = 0; i < IPCFIFO9.Level(); ++i)
+        snap.FIFO9[i] = IPCFIFO9.Peek(i);
+    for (u32 i = 0; i < IPCFIFO7.Level(); ++i)
+        snap.FIFO7[i] = IPCFIFO7.Peek(i);
+    std::memcpy(snap.IME, IME, sizeof(IME));
+    std::memcpy(snap.IE, IE, sizeof(IE));
+    std::memcpy(snap.IF, IF, sizeof(IF));
+    const auto copyCPU = [](WMServiceTrace::CPURegisters& output, const ARM& cpu) {
+        std::memcpy(output.R, cpu.R, sizeof(output.R));
+        output.CPSR = cpu.CPSR;
+        std::memcpy(output.R_FIQ, cpu.R_FIQ, sizeof(output.R_FIQ));
+        std::memcpy(output.R_SVC, cpu.R_SVC, sizeof(output.R_SVC));
+        std::memcpy(output.R_ABT, cpu.R_ABT, sizeof(output.R_ABT));
+        std::memcpy(output.R_IRQ, cpu.R_IRQ, sizeof(output.R_IRQ));
+        std::memcpy(output.R_UND, cpu.R_UND, sizeof(output.R_UND));
+        output.CurInstr = cpu.CurInstr;
+        std::memcpy(output.NextInstr, cpu.NextInstr, sizeof(output.NextInstr));
+        output.ExceptionBase = cpu.ExceptionBase;
+    };
+    copyCPU(snap.ARM9, ARM9); copyCPU(snap.ARM7, ARM7);
+    for (u32 i = 0; i < 9; ++i)
+        snap.VRAMCNT[i] = GPU.VRAMCNT[i];
+    snap.VRAMSTAT = GPU.VRAMSTAT;
+    snap.VRAMMap_LCDC = GPU.VRAMMap_LCDC;
+    std::memcpy(snap.VRAMMap_ABG, GPU.VRAMMap_ABG, sizeof(snap.VRAMMap_ABG));
+    std::memcpy(snap.VRAMMap_AOBJ, GPU.VRAMMap_AOBJ, sizeof(snap.VRAMMap_AOBJ));
+    std::memcpy(snap.VRAMMap_BBG, GPU.VRAMMap_BBG, sizeof(snap.VRAMMap_BBG));
+    std::memcpy(snap.VRAMMap_BOBJ, GPU.VRAMMap_BOBJ, sizeof(snap.VRAMMap_BOBJ));
+    std::memcpy(snap.VRAMMap_ABGExtPal, GPU.VRAMMap_ABGExtPal, sizeof(snap.VRAMMap_ABGExtPal));
+    snap.VRAMMap_AOBJExtPal = GPU.VRAMMap_AOBJExtPal;
+    std::memcpy(snap.VRAMMap_BBGExtPal, GPU.VRAMMap_BBGExtPal, sizeof(snap.VRAMMap_BBGExtPal));
+    snap.VRAMMap_BOBJExtPal = GPU.VRAMMap_BOBJExtPal;
+    std::memcpy(snap.VRAMMap_Texture, GPU.VRAMMap_Texture, sizeof(snap.VRAMMap_Texture));
+    std::memcpy(snap.VRAMMap_TexPal, GPU.VRAMMap_TexPal, sizeof(snap.VRAMMap_TexPal));
+    std::memcpy(snap.VRAMMap_ARM7, GPU.VRAMMap_ARM7, sizeof(snap.VRAMMap_ARM7));
+    const u8* sources[14] = {MainRAM, SharedWRAM, ARM7WRAM, ARM9.ITCM, ARM9.DTCM};
+    snap.MemorySizes[0] = MainRAMMask + 1;
+    snap.MemorySizes[1] = SharedWRAMSize;
+    snap.MemorySizes[2] = ARM7WRAMSize;
+    snap.MemorySizes[3] = ITCMPhysicalSize;
+    snap.MemorySizes[4] = DTCMPhysicalSize;
+    for (u32 i = 0; i < 9; ++i)
+    {
+        sources[5 + i] = GPU.VRAM[i];
+        snap.MemorySizes[5 + i] = GPU.VRAMMask[i] + 1;
+    }
+    u32 bytes = 0;
+    for (u32 size : snap.MemorySizes)
+        bytes += size;
+    trace.Snapshot.reset(new (std::nothrow) u8[bytes]);
+    if (!trace.Snapshot)
+    {
+        trace.File.Flags |= 4;
+        Log(LogLevel::Error, "WMTRACE snapshot allocation failed id=%s bytes=%u\n", trace.File.CaptureId, bytes);
+        return;
+    }
+    u32 offset = 0;
+    for (u32 i = 0; i < 14; ++i)
+    {
+        std::memcpy(trace.Snapshot.get() + offset, sources[i], snap.MemorySizes[i]);
+        offset += snap.MemorySizes[i];
+    }
+    trace.File.SnapshotBytes = bytes;
+    Log(LogLevel::Info, "WMTRACE snapshot id=%s frame=%u next_sequence=%" PRIu64 " bytes=%u\n",
+        trace.File.CaptureId, snap.Frame, snap.NextSequence, bytes);
+}
+
 template <CPUExecuteMode cpuMode>
 u32 NDS::RunFrame()
 {
     Current = this;
+    WM->Poll();
+    auto& renderer = GPU.GPU3D.GetCurrentRenderer();
+    renderer.SetFramePreparationDeferred(true);
+    struct FramePreparationScope
+    {
+        Renderer3D& Renderer;
+        ~FramePreparationScope() { Renderer.SetFramePreparationDeferred(false); }
+    } framePreparationScope{renderer};
 
     FrameStartTimestamp = SysTimestamp;
 
@@ -981,6 +1384,7 @@ u32 NDS::RunFrame()
 
             while (Running && GPU.TotalScanlines==0)
             {
+                WM->Poll();
                 u64 target = NextTarget();
                 ARM9Target = target << ARM9ClockShift;
                 CurCPU = 0;
@@ -1061,6 +1465,9 @@ u32 NDS::RunFrame()
         break;
     }
 
+    Wifi.SyncTransport();
+    renderer.FinishFramePreparation();
+
     // Ensure the last audio samples produced for this frame are available to the frontend immediately
     SPU.BufferAudio();
 
@@ -1076,8 +1483,18 @@ u32 NDS::RunFrame()
         return 263;
 }
 
-u32 NDS::RunFrame()
+u32 NDS::RunFrame(u64 wmFrameDeadline)
 {
+    WM->SetFrameDeadline(wmFrameDeadline);
+    struct WMDeadlineScope
+    {
+        WMService& Service;
+        ~WMDeadlineScope()
+        {
+            Service.FinishFrameWait();
+            Service.SetFrameDeadline(0);
+        }
+    } wmDeadlineScope{*WM};
 #ifdef JIT_ENABLED
     if (EnableJIT)
         return RunFrame<CPUExecuteMode::JIT>();
@@ -1094,6 +1511,21 @@ u32 NDS::RunFrame()
     }
 }
 
+void NDS::PollWMHost()
+{
+    WM->PollHost();
+}
+
+bool NDS::DeferWMFrameWait(u64 delay)
+{
+    return WM->DeferFrameWait(delay);
+}
+
+bool NDS::CanPollWMHost() const
+{
+    return WM->CanPollHost();
+}
+
 void NDS::Reschedule(u64 target)
 {
     if (CurCPU == 0)
@@ -1105,28 +1537,6 @@ void NDS::Reschedule(u64 target)
     {
         if (target < ARM7Target)
             ARM7Target = target;
-    }
-}
-
-void NDS::SetARM9OverclockMultiplier(int multiplier)
-{
-    u32 newOverclockShift = 0;
-    if (multiplier >= 4)
-        newOverclockShift = 2;
-    else if (multiplier >= 2)
-        newOverclockShift = 1;
-    ARM9OverclockShift = newOverclockShift;
-
-    const u32 baseShift = (ConsoleType == 1) ? 2u : 1u;
-    const u32 targetShift = std::min<u32>(3u, baseShift + ARM9OverclockShift);
-    if (ARM9ClockShift != targetShift)
-    {
-        ARM9Timestamp >>= ARM9ClockShift;
-        ARM9Target    >>= ARM9ClockShift;
-        ARM9ClockShift = targetShift;
-        ARM9Timestamp <<= ARM9ClockShift;
-        ARM9Target    <<= ARM9ClockShift;
-        ARM9.UpdateRegionTimings(0x00000, 0x100000);
     }
 }
 
@@ -1176,6 +1586,7 @@ void NDS::ScheduleEvent(u32 id, bool periodic, s32 delay, u32 funcid, u32 param)
     evt.Param = param;
 
     SchedListMask |= (1<<id);
+    NextEventTimestampDirty = true;
 
     Reschedule(evt.Timestamp);
 }
@@ -1183,6 +1594,7 @@ void NDS::ScheduleEvent(u32 id, bool periodic, s32 delay, u32 funcid, u32 param)
 void NDS::CancelEvent(u32 id)
 {
     SchedListMask &= ~(1<<id);
+    NextEventTimestampDirty = true;
 }
 
 
@@ -2142,6 +2554,11 @@ void NDS::ARM9Write8(u32 addr, u8 val)
     {
     case 0x02000000:
         JIT.CheckAndInvalidate<0, ARMJIT_Memory::memregion_MainRAM>(addr);
+        if (GPU.HasFaithfulMainRamCaptureTags()
+            && !GPU.ShouldDeferFaithfulDmaMainRamInvalidation(
+                0u, addr, sizeof(val)))
+            GPU.InvalidateFaithfulMainRamCaptureRangeForCpuAddress(
+                0u, addr, sizeof(val));
         *(u8*)&MainRAM[addr & MainRAMMask] = val;
         return;
 
@@ -2183,6 +2600,11 @@ void NDS::ARM9Write16(u32 addr, u16 val)
     {
     case 0x02000000:
         JIT.CheckAndInvalidate<0, ARMJIT_Memory::memregion_MainRAM>(addr);
+        if (GPU.HasFaithfulMainRamCaptureTags()
+            && !GPU.ShouldDeferFaithfulDmaMainRamInvalidation(
+                0u, addr, sizeof(val)))
+            GPU.InvalidateFaithfulMainRamCaptureRangeForCpuAddress(
+                0u, addr, sizeof(val));
         *(u16*)&MainRAM[addr & MainRAMMask] = val;
         return;
 
@@ -2243,6 +2665,11 @@ void NDS::ARM9Write32(u32 addr, u32 val)
     {
     case 0x02000000:
         JIT.CheckAndInvalidate<0, ARMJIT_Memory::memregion_MainRAM>(addr);
+        if (GPU.HasFaithfulMainRamCaptureTags()
+            && !GPU.ShouldDeferFaithfulDmaMainRamInvalidation(
+                0u, addr, sizeof(val)))
+            GPU.InvalidateFaithfulMainRamCaptureRangeForCpuAddress(
+                0u, addr, sizeof(val));
         *(u32*)&MainRAM[addr & MainRAMMask] = val;
         return ;
 
@@ -2538,6 +2965,11 @@ void NDS::ARM7Write8(u32 addr, u8 val)
     case 0x02000000:
     case 0x02800000:
         JIT.CheckAndInvalidate<1, ARMJIT_Memory::memregion_MainRAM>(addr);
+        if (GPU.HasFaithfulMainRamCaptureTags()
+            && !GPU.ShouldDeferFaithfulDmaMainRamInvalidation(
+                1u, addr, sizeof(val)))
+            GPU.InvalidateFaithfulMainRamCaptureRangeForCpuAddress(
+                1u, addr, sizeof(val));
         *(u8*)&MainRAM[addr & MainRAMMask] = val;
         return;
 
@@ -2597,6 +3029,11 @@ void NDS::ARM7Write16(u32 addr, u16 val)
     case 0x02000000:
     case 0x02800000:
         JIT.CheckAndInvalidate<1, ARMJIT_Memory::memregion_MainRAM>(addr);
+        if (GPU.HasFaithfulMainRamCaptureTags()
+            && !GPU.ShouldDeferFaithfulDmaMainRamInvalidation(
+                1u, addr, sizeof(val)))
+            GPU.InvalidateFaithfulMainRamCaptureRangeForCpuAddress(
+                1u, addr, sizeof(val));
         *(u16*)&MainRAM[addr & MainRAMMask] = val;
         return;
 
@@ -2667,6 +3104,11 @@ void NDS::ARM7Write32(u32 addr, u32 val)
     case 0x02000000:
     case 0x02800000:
         JIT.CheckAndInvalidate<1, ARMJIT_Memory::memregion_MainRAM>(addr);
+        if (GPU.HasFaithfulMainRamCaptureTags()
+            && !GPU.ShouldDeferFaithfulDmaMainRamInvalidation(
+                1u, addr, sizeof(val)))
+            GPU.InvalidateFaithfulMainRamCaptureRangeForCpuAddress(
+                1u, addr, sizeof(val));
         *(u32*)&MainRAM[addr & MainRAMMask] = val;
         return;
 
@@ -3171,6 +3613,8 @@ u32 NDS::ARM9IORead32(u32 addr)
     case 0x04000304: return PowerControl9;
 
     case 0x04100000:
+        if (WMTrace && WMTrace->Active)
+            TraceWMEvent(WMServiceTrace::ARM9Receive, IPCFIFO7.Peek());
         if (IPCFIFOCnt9 & 0x8000)
         {
             u32 ret;
@@ -3398,7 +3842,10 @@ void NDS::ARM9IOWrite16(u32 addr, u16 val)
 
     case 0x04000184:
         if (val & 0x0008)
+        {
             IPCFIFO9.Clear();
+            WM->ClearFIFO();
+        }
         if ((val & 0x0004) && (!(IPCFIFOCnt9 & 0x0004)) && IPCFIFO9.IsEmpty())
             SetIRQ(0, IRQ_IPCSendDone);
         if ((val & 0x0400) && (!(IPCFIFOCnt9 & 0x0400)) && (!IPCFIFO7.IsEmpty()))
@@ -3594,6 +4041,8 @@ void NDS::ARM9IOWrite32(u32 addr, u32 val)
         NDS::ARM9IOWrite16(addr, val);
         return;
     case 0x04000188:
+        if (WMTrace && WMTrace->Active)
+            TraceWMEvent(WMServiceTrace::ARM9Send, val);
         if (IPCFIFOCnt9 & 0x8000)
         {
             if (IPCFIFO9.IsFull())
@@ -3602,7 +4051,8 @@ void NDS::ARM9IOWrite32(u32 addr, u32 val)
             {
                 bool wasempty = IPCFIFO9.IsEmpty();
                 IPCFIFO9.Write(val);
-                if ((IPCFIFOCnt7 & 0x0400) && wasempty)
+                WM->Capture(val);
+                if ((IPCFIFOCnt7 & 0x0400) && wasempty && !WM->BlocksARM7())
                     SetIRQ(1, IRQ_IPCRecv);
             }
         }
@@ -3872,7 +4322,7 @@ u16 NDS::ARM7IORead16(u32 addr)
             u16 val = IPCFIFOCnt7;
             if (IPCFIFO7.IsEmpty())     val |= 0x0001;
             else if (IPCFIFO7.IsFull()) val |= 0x0002;
-            if (IPCFIFO9.IsEmpty())     val |= 0x0100;
+            if (IPCFIFO9.IsEmpty() || WM->BlocksARM7()) val |= 0x0100;
             else if (IPCFIFO9.IsFull()) val |= 0x0200;
             return val;
         }
@@ -4003,6 +4453,14 @@ u32 NDS::ARM7IORead32(u32 addr)
     case 0x04000308: return ARM7BIOSProt;
 
     case 0x04100000:
+        WM->Poll();
+        if (WM->BlocksARM7())
+        {
+            if (IPCFIFOCnt7 & 0x8000) IPCFIFOCnt7 |= 0x4000;
+            return 0;
+        }
+        if (WMTrace && WMTrace->Active)
+            TraceWMEvent(WMServiceTrace::ARM7Receive, IPCFIFO9.Peek());
         if (IPCFIFOCnt7 & 0x8000)
         {
             u32 ret;
@@ -4017,6 +4475,7 @@ u32 NDS::ARM7IORead32(u32 addr)
 
                 if (IPCFIFO9.IsEmpty() && (IPCFIFOCnt9 & 0x0004))
                     SetIRQ(0, IRQ_IPCSendDone);
+                WM->Poll();
             }
             return ret;
         }
@@ -4189,7 +4648,7 @@ void NDS::ARM7IOWrite16(u32 addr, u16 val)
             IPCFIFO7.Clear();
         if ((val & 0x0004) && (!(IPCFIFOCnt7 & 0x0004)) && IPCFIFO7.IsEmpty())
             SetIRQ(1, IRQ_IPCSendDone);
-        if ((val & 0x0400) && (!(IPCFIFOCnt7 & 0x0400)) && (!IPCFIFO9.IsEmpty()))
+        if ((val & 0x0400) && (!(IPCFIFOCnt7 & 0x0400)) && (!IPCFIFO9.IsEmpty()) && !WM->BlocksARM7())
             SetIRQ(1, IRQ_IPCRecv);
         if (val & 0x4000)
             IPCFIFOCnt7 &= ~0x4000;
@@ -4355,6 +4814,8 @@ void NDS::ARM7IOWrite32(u32 addr, u32 val)
         NDS::ARM7IOWrite16(addr, val);
         return;
     case 0x04000188:
+        if (WMTrace && WMTrace->Active)
+            TraceWMEvent(WMServiceTrace::ARM7Send, val);
         if (IPCFIFOCnt7 & 0x8000)
         {
             if (IPCFIFO7.IsFull())
@@ -4439,6 +4900,28 @@ void NDS::ARM7IOWrite32(u32 addr, u32 val)
     }
 
     Log(LogLevel::Debug, "unknown ARM7 IO write32 %08X %08X %08X\n", addr, val, ARM7.R[15]);
+}
+
+void NDS::SetARM9OverclockMultiplier(int multiplier)
+{
+    u32 newOverclockShift = 0;
+    if (multiplier >= 4)
+        newOverclockShift = 2;
+    else if (multiplier >= 2)
+        newOverclockShift = 1;
+
+    ARM9OverclockShift = newOverclockShift;
+
+    const u32 baseShift = (ConsoleType == 1) ? 2u : 1u;
+    const u32 targetShift = std::min<u32>(3u, baseShift + ARM9OverclockShift);
+    if (ARM9ClockShift != targetShift)
+    {
+        ARM9Timestamp >>= ARM9ClockShift;
+        ARM9Target    >>= ARM9ClockShift;
+        ARM9ClockShift = targetShift;
+        ARM9Timestamp <<= ARM9ClockShift;
+        ARM9Target    <<= ARM9ClockShift;
+    }
 }
 
 }

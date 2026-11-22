@@ -90,6 +90,27 @@ else
   fi
 fi
 
+find_spirv_opt() {
+  local candidate=""
+  if command -v spirv-opt >/dev/null 2>&1; then
+    command -v spirv-opt
+    return 0
+  fi
+
+  candidate="$(command -v "${SHADER_COMPILER[0]}" 2>/dev/null || true)"
+  if [[ -n "$candidate" ]]; then
+    candidate="$(dirname "$candidate")/spirv-opt"
+    if [[ -x "$candidate" ]]; then
+      echo "$candidate"
+      return 0
+    fi
+  fi
+
+  return 1
+}
+
+SPIRV_OPT="$(find_spirv_opt || true)"
+
 if ! command -v xxd >/dev/null 2>&1; then
   echo "Missing required tool: xxd" >&2
   exit 1
@@ -106,10 +127,47 @@ compile_shader() {
   local output="$3"
   shift 3
   if [[ "${SHADER_COMPILER[0]##*/}" == glslc* ]]; then
-    "${SHADER_COMPILER[@]}" --target-env=vulkan1.0 -fshader-stage="$stage" "$@" -o "$output" "$source"
+    "${SHADER_COMPILER[@]}" -fshader-stage="$stage" "$@" -o "$output" "$source"
   else
-    "${SHADER_COMPILER[@]}" --target-env vulkan1.0 -V -S "$stage" "$@" -o "$output" "$source"
+    "${SHADER_COMPILER[@]}" -V -S "$stage" "$@" -o "$output" "$source"
   fi
+}
+
+declare_dynamic_texture_indexing() {
+  local module="$1"
+  local byte_count
+  byte_count="$(wc -c < "$module")"
+  if (( byte_count < 20 || byte_count % 4 != 0 )); then
+    echo "Invalid SPIR-V word stream: $module" >&2
+    return 1
+  fi
+  if [[ "$(xxd -p -l 4 "$module")" != "03022307" ]]; then
+    echo "Expected little-endian SPIR-V: $module" >&2
+    return 1
+  fi
+
+  local offset=20
+  local capability
+  while true; do
+    capability="$(xxd -p -s "$offset" -l 8 "$module")"
+
+    if [[ "${capability:0:8}" != "11000200" ]]; then
+      break
+    fi
+    if [[ "${capability:8:8}" == "1d000000" ]]; then
+      return 0
+    fi
+    offset=$((offset + 8))
+  done
+
+  local declared_module
+  declared_module="$(mktemp)"
+  {
+    dd if="$module" bs=4 count=5 2>/dev/null
+    printf '\021\000\002\000\035\000\000\000'
+    dd if="$module" bs=4 skip=5 2>/dev/null
+  } > "$declared_module"
+  mv "$declared_module" "$module"
 }
 
 generate_header() {
@@ -119,12 +177,33 @@ generate_header() {
   local output_header="$4"
   shift 4
 
+  local requires_dynamic_indexing=0
+  if [[ "${1:-}" == "--requires-dynamic-texture-indexing" ]]; then
+    requires_dynamic_indexing=1
+    shift
+  fi
+
   local tmp_spv
   local tmp_header
   tmp_spv="$(mktemp)"
   tmp_header="$(mktemp)"
 
   compile_shader "$source" "$stage" "$tmp_spv" "$@"
+
+  if [[ "${OPTIMIZE_SPIRV:-0}" == "1" ]]; then
+    if [[ -z "$SPIRV_OPT" ]]; then
+      echo "Missing required tool for optimized shader: spirv-opt" >&2
+      exit 1
+    fi
+    local optimized_spv
+    optimized_spv="$(mktemp)"
+    "$SPIRV_OPT" -O --preserve-spec-constants "$tmp_spv" -o "$optimized_spv"
+    mv "$optimized_spv" "$tmp_spv"
+  fi
+
+  if [[ "$requires_dynamic_indexing" == "1" ]]; then
+    declare_dynamic_texture_indexing "$tmp_spv"
+  fi
 
   {
     echo "#pragma once"
@@ -151,60 +230,6 @@ generate_header() {
 }
 
 generate_header \
-  "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_InterpSpansShader.comp" \
-  "comp" \
-  "melonDS_gpu3d_vulkan_interp_spans_comp_spv" \
-  "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_InterpSpansShaderData.h"
-
-generate_header \
-  "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_BinCombinedShader.comp" \
-  "comp" \
-  "melonDS_gpu3d_vulkan_bin_combined_comp_spv" \
-  "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_BinCombinedShaderData.h"
-
-generate_header \
-  "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_CalculateWorkOffsetsShader.comp" \
-  "comp" \
-  "melonDS_gpu3d_vulkan_calc_work_offsets_comp_spv" \
-  "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_CalculateWorkOffsetsShaderData.h"
-
-generate_header \
-  "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_SortWorkShader.comp" \
-  "comp" \
-  "melonDS_gpu3d_vulkan_sort_work_comp_spv" \
-  "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_SortWorkShaderData.h"
-
-generate_header \
-  "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_TriRasterShader.comp" \
-  "comp" \
-  "melonDS_gpu3d_vulkan_tri_raster_comp_spv" \
-  "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_TriRasterShaderData.h"
-
-generate_header \
-  "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_TriRasterBaseShader.comp" \
-  "comp" \
-  "melonDS_gpu3d_vulkan_tri_raster_base_comp_spv" \
-  "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_TriRasterBaseShaderData.h"
-
-generate_header \
-  "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_TriRasterCompatShader.comp" \
-  "comp" \
-  "melonDS_gpu3d_vulkan_tri_raster_compat_comp_spv" \
-  "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_TriRasterCompatShaderData.h"
-
-generate_header \
-  "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_DepthBlendShader.comp" \
-  "comp" \
-  "melonDS_gpu3d_vulkan_depth_blend_comp_spv" \
-  "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_DepthBlendShaderData.h"
-
-generate_header \
-  "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_FinalPassShader.comp" \
-  "comp" \
-  "melonDS_gpu3d_vulkan_final_pass_comp_spv" \
-  "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_FinalPassShaderData.h"
-
-generate_header \
   "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_CaptureLineExportShader.comp" \
   "comp" \
   "melonDS_gpu3d_vulkan_capture_line_export_comp_spv" \
@@ -225,6 +250,14 @@ generate_header \
 generate_header \
   "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_GraphicsRasterShader.frag" \
   "frag" \
+  "melonDS_gpu3d_vulkan_graphics_raster_direct_frag_spv" \
+  "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_GraphicsRasterDirectShaderFragmentData.h" \
+  "--requires-dynamic-texture-indexing" \
+  "-DMELONDS_DIRECT_TEXTURE_INDEXING=1"
+
+generate_header \
+  "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_GraphicsRasterShader.frag" \
+  "frag" \
   "melonDS_gpu3d_vulkan_graphics_raster_no_frag_depth_frag_spv" \
   "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_GraphicsRasterNoFragDepthShaderFragmentData.h" \
   "-DMELONDS_NO_FRAG_DEPTH=1"
@@ -234,6 +267,7 @@ generate_header \
   "frag" \
   "melonDS_gpu3d_vulkan_graphics_raster_no_frag_depth_direct_frag_spv" \
   "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectShaderFragmentData.h" \
+  "--requires-dynamic-texture-indexing" \
   "-DMELONDS_NO_FRAG_DEPTH=1" \
   "-DMELONDS_DIRECT_TEXTURE_INDEXING=1"
 
@@ -242,6 +276,7 @@ generate_header \
   "frag" \
   "melonDS_gpu3d_vulkan_graphics_raster_no_frag_depth_direct_fast_modulate_frag_spv" \
   "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulateShaderFragmentData.h" \
+  "--requires-dynamic-texture-indexing" \
   "-DMELONDS_NO_FRAG_DEPTH=1" \
   "-DMELONDS_DIRECT_TEXTURE_INDEXING=1" \
   "-DMELONDS_FAST_OPAQUE_MODULATE=1" \
@@ -252,6 +287,7 @@ generate_header \
   "frag" \
   "melonDS_gpu3d_vulkan_graphics_raster_no_frag_depth_direct_fast_modulate_toon_frag_spv" \
   "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulateToonShaderFragmentData.h" \
+  "--requires-dynamic-texture-indexing" \
   "-DMELONDS_NO_FRAG_DEPTH=1" \
   "-DMELONDS_DIRECT_TEXTURE_INDEXING=1" \
   "-DMELONDS_FAST_OPAQUE_MODULATE=1" \
@@ -263,7 +299,46 @@ generate_header \
   "frag" \
   "melonDS_gpu3d_vulkan_graphics_raster_no_frag_depth_direct_fast_modulate_plain_frag_spv" \
   "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulatePlainShaderFragmentData.h" \
+  "--requires-dynamic-texture-indexing" \
   "-DMELONDS_NO_FRAG_DEPTH=1" \
+  "-DMELONDS_DIRECT_TEXTURE_INDEXING=1" \
+  "-DMELONDS_FAST_OPAQUE_MODULATE=1" \
+  "-DMELONDS_FAST_TOON_MODE=2" \
+  "-DMELONDS_FAST_TEXTURE_PUSH_CONSTANTS=1"
+
+OPTIMIZE_SPIRV=1 generate_header \
+  "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_GraphicsRasterShader.frag" \
+  "frag" \
+  "melonDS_gpu3d_vulkan_graphics_raster_no_frag_depth_direct_fast_modulate_opaque_alpha_toon_frag_spv" \
+  "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulateOpaqueAlphaToonShaderFragmentData.h" \
+  "--requires-dynamic-texture-indexing" \
+  "-DMELONDS_NO_FRAG_DEPTH=1" \
+  "-DMELONDS_DIRECT_TEXTURE_INDEXING=1" \
+  "-DMELONDS_FAST_OPAQUE_MODULATE=1" \
+  "-DMELONDS_FAST_TOON_MODE=1" \
+  "-DMELONDS_FAST_TEXTURE_PUSH_CONSTANTS=1" \
+  "-DMELONDS_FAST_OPAQUE_FULL_ALPHA=1"
+
+OPTIMIZE_SPIRV=1 generate_header \
+  "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_GraphicsRasterShader.frag" \
+  "frag" \
+  "melonDS_gpu3d_vulkan_graphics_raster_no_frag_depth_direct_fast_modulate_opaque_alpha_plain_frag_spv" \
+  "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulateOpaqueAlphaPlainShaderFragmentData.h" \
+  "--requires-dynamic-texture-indexing" \
+  "-DMELONDS_NO_FRAG_DEPTH=1" \
+  "-DMELONDS_DIRECT_TEXTURE_INDEXING=1" \
+  "-DMELONDS_FAST_OPAQUE_MODULATE=1" \
+  "-DMELONDS_FAST_TOON_MODE=2" \
+  "-DMELONDS_FAST_TEXTURE_PUSH_CONSTANTS=1" \
+  "-DMELONDS_FAST_OPAQUE_FULL_ALPHA=1" \
+  "-DMELONDS_FAST_FLOAT_MODULATE=1"
+
+OPTIMIZE_SPIRV=1 generate_header \
+  "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_GraphicsRasterShader.frag" \
+  "frag" \
+  "melonDS_gpu3d_vulkan_graphics_raster_fragment_depth_direct_fast_modulate_plain_frag_spv" \
+  "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_GraphicsRasterFragmentDepthDirectFastModulatePlainShaderFragmentData.h" \
+  "--requires-dynamic-texture-indexing" \
   "-DMELONDS_DIRECT_TEXTURE_INDEXING=1" \
   "-DMELONDS_FAST_OPAQUE_MODULATE=1" \
   "-DMELONDS_FAST_TOON_MODE=2" \
@@ -272,21 +347,9 @@ generate_header \
 generate_header \
   "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_GraphicsRasterShader.frag" \
   "frag" \
-  "melonDS_gpu3d_vulkan_graphics_raster_no_frag_depth_direct_fast_modulate_opaque_alpha_toon_frag_spv" \
-  "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulateOpaqueAlphaToonShaderFragmentData.h" \
-  "-DMELONDS_NO_FRAG_DEPTH=1" \
-  "-DMELONDS_DIRECT_TEXTURE_INDEXING=1" \
-  "-DMELONDS_FAST_OPAQUE_MODULATE=1" \
-  "-DMELONDS_FAST_TOON_MODE=1" \
-  "-DMELONDS_FAST_TEXTURE_PUSH_CONSTANTS=1" \
-  "-DMELONDS_FAST_OPAQUE_FULL_ALPHA=1"
-
-generate_header \
-  "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_GraphicsRasterShader.frag" \
-  "frag" \
-  "melonDS_gpu3d_vulkan_graphics_raster_no_frag_depth_direct_fast_modulate_opaque_alpha_plain_frag_spv" \
-  "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulateOpaqueAlphaPlainShaderFragmentData.h" \
-  "-DMELONDS_NO_FRAG_DEPTH=1" \
+  "melonDS_gpu3d_vulkan_graphics_raster_fragment_depth_direct_fast_modulate_opaque_alpha_plain_frag_spv" \
+  "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_GraphicsRasterFragmentDepthDirectFastModulateOpaqueAlphaPlainShaderFragmentData.h" \
+  "--requires-dynamic-texture-indexing" \
   "-DMELONDS_DIRECT_TEXTURE_INDEXING=1" \
   "-DMELONDS_FAST_OPAQUE_MODULATE=1" \
   "-DMELONDS_FAST_TOON_MODE=2" \
@@ -299,6 +362,7 @@ generate_header \
   "frag" \
   "melonDS_gpu3d_vulkan_graphics_raster_no_frag_depth_direct_fast_modulate_opaque_alpha_plain_no_attr_frag_spv" \
   "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulateOpaqueAlphaPlainNoAttrShaderFragmentData.h" \
+  "--requires-dynamic-texture-indexing" \
   "-DMELONDS_NO_FRAG_DEPTH=1" \
   "-DMELONDS_DIRECT_TEXTURE_INDEXING=1" \
   "-DMELONDS_FAST_OPAQUE_MODULATE=1" \
@@ -313,6 +377,7 @@ generate_header \
   "frag" \
   "melonDS_gpu3d_vulkan_graphics_raster_no_frag_depth_direct_fast_modulate_opaque_alpha_plain_color_only_frag_spv" \
   "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulateOpaqueAlphaPlainColorOnlyShaderFragmentData.h" \
+  "--requires-dynamic-texture-indexing" \
   "-DMELONDS_NO_FRAG_DEPTH=1" \
   "-DMELONDS_DIRECT_TEXTURE_INDEXING=1" \
   "-DMELONDS_FAST_OPAQUE_MODULATE=1" \
@@ -346,6 +411,13 @@ generate_header \
   "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_GraphicsEdgeShaderData.h"
 
 generate_header \
+  "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_GraphicsEdgeMarkAlphaShader.frag" \
+  "frag" \
+  "melonDS_gpu3d_vulkan_graphics_edge_mark_alpha_frag_spv" \
+  "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_GraphicsEdgeMarkAlphaShaderData.h" \
+  "--requires-dynamic-texture-indexing"
+
+generate_header \
   "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_GraphicsEdgeFogShader.frag" \
   "frag" \
   "melonDS_gpu3d_vulkan_graphics_edge_fog_frag_spv" \
@@ -357,152 +429,23 @@ generate_header \
   "melonDS_gpu3d_vulkan_graphics_fog_frag_spv" \
   "$ROOT_DIR/melonDS-android-lib/src/GPU3D_Vulkan_GraphicsFogShaderData.h"
 
-# Compatibility profile shaders are compiled from the exact pre-fastpath
-# sources at melonDS-android-lib commit 39363b7c. They deliberately use
-# distinct symbols so one native engine can keep both Vulkan pipeline
-# strategies resident without duplicating the whole core.
 generate_header \
-  "$ROOT_DIR/melonDS-android-lib/src/compatibility/GPU3D_Vulkan_TriRasterBaseShader.comp" \
+  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanFaithfulShader.comp" \
   "comp" \
-  "melonDS_compat_gpu3d_vulkan_tri_raster_base_comp_spv" \
-  "$ROOT_DIR/melonDS-android-lib/src/compatibility/GPU3D_Vulkan_TriRasterBaseShaderData.h"
+  "melonDS_android_vulkan_faithful_comp_spv" \
+  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanFaithfulShaderData.h"
 
 generate_header \
-  "$ROOT_DIR/melonDS-android-lib/src/compatibility/GPU3D_Vulkan_CaptureLineExportShader.comp" \
+  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanFaithfulObjScanlineShader.comp" \
   "comp" \
-  "melonDS_compat_gpu3d_vulkan_capture_line_export_comp_spv" \
-  "$ROOT_DIR/melonDS-android-lib/src/compatibility/GPU3D_Vulkan_CaptureLineExportShaderData.h"
+  "melonDS_android_vulkan_faithful_obj_scanline_comp_spv" \
+  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanFaithfulObjScanlineShaderData.h"
 
 generate_header \
-  "$ROOT_DIR/melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsRasterShader.frag" \
-  "frag" \
-  "melonDS_compat_gpu3d_vulkan_graphics_raster_frag_spv" \
-  "$ROOT_DIR/melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsRasterShaderFragmentData.h"
-
-generate_header \
-  "$ROOT_DIR/melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsRasterShader.frag" \
-  "frag" \
-  "melonDS_compat_gpu3d_vulkan_graphics_raster_no_frag_depth_frag_spv" \
-  "$ROOT_DIR/melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsRasterNoFragDepthShaderFragmentData.h" \
-  "-DMELONDS_NO_FRAG_DEPTH=1"
-
-generate_header \
-  "$ROOT_DIR/melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsRasterShader.frag" \
-  "frag" \
-  "melonDS_compat_gpu3d_vulkan_graphics_raster_no_frag_depth_direct_frag_spv" \
-  "$ROOT_DIR/melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectShaderFragmentData.h" \
-  "-DMELONDS_NO_FRAG_DEPTH=1" \
-  "-DMELONDS_DIRECT_TEXTURE_INDEXING=1"
-
-generate_header \
-  "$ROOT_DIR/melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsRasterShader.frag" \
-  "frag" \
-  "melonDS_compat_gpu3d_vulkan_graphics_raster_no_frag_depth_direct_fast_modulate_frag_spv" \
-  "$ROOT_DIR/melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulateShaderFragmentData.h" \
-  "-DMELONDS_NO_FRAG_DEPTH=1" \
-  "-DMELONDS_DIRECT_TEXTURE_INDEXING=1" \
-  "-DMELONDS_FAST_OPAQUE_MODULATE=1" \
-  "-DMELONDS_FAST_TEXTURE_PUSH_CONSTANTS=1"
-
-generate_header \
-  "$ROOT_DIR/melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsRasterShader.frag" \
-  "frag" \
-  "melonDS_compat_gpu3d_vulkan_graphics_raster_no_frag_depth_direct_fast_modulate_toon_frag_spv" \
-  "$ROOT_DIR/melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulateToonShaderFragmentData.h" \
-  "-DMELONDS_NO_FRAG_DEPTH=1" \
-  "-DMELONDS_DIRECT_TEXTURE_INDEXING=1" \
-  "-DMELONDS_FAST_OPAQUE_MODULATE=1" \
-  "-DMELONDS_FAST_TOON_MODE=1" \
-  "-DMELONDS_FAST_TEXTURE_PUSH_CONSTANTS=1"
-
-generate_header \
-  "$ROOT_DIR/melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsRasterShader.frag" \
-  "frag" \
-  "melonDS_compat_gpu3d_vulkan_graphics_raster_no_frag_depth_direct_fast_modulate_plain_frag_spv" \
-  "$ROOT_DIR/melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulatePlainShaderFragmentData.h" \
-  "-DMELONDS_NO_FRAG_DEPTH=1" \
-  "-DMELONDS_DIRECT_TEXTURE_INDEXING=1" \
-  "-DMELONDS_FAST_OPAQUE_MODULATE=1" \
-  "-DMELONDS_FAST_TOON_MODE=2" \
-  "-DMELONDS_FAST_TEXTURE_PUSH_CONSTANTS=1"
-
-generate_header \
-  "$ROOT_DIR/melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsRasterShader.frag" \
-  "frag" \
-  "melonDS_compat_gpu3d_vulkan_graphics_raster_no_frag_depth_direct_fast_modulate_opaque_alpha_toon_frag_spv" \
-  "$ROOT_DIR/melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulateOpaqueAlphaToonShaderFragmentData.h" \
-  "-DMELONDS_NO_FRAG_DEPTH=1" \
-  "-DMELONDS_DIRECT_TEXTURE_INDEXING=1" \
-  "-DMELONDS_FAST_OPAQUE_MODULATE=1" \
-  "-DMELONDS_FAST_TOON_MODE=1" \
-  "-DMELONDS_FAST_TEXTURE_PUSH_CONSTANTS=1" \
-  "-DMELONDS_FAST_OPAQUE_FULL_ALPHA=1"
-
-generate_header \
-  "$ROOT_DIR/melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsRasterShader.frag" \
-  "frag" \
-  "melonDS_compat_gpu3d_vulkan_graphics_raster_no_frag_depth_direct_fast_modulate_opaque_alpha_plain_frag_spv" \
-  "$ROOT_DIR/melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulateOpaqueAlphaPlainShaderFragmentData.h" \
-  "-DMELONDS_NO_FRAG_DEPTH=1" \
-  "-DMELONDS_DIRECT_TEXTURE_INDEXING=1" \
-  "-DMELONDS_FAST_OPAQUE_MODULATE=1" \
-  "-DMELONDS_FAST_TOON_MODE=2" \
-  "-DMELONDS_FAST_TEXTURE_PUSH_CONSTANTS=1" \
-  "-DMELONDS_FAST_OPAQUE_FULL_ALPHA=1"
-
-generate_header \
-  "$ROOT_DIR/melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsNoColorShader.frag" \
-  "frag" \
-  "melonDS_compat_gpu3d_vulkan_graphics_no_color_frag_spv" \
-  "$ROOT_DIR/melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsNoColorShaderData.h"
-
-generate_header \
-  "$ROOT_DIR/melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsEdgeShader.frag" \
-  "frag" \
-  "melonDS_compat_gpu3d_vulkan_graphics_edge_frag_spv" \
-  "$ROOT_DIR/melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsEdgeShaderData.h"
-
-generate_header \
-  "$ROOT_DIR/melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsEdgeFogShader.frag" \
-  "frag" \
-  "melonDS_compat_gpu3d_vulkan_graphics_edge_fog_frag_spv" \
-  "$ROOT_DIR/melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsEdgeFogShaderData.h"
-
-generate_header \
-  "$ROOT_DIR/melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsFogShader.frag" \
-  "frag" \
-  "melonDS_compat_gpu3d_vulkan_graphics_fog_frag_spv" \
-  "$ROOT_DIR/melonDS-android-lib/src/compatibility/GPU3D_Vulkan_GraphicsFogShaderData.h"
-
-generate_header \
-  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanCompositorShader.comp" \
+  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanRenderer3dNativeProjectionShader.comp" \
   "comp" \
-  "melonDS_android_vulkan_compositor_comp_spv" \
-  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanCompositorShaderData.h"
-
-generate_header \
-  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanCompositorCompatibilityShader.comp" \
-  "comp" \
-  "melonDS_android_vulkan_compositor_compatibility_comp_spv" \
-  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanCompositorCompatibilityShaderData.h"
-
-generate_header \
-  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanAccumulate3dShader.comp" \
-  "comp" \
-  "melonDS_android_vulkan_accumulate_3d_comp_spv" \
-  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanAccumulate3dShaderData.h"
-
-generate_header \
-  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanAccumulate3dCompatibilityShader.comp" \
-  "comp" \
-  "melonDS_android_vulkan_accumulate_3d_compatibility_comp_spv" \
-  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanAccumulate3dCompatibilityShaderData.h"
-
-generate_header \
-  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanAccumulate3dScale8Shader.comp" \
-  "comp" \
-  "melonDS_android_vulkan_accumulate_3d_scale8_comp_spv" \
-  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanAccumulate3dScale8ShaderData.h"
+  "melonDS_android_vulkan_renderer3d_native_projection_comp_spv" \
+  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanRenderer3dNativeProjectionShaderData.h"
 
 generate_header \
   "$ROOT_DIR/app/src/main/cpp/renderer/VulkanSurfacePresenter.vert" \
@@ -515,12 +458,6 @@ generate_header \
   "frag" \
   "melonDS_android_vulkan_surface_presenter_frag_spv" \
   "$ROOT_DIR/app/src/main/cpp/renderer/VulkanSurfacePresenterFragmentShaderData.h"
-
-generate_header \
-  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanSurfacePresenterCompatibility.frag" \
-  "frag" \
-  "melonDS_android_vulkan_surface_presenter_compatibility_frag_spv" \
-  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanSurfacePresenterCompatibilityFragmentShaderData.h"
 
 if [[ "$MODE" == "check" ]]; then
   echo "Vulkan SPIR-V headers are up to date."

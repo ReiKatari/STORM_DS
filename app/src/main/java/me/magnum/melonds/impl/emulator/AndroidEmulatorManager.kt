@@ -1507,7 +1507,14 @@ class AndroidEmulatorManager(
     }
 
     override suspend fun takeScreenshot(): Boolean = withContext(Dispatchers.IO) {
-        MelonEmulator.takeScreenshot()
+        val pixels = MelonEmulator.takeScreenshot() ?: return@withContext false
+        val buffer = screenshotFrameBufferProvider.frameBuffer()
+        if (buffer.capacity() < pixels.size * 4) {
+            return@withContext false
+        }
+        buffer.position(0)
+        buffer.asIntBuffer().put(pixels)
+        true
     }
 
     override fun stopEmulator() {

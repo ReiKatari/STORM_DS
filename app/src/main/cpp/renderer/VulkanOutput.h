@@ -4,15 +4,18 @@
 #include <cstddef>
 #include <cstdint>
 #include <array>
+#include <memory>
 #include <mutex>
+#include <string>
 #include <unordered_map>
 #include <vector>
 #include <vulkan/vulkan.h>
 
 #include "renderer/FrameQueue.h"
+#include "renderer/FaithfulDiagnosticPayload.h"
+#include "renderer/FaithfulAtlasStaging.h"
 #include "renderer/VulkanFilterMode.h"
 #include "types.h"
-#include "VulkanPipelineProfile.h"
 #include "VulkanPerfStats.h"
 
 namespace melonDS
@@ -323,8 +326,6 @@ struct VulkanCompositionInputs
     u32 rendererWidth{};
     u32 rendererHeight{};
     VulkanFilterMode filtering{VulkanFilterMode::Nearest};
-    melonDS::VulkanPipelineProfile pipelineProfile =
-        melonDS::VulkanPipelineProfile::Compatibility;
     bool previousTopSourceValid{};
     bool previousBottomSourceValid{};
     bool exactBottomObjPresenterValid{};
@@ -343,6 +344,10 @@ struct VulkanCompositionInputs
     bool bottomEmptyComp3UsesFullCarry{};
     bool topAlternatingMixedRegularComp23UsesComposedCarry{};
     bool topFullRegularComp7BottomPassiveComp2Producer{};
+
+    bool soloMaterializar{};
+
+    bool necesita3d{};
     bool topFullRegularComp7BottomPassiveComp2Phase{};
     bool topPassiveComp2BottomFullRegularComp7Phase{};
     bool bottomExactRegularComp7BlackProducer{};
@@ -403,19 +408,6 @@ struct VulkanCompositionInputs
     bool needsReadback{};
     bool multiSurface{};
     bool validationMode{};
-    u32 compositorMode{};
-    u32 debugView{};
-};
-
-struct VulkanVisibleCompositorRegion
-{
-    bool enabled{};
-    bool topScreen{};
-    bool copyFromPrevious{};
-    u32 x{};
-    u32 y{};
-    u32 width{};
-    u32 height{};
 };
 
 struct VulkanOutputTemporalStats
@@ -475,8 +467,10 @@ struct VulkanOutputTemporalStats
 
 class VulkanOutput
 {
+    const bool lowLatencyEnabled;
+
 public:
-    explicit VulkanOutput(melonDS::VulkanPipelineProfile pipelineProfile);
+    explicit VulkanOutput(bool lowLatencyEnabled = false);
     ~VulkanOutput();
 
     VulkanOutput(const VulkanOutput&) = delete;
@@ -485,52 +479,68 @@ public:
     bool init();
     void shutdown();
     [[nodiscard]] bool isInitialized() const { return initialized; }
-    [[nodiscard]] melonDS::VulkanPipelineProfile getPipelineProfile() const { return pipelineProfile; }
 
     bool ensureFrameResources(Frame* frame, u32 width, u32 height);
-    void invalidateTemporalHistory(melonDS::VulkanPipelineProfile pipelineProfile);
+
+    void resetFaithfulCompose(Frame* frame);
+    void invalidateTemporalHistory();
     void seedCapture3dSourceFromVram(const melonDS::u16* vram);
     void clearStructuredCaptureHistory();
-    void releaseCompatibilityTemporalFrameReferences();
     void releaseTemporalFrameReferences();
     bool releaseTemporalFrameReferencesFor(Frame* frame);
     void markFramePreviousSourcesSubmitted(Frame* frame);
-    bool captureRenderer3dSnapshot(Frame* frame, const melonDS::VulkanRenderer3D& renderer3D, bool snapshotScreenSwap);
-    bool prepareFrameForPresentation(
-        Frame* frame,
-        const melonDS::GPU& gpu,
-        int frontBuffer,
-        bool frameScreenSwap,
-        SoftPackedFrameSnapshot& softPackedSnapshot,
-        melonDS::VulkanRenderer3D& renderer3D,
-        melonDS::VulkanPipelineProfile pipelineProfile);
-    bool prepareFrameForPresentationCompatibility(
-        Frame* frame,
-        const melonDS::GPU& gpu,
-        int frontBuffer,
-        bool frameScreenSwap,
-        SoftPackedFrameSnapshot& softPackedSnapshot,
-        melonDS::VulkanRenderer3D& renderer3D);
+    bool captureRenderer3dSnapshot(Frame* frame, const melonDS::VulkanRenderer3D& renderer3D, bool snapshotScreenSwap, bool deferSubmit = false);
+    bool flushRenderer3dSnapshot(Frame* frame);
+
+    bool preservePublishedRenderer3dSnapshot(const Frame* frame,
+        const melonDS::VulkanRenderer3D& renderer3D, bool snapshotScreenSwap);
+
+    void solicitarSnapshotEnCompose(const melonDS::VulkanRenderer3D* renderer3D, bool snapshotScreenSwap)
+    {
+        snapshotDiferidoRenderer = renderer3D;
+        snapshotDiferidoSwap = snapshotScreenSwap;
+    }
+    const melonDS::VulkanRenderer3D* snapshotDiferidoRenderer = nullptr;
+    bool snapshotDiferidoSwap = false;
     [[nodiscard]] bool wasLastPrepareBlockedByMissingHighresHistory() const { return lastPrepareBlockedByMissingHighresHistory; }
     [[nodiscard]] bool wasLastPrepareBlockedByMissingRegularCapture3dSource() const { return lastPrepareBlockedByMissingRegularCapture3dSource; }
     bool composeAndSubmitFrame(Frame* frame, const VulkanCompositionInputs& inputs);
+
+    void setFaithfulNativeFallbackIdentity(
+        u64 renderProductEpoch, u64 sequence, bool gpuBacked);
+
+    [[nodiscard]] bool frameHasOwnRenderer3dSnapshot(
+        const Frame* frame, bool requireExactNativeProjection = false) const;
+
+    [[nodiscard]] melonDS::u32 getRechazosFuente3D() const noexcept { return rechazosFuente3D.load(std::memory_order_relaxed); }
+
+    [[nodiscard]] bool liveCausalSourceAvailable(const Frame* frame, melonDS::u32 escala,
+                                                 melonDS::u32* lineasDirectas, melonDS::u32* coincidencias,
+                                                 bool* ambigua) const;
+    [[nodiscard]] bool getExactFaithfulNativeProjectionIdentity(
+        Frame* frame, u64& renderProductEpoch, u64& sequence);
     bool buildCompositionInputs(
         const Frame* frame,
         const melonDS::VulkanRenderer3D& renderer3D,
         int scale,
         VulkanFilterMode filtering,
-        melonDS::VulkanPipelineProfile pipelineProfile,
         bool needsReadback,
         bool multiSurface,
         bool validationMode,
         VulkanCompositionInputs& outInputs) const;
     bool validateFrameSubmission(Frame* frame, u64 waitTimeoutNs = UINT64_MAX);
-    bool validateCompositorSubmission(Frame* frame, const melonDS::VulkanRenderer3D& renderer3D, int scale, u64 waitTimeoutNs = UINT64_MAX);
     bool validateRuntimePath(u32 width, u32 height, const melonDS::VulkanRenderer3D& renderer3D, int scale);
+
+    bool prewarmFaithfulPipeline() { return ensureFaithfulPipeline(); }
     bool isFrameReady(const Frame* frame) const;
-    bool waitForFrame(const Frame* frame, u64 timeoutNs);
+    bool getFramePresentationDependency(const Frame* frame, VkSemaphore& semaphore, u64& value) const;
+
+    enum class WaitSite : u8 { Other = 0, Presentation = 1 };
+    bool waitForFrame(const Frame* frame, u64 timeoutNs,
+                      WaitSite site = WaitSite::Other);
     bool isFrameReferencedAsPendingPreviousSource(const Frame* frame) const;
     bool readFramePixels(const Frame* frame, u32* destinationPixels, size_t destinationPixelCount, u64 waitTimeoutNs = UINT64_MAX);
+
     bool readPreparedRenderer3dPixels(
         const Frame* frame,
         u32* destinationPixels,
@@ -557,86 +567,66 @@ public:
     [[nodiscard]] VkImage getFrameImage(const Frame* frame) const;
     [[nodiscard]] VkImageView getFrameImageView(const Frame* frame) const;
     VulkanOutputTemporalStats takeTemporalStatsSnapshotAndReset();
-    bool composeAndSubmitVisibleFrame(
-        Frame* frame,
-        const VulkanCompositionInputs& inputs,
-        VkImage targetImage,
-        VkImageView targetImageView,
-        VkImageLayout targetLayout,
-        bool targetHasContent,
-        u32 targetWidth,
-        u32 targetHeight,
-        VkImage previousImage,
-        bool previousValid,
-        const VulkanVisibleCompositorRegion* regions,
-        u32 regionCount);
-
 private:
     static constexpr size_t kPackedScreenWordCount =
         SoftPackedFrameSnapshot::kLineCount
         * ((SoftPackedFrameSnapshot::kScreenWidth * 3u) + 1u);
 
-    struct CompositorPushConstants
+    enum class Renderer3dSnapshotState : u8
     {
-        u32 outputWidth;
-        u32 outputHeight;
-        u32 scale;
-        u32 rendererWidth;
-        u32 rendererHeight;
-        u32 packedStride;
-        u32 screenSwap;
-        u32 filtering;
-        u32 previousTopSourceValid;
-        u32 previousBottomSourceValid;
-        u32 captureSourceValid;
-        u32 captureSourceScreenSwapValid;
-        u32 captureSourceScreenSwap;
-        u32 liveSourceScreenSwap;
-        u32 class4VramStructuredPair;
-        u32 class4NoAboveVramStructuredPair;
-        u32 class4PackedVramMode;
-        u32 class4PreservePackedVramScreenSwap;
-        u32 topStructuredHandoffNoCurrent3d;
-        u32 bottomStructuredHandoffNoCurrent3d;
-        u32 topStructuredHandoffSuppress3d;
-        u32 bottomStructuredHandoffSuppress3d;
-        u32 regionMode;
-        u32 regionTopScreen;
-        u32 regionX;
-        u32 regionY;
-        u32 regionWidth;
-        u32 regionHeight;
-        u32 fastHighresOnlyTop;
-        u32 fastHighresOnlyBottom;
-        u32 compositorMode;
-        u32 debugView;
+        Empty = 0,
+        PendingSubmit = 1,
+        Published = 2,
     };
-    static_assert(sizeof(CompositorPushConstants) == 128u);
-    static_assert(offsetof(CompositorPushConstants, regionMode) == 88u);
 
-    struct CompatibilityAccumulatePushConstants
+    enum class Renderer3dSnapshotCopyOp : u8
     {
-        u32 scale;
-        u32 packedStride;
-        u32 topLcd;
+        None = 0,
+        Copy = 1,
+        BlitNearest = 2,
+        BlitLinear = 3,
     };
-    static_assert(sizeof(CompatibilityAccumulatePushConstants) == 12);
-    static_assert(offsetof(CompatibilityAccumulatePushConstants, scale) == 0);
-    static_assert(offsetof(CompatibilityAccumulatePushConstants, packedStride) == 4);
-    static_assert(offsetof(CompatibilityAccumulatePushConstants, topLcd) == 8);
 
-    struct AccumulatePushConstants
+    enum class Renderer3dNativeProjectionOp : u8
     {
-        u32 scale;
-        u32 packedStride;
-        u32 topLcd;
-        u32 authoritativeProtectedBlack;
+        None = 0,
+        Center6A5 = 1,
     };
-    static_assert(sizeof(AccumulatePushConstants) == 16);
-    static_assert(offsetof(AccumulatePushConstants, scale) == 0);
-    static_assert(offsetof(AccumulatePushConstants, packedStride) == 4);
-    static_assert(offsetof(AccumulatePushConstants, topLcd) == 8);
-    static_assert(offsetof(AccumulatePushConstants, authoritativeProtectedBlack) == 12);
+
+    struct Renderer3dSnapshotProjectionKey
+    {
+        u32 sourceWidth{};
+        u32 sourceHeight{};
+        u32 destinationWidth{};
+        u32 destinationHeight{};
+        Renderer3dSnapshotCopyOp operation{Renderer3dSnapshotCopyOp::None};
+        Renderer3dNativeProjectionOp nativeOperation{
+            Renderer3dNativeProjectionOp::None};
+
+        [[nodiscard]] bool valid() const noexcept
+        {
+            return sourceWidth != 0u && sourceHeight != 0u
+                && destinationWidth != 0u && destinationHeight != 0u
+                && operation != Renderer3dSnapshotCopyOp::None;
+        }
+
+        [[nodiscard]] bool hasExactNativeProjection() const noexcept
+        {
+            return valid()
+                && nativeOperation
+                    == Renderer3dNativeProjectionOp::Center6A5;
+        }
+
+        [[nodiscard]] bool operator==(
+            const Renderer3dSnapshotProjectionKey& other) const noexcept
+        {
+            return sourceWidth == other.sourceWidth
+                && sourceHeight == other.sourceHeight
+                && destinationWidth == other.destinationWidth
+                && destinationHeight == other.destinationHeight
+                && operation == other.operation;
+        }
+    };
 
     struct FrameResource
     {
@@ -649,24 +639,33 @@ private:
         VkDeviceSize stagingSize{};
 
         VkCommandBuffer commandBuffer{VK_NULL_HANDLE};
+
+        bool cbAbierto{false};
         VkFence submitFence{VK_NULL_HANDLE};
-        VkDescriptorSet descriptorSet{VK_NULL_HANDLE};
         VkQueryPool timestampQueryPool{VK_NULL_HANDLE};
-        VkBuffer topPackedBuffer{VK_NULL_HANDLE};
-        VkDeviceMemory topPackedMemory{VK_NULL_HANDLE};
-        void* topPackedMapped{};
-        VkBuffer bottomPackedBuffer{VK_NULL_HANDLE};
-        VkDeviceMemory bottomPackedMemory{VK_NULL_HANDLE};
-        void* bottomPackedMapped{};
-        VkBuffer capture3dBuffer{VK_NULL_HANDLE};
-        VkDeviceMemory capture3dMemory{VK_NULL_HANDLE};
-        void* capture3dMapped{};
-        VkDeviceSize packedBufferSize{};
+        bool faithfulTimestampBreakdownPending{};
         VkImage renderer3dSnapshot{VK_NULL_HANDLE};
         VkImageView renderer3dSnapshotView{VK_NULL_HANDLE};
         VkDeviceMemory renderer3dSnapshotMemory{VK_NULL_HANDLE};
         u32 snapshotWidth{};
         u32 snapshotHeight{};
+
+        bool renderer3dSnapshotLayoutInitialized{};
+        Renderer3dSnapshotState renderer3dSnapshotState{
+            Renderer3dSnapshotState::Empty};
+
+        u64 renderer3dSnapshotFrameId{};
+        u64 renderer3dSnapshotPublicationGeneration{};
+        Renderer3dSnapshotProjectionKey renderer3dSnapshotProjection{};
+
+        VkBuffer renderer3dNativeProjectionBuffer{VK_NULL_HANDLE};
+        VkDeviceMemory renderer3dNativeProjectionMemory{VK_NULL_HANDLE};
+        VkDescriptorPool renderer3dNativeProjectionDescriptorPool{
+            VK_NULL_HANDLE};
+        VkDescriptorSet renderer3dNativeProjectionDescriptorSet{
+            VK_NULL_HANDLE};
+        u64 renderer3dNativeProjectionDescriptorGeneration{};
+        bool renderer3dNativeProjectionValid{};
         VkImage exactObjRenderer3dSnapshot{VK_NULL_HANDLE};
         VkImageView exactObjRenderer3dSnapshotView{VK_NULL_HANDLE};
         VkDeviceMemory exactObjRenderer3dSnapshotMemory{VK_NULL_HANDLE};
@@ -771,7 +770,8 @@ private:
         bool screenSwap{};
         bool screenSwapToggledFromPrevious{};
         bool hasContent{};
-        bool hasPreparedInputs{};
+
+        u64 faithfulComposedFrameId = ~0ull;
         bool replayTopComposedFromPrevious{};
         bool replayBottomComposedFromPrevious{};
         bool replayTopComposedFromLatest{};
@@ -793,10 +793,15 @@ private:
         bool renderer3dSnapshotScreenSwap{};
         bool renderer3dSnapshotZeroPolygons{};
         bool renderer3dSnapshotSourceIdentityValid{};
+        u64 renderer3dSnapshotSourceEpoch{};
         u64 renderer3dSnapshotSourceSequence{};
         u32 renderer3dSnapshotSourcePolygonCount{};
         u32 renderer3dSnapshotSourceCaptureCnt{};
         bool renderer3dSnapshotSourceScreenSwap{};
+
+        u64 faithfulLiveConsumerTimelineValue{};
+        FrameResource* faithfulLiveConsumerFenceOwner{};
+        u64 faithfulLiveConsumerSubmissionValue{};
         bool sameBankMode2DisplayedSourceApplied{};
         bool sameBankMode2DisplayedSourceFromCache{};
         bool sameBankMode2CacheWritePending{};
@@ -816,12 +821,24 @@ private:
         VkImageView cachedPreviousTopRendererImageView{VK_NULL_HANDLE};
         VkImageView cachedPreviousBottomRendererImageView{VK_NULL_HANDLE};
         std::array<u32, 256 * 192> preparedCapture3dSource{};
+
+        [[nodiscard]] bool hasPublishedRenderer3dForFrame(const Frame& frame) const noexcept
+        {
+            return frame.backend == FrameBackend::VulkanImage
+                && frame.renderTimelineValue != 0u
+                && renderer3dSnapshotState == Renderer3dSnapshotState::Published
+                && hasRenderer3dSnapshot
+                && renderer3dSnapshot != VK_NULL_HANDLE
+                && snapshotWidth != 0u && snapshotHeight != 0u
+                && renderer3dSnapshotFrameId != 0u
+                && renderer3dSnapshotFrameId == frame.frameId
+                && renderer3dSnapshotPublicationGeneration == frame.publicationGeneration;
+        }
     };
 
     struct SameBankMode2SourceCache
     {
         VkImage image{VK_NULL_HANDLE};
-        VkImageView imageView{VK_NULL_HANDLE};
         VkDeviceMemory memory{VK_NULL_HANDLE};
         u32 width{};
         u32 height{};
@@ -833,44 +850,327 @@ private:
 private:
     bool createSyncObjects();
     bool createCommandObjects();
-    bool createCompositorResources();
     bool createTimestampQueryPool(VkQueryPool& queryPool);
     void destroyTimestampQueryPool(VkQueryPool& queryPool);
-    void destroyCompositorResources();
     bool createFrameResource(Frame* frame, u32 width, u32 height);
     void destroyFrameResource(Frame* frame);
     void destroyFrameResources();
     u32 findMemoryType(u32 typeBits, VkMemoryPropertyFlags properties) const;
 
+public:
+    bool ensureFaithfulAtlas();
+    void uploadFaithfulAtlas(melonDS::GPU& gpu);
+
+    void uploadFaithfulAtlasPreFrame(melonDS::GPU& gpu, bool desdeTail = false);
+
+    void publishFaithfulCertifiedCaptureTerminals(
+        melonDS::GPU& gpu, u32 outputScale);
+    bool faithfulPreListo = false;
+    bool faithfulHighresConsumerActive = false;
+    [[nodiscard]] const void* faithfulAtlasMapped() const { return faithfulAtlasMappedPtr[faithfulRing]; }
+
+    std::atomic<int> diagFrameId {-1};
+
+    u32 diagInvalidaciones = 0u;
+
+    [[nodiscard]] bool consumirSubidaSuciaFiel()
+    { const bool v = fielHuboSubidaSucia; fielHuboSubidaSucia = false; return v; }
+
+    [[nodiscard]] bool swapEfectivoFiel(melonDS::GPU& gpu) const;
+    [[nodiscard]] void* faithful3dMappedActual() const { return faithful3dMapped[faithfulRing]; }
+private:
+    void destroyFaithfulAtlas();
+
+    static constexpr uint32_t kFielRanuras = 3;
+
+    struct FaithfulUse
+    {
+        u64 timelineValue{};
+        FrameResource* fenceOwner{};
+        u64 ownerSubmissionValue{};
+    };
+    FaithfulUse faithfulSlotUse[kFielRanuras] {};
+
+    FaithfulUse faithfulTemporalUse {};
+
+    mutable std::mutex faithfulLifetimeLock;
+    std::atomic<melonDS::u32> rechazosFuente3D {0};
+
+    static void renderer3dSnapshotDstDims(melonDS::u32 rendererWidth, melonDS::u32 rendererHeight,
+                                          melonDS::u32 resourceWidth, melonDS::u32& dstWidth, melonDS::u32& dstHeight) noexcept;
+    [[nodiscard]] bool waitFaithfulUseLocked(FaithfulUse& use);
+    [[nodiscard]] bool waitFaithfulLiveSnapshotUseLocked(
+        FrameResource& source);
+    void markFaithfulLiveSnapshotConsumerLocked(
+        FrameResource& source, FrameResource& consumer);
+    void clearFaithfulUsesForCompletedResourceLocked(FrameResource& resource);
+    void markFaithfulSubmittedLocked(u32 slot, FrameResource& resource);
+    [[nodiscard]] FrameResource* findExactFaithfulNativeProjectionLocked(
+        u64 renderProductEpoch, u64 sequence,
+        const FrameResource* excludedResource = nullptr);
+    [[nodiscard]] bool flushFaithfulAtlasWritesLocked(u32 slot);
+    void uploadFaithfulAtlasPreFrameLocked(melonDS::GPU& gpu, bool desdeTail);
+    void uploadFaithfulCausalPrevLocked(melonDS::GPU& gpu);
+    struct FaithfulCaptureMaterializationNode;
+    struct FaithfulCaptureMaterializationPlan;
+    [[nodiscard]] bool uploadFaithfulCaptureRecipeLocked(
+        const FaithfulCaptureMaterializationNode& node, u32 targetSlot);
+    VkBuffer faithfulAtlasBuffer[kFielRanuras] = {};
+    VkDeviceMemory faithfulAtlasMemory[kFielRanuras] = {};
+    void* faithfulAtlasMappedPtr[kFielRanuras] = {};
+
+    static constexpr size_t kFaithfulPreBytes = 0x225000u;
+    FaithfulAtlasStaging<kFaithfulPreBytes> faithfulAtlasPre[kFielRanuras];
+    PFN_vkFlushMappedMemoryRanges faithfulFlushMappedMemoryRanges = nullptr;
+    VkMemoryPropertyFlags faithfulAtlasMemoryFlags[kFielRanuras] = {};
+    bool faithfulAtlasDeviceVisible[kFielRanuras] = {};
+    bool fielHuboSubidaSucia = false;
+    bool faithfulAtlasPrimed[kFielRanuras] = {};
+    uint32_t faithfulRing = 0;
+
+    uint32_t faithfulEpocaVista = 0xFFFFFFFFu;
+
+    VkSampler faithfulSampler = VK_NULL_HANDLE;
+
+    struct PendienteFiel
+    {
+        uint64_t ABG[16]; uint64_t BBG[4]; uint64_t AOBJ[8]; uint64_t BOBJ[4];
+        uint64_t ABGExtPal[1]; uint64_t BBGExtPal[1];
+        uint64_t AOBJExtPal[1]; uint64_t BOBJExtPal[1];
+
+        uint64_t Bancos[4][4];
+    };
+    PendienteFiel faithfulPendiente[kFielRanuras] {};
+    bool faithfulBancosCebados[kFielRanuras][4] {};
+
+    u32 faithfulCapStashSeqVista[kFielRanuras][2] {};
+    u32 faithfulSwapPrevio = 0xFFFFFFFFu;
+
+public:
+    bool composeFaithfulDebug(melonDS::GPU& gpu, u32* out            );
+
+    [[nodiscard]] std::vector<u32> captureFaithfulDiagnosticPayload(u64 expectedFrameId);
+
+    bool dispatchFaithfulCompositor(Frame* frame, FrameResource& resource,
+                                    const VulkanCompositionInputs* inputs = nullptr);
+private:
+    void destroyFaithfulDebugLocked();
+
+    bool ensureFaithfulPipelineCache();
+    void saveFaithfulPipelineCacheIfGrown();
+    void destroyFaithfulPipelineCache();
+    VkPipelineCache faithfulPipelineCache = VK_NULL_HANDLE;
+    std::string faithfulPipelineCacheFile;
+    std::size_t faithfulPipelineCacheSavedBytes = 0;
+    FaithfulDiagnosticPayload faithfulDiagnosticPayload;
+    void destroyRenderer3dNativeProjection(FrameResource& resource);
+    bool ensureRenderer3dNativeProjection(FrameResource& resource);
+    void destroyCapturaHighresLocked();
+    bool ensureFaithfulPipeline();
+    VkBuffer faithfulRegsBuffer[kFielRanuras] = {};
+    VkDeviceMemory faithfulRegsMemory[kFielRanuras] = {};
+    void* faithfulRegsMapped[kFielRanuras] = {};
+
+    VkBuffer faithfulCausalBuffer[kFielRanuras] = {};
+    VkDeviceMemory faithfulCausalMemory[kFielRanuras] = {};
+    void* faithfulCausalMapped[kFielRanuras] = {};
+
+    std::shared_ptr<const FaithfulCaptureMaterializationPlan>
+        faithfulCapturePlans[kFielRanuras] {};
+    VkImage faithfulOutImage = VK_NULL_HANDLE;
+    VkDeviceMemory faithfulOutMemory = VK_NULL_HANDLE;
+    VkImageView faithfulOutView = VK_NULL_HANDLE;
+
+    VkImage capHighresImage[4] = {VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE};
+    VkDeviceMemory capHighresMem[4] = {VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE};
+    VkImageView capHighresView[4] = {VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE};
+    bool capHighresPrevInicial = false;
+    bool capHighresPrev2Inicial = false;
+    bool capFichaPrevSinCaptura = false;
+
+    enum class FaithfulCaptureSlotState : u8
+    {
+        Empty = 0,
+        PendingSeal,
+        Certified,
+    };
+
+    bool capHighresLayoutInitialized[4] = {false, false, false, false};
+    FaithfulCaptureSlotState capHighresSlotState[4] = {
+        FaithfulCaptureSlotState::Empty,
+        FaithfulCaptureSlotState::Empty,
+        FaithfulCaptureSlotState::Empty,
+        FaithfulCaptureSlotState::Empty,
+    };
+    u64 capHighresSealAttempt[4] = {};
+    u64 faithfulSealNextAttempt = 1u;
+
+    bool faithfulCaptureLineageInvalidationPending = false;
+    void noteFaithfulCertifiedCaptureLossLocked() noexcept;
+    struct FaithfulCaptureTerminalKey
+    {
+        u64 epoch = 0u;
+        u64 id = 0u;
+    };
+    std::array<FaithfulCaptureTerminalKey, 4>
+        faithfulPublishedCaptureTerminals {};
+    std::array<FaithfulCaptureTerminalKey, 4>
+        faithfulRequiredCaptureTerminals {};
+    u8 faithfulPublishedCaptureTerminalCount = 0u;
+    u8 faithfulRequiredCaptureTerminalCount = 0u;
+    u64 faithfulPublishedCaptureTerminalEpoch = 0u;
+    u64 faithfulRequiredCaptureTerminalEpoch = 0u;
+    u64 faithfulPublishedCaptureTerminalGeneration = 0u;
+    u64 faithfulRequiredCaptureTerminalGeneration = 0u;
+
+    std::array<FaithfulCaptureTerminalKey, 4>
+        faithfulNativeFrontiers {};
+    u8 faithfulNativeFrontierCount = 0u;
+    u64 faithfulNativeFrontierEpoch = 0u;
+    FaithfulCaptureTerminalKey capHighresRejectKey {};
+    u32 capHighresRejectStreak = 0u;
+    static constexpr u32 kFaithfulCaptureRejectFrontier = 4u;
+
+    static constexpr u32 kFaithfulCaptureChainMax = 2u;
+    u32 capHighresEscala = 0;
+    bool capHighresValida = false;
+    u32 capHighresBanco = 0;
+    u32 capHighresBancoPar[2] = {0xFFFFFFFFu, 0xFFFFFFFFu};
+    u32 capHighresOfsPar[2] = {0, 0};
+    u32 capHighresSel = 0;
+    u32 capFichaCnt = 0;
+    bool capFichaActiva = false;
+    bool capFichaSwap = false;
+
+    u32 capFichaIniABG = 0xFFFFFFFFu;
+    u32 capFichaIniBBG = 0xFFFFFFFFu;
+    u32 capHighresIniABG = 0xFFFFFFFFu;
+    u32 capHighresIniBBG = 0xFFFFFFFFu;
+    u32 capHighresIniObj = 0xFFFFFFFFu;
+    u32 capFichaDispA0 = 0;
+    u32 capFichaDispB0 = 0;
+    bool capFichaPreA = false;
+    bool capFichaPreB = false;
+    u32 capVivaDispA0 = 0;
+    bool capVivaPreA = false;
+    bool capVivaActiva = false;
+    u32 capVivaCnt = 0;
+    u32 capVivaFotSeq = 0;
+    u32 capUltimoFotSeq = 0;
+    bool capFichaSalto = false;
+    u32 capSwapCambioReciente = 0;
+
+    u32 capSwapPrevio = 0xFFu;
+    u32 capSwapVentana = 0;
+
+    u32 capSwapSuave = 0;
+
+    u32 capSwapRetenidos = 0;
+
+    u32 capFichaNp = 0;
+
+    u32 capFichaNpPrev = 0;
+
+    u32 capSelloPar[2] = {0xFFu, 0xFFu};
+    u32 capSelloPrev = 0xFFu;
+    u32 capSelloPrev2 = 0xFFu;
+    bool capFrescaPar[2] = {false, false};
+
+    bool capVetoIdentidadPar[2] = {false, false};
+
+    struct FaithfulCaptureProductStamp
+    {
+        bool valid = false;
+        bool complete = false;
+        bool highresEligible = false;
+        bool materialComplete = false;
+        bool causalMetadataComplete = false;
+        bool recipeComplete = false;
+        bool uses3d = false;
+        bool sourceIdentityValid = false;
+        bool sourceScreenSwap = false;
+        u64 productId = 0;
+        u64 productEpoch = 0;
+        u64 sourceRenderProductEpoch = 0;
+        u64 sourceSequence = 0;
+        u32 captureCnt = 0;
+        u32 frameSequence = 0;
+        u32 destinationOffsetPixels = 0;
+        u32 sourcePolygonCount = 0;
+        u32 sourceCaptureCnt = 0;
+        u16 width = 0;
+        u16 height = 0;
+        u8 destinationBank = 0xFFu;
+
+        std::shared_ptr<const void> lease {};
+    };
+    FaithfulCaptureProductStamp capProductoVivo {};
+    FaithfulCaptureProductStamp capProductoPrev {};
+    FaithfulCaptureProductStamp capHighresProducto[4] {};
+    u64 capHighresProductEpoch = 0;
+
+    VkBuffer faithfulCaptureSealBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory faithfulCaptureSealMemory = VK_NULL_HANDLE;
+    bool faithfulCaptureSealNeedsClear = true;
+
+    VkBuffer faithfulSealReadbackBuffer[kFielRanuras] {};
+    VkDeviceMemory faithfulSealReadbackMemory[kFielRanuras] {};
+    void* faithfulSealReadbackMapped[kFielRanuras] {};
+    bool faithfulSealReadbackPending[kFielRanuras] {};
+    u32 faithfulSealReadbackSlot[kFielRanuras] {4u, 4u, 4u};
+    u64 faithfulSealReadbackEpoch[kFielRanuras] {};
+    u64 faithfulSealReadbackProduct[kFielRanuras] {};
+    u64 faithfulSealReadbackAttempt[kFielRanuras] {};
+    bool ensureCapturaHighres(u32 escala);
+    VkBuffer faithfulReadBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory faithfulReadMemory = VK_NULL_HANDLE;
+    void* faithfulReadMapped = nullptr;
+    VkDescriptorSetLayout faithfulSetLayout = VK_NULL_HANDLE;
+    VkPipelineLayout faithfulPipeLayout = VK_NULL_HANDLE;
+    VkPipeline faithfulPipeline = VK_NULL_HANDLE;
+
+    VkPipeline faithfulObjScanlinePipeline = VK_NULL_HANDLE;
+
+    VkPipeline faithfulModePipeline[7] {};
+
+    VkPipeline faithfulCaptureSourceAOnlyPipeline[2] {};
+
+    VkPipeline faithfulFinalNativeCellPipeline = VK_NULL_HANDLE;
+
+    u32 faithfulFinalNativeSubtileSize = 4u;
+    VkDescriptorSetLayout renderer3dNativeProjectionSetLayout = VK_NULL_HANDLE;
+    VkPipelineLayout renderer3dNativeProjectionPipeLayout = VK_NULL_HANDLE;
+    VkPipeline renderer3dNativeProjectionPipeline = VK_NULL_HANDLE;
+    u64 renderer3dNativeProjectionPipelineGeneration = 0u;
+
+    bool faithfulPipelineReady = false;
+    VkDescriptorPool faithfulDescPool = VK_NULL_HANDLE;
+    VkDescriptorSet faithfulDescSet[kFielRanuras] = {};
+    bool faithfulOutImageInitialized = false;
+    VkBuffer faithful3dBuffer[kFielRanuras] = {};
+    VkDeviceMemory faithful3dMemory[kFielRanuras] = {};
+    void* faithful3dMapped[kFielRanuras] = {};
+
+    VkBuffer faithfulObjBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory faithfulObjMemory = VK_NULL_HANDLE;
+
+    VkBuffer faithfulB1Buffer = VK_NULL_HANDLE;
+    VkDeviceMemory faithfulB1Memory = VK_NULL_HANDLE;
+public:
+
+    std::vector<u32> faithful3dStash;
+
+    std::vector<u32> faithful3dStashPrev;
+private:
+
+    u64 faithfulNativeFallbackEpoch = 0u;
+    u64 faithfulNativeFallbackSequence = 0u;
+    bool faithfulNativeFallbackGpuBacked = false;
+
     bool beginFrameCommand(FrameResource& resource, u64 waitTimeoutNs = UINT64_MAX);
     bool submitFrameCommand(Frame* frame, FrameResource& resource, bool signalTimeline);
-    bool updateCompositorPackedBuffers(
-        Frame* frame,
-        FrameResource& resource,
-        const SoftPackedFrameSnapshot& softPackedSnapshot,
-        melonDS::VulkanPipelineProfile pipelineProfile);
-    bool updateCompositorPackedBuffersCompatibility(
-        Frame* frame,
-        FrameResource& resource,
-        const SoftPackedFrameSnapshot& softPackedSnapshot);
-    bool updateCompositorPackedBuffersFastPath(
-        Frame* frame,
-        FrameResource& resource,
-        const SoftPackedFrameSnapshot& softPackedSnapshot);
-    bool updatePreparedCapture3dSourceCompatibility(
-        FrameResource& resource,
-        SoftPackedFrameSnapshot& softPackedSnapshot,
-        const FrameResource* previousResource,
-        bool currentBackendIsGraphics,
-        bool currentFrameNeedsCapture3dSource,
-        melonDS::VulkanRenderer3D& renderer3D);
-    bool updatePreparedCapture3dSourceFastPath(
-        FrameResource& resource,
-        SoftPackedFrameSnapshot& softPackedSnapshot,
-        const FrameResource* previousResource,
-        bool currentBackendIsGraphics,
-        bool currentFrameNeedsCapture3dSource,
-        melonDS::VulkanRenderer3D& renderer3D);
+    void clearRenderer3dSnapshotPublication(
+        FrameResource& resource, bool forgetLayout);
     bool ensureRenderer3dSnapshot(FrameResource& resource, u32 width, u32 height);
     void destroyRenderer3dSnapshot(FrameResource& resource);
     bool ensureExactObjRenderer3dSnapshot(FrameResource& resource, u32 width, u32 height);
@@ -901,70 +1201,7 @@ private:
         bool preferPinnedCaptureSource);
     bool recordRenderer3dLiveSourcePrep(FrameResource& resource, melonDS::VulkanRenderer3D& renderer3D, bool sourceScreenSwap);
     void releaseRetainedRenderer3dSource(FrameResource& resource);
-    bool buildCompositionInputsCompatibility(
-        const Frame* frame,
-        const melonDS::VulkanRenderer3D& renderer3D,
-        int scale,
-        VulkanFilterMode filtering,
-        bool needsReadback,
-        bool multiSurface,
-        bool validationMode,
-        VulkanCompositionInputs& outInputs) const;
-
-    bool createAccumulateResources();
-    void destroyAccumulateResources();
-    bool ensureAccumulatedHighresImages(u32 width, u32 height);
-    void destroyAccumulatedHighresImage(VkImage& image, VkImageView& view, VkDeviceMemory& memory, bool& valid, bool& layoutReady);
-    bool recordAccumulateMerge(
-        FrameResource& resource,
-        bool topLcd,
-        bool replaceExisting,
-        bool allowCrossLcdSource);
-    bool recordAccumulateMergeCompatibility(
-        FrameResource& resource,
-        bool topLcd,
-        bool replaceExisting);
-    bool recordDirectPresentationPrep(
-        Frame* frame,
-        FrameResource& resource,
-        melonDS::VulkanRenderer3D& renderer3D,
-        bool snapshotScreenSwap,
-        bool allowRetainedLiveSource,
-        bool accumulateTopHighres,
-        bool accumulateBottomHighres,
-        bool replaceAccumulatedHighres,
-        int crossLcdReplayTarget,
-        bool usePublishedOppositeAsLiveSource,
-        const SoftPackedObjCaptureSourceIdentity* exactBottomObjSource,
-        const SoftPackedDisplayedCaptureSourceIdentity* exactTopDisplayedCaptureSource,
-        const SoftPackedSameBankMode2DisplayedSourceIdentity*
-            sameBankMode2DisplayedSource);
     bool dispatchCompositor(Frame* frame, FrameResource& resource, const VulkanCompositionInputs& inputs);
-    bool dispatchVisibleCompositor(
-        Frame* frame,
-        FrameResource& resource,
-        const VulkanCompositionInputs& inputs,
-        VkImage targetImage,
-        VkImageView targetImageView,
-        VkImageLayout targetLayout,
-        bool targetHasContent,
-        u32 targetWidth,
-        u32 targetHeight,
-        VkImage previousImage,
-        bool previousValid,
-        const VulkanVisibleCompositorRegion* regions,
-        u32 regionCount);
-    void recordTemporalStats(
-        const SoftPackedFrameSnapshot& softPackedSnapshot,
-        const FrameResource& resource,
-        bool topNeedsAccumulatedHighres,
-        bool bottomNeedsAccumulatedHighres,
-        bool topAccumulatorAvailable,
-        bool bottomAccumulatorAvailable,
-        bool packedScreenSwap,
-        bool liveSourceScreenSwap,
-        bool hasRenderer3dSnapshot,
-        bool renderer3dSnapshotScreenSwap);
     void consumeFrameGpuTiming(FrameResource& resource);
     void logPerformanceIfNeeded();
     void logDirectPerformanceIfNeeded();
@@ -980,7 +1217,6 @@ private:
         u64 waitTimeoutNs);
 
 private:
-    const melonDS::VulkanPipelineProfile pipelineProfile;
     bool initialized{};
     bool contextAcquired{};
     bool lastPrepareBlockedByMissingHighresHistory{};
@@ -1003,47 +1239,14 @@ private:
     PFN_vkResetQueryPoolEXT resetQueryPool{};
     float timestampPeriodNs{};
     bool timestampQueriesSupported{};
+    bool faithfulPassTimingSessionEnabled{};
 
-    VkDescriptorSetLayout compositorDescriptorSetLayout{VK_NULL_HANDLE};
-    VkDescriptorPool compositorDescriptorPool{VK_NULL_HANDLE};
-    VkPipelineLayout compositorPipelineLayout{VK_NULL_HANDLE};
-    VkPipeline compositorPipeline{VK_NULL_HANDLE};
 
-    VkImage accumulatedTopHighresImage{VK_NULL_HANDLE};
-    VkImageView accumulatedTopHighresView{VK_NULL_HANDLE};
-    VkDeviceMemory accumulatedTopHighresMemory{VK_NULL_HANDLE};
-    bool accumulatedTopHighresValid{false};
-    u64 accumulatedTopHighresLastMergeFrameId{0};
-    u64 accumulatedBottomHighresLastMergeFrameId{0};
     u64 lastPreparedFrameId{0};
-    u64 accumulatedHighresPrepareSerial{0};
-    u64 accumulatedTopHighresLastMergePrepareSerial{0};
-    u64 accumulatedBottomHighresLastMergePrepareSerial{0};
-    bool accumulatedTopHighresLayoutReady{false};
-    VkImage accumulatedBottomHighresImage{VK_NULL_HANDLE};
-    VkImageView accumulatedBottomHighresView{VK_NULL_HANDLE};
-    VkDeviceMemory accumulatedBottomHighresMemory{VK_NULL_HANDLE};
-    bool accumulatedBottomHighresValid{false};
-    bool accumulatedBottomHighresLayoutReady{false};
-    u32 accumulatedHighresWidth{0};
-    u32 accumulatedHighresHeight{0};
-
-    VkDescriptorSetLayout accumulateDescriptorSetLayout{VK_NULL_HANDLE};
-    VkDescriptorPool accumulateDescriptorPool{VK_NULL_HANDLE};
-    VkPipelineLayout accumulatePipelineLayout{VK_NULL_HANDLE};
-    VkPipeline accumulatePipeline{VK_NULL_HANDLE};
-    VkPipeline accumulateCompatibilityPipeline{VK_NULL_HANDLE};
-    VkPipeline accumulateScale8Pipeline{VK_NULL_HANDLE};
-    VkDescriptorSet accumulateTopDescriptorSet{VK_NULL_HANDLE};
-    VkDescriptorSet accumulateBottomDescriptorSet{VK_NULL_HANDLE};
-    bool accumulateTopDescriptorReady{false};
-    bool accumulateBottomDescriptorReady{false};
-    VkImageView cachedAccumulateTopSourceView{VK_NULL_HANDLE};
-    VkImageView cachedAccumulateBottomSourceView{VK_NULL_HANDLE};
     std::array<SameBankMode2SourceCache, 4> sameBankMode2SourceCaches{};
 
+    Frame bridgeRenderer3dFrame{};
     std::unordered_map<Frame*, FrameResource> resources;
-    mutable std::recursive_mutex resourcesLock;
     std::mutex commandPoolLock;
     mutable std::mutex temporalReferenceLock;
     Frame* lastPreparedFrame{nullptr};
@@ -1051,6 +1254,9 @@ private:
     Frame* lastBottomRendererSourceFrame{nullptr};
     Frame* lastTopComposedFrame{nullptr};
     Frame* lastBottomComposedFrame{nullptr};
+
+    u32 topEmptyStructured2dReplayRun{0};
+    u32 bottomEmptyStructured2dReplayRun{0};
     std::vector<u32> lastValidTopPacked;
     std::vector<u32> lastValidBottomPacked;
     std::vector<u32> exactVisibleRegularComp7TopPacked;
@@ -1124,7 +1330,16 @@ private:
     PerfSampleWindow<120> prepareDirectCpuWindow;
     PerfSampleWindow<120> prepareFinalizeCpuWindow;
     PerfSampleWindow<120> waitCpuWindow;
+    PerfSampleWindow<120> waitPresentationCpuWindow;
+    PerfSampleWindow<120> waitOtherCpuWindow;
     PerfSampleWindow<120> compositorGpuWindow;
+    PerfSampleWindow<120> faithfulSnapshotGpuWindow;
+    PerfSampleWindow<120> faithfulObjGpuWindow;
+    PerfSampleWindow<120> faithfulB1GpuWindow;
+    PerfSampleWindow<120> faithfulCaptureGpuWindow;
+    PerfSampleWindow<120> faithfulCompactGpuWindow;
+    PerfSampleWindow<120> faithfulFinalGpuWindow;
+    PerfSampleWindow<120> faithfulReadbackGpuWindow;
     u64 waitFailureInvalidFrame = 0;
     u64 waitFailureTimelineZero = 0;
     u64 waitFailureResourceMissing = 0;

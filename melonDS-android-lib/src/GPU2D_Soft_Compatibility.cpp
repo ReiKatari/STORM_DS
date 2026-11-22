@@ -740,17 +740,11 @@ void CompatibilitySoftRenderer::StoreStructuredVulkan2DPixel(
         }
         else if (slotInPlane0 || captureBackedSlotInPlane0)
         {
-            belowPlane =
-                (legacyVal2 != 0u && !StructuredVulkan2DHas3DSlot(legacyVal2))
-                    ? legacyVal2
-                    : (!StructuredVulkan2DHas3DSlot(originalVal2) ? originalVal2 : 0u);
+            belowPlane = legacyVal2;
         }
         else if (slotInPlane1 || captureBackedSlotInPlane1)
         {
-            belowPlane =
-                (legacyVal2 != 0u && !StructuredVulkan2DHas3DSlot(legacyVal2))
-                    ? legacyVal2
-                    : (!StructuredVulkan2DHas3DSlot(originalVal3) ? originalVal3 : 0u);
+            belowPlane = legacyVal2;
             if (StructuredVulkan2DSourceIsReal2D(sourceClass0))
             {
                 abovePlane = originalVal1;
@@ -762,7 +756,7 @@ void CompatibilitySoftRenderer::StoreStructuredVulkan2DPixel(
         }
         else
         {
-            belowPlane = 0u;
+            belowPlane = legacyVal1;
             if (StructuredVulkan2DSourceIsReal2D(sourceClass0) || StructuredVulkan2DSourceIsReal2D(sourceClass1))
             {
                 abovePlane = legacyVal1;
@@ -921,24 +915,23 @@ void CompatibilitySoftRenderer::StoreStructuredVulkan2DCapturePixel(
         }
         else if (external3DSlot && slotInPlane0)
         {
-            belowPlane =
-                (legacyVal2 != 0u && !StructuredVulkan2DHas3DSlot(legacyVal2))
-                    ? legacyVal2
-                    : (!StructuredVulkan2DHas3DSlot(originalVal2) ? originalVal2 : 0u);
+            belowPlane = legacyVal2;
+            if (StructuredVulkan2DSourceIsReal2D(sourceClass1))
+            {
+                abovePlane = legacyVal2;
+                hasAbovePlane = true;
+                protectedBlack2D =
+                    StructuredVulkan2DSourceIsReal2D(sourceClass1)
+                    && StructuredVulkan2DIsOpaqueBlack(abovePlane);
+            }
         }
         else if (slotInPlane0 || captureBackedSlotInPlane0)
         {
-            belowPlane =
-                (legacyVal2 != 0u && !StructuredVulkan2DHas3DSlot(legacyVal2))
-                    ? legacyVal2
-                    : (!StructuredVulkan2DHas3DSlot(originalVal2) ? originalVal2 : 0u);
+            belowPlane = legacyVal2;
         }
         else if (slotInPlane1 || captureBackedSlotInPlane1)
         {
-            belowPlane =
-                (legacyVal2 != 0u && !StructuredVulkan2DHas3DSlot(legacyVal2))
-                    ? legacyVal2
-                    : (!StructuredVulkan2DHas3DSlot(originalVal3) ? originalVal3 : 0u);
+            belowPlane = legacyVal2;
             if (StructuredVulkan2DSourceIsReal2D(sourceClass0))
             {
                 abovePlane = originalVal1;
@@ -950,7 +943,7 @@ void CompatibilitySoftRenderer::StoreStructuredVulkan2DCapturePixel(
         }
         else
         {
-            belowPlane = 0u;
+            belowPlane = legacyVal1;
             if (StructuredVulkan2DSourceIsReal2D(sourceClass0) || StructuredVulkan2DSourceIsReal2D(sourceClass1))
             {
                 abovePlane = legacyVal1;
@@ -1058,6 +1051,8 @@ void CompatibilitySoftRenderer::DrawScanline(u32 line, Unit* unit)
     if (CurUnit->Num == 0)
     {
         if (!GPU.GPU3D.IsRendererAccelerated())
+            _3DLine = GPU.GPU3D.GetLine(n3dline);
+        else if (!useStructuredVulkan2D && CurUnit->CaptureLatch && (((CurUnit->CaptureCnt >> 29) & 0x3) != 1))
             _3DLine = GPU.GPU3D.GetLine(n3dline);
     }
 
@@ -1254,6 +1249,13 @@ void CompatibilitySoftRenderer::VBlankEnd(Unit* unitA, Unit* unitB)
         const u32 captureCnt = unitA->CaptureCnt;
         const u32 captureMode = (captureCnt >> 29u) & 0x3u;
         const bool captureEnabled = (captureCnt & (1u << 31u)) != 0u;
+        if (!renderer3d.UsesStructured2DMetadata())
+        {
+            if (captureEnabled && captureMode != 1u)
+                renderer3d.PrepareCaptureFrame();
+            return;
+        }
+
         const bool captureUsesDirect3D = (captureCnt & (1u << 24u)) != 0u;
         const bool sourceAContributes = captureMode == 0u
             || ((captureMode >= 2u) && ((captureCnt & 0x1Fu) != 0u));
@@ -1308,6 +1310,199 @@ void CompatibilitySoftRenderer::DoCapture(u32 line, u32 width, u32 sourceLine)
 
     u16* dst = (u16*)GPU.VRAM[dstvram];
     u32 dstaddr = (((captureCnt >> 18) & 0x3) << 14) + (line * width);
+    if (!useStructuredVulkan2D)
+    {
+        u32* srcA;
+        if (captureCnt & (1<<24))
+        {
+            srcA = _3DLine;
+        }
+        else
+        {
+            srcA = BGOBJLine;
+            if (GPU.GPU3D.IsRendererAccelerated())
+            {
+                for (int i = 0; i < 256; i++)
+                {
+                    u32 val1 = BGOBJLine[i];
+                    u32 val2 = BGOBJLine[256+i];
+                    u32 val3 = BGOBJLine[512+i];
+
+                    u32 compmode = (val3 >> 24) & 0xF;
+
+                    if (compmode == 4)
+                    {
+                        u32 _3dval = _3DLine[i];
+                        if ((_3dval >> 24) > 0)
+                            val1 = ColorBlend5(_3dval, val1);
+                        else
+                            val1 = val2;
+                    }
+                    else if (compmode == 1)
+                    {
+                        u32 _3dval = _3DLine[i];
+                        if ((_3dval >> 24) > 0)
+                        {
+                            u32 eva = (val3 >> 8) & 0x1F;
+                            u32 evb = (val3 >> 16) & 0x1F;
+
+                            val1 = ColorBlend4(val1, _3dval, eva, evb);
+                        }
+                        else
+                            val1 = val2;
+                    }
+                    else if (compmode <= 3)
+                    {
+                        u32 _3dval = _3DLine[i];
+                        if ((_3dval >> 24) > 0)
+                        {
+                            u32 evy = (val3 >> 8) & 0x1F;
+
+                            val1 = _3dval;
+                            if      (compmode == 2) val1 = ColorBrightnessUp(val1, evy, 0x8);
+                            else if (compmode == 3) val1 = ColorBrightnessDown(val1, evy, 0x7);
+                        }
+                        else
+                            val1 = val2;
+                    }
+
+                    BGOBJLine[i] = val1;
+                }
+            }
+        }
+
+        u16* srcB = NULL;
+        u32 srcBaddr = line * 256;
+
+        if (captureCnt & (1<<25))
+        {
+            srcB = &CurUnit->DispFIFOBuffer[0];
+            srcBaddr = 0;
+        }
+        else
+        {
+            u32 srcvram = (CurUnit->DispCnt >> 18) & 0x3;
+            if (GPU.VRAMMap_LCDC & (1<<srcvram))
+                srcB = (u16*)GPU.VRAM[srcvram];
+
+            if (((CurUnit->DispCnt >> 16) & 0x3) != 2)
+                srcBaddr += ((captureCnt >> 26) & 0x3) << 14;
+        }
+
+        dstaddr &= 0xFFFF;
+        srcBaddr &= 0xFFFF;
+
+        static_assert(VRAMDirtyGranularity == 512);
+        GPU.VRAMDirty[dstvram][(dstaddr * 2) / VRAMDirtyGranularity] = true;
+        GPU.VRAMDirty_LCDC[dstvram][(dstaddr * 2) / VRAMDirtyGranularity] = true;
+
+        switch ((captureCnt >> 29) & 0x3)
+        {
+        case 0:
+            {
+                for (u32 i = 0; i < width; i++)
+                {
+                    u32 val = srcA[i];
+
+                    u32 r = (val >> 1) & 0x1F;
+                    u32 g = (val >> 9) & 0x1F;
+                    u32 b = (val >> 17) & 0x1F;
+                    u32 a = ((val >> 24) != 0) ? 0x8000 : 0;
+
+                    dst[dstaddr] = r | (g << 5) | (b << 10) | a;
+                    dstaddr = (dstaddr + 1) & 0xFFFF;
+                }
+            }
+            break;
+
+        case 1:
+            {
+                if (srcB)
+                {
+                    for (u32 i = 0; i < width; i++)
+                    {
+                        dst[dstaddr] = srcB[srcBaddr];
+                        srcBaddr = (srcBaddr + 1) & 0xFFFF;
+                        dstaddr = (dstaddr + 1) & 0xFFFF;
+                    }
+                }
+                else
+                {
+                    for (u32 i = 0; i < width; i++)
+                    {
+                        dst[dstaddr] = 0;
+                        dstaddr = (dstaddr + 1) & 0xFFFF;
+                    }
+                }
+            }
+            break;
+
+        case 2:
+        case 3:
+            {
+                u32 eva = captureCnt & 0x1F;
+                u32 evb = (captureCnt >> 8) & 0x1F;
+
+                if (eva > 16) eva = 16;
+                if (evb > 16) evb = 16;
+
+                if (srcB)
+                {
+                    for (u32 i = 0; i < width; i++)
+                    {
+                        u32 val = srcA[i];
+
+                        u32 rA = (val >> 1) & 0x1F;
+                        u32 gA = (val >> 9) & 0x1F;
+                        u32 bA = (val >> 17) & 0x1F;
+                        u32 aA = ((val >> 24) != 0) ? 1 : 0;
+
+                        val = srcB[srcBaddr];
+
+                        u32 rB = val & 0x1F;
+                        u32 gB = (val >> 5) & 0x1F;
+                        u32 bB = (val >> 10) & 0x1F;
+                        u32 aB = val >> 15;
+
+                        u32 rD = ((rA * aA * eva) + (rB * aB * evb) + 8) >> 4;
+                        u32 gD = ((gA * aA * eva) + (gB * aB * evb) + 8) >> 4;
+                        u32 bD = ((bA * aA * eva) + (bB * aB * evb) + 8) >> 4;
+                        u32 aD = (eva>0 ? aA : 0) | (evb>0 ? aB : 0);
+
+                        if (rD > 0x1F) rD = 0x1F;
+                        if (gD > 0x1F) gD = 0x1F;
+                        if (bD > 0x1F) bD = 0x1F;
+
+                        dst[dstaddr] = rD | (gD << 5) | (bD << 10) | (aD << 15);
+                        srcBaddr = (srcBaddr + 1) & 0xFFFF;
+                        dstaddr = (dstaddr + 1) & 0xFFFF;
+                    }
+                }
+                else
+                {
+                    for (u32 i = 0; i < width; i++)
+                    {
+                        u32 val = srcA[i];
+
+                        u32 rA = (val >> 1) & 0x1F;
+                        u32 gA = (val >> 9) & 0x1F;
+                        u32 bA = (val >> 17) & 0x1F;
+                        u32 aA = ((val >> 24) != 0) ? 1 : 0;
+
+                        u32 rD = ((rA * aA * eva) + 8) >> 4;
+                        u32 gD = ((gA * aA * eva) + 8) >> 4;
+                        u32 bD = ((bA * aA * eva) + 8) >> 4;
+                        u32 aD = (eva>0 ? aA : 0);
+
+                        dst[dstaddr] = rD | (gD << 5) | (bD << 10) | (aD << 15);
+                        dstaddr = (dstaddr + 1) & 0xFFFF;
+                    }
+                }
+            }
+            break;
+        }
+        return;
+    }
 
     const u32 structuredCaptureDstBase = dstaddr & 0xFFFFu;
     bool structuredCaptureStoredFromSourceA = false;
@@ -1620,6 +1815,7 @@ void CompatibilitySoftRenderer::DoCapture(u32 line, u32 width, u32 sourceLine)
 
     static_assert(VRAMDirtyGranularity == 512);
     GPU.VRAMDirty[dstvram][(dstaddr * 2) / VRAMDirtyGranularity] = true;
+    GPU.VRAMDirty_LCDC[dstvram][(dstaddr * 2) / VRAMDirtyGranularity] = true;
 
     auto packCaptureColor = [](u32 val) -> u16 {
         u32 r = (val >> 1) & 0x1F;
@@ -1984,11 +2180,7 @@ void CompatibilitySoftRenderer::DrawScanline_BGOBJ(u32 line)
         if (CurUnit->DispCnt & (1<<7))
         {
             for (int i = 0; i < 256; i++)
-            {
                 BGOBJLine[i] = 0xFF3F3F3F;
-                BGOBJLine[256 + i] = 0;
-                BGOBJLine[512 + i] = 0x07000000;
-            }
 
             return;
         }
@@ -2006,11 +2198,7 @@ void CompatibilitySoftRenderer::DrawScanline_BGOBJ(u32 line)
             backdrop |= (backdrop << 32);
 
             for (int i = 0; i < 256; i+=2)
-            {
                 *(u64*)&BGOBJLine[i] = backdrop;
-                *(u64*)&BGOBJLine[256 + i] = 0;
-                *(u64*)&BGOBJLine[512 + i] = 0;
-            }
         }
 
         if (CurUnit->DispCnt & 0xE000)
@@ -2192,11 +2380,7 @@ void CompatibilitySoftRenderer::DrawScanline_BGOBJ(u32 line)
     if (CurUnit->DispCnt & (1<<7))
     {
         for (int i = 0; i < 256; i++)
-        {
             BGOBJLine[i] = 0xFF3F3F3F;
-            BGOBJLine[256 + i] = 0;
-            BGOBJLine[512 + i] = 0x07000000;
-        }
 
         return;
     }
@@ -2216,8 +2400,11 @@ void CompatibilitySoftRenderer::DrawScanline_BGOBJ(u32 line)
         for (int i = 0; i < 256; i+=2)
         {
             *(u64*)&BGOBJLine[i] = backdrop;
-            *(u64*)&BGOBJLine[256 + i] = 0;
-            *(u64*)&BGOBJLine[512 + i] = 0;
+            if (useStructuredVulkan2D)
+            {
+                *(u64*)&BGOBJLine[256 + i] = 0;
+                *(u64*)&BGOBJLine[512 + i] = 0;
+            }
         }
     }
 

@@ -460,6 +460,7 @@ MelonDSAndroid::EmulatorConfiguration MelonDSAndroidConfiguration::buildEmulator
     jfieldID enable3dWidescreenField = getFieldIdOrClear(env, emulatorConfigurationClass, "enable3dWidescreen", "Z");
     jfieldID enable60FpsPatchField = getFieldIdOrClear(env, emulatorConfigurationClass, "enable60FpsPatch", "Z");
     jfieldID wfcDnsServerIpField = getFieldIdOrClear(env, emulatorConfigurationClass, "wfcDnsServerIp", "Ljava/lang/String;");
+    jfieldID wfcSettingsPathField = getFieldIdOrClear(env, emulatorConfigurationClass, "wfcSettingsPath", "Ljava/lang/String;");
 
     finalEmulatorConfiguration.renderer = videoRenderer;
     finalEmulatorConfiguration.dsiWareAutoloadTitleId = 0u;
@@ -471,6 +472,28 @@ MelonDSAndroid::EmulatorConfiguration MelonDSAndroidConfiguration::buildEmulator
         {
             env->ExceptionClear();
             finalEmulatorConfiguration.dsiWareAutoloadTitleId = 0u;
+        }
+    }
+    finalEmulatorConfiguration.audioSettings.muteOnFastForward = getBooleanFieldOrDefault(env, emulatorConfiguration, emulatorConfigurationClass, "muteOnFastForward", JNI_FALSE) != 0;
+    finalEmulatorConfiguration.audioSettings.micGain = std::clamp<int>(getIntFieldOrDefault(env, emulatorConfiguration, emulatorConfigurationClass, "micGain", 1), 1, 10);
+    finalEmulatorConfiguration.frameskipMode = getIntFieldOrDefault(env, emulatorConfiguration, emulatorConfigurationClass, "frameskipMode", 0);
+    finalEmulatorConfiguration.frameskipManualValue = getIntFieldOrDefault(env, emulatorConfiguration, emulatorConfigurationClass, "frameskipManualValue", 0);
+    finalEmulatorConfiguration.vulkanDrsEnabled = getBooleanFieldOrDefault(env, emulatorConfiguration, emulatorConfigurationClass, "vulkanDrsEnabled", JNI_FALSE) != 0;
+    finalEmulatorConfiguration.lowLatencyEnabled = getBooleanFieldOrDefault(env, emulatorConfiguration, emulatorConfigurationClass, "lowLatencyEnabled", JNI_FALSE) != 0;
+    finalEmulatorConfiguration.rtcOffsetMinutes = getIntFieldOrDefault(env, emulatorConfiguration, emulatorConfigurationClass, "rtcOffsetMinutes", 0);
+    if (wfcSettingsPathField != nullptr) {
+        jstring wfcPathStr = static_cast<jstring>(env->GetObjectField(emulatorConfiguration, wfcSettingsPathField));
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+        } else if (wfcPathStr != nullptr) {
+            const char* wfcChars = env->GetStringUTFChars(wfcPathStr, nullptr);
+            if (wfcChars != nullptr) {
+                finalEmulatorConfiguration.wfcSettingsPath = wfcChars;
+                env->ReleaseStringUTFChars(wfcPathStr, wfcChars);
+            } else if (env->ExceptionCheck()) {
+                env->ExceptionClear();
+            }
+            env->DeleteLocalRef(wfcPathStr);
         }
     }
     finalEmulatorConfiguration.arm9OverclockMultiplier = getIntFieldOrDefault(env, emulatorConfiguration, emulatorConfigurationClass, "arm9OverclockMultiplier", 1);
@@ -598,16 +621,6 @@ std::unique_ptr<MelonDSAndroid::RenderSettings> MelonDSAndroidConfiguration::bui
 
     jmethodID getResolutionScalingMethod = getMethodIdOrClear(env, renderSettingsClass, "getResolutionScaling", "()I");
     jboolean threadedRendering = getBooleanFieldOrDefault(env, renderSettings, renderSettingsClass, "threadedRendering", JNI_FALSE);
-    jobject vulkanPipelineProfileObject = getOptionalObjectField(
-        env,
-        renderSettings,
-        renderSettingsClass,
-        "vulkanPipelineProfile",
-        "Lme/magnum/melonds/domain/model/VulkanPipelineProfile;");
-    jint vulkanPipelineProfileOrdinal = 0;
-    (void)getEnumOrdinal(env, vulkanPipelineProfileObject, &vulkanPipelineProfileOrdinal);
-    if (vulkanPipelineProfileObject != nullptr)
-        env->DeleteLocalRef(vulkanPipelineProfileObject);
     jboolean rendererDebugToolsEnabled = getBooleanFieldOrDefault(env, renderSettings, renderSettingsClass, "rendererDebugToolsEnabled", JNI_FALSE);
     jboolean rendererDebugBgObjEnabled = getBooleanFieldOrDefault(env, renderSettings, renderSettingsClass, "rendererDebugBgObjEnabled", JNI_FALSE);
     jboolean rendererDebugLatchTraceEnabled = getBooleanFieldOrDefault(env, renderSettings, renderSettingsClass, "rendererDebugLatchTraceEnabled", JNI_FALSE);
@@ -660,10 +673,6 @@ std::unique_ptr<MelonDSAndroid::RenderSettings> MelonDSAndroidConfiguration::bui
                 .threadedRendering = true,
                 .betterPolygons = true,
                 .scale = internalResolutionScaling,
-                .useSimplePipeline = true,
-                .pipelineProfile = vulkanPipelineProfileOrdinal == 1
-                    ? melonDS::VulkanPipelineProfile::FastPath
-                    : melonDS::VulkanPipelineProfile::Compatibility,
                 .rendererDebugToolsEnabled = rendererDebugToolsEnabled != 0,
                 .rendererDebugBgObjEnabled = rendererDebugBgObjEnabled != 0,
                 .rendererDebugLatchTraceEnabled = rendererDebugLatchTraceEnabled != 0,

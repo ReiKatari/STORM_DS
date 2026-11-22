@@ -244,3 +244,9 @@ bool SaveManager::NeedsFlush()
 {
     return FlushVersion.load(std::memory_order_acquire) != PreviousFlushVersion.load(std::memory_order_acquire);
 }
+
+void SaveManager::FlushNow()
+{
+    CheckFlush();
+    FlushSecondaryBuffer();
+}

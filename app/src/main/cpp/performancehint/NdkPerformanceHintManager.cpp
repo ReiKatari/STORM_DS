@@ -25,11 +25,21 @@ NdkPerformanceHintManager::NdkPerformanceHintManager()
 
 void NdkPerformanceHintManager::createSession(pid_t threadId, int64_t targetDurationNs)
 {
-    if (manager == nullptr)
+    createSessionForThreads({ threadId }, targetDurationNs);
+}
+
+void NdkPerformanceHintManager::createSessionForThreads(const std::vector<pid_t>& threadIds, int64_t targetDurationNs)
+{
+    if (manager == nullptr || threadIds.empty())
         return;
 
-    int32_t tids[] = { static_cast<int32_t>(threadId) };
-    session = fn_createSession(manager, tids, 1, targetDurationNs);
+    if (session != nullptr)
+    {
+        fn_closeSession(session);
+        session = nullptr;
+    }
+    std::vector<int32_t> tids(threadIds.begin(), threadIds.end());
+    session = fn_createSession(manager, tids.data(), tids.size(), targetDurationNs);
 }
 
 void NdkPerformanceHintManager::reportActualWorkDuration(int64_t actualDurationNs)

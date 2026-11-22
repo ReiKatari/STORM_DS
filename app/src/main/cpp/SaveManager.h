@@ -45,6 +45,7 @@ public:
 
     bool NeedsFlush();
     void FlushSecondaryBuffer(u8* dst = nullptr, u32 dstLength = 0);
+    void FlushNow();
 
 private:
 

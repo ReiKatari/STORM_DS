@@ -80,7 +80,7 @@ const u8 Wifi::MPAckMAC[6]   = {0x03, 0x09, 0xBF, 0x00, 0x00, 0x03};
 
 bool MACEqual(const u8* a, const u8* b)
 {
-    return (*(u32*)&a[0] == *(u32*)&b[0]) && (*(u16*)&a[4] == *(u16*)&b[4]);
+    return memcmp(a, b, 6) == 0;
 }
 
 bool MACIsBroadcast(const u8* a)
@@ -89,7 +89,7 @@ bool MACIsBroadcast(const u8* a)
 }
 
 
-Wifi::Wifi(melonDS::NDS& nds) : NDS(nds)
+Wifi::Wifi(melonDS::NDS& nds) : NDS(nds), Enabled(false), PowerOn(false)
 {
     NDS.RegisterEventFuncs(Event_Wifi, this, {MakeEventThunk(Wifi, USTimer)});
 
@@ -98,6 +98,8 @@ Wifi::Wifi(melonDS::NDS& nds) : NDS(nds)
 
 Wifi::~Wifi()
 {
+    FlushMPAck();
+    if (PowerOn) Platform::MP_End(NDS.UserData);
     delete WifiAP; WifiAP = nullptr;
 
     NDS.UnregisterEventFuncs(Event_Wifi);
@@ -105,6 +107,10 @@ Wifi::~Wifi()
 
 void Wifi::Reset()
 {
+    PendingMPRepliesTimestamp = 0;
+    PendingMPRepliesMask = 0;
+    FlushMPAck();
+    if (PowerOn) Platform::MP_End(NDS.UserData);
     memset(RAM, 0, 0x2000);
     memset(IO, 0, 0x1000);
 
@@ -242,6 +248,13 @@ void Wifi::Reset()
 
 void Wifi::DoSavestate(Savestate* file)
 {
+    if (file->Saving)
+        ReceiveMPReplies();
+    else
+    {
+        PendingMPRepliesTimestamp = 0;
+        PendingMPRepliesMask = 0;
+    }
     file->Section("WIFI");
 
     // berp.
@@ -347,6 +360,8 @@ void Wifi::UpdatePowerOn()
     if (on == PowerOn)
         return;
 
+    if (!on)
+        ReceiveMPReplies();
     PowerOn = on;
     if (on)
     {
@@ -362,6 +377,7 @@ void Wifi::UpdatePowerOn()
 
         NDS.CancelEvent(Event_Wifi);
 
+        FlushMPAck();
         Platform::MP_End(NDS.UserData);
     }
 }
@@ -600,6 +616,7 @@ void Wifi::ReportMPReplyErrors(u16 clientfail)
 
 void Wifi::TXSendFrame(const TXSlot* slot, int num)
 {
+    FlushMPAck();
     u32 noseqno = 0;
 
     if (RAM[slot->Addr + 0x4])
@@ -693,6 +710,7 @@ void Wifi::StartTX_LocN(int nslot, int loc)
 
 void Wifi::StartTX_Cmd()
 {
+    ReceiveMPReplies();
     TXSlot* slot = &TXSlots[1];
 
     if (IOPORT(W_TXSlotCmd) & 0x3000)
@@ -781,6 +799,7 @@ void Wifi::FireTX()
 
     if (txstart & 0x0002)
     {
+        ReceiveMPReplies();
         MPClientFail = 0xFFFE;
         StartTX_Cmd();
         return;
@@ -795,6 +814,7 @@ void Wifi::FireTX()
 
 void Wifi::SendMPDefaultReply()
 {
+    FlushMPAck();
     u8 reply[12 + 28];
 
     *(u16*)&reply[0xA] = 28; // length
@@ -889,7 +909,8 @@ void Wifi::SendMPReply(u16 clienttime, u16 clientmask)
 
 void Wifi::SendMPAck(u16 cmdcount, u16 clientfail)
 {
-    u8 ack[12 + 32];
+    FlushMPAck();
+    u8* ack = PendingMPAck;
 
     *(u16*)&ack[0xA] = 32; // length
 
@@ -916,24 +937,65 @@ void Wifi::SendMPAck(u16 cmdcount, u16 clientfail)
     *(u16*)&ack[0xC + 0x1A] = clientfail;
     *(u32*)&ack[0xC + 0x1C] = 0;
 
-    if (!clientfail)
+    PendingMPAckConservative = Platform::MP_ConservativeAck(NDS.UserData);
+    if (PendingMPAckConservative)
+    {
+        *(u32*)&ack[0] = 0;
+    }
+    else if (!clientfail)
     {
         u32 nextbeacon;
         if (IOPORT(W_TXBusy) & 0x0010)
             nextbeacon = 0;
         else
-            nextbeacon = ((IOPORT(W_BeaconCount1) - 1) << 10) + (0x400 - (USCounter & 0x3FF));
+            nextbeacon = ((static_cast<u32>(IOPORT(W_BeaconCount1)) - 1u) << 10)
+                + (0x400 - (USCounter & 0x3FF));
         int runahead = std::min(CmdCounter, nextbeacon);
         if (CmdCounter < 1000) runahead -= 210;
-        *(u32*)&ack[0] = std::max(runahead - (32*(TXSlots[1].Rate==2?4:8)), 0);
+        *(u32*)&ack[0] = std::max(runahead - (32 * (TXSlots[1].Rate == 2 ? 4 : 8)), 0);
     }
     else
     {
         *(u32*)&ack[0] = PreambleLen(TXSlots[1].Rate);
     }
 
-    int txlen = Platform::MP_SendAck(ack, 12+32, USTimestamp, NDS.UserData);
+    PendingMPAckTimestamp = USTimestamp;
+    HasPendingMPAck = true;
+    if (!PendingMPAckConservative) FlushMPAck();
+}
+
+void Wifi::FlushMPAck()
+{
+    if (!HasPendingMPAck) return;
+    HasPendingMPAck = false;
+    if (PendingMPAckConservative)
+    {
+        const u64 airtime = 32 * (PendingMPAck[8] == 0x14 ? 4 : 8);
+        const u64 elapsed = USTimestamp - PendingMPAckTimestamp;
+        const u32 runahead = elapsed > airtime
+            ? static_cast<u32>(std::min<u64>(elapsed - airtime, 0xFFFFFFFF)) : 0;
+        memcpy(PendingMPAck, &runahead, sizeof(runahead));
+    }
+    int txlen = Platform::MP_SendAck(PendingMPAck, sizeof(PendingMPAck), PendingMPAckTimestamp, NDS.UserData);
     WIFI_LOG("wifi: sent %d/44 bytes of MP ack, %d %d\n", txlen, ComStatus, RXTime);
+}
+
+void Wifi::SyncTransport()
+{
+    FlushMPAck();
+    if (PowerOn && IsMP && !IsMPClient)
+        Platform::MP_SendProgress(USTimestamp, NDS.UserData);
+}
+
+void Wifi::ReceiveMPReplies()
+{
+    const u16 mask = PendingMPRepliesMask;
+    if (!mask)
+        return;
+    PendingMPRepliesMask = 0;
+    const u16 received = Platform::MP_RecvReplies(
+        MPClientReplies, PendingMPRepliesTimestamp, mask, NDS.UserData);
+    MPClientFail &= ~received;
 }
 
 bool Wifi::ProcessTX(TXSlot* slot, int num)
@@ -951,6 +1013,7 @@ bool Wifi::ProcessTX(TXSlot* slot, int num)
             MPReplyTimer -= kTimerInterval;
             if (MPReplyTimer <= 0 && MPClientMask != 0)
             {
+                ReceiveMPReplies();
                 int nclient = 1;
                 while (!(MPClientMask & (1 << nclient))) nclient++;
 
@@ -1053,10 +1116,8 @@ bool Wifi::ProcessTX(TXSlot* slot, int num)
 
                 MPReplyTimer = 16 + PreambleLen(slot->Rate);
 
-                u16 res = 0;
-                if (MPClientMask)
-                    res = Platform::MP_RecvReplies(MPClientReplies, USTimestamp, MPClientMask, NDS.UserData);
-                MPClientFail &= ~res;
+                PendingMPRepliesTimestamp = USTimestamp;
+                PendingMPRepliesMask = MPClientMask;
 
                 // TODO: 112 likely includes the ack preamble, which needs adjusted
                 // for long-preamble settings
@@ -1118,6 +1179,7 @@ bool Wifi::ProcessTX(TXSlot* slot, int num)
 
     case 2: // MP host transfer done
         {
+            ReceiveMPReplies();
             SetIRQ(7);
             SetStatus(8);
 
@@ -1494,6 +1556,7 @@ void Wifi::FinishRX()
             // in the case this client wasn't ready to send a reply
             // TODO: also send this if we have RX disabled
 
+            FlushMPAck();
             Platform::MP_SendReply(nullptr, 0, USTimestamp, 0, NDS.UserData);
         }
     }
@@ -1585,6 +1648,11 @@ bool Wifi::CheckRX(int type) // 0=regular 1=MP replies 2=MP host frames
         else
         {
             rxlen = Platform::MP_RecvHostPacket(RXBuffer, &timestamp, NDS.UserData);
+            if (rxlen == -2)
+            {
+                if (IsMPClient) NextSync = std::max(NextSync, timestamp);
+                return false;
+            }
             if (rxlen < 0)
             {
                 // host is gone
@@ -1669,6 +1737,7 @@ bool Wifi::CheckRX(int type) // 0=regular 1=MP replies 2=MP host frames
         {
             Log(LogLevel::Debug, "[CLIENT %01X] host sync=%016llX\n", aid&0xF, timestamp);
 
+            FlushMPAck();
             IsMP = true;
             IsMPClient = true;
             USTimestamp = timestamp;
@@ -1753,6 +1822,9 @@ void Wifi::MSTimer()
 void Wifi::USTimer(u32 param)
 {
     USTimestamp += kTimerInterval;
+
+    if (IsMP && !IsMPClient && !(USTimestamp & 0x7FF))
+        SyncTransport();
 
     if (IsMPClient && (!ComStatus))
     {
@@ -2472,6 +2544,11 @@ const u8* Wifi::GetMAC() const
 const u8* Wifi::GetBSSID() const
 {
     return (u8*)&IOPORT(W_BSSID0);
+}
+
+bool Wifi::IsClient() const
+{
+    return PowerOn && IsMPClient;
 }
 
 }

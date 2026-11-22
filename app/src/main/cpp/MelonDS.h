@@ -1,8 +1,11 @@
 #ifndef MELONDS_MELONDS_H
 #define MELONDS_MELONDS_H
 
+#include <atomic>
+#include <cstdint>
 #include <list>
-#include <mutex>
+#include <memory>
+#include <string>
 #include <vector>
 #include <optional>
 #include <android/native_window.h>
@@ -107,17 +110,14 @@ namespace MelonDSAndroid {
 
     extern OpenGLContext *openGlContext;
     extern std::mutex openGlContextMutex;
+    extern std::mutex mpInterfaceMutex;
     extern AndroidFileHandler* fileHandler;
     extern AndroidCameraHandler* cameraHandler;
     extern std::string internalFilesDir;
     extern std::shared_ptr<MelonEventMessenger> eventMessenger;
-    extern std::mutex mpInterfaceMutex;
     extern bool ensureOpenGlContext();
 
     extern void setConfiguration(EmulatorConfiguration emulatorConfiguration);
-    extern std::shared_ptr<EmulatorConfiguration> GetConfigurationSnapshot();
-    extern std::shared_ptr<EmulatorConfiguration> cloneEmulatorConfiguration(const EmulatorConfiguration& source);
-    extern std::shared_ptr<MelonInstance> GetInstanceSnapshot();
     extern void setup(AndroidCameraHandler* androidCameraHandler, std::shared_ptr<MelonEventMessenger> androidEventMessenger, u32* screenshotBufferPointer, int instanceId);
     extern void setCodeList(std::list<Cheat> cheats);
     extern bool setupAchievements(
@@ -127,17 +127,20 @@ namespace MelonDSAndroid {
         std::optional<RetroAchievements::RARuntimeBridgeConfig> runtimeBridgeConfig
     );
     extern void unloadRetroAchievementsData();
+
+    extern void requestRetroAchievementsBootstrapService();
+    extern void serviceRetroAchievementsBootstrap();
     extern std::string getRichPresenceStatus();
     extern std::vector<RetroAchievements::RARuntimeAchievement> getRuntimeAchievements();
     extern std::vector<RetroAchievements::RARuntimeAchievementBucketEntry> getRuntimeAchievementBuckets();
     extern std::vector<long> getRuntimeSubsetIds();
+    extern int getRetroAchievementsSetupFailureReason();
     extern RetroAchievements::RANativePendingRetryResult retryPendingRetroAchievementsSubmissions(
         const std::vector<uint64_t>& expectedSubmissionIds);
     extern uint64_t refreshPendingRetroAchievementsSubmissions();
     extern int32_t discardPendingRetroAchievementsSubmissions(
         const std::vector<uint64_t>& expectedSubmissionIds);
     extern void setRetroAchievementsSubmissionTransportSuspended(bool suspended);
-    extern void setRetroAchievementsHardcoreEnabled(bool enabled);
     extern Renderer getCurrentRenderer();
     extern void updateEmulatorConfiguration(std::unique_ptr<EmulatorConfiguration> emulatorConfiguration);
 
@@ -152,26 +155,48 @@ namespace MelonDSAndroid {
      */
     extern int loadRom(std::string romPath, std::string sramPath, RomGbaSlotConfig* gbaSlotConfig);
     extern int bootFirmware();
+    extern bool isWifiClient();
+    extern bool deferMultiplayerFrameWait(u64 delay);
     extern bool precompileVulkanPipelines(const VulkanSurfaceConfig& retroArchConfig);
     extern void touchScreen(u16 x, u16 y);
     extern void releaseScreen();
+    extern bool armExactLiveGuide(std::int64_t anchorFrame, u16 x, u16 y);
+    extern std::string getExactLiveGuideStatusJson();
+    extern void abortExactLiveGuide(std::uint32_t reason);
     extern void pressKey(u32 key);
     extern void releaseKey(u32 key);
+    extern void updateMotionData(float ax, float ay, float az, float rx, float ry, float rz);
     extern void setSlot2AnalogInput(float x, float y);
-    extern void setSlot2AddonType(int addonType);
     extern void start();
-    extern u32 loop();
+
+    extern u32 loop(bool frameskipSolicitado, int frameskipModo, int frameskipManualN, bool drsActivo, bool drsDeuda, u64 wmFrameDeadline);
+
+    extern bool frameskipConcedidoUltimoFrame();
+
+    extern std::string getVulkanFrameskipStatsText();
+
+    extern int getVulkanRenderedInternalResolution();
     extern Frame* getPresentationFrame(std::optional<std::chrono::time_point<std::chrono::steady_clock>> deadline);
     extern bool waitForPresentationFrame(Frame* frame, u64 timeoutNs);
     extern int attachVulkanSurface(ANativeWindow* window, u32 width, u32 height);
     extern bool resizeVulkanSurface(int surfaceId, u32 width, u32 height);
     extern bool configureVulkanSurface(int surfaceId, const VulkanSurfaceConfig& config, const VulkanBackgroundImage& backgroundImage);
     extern void detachVulkanSurface(int surfaceId);
-    extern bool presentVulkanFrame(
+    extern VulkanPresentationResult presentVulkanFrame(
         std::optional<std::chrono::time_point<std::chrono::steady_clock>> deadline,
-        std::optional<std::chrono::time_point<std::chrono::steady_clock>> budgetDeadline);
+        std::optional<std::chrono::time_point<std::chrono::steady_clock>> budgetDeadline,
+        u64 expectedWaitEpoch);
+    extern u64 captureVulkanPresentationWaitEpoch();
+    extern VulkanPresentationWaitResult waitForVulkanPresentationProduct(
+        u64 expectedWaitEpoch,
+        u64 timeoutNs);
+    extern void cancelVulkanPresentationWaits();
     extern void requestVulkanPresentationResync();
     extern void requestVulkanFastForwardPresentationTransition();
+
+    extern std::atomic<std::uint64_t> vulkanUltimaEsperaColaNs;
+
+    extern std::atomic<int> drsErrorLimitadorC;
     extern bool areRendererDebugToolsEnabled();
     extern bool areRendererDebugBgObjLogsEnabled();
     extern bool areRendererDebugLatchTraceLogsEnabled();
@@ -223,6 +248,7 @@ namespace MelonDSAndroid {
     extern std::string captureCurrentSoftPackedFrameMetaJsonForDebug();
     extern std::vector<u32> captureCurrentCompositedDimensionsForDebug();
     extern std::vector<u32> captureCurrentCompositedFrameForDebug();
+    extern std::vector<u32> captureFaithfulDiagnosticPayloadForDebug(u64 expectedFrameId);
     extern std::vector<u32> captureCurrent3dDimensionsForDebug();
     extern std::vector<u32> captureCurrent3dFrameForDebug();
     extern std::vector<u32> captureCurrent3dCaptureFrameForDebug();
@@ -251,20 +277,31 @@ namespace MelonDSAndroid {
     extern void dumpCurrentRendererDebugSnapshot();
     extern void setFastForwardActive(bool enabled);
     extern bool isFastForwardActive();
+    extern void setMuteOnFastForward(bool enabled);
     extern void setMuteOnFastForwardActive(bool enabled);
     extern bool isMuteOnFastForwardActive();
     extern void setRewindActive(bool enabled);
     extern bool isRewindActive();
+    extern std::shared_ptr<MelonInstance> GetInstanceSnapshot();
+    extern void setRetroAchievementsHardcoreEnabled(bool enabled);
+    extern void setSlot2AddonType(int addonType);
+    extern void flushPendingSaveStateWrites();
+    extern void flushSramSaves();
+    extern std::string getDetailedEmulationDiagnostic();
+    extern bool isMuteOnFastForward();
+    extern void setAudioOutputSpeedHint(double speed);
+    extern void resumeFramePublication();
+    extern void pauseAfterCurrentFramePublication();
     extern void pause();
     extern void resume();
+    extern void requestRtcSync();
     extern void reset();
     extern bool saveState(const char* path);
-    extern void flushPendingSaveStateWrites();
     extern bool loadState(const char* path);
     extern bool loadRewindState(melonDS::RewindSaveState rewindSaveState);
     extern RewindWindow getRewindWindow();
     extern bool takeScreenshot();
-    extern std::string getDetailedEmulationDiagnostic();
+    extern std::vector<u32> getScreenshotPixels();
     extern void stop();
     extern void cleanup();
 }

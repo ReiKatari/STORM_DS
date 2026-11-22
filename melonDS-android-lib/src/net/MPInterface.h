@@ -20,7 +20,8 @@
 #define MPINTERFACE_H
 
 #include <memory>
-#include "types.h"
+#include <array>
+#include "../types.h"
 
 namespace melonDS
 {
@@ -41,6 +42,24 @@ struct MPPacketHeader
     u32 Type;       // 0=regular 1=CMD 2=reply 3=ack
     u32 Length;
     u64 Timestamp;
+};
+
+inline constexpr u8 WMServiceVersion = 8;
+
+struct WMServiceInfo
+{
+    u64 Session = 0;
+    int LocalID = -1;
+    u16 Peers = 0;
+    bool Terminal = false;
+};
+
+struct WMServicePacket
+{
+    u8 SenderID = 0;
+    u64 Connection = 0;
+    u16 Length = 0;
+    std::array<u8, 2048> Data{};
 };
 
 class MPInterface
@@ -66,8 +85,17 @@ public:
     virtual int SendCmd(int inst, u8* data, int len, u64 timestamp) = 0;
     virtual int SendReply(int inst, u8* data, int len, u64 timestamp, u16 aid) = 0;
     virtual int SendAck(int inst, u8* data, int len, u64 timestamp) = 0;
+    virtual int SendProgress(int inst, u64 timestamp) { return 0; }
+    virtual bool UsesConservativeAck() const { return false; }
     virtual int RecvHostPacket(int inst, u8* data, u64* timestamp) = 0;
     virtual u16 RecvReplies(int inst, u8* data, u64 timestamp, u16 aidmask) = 0;
+    virtual bool SupportsWMService() const { return false; }
+    virtual WMServiceInfo GetWMServiceInfo() const { return {}; }
+    virtual int GetWMServiceLocalID() const { return -1; }
+    virtual u16 GetWMServicePeerMask() const { return 0; }
+    virtual u16 SendWMService(u16 peers, const u8* data, u16 length) { return 0; }
+    virtual int ReceiveWMService(WMServicePacket& packet) { return 0; }
+    virtual void ResetWMService() {}
 
 protected:
     int RecvTimeout = 25;

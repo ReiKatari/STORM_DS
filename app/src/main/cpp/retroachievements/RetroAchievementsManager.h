@@ -2,15 +2,13 @@
 #define RETROACHIEVEMENTSMANAGER_H
 
 #include <atomic>
-#include <chrono>
 #include <condition_variable>
-#include <cstdint>
-#include <deque>
 #include <list>
+#include <memory>
+#include <cstdint>
 #include <mutex>
 #include <optional>
 #include <string>
-#include <thread>
 #include <unordered_map>
 #include <vector>
 #include <jni.h>
@@ -28,6 +26,11 @@ namespace MelonDSAndroid
 {
 namespace RetroAchievements
 {
+
+class RcClientHttpSession;
+struct RcClientBootstrapAttempt;
+struct RcClientHttpCompletion;
+struct RcClientServerCallbackMetadata;
 
 enum class RANativePendingSubmissionType : int32_t
 {
@@ -65,11 +68,22 @@ public:
     RetroAchievementsManager(melonDS::NDS* nds);
     ~RetroAchievementsManager();
     static void SetJavaVm(JavaVM* javaVm);
+    bool SetupRuntime(
+        std::list<RAAchievement> achievements,
+        std::list<RALeaderboard> leaderboards,
+        std::optional<std::string> richPresenceScript,
+        std::optional<RARuntimeBridgeConfig> runtimeBridgeConfig
+    );
+    void Close();
+    void ServiceBootstrapFromEmulationThread();
     void ConfigureRuntimeBridge(std::optional<RARuntimeBridgeConfig> runtimeBridgeConfig);
     bool LoadAchievements(std::list<RAAchievement> achievements);
     bool LoadLeaderboards(std::list<RALeaderboard> leaderboards);
     bool ActivatePreferredRuntime();
     void UnloadEverything();
+
+    enum SetupFailureReason : int { None = 0, ResponseTooLarge = 1 };
+    int GetLastSetupFailureReason() const { return lastSetupFailureReason.load(std::memory_order_acquire); }
     void SetupRichPresence(std::string richPresenceScript);
     std::string GetRichPresenceStatus();
     std::vector<RARuntimeAchievement> GetRuntimeAchievements();
@@ -103,8 +117,16 @@ private:
         RcClientOffline,
     };
 
-    bool TryActivateRcClientRuntimeLocked();
-    void DeactivateRcClientRuntimeLocked();
+    bool ActivatePreferredRuntimeInternal(uint64_t expectedSetupInvalidationGeneration);
+    void UnloadEverythingInternal();
+    std::shared_ptr<RcClientHttpSession> DeactivateRcClientRuntimeLocked();
+    void DrainRcClientHttpCompletionsLocked();
+    void ProcessRcClientHttpCompletionLocked(RcClientHttpCompletion&& completion);
+    bool QueueRcClientHttpRequestLocked(
+        const rc_api_request_t* request,
+        RcClientServerCallbackMetadata metadata
+    );
+    void NotifyBootstrapServiceNeeded() const;
     void ResetRcClientPerformanceWindowLocked();
     std::string BuildRcClientLoginResponse() const;
     std::string BuildRcClientResolveHashResponse() const;
@@ -141,6 +163,7 @@ private:
         bool hardcore = false;
         bool presentationReady = false;
         bool published = false;
+        uint64_t activeTransportRequestId = 0;
         std::string formattedScore;
         PendingSubmissionStatus status = PendingSubmissionStatus::InFlight;
         std::optional<int32_t> permanentFailureResult;
@@ -152,7 +175,8 @@ private:
         const std::string& requestAction,
         const rc_api_request_t* request,
         uintptr_t callbackDataToken,
-        std::optional<uint64_t> leaderboardAttemptId
+        std::optional<uint64_t> leaderboardAttemptId,
+        uint64_t transportRequestId
     );
     void MarkPendingSubmissionPresentationReady(
         RANativePendingSubmissionType type,
@@ -164,7 +188,8 @@ private:
     void FinalizePendingSubmissionTransport(
         uintptr_t callbackDataToken,
         bool retryPending,
-        bool alreadyAccepted
+        bool alreadyAccepted,
+        uint64_t transportRequestId
     );
     void MaybePublishPendingSubmission(PendingSubmissionState& submission);
     bool IsPendingSubmissionPublishable(const PendingSubmissionState& submission) const;
@@ -219,6 +244,20 @@ private:
     melonDS::NDS* nds;
     rc_client_t* rcClientRuntime;
     std::mutex runtimeLock;
+    std::mutex runtimeSetupLock;
+    std::atomic<int> lastSetupFailureReason{SetupFailureReason::None};
+    std::condition_variable submissionResolutionCondition;
+    bool runtimeClosing = false;
+
+    bool managerClosed = false;
+
+    std::atomic<uint64_t> setupInvalidationGeneration{0};
+    bool bootstrapInProgress = false;
+    uint64_t runtimeGeneration = 0;
+    std::shared_ptr<RcClientHttpSession> rcClientHttpSession;
+    std::shared_ptr<RcClientBootstrapAttempt> activeBootstrapAttempt;
+
+    std::vector<std::shared_ptr<RcClientBootstrapAttempt>> bootstrapAttempts;
 
     std::list<RAAchievement> loadedAchievements;
     std::list<RALeaderboard> loadedLeaderboards;
@@ -247,58 +286,6 @@ private:
     uintptr_t activeSubmissionResponseCallbackData = 0;
     uint64_t nextPendingSubmissionBarrierId = 1;
     std::atomic<bool> submissionTransportSuspended{false};
-
-    struct HttpWorkItem
-    {
-        uint64_t requestId = 0;
-        uint64_t generation = 0;
-        rc_client_t* client = nullptr;
-        rc_client_server_callback_t callback = nullptr;
-        void* callbackData = nullptr;
-        uintptr_t callbackDataToken = 0;
-        std::string url;
-        std::string postData;
-        bool hasPostData = false;
-        std::string contentType;
-        bool hasContentType = false;
-        std::string userAgent;
-        std::string requestAction;
-        std::optional<uint64_t> leaderboardAttemptId;
-        std::optional<uint32_t> submittedLeaderboardId;
-    };
-
-    struct CompletedHttpResponse
-    {
-        uint64_t requestId = 0;
-        uint64_t generation = 0;
-        rc_client_t* client = nullptr;
-        rc_client_server_callback_t callback = nullptr;
-        void* callbackData = nullptr;
-        uintptr_t callbackDataToken = 0;
-        std::string requestAction;
-        std::optional<uint64_t> leaderboardAttemptId;
-        std::optional<uint32_t> submittedLeaderboardId;
-        std::string responseBody;
-        int httpStatusCode = RC_API_SERVER_RESPONSE_RETRYABLE_CLIENT_ERROR;
-    };
-
-    void EnsureHttpWorkerStartedLocked();
-    void StopHttpWorkerLocked();
-    void HttpWorkerLoop();
-    void DrainCompletedHttpResponsesLocked();
-    void InvokeCompletedHttpResponseLocked(const CompletedHttpResponse& completed);
-    bool WaitForHttpRequestLocked(uint64_t requestId, std::chrono::milliseconds timeout);
-
-    std::mutex httpQueueMutex;
-    std::condition_variable httpWorkerCv;
-    std::condition_variable httpCompletionCv;
-    std::deque<HttpWorkItem> pendingHttpRequests;
-    std::deque<CompletedHttpResponse> completedHttpResponses;
-    std::thread httpWorkerThread;
-    bool httpWorkerStop = false;
-    uint64_t httpSessionGeneration = 1;
-    uint64_t nextHttpRequestId = 1;
-    bool waitForServerCallCompletion = false;
 
     static std::atomic<JavaVM*> javaVm;
 };

@@ -49,6 +49,7 @@ add_library(core STATIC
     melonDLDI.h
     Mic.cpp
     NDS.cpp
+    WMService.cpp
     NDSCart.cpp
     NDSCartR4.cpp
     Platform.h
@@ -81,7 +82,23 @@ add_library(core STATIC
     tiny-AES-c/aes.c
     xxhash/xxhash.c
 
+    soundtouch/source/SoundTouch/AAFilter.cpp
+    soundtouch/source/SoundTouch/cpu_detect_x86.cpp
+    soundtouch/source/SoundTouch/FIFOSampleBuffer.cpp
+    soundtouch/source/SoundTouch/FIRFilter.cpp
+    soundtouch/source/SoundTouch/InterpolateCubic.cpp
+    soundtouch/source/SoundTouch/InterpolateLinear.cpp
+    soundtouch/source/SoundTouch/InterpolateShannon.cpp
+    soundtouch/source/SoundTouch/mmx_optimized.cpp
+    soundtouch/source/SoundTouch/RateTransposer.cpp
+    soundtouch/source/SoundTouch/SoundTouch.cpp
+    soundtouch/source/SoundTouch/sse_optimized.cpp
+    soundtouch/source/SoundTouch/TDStretch.cpp
     blip-buf/blip_buf.c)
+
+if (ANDROID_ABI STREQUAL "arm64-v8a")
+    target_compile_definitions(core PRIVATE SOUNDTOUCH_USE_NEON)
+endif()
 
 if (ENABLE_GDBSTUB)
     message(NOTICE "Enabling GDB stub")
@@ -187,11 +204,9 @@ if (NOT MSVC)
     # MSVC has its own compiler flag syntax; if we ever support it,
     # be sure to add equivalent flags here.
 
-    target_compile_options(core PRIVATE -fwrapv)
+    target_compile_options(core PUBLIC -fwrapv)
 
     target_compile_options(core PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:-Wno-invalid-offsetof>")
-    # These warnings are excessive, and are only triggered in the ARMJIT code
-    # (which is fundamentally non-portable, so this is fine)
     if (NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
         target_compile_options(core PRIVATE
             -fomit-frame-pointer
@@ -202,10 +217,7 @@ if (NOT MSVC)
         )
         target_compile_options(core PRIVATE "$<$<OR:$<CONFIG:RELEASE>,$<CONFIG:RELWITHDEBINFO>>:-O3>")
         if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-            target_compile_options(core PRIVATE
-                -fvectorize
-                -fslp-vectorize
-            )
+            target_compile_options(core PRIVATE -fvectorize -fslp-vectorize)
         endif()
     endif()
 endif()

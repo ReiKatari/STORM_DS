@@ -52,7 +52,7 @@ public:
     LAN& operator=(LAN&& other) = delete;
     ~LAN() noexcept;
 
-    enum PlayerStatus
+    enum PlayerStatus : int
     {
         Player_None = 0,        // no player in this entry
         Player_Client,          // game client
@@ -69,6 +69,7 @@ public:
         u32 Address;
 
         bool IsLocalPlayer;
+        u16 Port;
         u32 Ping;
     };
 
@@ -85,9 +86,12 @@ public:
 
     bool StartDiscovery();
     void EndDiscovery();
-    bool StartHost(const char* player, int numplayers);
-    bool StartClient(const char* player, const char* host);
+    static bool BindInterface(ENetSocket socket, unsigned index);
+    bool StartHost(const char* player, int numplayers, bool hle = false, u32 bindAddress = ENET_HOST_ANY, unsigned interfaceIndex = 0);
+    bool StartClient(const char* player, const char* host, bool hle = false, u32 bindAddress = ENET_HOST_ANY, unsigned interfaceIndex = 0);
     void EndSession();
+    void SetFirmwareBoot(bool firmware);
+    bool UsesConservativeAck() const override { return FirmwareBootMask != 0; }
 
     std::map<u32, DiscoveryData> GetDiscoveryList();
     std::vector<Player> GetPlayerList();
@@ -104,13 +108,38 @@ public:
     int SendCmd(int inst, u8* data, int len, u64 timestamp) override;
     int SendReply(int inst, u8* data, int len, u64 timestamp, u16 aid) override;
     int SendAck(int inst, u8* data, int len, u64 timestamp) override;
+    int SendProgress(int inst, u64 timestamp) override;
     int RecvHostPacket(int inst, u8* data, u64* timestamp) override;
     u16 RecvReplies(int inst, u8* data, u64 timestamp, u16 aidmask) override;
+    bool SupportsWMService() const override;
+    WMServiceInfo GetWMServiceInfo() const override;
+    int GetWMServiceLocalID() const override;
+    u16 GetWMServicePeerMask() const override;
+    u16 SendWMService(u16 peers, const u8* data, u16 length) override;
+    int ReceiveWMService(WMServicePacket& packet) override;
+    void ResetWMService() override;
+
+    struct ReceiveWait
+    {
+        void* Context;
+        void (*Callback)(void* context, int timeout);
+    };
+
+    ENetSocket GetSocket() const { return Host ? Host->socket : ENET_SOCKET_NULL; }
+    void SetFlushOnSend(bool enabled) { FlushOnSend = enabled; }
+    void Flush() { if (Host) enet_host_flush(Host); }
+    size_t GetReceiveQueueSize() const { return RXQueue.size(); }
+    bool HasPendingWMDispatch() const { return Active && WMServiceHLE && Host && !enet_list_empty(&Host->dispatchQueue); }
+    bool HasPendingPacket() const { return !RXQueue.empty() || !RXDeferredQueue.empty(); }
+    int RecvPacket(int inst, u8* data, u64* timestamp, const ReceiveWait* wait);
+    int RecvHostPacket(int inst, u8* data, u64* timestamp, const ReceiveWait* wait);
+    u16 RecvReplies(int inst, u8* data, u64 timestamp, u16 aidmask, const ReceiveWait* wait);
 
 private:
     bool Inited;
     bool Active;
     bool IsHost;
+    bool FlushOnSend = true;
 
     ENetHost* Host;
     ENetPeer* RemotePeers[16];
@@ -129,15 +158,29 @@ private:
     u32 HostAddress;
 
     u16 ConnectedBitmask;
+    u16 FirmwareBootMask;
+    u16 WMServiceCapabilities = 0;
+    bool WMServiceHLE = false;
+    bool WMServiceTerminal = false;
+    u64 WMServiceSession = 0;
+    u64 WMConnectionCounter = 0;
+    std::array<u64, 16> WMConnections{};
+    bool WMServiceReceiveFailed = false;
+    std::queue<WMServicePacket> WMServiceReceiveQueue;
 
     int MPRecvTimeout;
     int LastHostID;
     ENetPeer* LastHostPeer;
     std::queue<ENetPacket*> RXQueue;
+    std::queue<ENetPacket*> RXDeferredQueue;
 
     u32 FrameCount;
 
     void ProcessDiscovery();
+    void ClearReceiveQueue();
+    void SendFirmwareBoot();
+    void SendWMServiceCapability(ENetPeer* peer);
+    void ProcessWMServiceEvent(const ENetEvent& event);
 
     void HostUpdatePlayerList();
     void ClientUpdatePlayerList();
@@ -145,10 +188,10 @@ private:
     void ProcessHostEvent(ENetEvent& event);
     void ProcessClientEvent(ENetEvent& event);
     void ProcessEvent(ENetEvent& event);
-    void ProcessLAN(int type);
+    void ProcessLAN(int type, const ReceiveWait* wait = nullptr);
 
     int SendPacketGeneric(u32 type, u8* packet, int len, u64 timestamp);
-    int RecvPacketGeneric(u8* packet, bool block, u64* timestamp);
+    int RecvPacketGeneric(u8* packet, bool block, u64* timestamp, const ReceiveWait* wait = nullptr);
 };
 
 }

@@ -514,6 +514,17 @@ int MP_SendAck(u8* data, int len, u64 timestamp, void* userdata)
     return MPInterface::Get().SendAck(inst, data, len, timestamp);
 }
 
+int MP_SendProgress(u64 timestamp, void* userdata)
+{
+    int inst = ((EmuInstance*)userdata)->getInstanceID();
+    return MPInterface::Get().SendProgress(inst, timestamp);
+}
+
+bool MP_ConservativeAck(void* userdata)
+{
+    return MPInterface::Get().UsesConservativeAck();
+}
+
 int MP_RecvHostPacket(u8* data, u64* timestamp, void* userdata)
 {
     int inst = ((EmuInstance*)userdata)->getInstanceID();
@@ -525,6 +536,13 @@ u16 MP_RecvReplies(u8* data, u64 timestamp, u16 aidmask, void* userdata)
     int inst = ((EmuInstance*)userdata)->getInstanceID();
     return MPInterface::Get().RecvReplies(inst, data, timestamp, aidmask);
 }
+
+WMServiceInfo MP_WMInfo(void*) { return {}; }
+void MP_WMAbort(void*) {}
+
+u16 MP_WMSend(u16, const u8*, u16, void*) { return 0; }
+int MP_WMReceive(WMServicePacket&, void*) { return 0; }
+void MP_WMReset(void*) {}
 
 
 int Net_SendPacket(u8* data, int len, void* userdata)

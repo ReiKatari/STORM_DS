@@ -273,7 +273,18 @@ void ARMv5::UpdatePURegions(bool update_all)
         memset(PU_UserMap, mask, 0x100000);
         memset(PU_PrivMap, mask, 0x100000);
 
-        UpdateRegionTimings(0x00000, 0x100000);
+        for (u32 i = 0; i < 0x40000; i++)
+        {
+            const u8* bus = NDS.ARM9MemTimings[i];
+            const u8 timings[4] = {
+                static_cast<u8>((mask & 0x40) ? 0xFF : bus[2] << NDS.ARM9ClockShift),
+                static_cast<u8>((mask & 0x10) ? kDataCacheTiming : bus[0] << NDS.ARM9ClockShift),
+                static_cast<u8>((mask & 0x10) ? kDataCacheTiming : bus[2] << NDS.ARM9ClockShift),
+                static_cast<u8>((mask & 0x10) ? 1 : bus[3] << NDS.ARM9ClockShift),
+            };
+            for (u32 page = 0; page < 4; page++)
+                memcpy(MemTimings[i * 4 + page], timings, sizeof(timings));
+        }
         return;
     }
 
@@ -297,33 +308,28 @@ void ARMv5::UpdatePURegions(bool update_all)
 
 void ARMv5::UpdateRegionTimings(u32 addrstart, u32 addrend)
 {
-    for (u32 i = addrstart; i < addrend; i++)
+    const u32 clockShift = NDS.ARM9ClockShift;
+    for (u32 i = addrstart; i < addrend;)
     {
-        u8 pu = PU_Map[i];
-        u8* bustimings = NDS.ARM9MemTimings[i >> 2];
+        const u8 pu = PU_Map[i];
 
-        const u32 busClockShift = std::min<u32>(NDS.ARM9ClockShift, 2u);
-        if (pu & 0x40)
-        {
-            MemTimings[i][0] = 0xFF;//kCodeCacheTiming;
-        }
-        else
-        {
-            MemTimings[i][0] = bustimings[2] << busClockShift;
-        }
+        const bool sameGroup = (i & 3u) == 0u && addrend - i >= 4u
+            && (((pu ^ PU_Map[i + 1]) | (pu ^ PU_Map[i + 2])
+                | (pu ^ PU_Map[i + 3])) & 0x50u) == 0u;
+        const u32 count = sameGroup ? 4u : 1u;
+        const u8* bus = NDS.ARM9MemTimings[i >> 2];
+        const u8 timings[4] = {
+            static_cast<u8>((pu & 0x40) ? 0xFF : bus[2] << clockShift),
+            static_cast<u8>((pu & 0x10) ? kDataCacheTiming : bus[0] << clockShift),
+            static_cast<u8>((pu & 0x10) ? kDataCacheTiming : bus[2] << clockShift),
+            static_cast<u8>((pu & 0x10) ? 1 : bus[3] << clockShift),
+        };
 
-        if (pu & 0x10)
+        for (u32 page = 0; page < count; page++)
         {
-            MemTimings[i][1] = kDataCacheTiming;
-            MemTimings[i][2] = kDataCacheTiming;
-            MemTimings[i][3] = 1;
+            memcpy(MemTimings[i + page], timings, sizeof(timings));
         }
-        else
-        {
-            MemTimings[i][1] = bustimings[0] << busClockShift;
-            MemTimings[i][2] = bustimings[2] << busClockShift;
-            MemTimings[i][3] = bustimings[3] << busClockShift;
-        }
+        i += count;
     }
 }
 
@@ -595,8 +601,8 @@ void ARMv5::CP15Write(u32 id, u32 val)
         Log(LogLevel::Debug, "%s", log_output);
         // Some implementations of Log imply a newline, so we build up the line before printing it
 
-        // TODO: smarter region update for this?
-        UpdatePURegions(true);
+        if (CP15Control & (1<<0))
+            UpdatePURegions(true);
         return;
 
 
@@ -818,6 +824,12 @@ u32 ARMv5::CodeRead32(u32 addr, bool branch)
 
 void ARMv5::DataRead8(u32 addr, u32* val)
 {
+    if (!(PU_Map[addr>>12] & 0x01))
+    {
+        DataAbort();
+        return;
+    }
+
     DataRegion = addr;
 
     if (addr < ITCMSize)
@@ -833,18 +845,18 @@ void ARMv5::DataRead8(u32 addr, u32* val)
         return;
     }
 
-    if (!(PU_Map[addr>>12] & 0x01))
-    {
-        DataAbort();
-        return;
-    }
-
     *val = BusRead8(addr);
     DataCycles = MemTimings[addr >> 12][1];
 }
 
 void ARMv5::DataRead16(u32 addr, u32* val)
 {
+    if (!(PU_Map[addr>>12] & 0x01))
+    {
+        DataAbort();
+        return;
+    }
+
     DataRegion = addr;
 
     addr &= ~1;
@@ -862,18 +874,18 @@ void ARMv5::DataRead16(u32 addr, u32* val)
         return;
     }
 
-    if (!(PU_Map[addr>>12] & 0x01))
-    {
-        DataAbort();
-        return;
-    }
-
     *val = BusRead16(addr);
     DataCycles = MemTimings[addr >> 12][1];
 }
 
 void ARMv5::DataRead32(u32 addr, u32* val)
 {
+    if (!(PU_Map[addr>>12] & 0x01))
+    {
+        DataAbort();
+        return;
+    }
+
     DataRegion = addr;
 
     addr &= ~3;
@@ -888,12 +900,6 @@ void ARMv5::DataRead32(u32 addr, u32* val)
     {
         DataCycles = 1;
         *val = *(u32*)&DTCM[addr & (DTCMPhysicalSize - 1)];
-        return;
-    }
-
-    if (!(PU_Map[addr>>12] & 0x01))
-    {
-        DataAbort();
         return;
     }
 
@@ -924,6 +930,12 @@ void ARMv5::DataRead32S(u32 addr, u32* val)
 
 void ARMv5::DataWrite8(u32 addr, u8 val)
 {
+    if (!(PU_Map[addr>>12] & 0x02))
+    {
+        DataAbort();
+        return;
+    }
+
     DataRegion = addr;
 
     if (addr < ITCMSize)
@@ -940,18 +952,18 @@ void ARMv5::DataWrite8(u32 addr, u8 val)
         return;
     }
 
-    if (!(PU_Map[addr>>12] & 0x02))
-    {
-        DataAbort();
-        return;
-    }
-
     BusWrite8(addr, val);
     DataCycles = MemTimings[addr >> 12][1];
 }
 
 void ARMv5::DataWrite16(u32 addr, u16 val)
 {
+    if (!(PU_Map[addr>>12] & 0x02))
+    {
+        DataAbort();
+        return;
+    }
+
     DataRegion = addr;
 
     addr &= ~1;
@@ -970,18 +982,18 @@ void ARMv5::DataWrite16(u32 addr, u16 val)
         return;
     }
 
-    if (!(PU_Map[addr>>12] & 0x02))
-    {
-        DataAbort();
-        return;
-    }
-
     BusWrite16(addr, val);
     DataCycles = MemTimings[addr >> 12][1];
 }
 
 void ARMv5::DataWrite32(u32 addr, u32 val)
 {
+    if (!(PU_Map[addr>>12] & 0x02))
+    {
+        DataAbort();
+        return;
+    }
+
     DataRegion = addr;
 
     addr &= ~3;
@@ -997,12 +1009,6 @@ void ARMv5::DataWrite32(u32 addr, u32 val)
     {
         DataCycles = 1;
         *(u32*)&DTCM[addr & (DTCMPhysicalSize - 1)] = val;
-        return;
-    }
-
-    if (!(PU_Map[addr>>12] & 0x02))
-    {
-        DataAbort();
         return;
     }
 

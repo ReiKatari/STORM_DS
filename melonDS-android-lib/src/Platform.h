@@ -27,6 +27,8 @@
 namespace melonDS
 {
 class Firmware;
+struct WMServicePacket;
+struct WMServiceInfo;
 
 namespace Platform
 {
@@ -62,6 +64,7 @@ enum StopReason {
      * or its "battery" ran out.
      */
     PowerOff,
+    WirelessUnsupported,
 };
 
 /**
@@ -307,8 +310,15 @@ int MP_RecvPacket(u8* data, u64* timestamp, void* userdata);
 int MP_SendCmd(u8* data, int len, u64 timestamp, void* userdata);
 int MP_SendReply(u8* data, int len, u64 timestamp, u16 aid, void* userdata);
 int MP_SendAck(u8* data, int len, u64 timestamp, void* userdata);
+int MP_SendProgress(u64 timestamp, void* userdata);
+bool MP_ConservativeAck(void* userdata);
 int MP_RecvHostPacket(u8* data, u64* timestamp, void* userdata);
 u16 MP_RecvReplies(u8* data, u64 timestamp, u16 aidmask, void* userdata);
+WMServiceInfo MP_WMInfo(void* userdata);
+void MP_WMAbort(void* userdata);
+u16 MP_WMSend(u16 peers, const u8* data, u16 length, void* userdata);
+int MP_WMReceive(WMServicePacket& packet, void* userdata);
+void MP_WMReset(void* userdata);
 
 
 // network comm interface

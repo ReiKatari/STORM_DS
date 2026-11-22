@@ -51,6 +51,9 @@
 namespace melonDS
 {
 struct NDSArgs;
+struct WMServiceTrace;
+struct WMServiceTraceMetadata;
+class WMService;
 class Firmware;
 enum
 {
@@ -287,6 +290,7 @@ public: // TODO: Encapsulate the rest of these members
     alignas(u32) u8 ROMSeed1[2*8];
 
 protected:
+    friend class WMService;
     // These BIOS arrays should be declared *before* the component objects (JIT, SPI, etc.)
     // so that they're initialized before the component objects' constructors run.
     std::array<u8, ARM9BIOSSize> ARM9BIOS;
@@ -405,7 +409,15 @@ public: // TODO: Encapsulate the rest of these members
 
     std::unique_ptr<GBACart::CartCommon> EjectGBACart() { return GBACartSlot.EjectCart(); }
 
-    u32 RunFrame();
+    u32 RunFrame(u64 wmFrameDeadline = 0);
+    void PollWMHost();
+    bool CanPollWMHost() const;
+    bool DeferWMFrameWait(u64 delay);
+
+    void TraceWMFrameBoundary(const std::string& directory);
+    bool IsWMTraceActive() const;
+    u64 TraceWMServiceEvent(const WMServiceTraceMetadata& metadata, const u8* data = nullptr, u32 length = 0,
+                            const u8* extra = nullptr, u32 extraLength = 0);
 
     bool IsRunning() const noexcept { return Running; }
 
@@ -499,8 +511,15 @@ public: // TODO: Encapsulate the rest of these members
 #endif
 
 protected:
+    u64 TraceWMEvent(u32 kind, u32 word, const WMServiceTraceMetadata* metadata = nullptr,
+                     const u8* data = nullptr, u32 length = 0, const u8* extra = nullptr, u32 extraLength = 0);
+    u32 ReadWMTraceMemory(u32 cpu, u32 addr, u8* output, u32 length);
+    void SnapshotWMTrace();
+    void FlushWMTrace(u32 reason);
     void InitTimings();
     u32 SchedListMask;
+    u64 NextEventTimestamp = UINT64_MAX;
+    bool NextEventTimestampDirty = true;
     u64 SysTimestamp;
     u8 WRAMCnt;
     u8 PostFlag9;
@@ -548,6 +567,8 @@ protected:
     void EnterSleepMode();
     template <CPUExecuteMode cpuMode>
     u32 RunFrame();
+    std::unique_ptr<WMServiceTrace> WMTrace;
+    std::unique_ptr<WMService> WM;
 
 public:
     NDS(NDSArgs&& args, void* userdata = nullptr) noexcept : NDS(std::move(args), 0, userdata) {}

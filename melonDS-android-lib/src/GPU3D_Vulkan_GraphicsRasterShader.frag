@@ -32,14 +32,16 @@
 #define MELONDS_COLOR_ONLY 0
 #endif
 
-const uint MAX_TEXTURE_DESCRIPTORS = 62u;
+const uint MAX_TEXTURE_DESCRIPTORS = 2049u;
+
+const uint TEXTURE_DESCRIPTOR_PAGE_SIZE = 7u;
 
 layout(constant_id = 0) const uint DEPTH_INTERPOLATION_MODE = 0u;
 layout(constant_id = 1) const uint TRANSLUCENT_PASS = 0u;
 layout(constant_id = 2) const uint EDGE_MARK_PASS = 0u;
 
-layout(set = 0, binding = 1) uniform usampler2DArray texArrays[MAX_TEXTURE_DESCRIPTORS];
-layout(set = 0, binding = 6) uniform sampler2DArray normTexArrays[MAX_TEXTURE_DESCRIPTORS];
+layout(set = 0, binding = 1) uniform usampler2DArray texArrays[TEXTURE_DESCRIPTOR_PAGE_SIZE];
+layout(set = 0, binding = 6) uniform sampler2DArray normTexArrays[TEXTURE_DESCRIPTOR_PAGE_SIZE];
 
 layout(set = 0, binding = 2, std430) readonly buffer ToonTableBuffer
 {
@@ -73,6 +75,7 @@ layout(location = 2) noperspective in float fDepthLinear;
 layout(location = 3) smooth in float fDepthPerspective;
 layout(location = 4) flat in uvec4 fTriInfo0;
 layout(location = 5) flat in uvec4 fTriInfo1;
+layout(location = 6) flat in vec4 fTexcoordBounds;
 
 layout(location = 0) out vec4 oColor;
 #if MELONDS_COLOR_ONLY == 0
@@ -82,7 +85,27 @@ layout(location = 1) out vec4 oAttr;
 const uint TRI_FLAG_TEXTURED = 1u << 1u;
 const uint TRI_FLAG_DECAL = 1u << 2u;
 const uint TRI_FLAG_LINEAR = 1u << 6u;
-const float LINEAR_TEXEL_COORD_BIAS = 1.0 / 8.0;
+const uint TRI_FLAG_TEXCOORD_BOUNDS = 1u << 15u;
+const uint TRI_FLAG_INTEGRAL_TEXCOORD_S = 1u << 16u;
+const uint TRI_FLAG_INTEGRAL_TEXCOORD_T = 1u << 18u;
+
+vec2 clampPolygonTexcoord(vec2 texcoord)
+{
+    if ((fTriInfo0.x & TRI_FLAG_TEXCOORD_BOUNDS) != 0u)
+    {
+        vec2 bounded = clamp(texcoord, fTexcoordBounds.xy, fTexcoordBounds.zw);
+        uint integralAxes = fTriInfo0.x & (TRI_FLAG_INTEGRAL_TEXCOORD_S | TRI_FLAG_INTEGRAL_TEXCOORD_T);
+        if (integralAxes != 0u)
+        {
+            float grid = float(pc.width) * (1.0 / 8.0);
+            vec2 snapped = round(bounded * grid) / grid;
+            bounded = mix(bounded, snapped, bvec2((integralAxes & TRI_FLAG_INTEGRAL_TEXCOORD_S) != 0u,
+                                                  (integralAxes & TRI_FLAG_INTEGRAL_TEXCOORD_T) != 0u));
+        }
+        return bounded;
+    }
+    return texcoord;
+}
 
 struct Color6A5
 {
@@ -124,6 +147,7 @@ Color6A5 decodeTexelRgb6Opaque(uvec4 texel)
 
 uvec4 fetchTextureArrayTexel(uint descriptorIndex, ivec3 coord)
 {
+    descriptorIndex %= TEXTURE_DESCRIPTOR_PAGE_SIZE;
 #if MELONDS_DIRECT_TEXTURE_INDEXING != 0
     return texelFetch(texArrays[descriptorIndex], coord, 0);
 #else
@@ -136,62 +160,7 @@ uvec4 fetchTextureArrayTexel(uint descriptorIndex, ivec3 coord)
         case 4u: return texelFetch(texArrays[4], coord, 0);
         case 5u: return texelFetch(texArrays[5], coord, 0);
         case 6u: return texelFetch(texArrays[6], coord, 0);
-        case 7u: return texelFetch(texArrays[7], coord, 0);
-        case 8u: return texelFetch(texArrays[8], coord, 0);
-        case 9u: return texelFetch(texArrays[9], coord, 0);
-        case 10u: return texelFetch(texArrays[10], coord, 0);
-        case 11u: return texelFetch(texArrays[11], coord, 0);
-        case 12u: return texelFetch(texArrays[12], coord, 0);
-        case 13u: return texelFetch(texArrays[13], coord, 0);
-        case 14u: return texelFetch(texArrays[14], coord, 0);
-        case 15u: return texelFetch(texArrays[15], coord, 0);
-        case 16u: return texelFetch(texArrays[16], coord, 0);
-        case 17u: return texelFetch(texArrays[17], coord, 0);
-        case 18u: return texelFetch(texArrays[18], coord, 0);
-        case 19u: return texelFetch(texArrays[19], coord, 0);
-        case 20u: return texelFetch(texArrays[20], coord, 0);
-        case 21u: return texelFetch(texArrays[21], coord, 0);
-        case 22u: return texelFetch(texArrays[22], coord, 0);
-        case 23u: return texelFetch(texArrays[23], coord, 0);
-        case 24u: return texelFetch(texArrays[24], coord, 0);
-        case 25u: return texelFetch(texArrays[25], coord, 0);
-        case 26u: return texelFetch(texArrays[26], coord, 0);
-        case 27u: return texelFetch(texArrays[27], coord, 0);
-        case 28u: return texelFetch(texArrays[28], coord, 0);
-        case 29u: return texelFetch(texArrays[29], coord, 0);
-        case 30u: return texelFetch(texArrays[30], coord, 0);
-        case 31u: return texelFetch(texArrays[31], coord, 0);
-        case 32u: return texelFetch(texArrays[32], coord, 0);
-        case 33u: return texelFetch(texArrays[33], coord, 0);
-        case 34u: return texelFetch(texArrays[34], coord, 0);
-        case 35u: return texelFetch(texArrays[35], coord, 0);
-        case 36u: return texelFetch(texArrays[36], coord, 0);
-        case 37u: return texelFetch(texArrays[37], coord, 0);
-        case 38u: return texelFetch(texArrays[38], coord, 0);
-        case 39u: return texelFetch(texArrays[39], coord, 0);
-        case 40u: return texelFetch(texArrays[40], coord, 0);
-        case 41u: return texelFetch(texArrays[41], coord, 0);
-        case 42u: return texelFetch(texArrays[42], coord, 0);
-        case 43u: return texelFetch(texArrays[43], coord, 0);
-        case 44u: return texelFetch(texArrays[44], coord, 0);
-        case 45u: return texelFetch(texArrays[45], coord, 0);
-        case 46u: return texelFetch(texArrays[46], coord, 0);
-        case 47u: return texelFetch(texArrays[47], coord, 0);
-        case 48u: return texelFetch(texArrays[48], coord, 0);
-        case 49u: return texelFetch(texArrays[49], coord, 0);
-        case 50u: return texelFetch(texArrays[50], coord, 0);
-        case 51u: return texelFetch(texArrays[51], coord, 0);
-        case 52u: return texelFetch(texArrays[52], coord, 0);
-        case 53u: return texelFetch(texArrays[53], coord, 0);
-        case 54u: return texelFetch(texArrays[54], coord, 0);
-        case 55u: return texelFetch(texArrays[55], coord, 0);
-        case 56u: return texelFetch(texArrays[56], coord, 0);
-        case 57u: return texelFetch(texArrays[57], coord, 0);
-        case 58u: return texelFetch(texArrays[58], coord, 0);
-        case 59u: return texelFetch(texArrays[59], coord, 0);
-        case 60u: return texelFetch(texArrays[60], coord, 0);
-        case 61u: return texelFetch(texArrays[61], coord, 0);
-        default: return texelFetch(texArrays[61], coord, 0);
+        default: return texelFetch(texArrays[0], coord, 0);
     }
 #endif
 }
@@ -236,6 +205,84 @@ Color6A5 unpackToonColor(uint shadeIndex)
     return color;
 }
 
+#if MELONDS_FAST_OPAQUE_MODULATE == 0
+bool usesDsPixelCenteredTranslucentPaletteUi(uint flags, uint polyAttr, uint texParam)
+{
+    uint textureFormat = (texParam >> 26u) & 0x7u;
+    uint polyAlpha = (polyAttr >> 16u) & 0x1Fu;
+    uint blendMode = (polyAttr >> 4u) & 0x3u;
+    bool color0Transparent = (texParam & (1u << 29u)) != 0u;
+    bool depthWriteDisabled = (polyAttr & (1u << 11u)) == 0u;
+    bool clearAlphaZero = ((pc.clearAttr >> 16u) & 0x1Fu) == 0u;
+    bool alphaBlendEnabled = (pc.dispCnt & (1u << 3u)) != 0u;
+    bool repeatS = (texParam & (1u << 16u)) != 0u;
+    bool repeatT = (texParam & (1u << 17u)) != 0u;
+    bool mirrorS = (texParam & (1u << 18u)) != 0u;
+    bool mirrorT = (texParam & (1u << 19u)) != 0u;
+    bool menuTexturePage = (texParam & 0xFFFFu) == 0xA3A0u;
+    return TRANSLUCENT_PASS != 0u
+        && (flags & TRI_FLAG_LINEAR) != 0u
+        && textureFormat == 3u
+        && color0Transparent
+        && menuTexturePage
+        && depthWriteDisabled
+        && clearAlphaZero
+        && alphaBlendEnabled
+        && blendMode == 0u
+        && polyAlpha > 0u
+        && polyAlpha < 31u
+        && !repeatS
+        && !repeatT
+        && !mirrorS
+        && !mirrorT;
+}
+
+bool usesPaletteUiAlphaHoleFill(uint flags, uint polyAttr, uint texParam)
+{
+    uint polyAlpha = (polyAttr >> 16u) & 0x1Fu;
+    return usesDsPixelCenteredTranslucentPaletteUi(flags, polyAttr, texParam)
+        && polyAlpha >= 21u;
+}
+
+bool usesCompactOpaqueDepthWritePaletteUi(uint flags, uint polyAttr, uint texParam)
+{
+    uint textureFormat = (texParam >> 26u) & 0x7u;
+    uint polyAlpha = (polyAttr >> 16u) & 0x1Fu;
+    uint blendMode = (polyAttr >> 4u) & 0x3u;
+    bool color0Transparent = (texParam & (1u << 29u)) != 0u;
+    bool depthWriteEnabled = (polyAttr & (1u << 11u)) != 0u;
+    bool clearAlphaZero = ((pc.clearAttr >> 16u) & 0x1Fu) == 0u;
+    bool repeatS = (texParam & (1u << 16u)) != 0u;
+    bool repeatT = (texParam & (1u << 17u)) != 0u;
+    bool mirrorS = (texParam & (1u << 18u)) != 0u;
+    bool mirrorT = (texParam & (1u << 19u)) != 0u;
+    bool statusGlyphTexturePage = (texParam & 0xFFFFu) == 0x05C0u;
+
+    return TRANSLUCENT_PASS == 0u
+        && (flags & TRI_FLAG_TEXTURED) != 0u
+        && (flags & TRI_FLAG_LINEAR) != 0u
+        && textureFormat == 3u
+        && color0Transparent
+        && statusGlyphTexturePage
+        && depthWriteEnabled
+        && clearAlphaZero
+        && blendMode == 0u
+        && polyAlpha == 31u
+        && !repeatS
+        && !repeatT
+        && !mirrorS
+        && !mirrorT;
+}
+
+vec2 dsPixelCenterDelta()
+{
+    vec2 renderScale = max(vec2(float(pc.width) * (1.0 / 256.0), float(pc.height) * (1.0 / 192.0)), vec2(1.0));
+    vec2 subpixelOffset = mod(gl_FragCoord.xy - vec2(0.5), renderScale);
+    vec2 dsPixelCenterOffset = max((renderScale - vec2(1.0)) * 0.5, vec2(0.0));
+    return dsPixelCenterOffset - subpixelOffset;
+}
+#endif
+
 Color6A5 sampleTexture(uint polyAttr)
 {
     Color6A5 whiteTexel;
@@ -278,19 +325,56 @@ Color6A5 sampleTexture(uint polyAttr)
     bool mirrorS = (texParam & (1u << 18u)) != 0u;
     bool mirrorT = (texParam & (1u << 19u)) != 0u;
 
+#if MELONDS_FAST_OPAQUE_MODULATE == 0
+    if (usesDsPixelCenteredTranslucentPaletteUi(flags, polyAttr, texParam))
+    {
+        vec2 centerDelta = dsPixelCenterDelta();
+        texcoord += dFdx(fTexcoord) * centerDelta.x + dFdy(fTexcoord) * centerDelta.y;
+    }
+    else if (usesCompactOpaqueDepthWritePaletteUi(flags, polyAttr, texParam))
+    {
+        vec2 centerDelta = dsPixelCenterDelta();
+        texcoord += dFdx(fTexcoord) * centerDelta.x + dFdy(fTexcoord) * centerDelta.y;
+    }
+
+#endif
+
+    texcoord = clampPolygonTexcoord(texcoord);
     int sampleS = int(floor(texcoord.x));
     int sampleT = int(floor(texcoord.y));
 
 #if MELONDS_FAST_OPAQUE_MODULATE != 0 && MELONDS_FAST_TEXTURE_PUSH_CONSTANTS != 0
     vec2 sampledTexelCenter = vec2(float(sampleS) + 0.5, float(sampleT) + 0.5);
     vec2 sampledUv = sampledTexelCenter / vec2(float(texWidth), float(texHeight));
-    vec4 normalizedTexel = texture(normTexArrays[texArrayIndex], vec3(sampledUv, float(texLayer)));
+    vec4 normalizedTexel = texture(normTexArrays[texArrayIndex % TEXTURE_DESCRIPTOR_PAGE_SIZE], vec3(sampledUv, float(texLayer)));
     uvec4 texel = uvec4(clamp(floor(normalizedTexel * 255.0 + vec4(0.5)), vec4(0.0), vec4(255.0)));
 #else
     sampleS = wrapTexelCoord(sampleS, int(texWidth), repeatS, mirrorS);
     sampleT = wrapTexelCoord(sampleT, int(texHeight), repeatT, mirrorT);
 
     uvec4 texel = fetchTextureArrayTexel(texArrayIndex, ivec3(sampleS, sampleT, int(texLayer)));
+#endif
+#if MELONDS_FAST_OPAQUE_MODULATE == 0
+    if (usesPaletteUiAlphaHoleFill(flags, polyAttr, texParam)
+        && (texel.a & 0x1Fu) == 0u)
+    {
+        int leftS = wrapTexelCoord(sampleS - 1, int(texWidth), repeatS, mirrorS);
+        int rightS = wrapTexelCoord(sampleS + 1, int(texWidth), repeatS, mirrorS);
+        int upT = wrapTexelCoord(sampleT - 1, int(texHeight), repeatT, mirrorT);
+        int downT = wrapTexelCoord(sampleT + 1, int(texHeight), repeatT, mirrorT);
+        uvec4 leftTexel = fetchTextureArrayTexel(texArrayIndex, ivec3(leftS, sampleT, int(texLayer)));
+        uvec4 rightTexel = fetchTextureArrayTexel(texArrayIndex, ivec3(rightS, sampleT, int(texLayer)));
+        uvec4 upTexel = fetchTextureArrayTexel(texArrayIndex, ivec3(sampleS, upT, int(texLayer)));
+        uvec4 downTexel = fetchTextureArrayTexel(texArrayIndex, ivec3(sampleS, downT, int(texLayer)));
+        if ((leftTexel.a & 0x1Fu) != 0u)
+            texel = leftTexel;
+        else if ((rightTexel.a & 0x1Fu) != 0u)
+            texel = rightTexel;
+        else if ((upTexel.a & 0x1Fu) != 0u)
+            texel = upTexel;
+        else if ((downTexel.a & 0x1Fu) != 0u)
+            texel = downTexel;
+    }
 #endif
 #if MELONDS_FAST_OPAQUE_FULL_ALPHA != 0
     return decodeTexelRgb6Opaque(texel);
@@ -306,9 +390,9 @@ vec3 sampleFastNormalizedTexel()
     uint texArrayIndex = pc.variantKey & 0xFFFFu;
     uint texHeight = (pc.passIndex >> 16u) & 0xFFFFu;
     uint texWidth = pc.passIndex & 0xFFFFu;
-    vec2 sampledTexelCenter = floor(fTexcoord) + vec2(0.5);
+    vec2 sampledTexelCenter = floor(clampPolygonTexcoord(fTexcoord)) + vec2(0.5);
     vec2 sampledUv = sampledTexelCenter / vec2(float(texWidth), float(texHeight));
-    vec4 normalizedTexel = texture(normTexArrays[texArrayIndex], vec3(sampledUv, float(texLayer)));
+    vec4 normalizedTexel = texture(normTexArrays[texArrayIndex % TEXTURE_DESCRIPTOR_PAGE_SIZE], vec3(sampledUv, float(texLayer)));
     return clamp(normalizedTexel.rgb * 255.0, vec3(0.0), vec3(63.0));
 }
 #endif
@@ -333,6 +417,51 @@ vec4 encodeColorDsTranslucentBlendAlpha(Color6A5 color)
 
 void main()
 {
+#if MELONDS_FAST_OPAQUE_MODULATE != 0 && MELONDS_FAST_TEXTURE_PUSH_CONSTANTS != 0 && MELONDS_FAST_TOON_MODE == 1
+    if (TRANSLUCENT_PASS == 0u && EDGE_MARK_PASS == 0u
+        && (pc.dispCnt & (1u << 1u)) == 0u)
+    {
+        uint toonPolyAttr = pc.depthBlendMode;
+        uint toonPolyAlpha = (toonPolyAttr >> 16u) & 0x1Fu;
+        uint shadeIndex = uint(clamp(fColor.r * 63.0 + 0.5, 0.0, 63.0)) >> 1u;
+        uint packedToon = toonValues[shadeIndex];
+        vec3 toon6 = vec3(float(packedToon & 0x3Fu),
+                         float((packedToon >> 8u) & 0x3Fu),
+                         float((packedToon >> 16u) & 0x3Fu));
+        uint texLayer = (pc.variantKey >> 16u) & 0xFFFFu;
+        uint texArrayIndex = pc.variantKey & 0xFFFFu;
+        uint texWidth = pc.passIndex & 0xFFFFu;
+        uint texHeight = (pc.passIndex >> 16u) & 0xFFFFu;
+        vec2 texcoord = clampPolygonTexcoord(fTexcoord);
+        int sampleS = int(floor(texcoord.x));
+        int sampleT = int(floor(texcoord.y));
+        vec2 sampledTexelCenter = vec2(float(sampleS) + 0.5, float(sampleT) + 0.5);
+        vec2 sampledUv = sampledTexelCenter / vec2(float(texWidth), float(texHeight));
+        vec4 normalizedTexel = texture(normTexArrays[texArrayIndex % TEXTURE_DESCRIPTOR_PAGE_SIZE], vec3(sampledUv, float(texLayer)));
+
+        vec4 texel6a5 = floor(normalizedTexel * 255.0 + vec4(0.5));
+        vec3 out6 = floor(((texel6a5.rgb + vec3(1.0))
+            * (toon6 + vec3(1.0)) - vec3(1.0)) * (1.0 / 64.0));
+#if MELONDS_FAST_OPAQUE_FULL_ALPHA == 0
+        float alpha5 = floor(((texel6a5.a + 1.0)
+            * (float(toonPolyAlpha) + 1.0) - 1.0) * (1.0 / 32.0));
+        if (toonPolyAlpha == 0u)
+            alpha5 = 31.0;
+        if (alpha5 <= float(pc.alphaRef) || alpha5 < 31.0)
+            discard;
+#endif
+        oColor = vec4(out6 * (1.0 / 63.0), 1.0);
+#if MELONDS_COLOR_ONLY == 0
+        uint toonPolyId = (toonPolyAttr >> 24u) & 0x3Fu;
+        float toonFogFlag = (toonPolyAttr & (1u << 15u)) != 0u ? 0.5 : 0.0;
+        oAttr = vec4(float(toonPolyId) * (1.0 / 63.0), toonFogFlag, 0.0, 1.0);
+#endif
+#if MELONDS_NO_FRAG_DEPTH == 0
+        gl_FragDepth = DEPTH_INTERPOLATION_MODE != 0u ? fDepthPerspective : fDepthLinear;
+#endif
+        return;
+    }
+#endif
 #if MELONDS_FAST_FLOAT_MODULATE != 0
     uint fastPolyAttr = pc.depthBlendMode;
     uint fastPolyId = (fastPolyAttr >> 24u) & 0x3Fu;
@@ -464,7 +593,7 @@ void main()
 
         oColor = vec4(0.0);
 #if MELONDS_COLOR_ONLY == 0
-        oAttr = vec4(0.0, 1.0, 0.0, 1.0);
+        oAttr = vec4(0.0, 0.0, 1.0, 1.0);
 #endif
 
         float edgeDepth = DEPTH_INTERPOLATION_MODE != 0u ? fDepthPerspective : fDepthLinear;
@@ -479,9 +608,17 @@ void main()
         if (sourceColor.a <= 0 || sourceColor.a >= 31)
             discard;
 
+#if MELONDS_FAST_OPAQUE_MODULATE == 0
+        if (usesPaletteUiAlphaHoleFill(flags, polyAttr, fTriInfo1.y))
+            oColor = encodeColorDsTranslucentBlendAlpha(sourceColor);
+        else
+            oColor = encodeColorDsTranslucentBlendAlpha(sourceColor);
+#else
         oColor = encodeColorDsTranslucentBlendAlpha(sourceColor);
+#endif
 #if MELONDS_COLOR_ONLY == 0
-        oAttr = vec4(0.0, 0.0, 0.0, 1.0);
+
+        oAttr = vec4(0.0, ((polyAttr & (1u << 15u)) != 0u) ? 0.5 : 0.0, 0.0, 1.0);
 #endif
     }
     else

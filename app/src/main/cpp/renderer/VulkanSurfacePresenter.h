@@ -3,7 +3,7 @@
 
 #include <android/native_window.h>
 #include <array>
-#include <atomic>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -14,7 +14,6 @@
 #include <vulkan/vulkan.h>
 
 #include "VulkanPerfStats.h"
-#include "VulkanPipelineProfile.h"
 #include "renderer/FrameQueue.h"
 #include "renderer/VulkanRetroArchFilterChain.h"
 #include "renderer/VulkanFilterMode.h"
@@ -76,6 +75,41 @@ struct VulkanBackgroundImage
     u32 height = 0;
 };
 
+enum class VulkanPresentationResult : int
+{
+    Presented = 0,
+    NoSurface = 1,
+    NoProduct = 2,
+    GpuNotReady = 3,
+    WsiNotReady = 4,
+    GenerationChanged = 5,
+    Stopped = 6,
+    RecoverableSurfaceError = 7,
+    FatalError = 8,
+};
+
+enum class VulkanPresentationWaitResult : int
+{
+    ProductReady = 0,
+    TimedOut = 1,
+    GenerationChanged = 2,
+    Stopped = 3,
+};
+
+enum class VulkanCausalWaitResult : u8
+{
+    Ready = 0,
+    TimedOut = 1,
+    GenerationChanged = 2,
+    Stopped = 3,
+};
+
+using VulkanCausalWaitOperation = std::function<bool()>;
+using VulkanSurfaceSubmitRunner = std::function<bool(const VulkanCausalWaitOperation&)>;
+using VulkanCausalWaitRunner = std::function<VulkanCausalWaitResult(
+    const char* traceName,
+    const VulkanCausalWaitOperation& operation)>;
+
 struct VulkanPresenterPacingStats
 {
     u64 AcquireTimeouts = 0;
@@ -97,18 +131,31 @@ struct VulkanPresenterPacingStats
     u64 DirectPresentedFrames = 0;
     u64 FallbackPresentedFrames = 0;
     u64 SwapchainRecoveries = 0;
+    u64 PresentQueueWaitIdleCalls = 0;
+    u64 PresentQueueWaitIdleTotalNs = 0;
+    u64 PresentQueueWaitIdleMaxNs = 0;
+    u64 PresentFenceMarkerSubmits = 0;
+    u64 PresentFenceMarkerFailures = 0;
+    u64 PresentFenceWaitCalls = 0;
+    u64 PresentFenceWaitTotalNs = 0;
+    u64 PresentFenceWaitMaxNs = 0;
+    u64 PresentFenceTokenErrors = 0;
+    u64 AcquireOutOfDate = 0;
+    u64 PresentOutOfDate = 0;
+    u64 PresentRejectedAfterSubmit = 0;
     u32 SwapchainImageCount = 0;
     VkPresentModeKHR PresentMode = VK_PRESENT_MODE_FIFO_KHR;
 };
 
 class VulkanOutput;
 struct VulkanCompositionInputs;
-struct VulkanVisibleCompositorRegion;
 
 class VulkanSurfacePresenter
 {
+    const bool lowLatencyEnabled;
+
 public:
-    VulkanSurfacePresenter() = default;
+    explicit VulkanSurfacePresenter(bool lowLatencyEnabled = false) : lowLatencyEnabled(lowLatencyEnabled) {}
     ~VulkanSurfacePresenter();
 
     VulkanSurfacePresenter(const VulkanSurfacePresenter&) = delete;
@@ -122,8 +169,17 @@ public:
     bool configureSurface(int surfaceId, const VulkanSurfaceConfig& config, const VulkanBackgroundImage& backgroundImage);
     void detachSurface(int surfaceId);
 
-    bool presentFrame(Frame* frame, VulkanOutput& output, const VulkanCompositionInputs& inputs, u64 timeoutNs);
-    bool waitForFrameConsumption(Frame* frame, u64 timeoutNs = UINT64_MAX);
+    VulkanPresentationResult presentFrame(
+        Frame* frame,
+        VulkanOutput& output,
+        const VulkanCompositionInputs& inputs,
+        u64 gpuWaitTimeoutNs,
+        u64 timeoutNs,
+        const VulkanCausalWaitRunner& waitRunner,
+        const VulkanSurfaceSubmitRunner& submitRunner);
+    bool waitForFrameConsumption(Frame* frame, u64 timeoutNs = UINT64_MAX,
+        void (*hostService)(void*) = nullptr, void* hostContext = nullptr);
+    bool getFrameConsumptionDependency(const Frame* frame, VkSemaphore& semaphore, u64& value);
     void invalidateDescriptorCaches();
     VulkanPresenterPacingStats takePacingStatsSnapshotAndReset();
     static bool prewarmRetroArchFilter(
@@ -190,16 +246,7 @@ private:
         std::string lastSizingLogKey;
         u64 frameCount = 0;
         bool pendingClearHistory = false;
-        melonDS::VulkanPipelineProfile pipelineProfile =
-            melonDS::VulkanPipelineProfile::Compatibility;
         bool initialized = false;
-    };
-
-    struct VisibleCompositeResources
-    {
-        std::array<RetroArchImageResource, 2> images;
-        u32 currentIndex = 0;
-        bool valid[2] = {false, false};
     };
 
     struct RetroArchSizing
@@ -226,7 +273,6 @@ private:
     struct DescriptorSetCacheState
     {
         bool ready = false;
-        bool fastPathProfile = false;
         VkImageView sampledImageView = VK_NULL_HANDLE;
         VkImageLayout sampledImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         VkSampler sampledSampler = VK_NULL_HANDLE;
@@ -248,39 +294,39 @@ private:
     struct SurfaceState
     {
         int id = 0;
+        u64 surfaceEpoch = 0;
+        u64 swapchainGeneration = 0;
+        u64 lastSubmitSerial = 0;
+        u32 nextDisplayTimingId = 1;
         ANativeWindow* window = nullptr;
-        ANativeWindow* nativeWindow = nullptr;
         u32 requestedWidth = 0;
         u32 requestedHeight = 0;
-        u32 consecutiveSurfaceRecoveryAttempts = 0;
-        bool surfacePaused = false;
 
         VkSurfaceKHR surface = VK_NULL_HANDLE;
         VkSwapchainKHR swapchain = VK_NULL_HANDLE;
         VkFormat swapchainFormat = VK_FORMAT_UNDEFINED;
         VkColorSpaceKHR colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
         VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
+
         VkExtent2D extent{};
+        VkExtent2D logicalExtent{};
+        VkSurfaceTransformFlagBitsKHR preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
 
         std::vector<VkImage> swapchainImages;
         std::vector<VkImageView> swapchainImageViews;
         std::vector<VkFramebuffer> framebuffers;
 
         VkRenderPass renderPass = VK_NULL_HANDLE;
-        VkPipeline pipeline = VK_NULL_HANDLE;
-        VkPipeline compatibilityPipeline = VK_NULL_HANDLE;
+        VkPipeline composedPipeline = VK_NULL_HANDLE;
         VkCommandPool commandPool = VK_NULL_HANDLE;
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkFence inFlightFence = VK_NULL_HANDLE;
-        u64 inFlightPresentGeneration = 0;
-        u64 completedPresentGeneration = 0;
         VkSemaphore imageAvailableSemaphore = VK_NULL_HANDLE;
-        VkSemaphore renderFinishedSemaphore = VK_NULL_HANDLE;
+
+        std::vector<VkSemaphore> renderFinishedSemaphores;
 
         VkDescriptorSet screenDescriptorSet = VK_NULL_HANDLE;
         VkDescriptorSet backgroundDescriptorSet = VK_NULL_HANDLE;
-        VkDescriptorSet compatibilityScreenDescriptorSet = VK_NULL_HANDLE;
-        VkDescriptorSet compatibilityBackgroundDescriptorSet = VK_NULL_HANDLE;
 
         VkBuffer vertexBuffer = VK_NULL_HANDLE;
         VkDeviceMemory vertexMemory = VK_NULL_HANDLE;
@@ -298,9 +344,7 @@ private:
         DescriptorSetCacheState screenDescriptorCache{};
         DescriptorSetCacheState backgroundDescriptorCache{};
         bool cachedDirectPresent = false;
-        bool cachedFastPathProfile = false;
         bool cachedRetroArchApplied = false;
-        bool cachedVisibleCompositePresent = false;
         bool cachedFastHighresOnlyTop = false;
         bool cachedFastHighresOnlyBottom = false;
         bool cachedFastHighresOverlay2DTop = false;
@@ -321,15 +365,11 @@ private:
         bool cachedDirectBottomCarryRequired = false;
         bool cachedDirectTopComposedCarryRequired = false;
         bool cachedDirectBottomComposedCarryRequired = false;
-        u32 cachedCompositorMode = 0u;
-        u32 cachedDebugView = 0u;
-        int cachedHingeGapPixels = 0;
         std::vector<DrawCall> cachedDrawCalls;
         VkQueryPool timestampQueryPool = VK_NULL_HANDLE;
         bool timestampPending = false;
         BackgroundResource background{};
         RetroArchResources retroArch{};
-        VisibleCompositeResources visibleComposite{};
         RetroArchImageResource topComposedCarry{};
         RetroArchImageResource bottomComposedCarry{};
         RetroArchImageResource bottomComp2OneShotCarry{};
@@ -350,37 +390,42 @@ private:
         u8 pendingBottomComposedCarryWriterPhase = 0;
     };
 
+    struct PresentFenceSlot
+    {
+        VkFence fence = VK_NULL_HANDLE;
+        bool assigned = false;
+        u64 serial = 0;
+        u64 presenterEpoch = 0;
+        u64 frameId = 0;
+        u64 publicationGeneration = 0;
+        u32 obligationCount = 0;
+        std::vector<PresentSurfaceObligation> surfaceObligations;
+    };
+
 private:
     bool createCommonResources();
     void destroyCommonResources();
     bool createSyncObjects();
     void destroySyncObjects();
+    bool submitPresentFenceMarker(PresentConsumptionToken& token);
+    bool waitForPresentFenceToken(PresentConsumptionToken& token, u64 timeoutNs,
+        void (*hostService)(void*), void* hostContext);
+    bool waitForPresentQueueRecovery(PresentConsumptionToken& token);
 
     bool createSurfaceStateResources(SurfaceState& surfaceState);
     void destroySurfaceStateResources(SurfaceState& surfaceState);
-    bool ensureDirectCarryResources(
-        SurfaceState& surfaceState,
-        u32 scale,
-        bool ensureBottomComp2OneShot);
     void destroyDirectCarryResources(SurfaceState& surfaceState);
     bool directCarryReadyForInputs(const SurfaceState& surfaceState, const VulkanCompositionInputs& inputs) const;
-    bool ensureVisibleCompositeResources(SurfaceState& surfaceState);
-    void destroyVisibleCompositeResources(SurfaceState& surfaceState);
-    bool canUseVisibleComposite(const SurfaceState& surfaceState, const VulkanCompositionInputs& inputs) const;
-    u32 buildVisibleCompositeRegions(
-        const SurfaceState& surfaceState,
-        const VulkanCompositionInputs& inputs,
-        VulkanVisibleCompositorRegion* regions,
-        u32 maxRegionCount) const;
-    bool ensureSwapchain(SurfaceState& surfaceState, bool fastPathProfile);
+    bool ensureSwapchain(SurfaceState& surfaceState);
     void destroySwapchain(SurfaceState& surfaceState);
+    VkResult createRenderFinishedSemaphores(SurfaceState& surfaceState, u32 count);
+    void destroyRenderFinishedSemaphores(SurfaceState& surfaceState);
+    VkResult waitForPresentQueueIdleForLifecycle();
     void recoverSwapchain(SurfaceState& surfaceState, const char* reason);
-    bool recoverLostSurface(SurfaceState& surfaceState, const char* reason);
-    void markDeviceLost(const char* context);
     bool createInFlightFence(SurfaceState& surfaceState, bool signaled);
     void destroyInFlightFence(SurfaceState& surfaceState);
     void ensureSurfacePipelineCache();
-    void saveSurfacePipelineCache(bool onlyIfSizeChanged = false);
+    void saveSurfacePipelineCache();
     void destroySurfacePipelineCache();
     VkResult waitForSurfaceIdle(SurfaceState& surfaceState, u64 timeoutNs = UINT64_MAX);
     bool resetSurfaceInFlightFence(SurfaceState& surfaceState);
@@ -398,8 +443,7 @@ private:
         VkImageView frameImageView,
         const VulkanCompositionInputs& inputs,
         VulkanFilterMode filtering,
-        bool directPresent,
-        bool fastPathProfile
+        bool directPresent
     );
     bool updateVertexBuffer(
         SurfaceState& surfaceState,
@@ -408,7 +452,6 @@ private:
         const VulkanCompositionInputs& inputs,
         bool directPresent,
         bool retroArchApplied,
-        bool visibleCompositePresent,
         std::vector<DrawCall>& drawCalls
     );
     bool recordSurfaceCommands(
@@ -429,11 +472,12 @@ private:
     bool submitSurfaceCommands(
         SurfaceState& surfaceState,
         u32 imageIndex,
+        VkSemaphore sourceReadySemaphore,
+        u64 sourceReadyValue,
         u64& presentCpuNs,
         u64& presentTimelineValueOut,
         bool& queueSubmitSucceededOut,
-        bool& presentAcceptedOut,
-        bool& surfaceLostOut);
+        bool& presentAcceptedOut);
     bool ensureRetroArchResources(
         SurfaceState& surfaceState,
         u32 sourceScreenWidth,
@@ -441,14 +485,12 @@ private:
         u32 outputScreenWidth,
         u32 outputScreenHeight,
         u32 outputAtlasWidth,
-        u32 outputAtlasHeight,
-        melonDS::VulkanPipelineProfile pipelineProfile);
+        u32 outputAtlasHeight);
     void destroyRetroArchResources(SurfaceState& surfaceState);
     bool createRetroArchImage(
         RetroArchImageResource& resource,
         u32 width,
-        u32 height,
-        melonDS::VulkanPipelineProfile pipelineProfile);
+        u32 height);
     void destroyRetroArchImage(RetroArchImageResource& resource);
     RetroArchSizing calculateRetroArchSizing(const SurfaceState& surfaceState, u32 atlasWidth, u32 atlasHeight) const;
     void logRetroArchSizingIfNeeded(SurfaceState& surfaceState, const RetroArchSizing& sizing, u32 atlasWidth, u32 atlasHeight);
@@ -458,46 +500,48 @@ private:
         VkImageView sourceAtlasImageView,
         u32 atlasWidth,
         u32 atlasHeight,
-        melonDS::VulkanPipelineProfile pipelineProfile,
         VkImage& outputImage,
         VkImageView& outputImageView);
-    void drainOrRecreateImageAvailableSemaphore(SurfaceState& surfaceState, bool imageAcquired);
-    bool recreateRetroArchFence(RetroArchResources& retro, bool signaled);
 
     u32 findMemoryType(u32 typeBits, VkMemoryPropertyFlags properties) const;
 
 private:
-    std::atomic<bool> initialized{false};
+    bool initialized = false;
     bool contextAcquired = false;
-    std::atomic<bool> deviceLost{false};
-    bool fastPathHardwareSupported = false;
     int nextSurfaceId = 1;
-    mutable std::recursive_mutex surfaceMutex;
+    u64 presenterEpoch = 0;
+    u64 nextSurfaceEpoch = 1;
+    u64 nextSubmitSerial = 1;
+    u64 nextFenceSerial = 1;
 
     VkInstance instance = VK_NULL_HANDLE;
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
     VkDevice device = VK_NULL_HANDLE;
     VkQueue queue = VK_NULL_HANDLE;
     u32 queueFamilyIndex = 0;
-    std::atomic<bool> useTimelineSemaphores{false};
+    bool useTimelineSemaphores = false;
+    bool hasExternalTimelineConsumer = false;
     VkSemaphore timelineSemaphore = VK_NULL_HANDLE;
     u64 timelineValue = 0;
-    u64 fallbackPresentGeneration = 0;
     PFN_vkWaitSemaphoresKHR waitSemaphores = nullptr;
+    PFN_vkGetPastPresentationTimingGOOGLE getPastPresentationTiming = nullptr;
+
+    std::mutex presentConsumptionMutex;
+    std::array<PresentFenceSlot, FRAME_QUEUE_SIZE> presentFenceSlots{};
 
     VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
-    VkDescriptorSetLayout compatibilityDescriptorSetLayout = VK_NULL_HANDLE;
     VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
     VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
-    VkPipelineLayout compatibilityPipelineLayout = VK_NULL_HANDLE;
     VkPipelineCache surfacePipelineCache = VK_NULL_HANDLE;
     std::string surfacePipelineCacheFile;
-    size_t lastSavedPipelineCacheSize = 0;
+    std::size_t surfacePipelineCacheSavedBytes = 0;
     VkShaderModule vertexShaderModule = VK_NULL_HANDLE;
-    VkShaderModule fragmentShaderModule = VK_NULL_HANDLE;
-    VkShaderModule compatibilityFragmentShaderModule = VK_NULL_HANDLE;
+    VkShaderModule composedFragmentShaderModule = VK_NULL_HANDLE;
     VkSampler nearestSampler = VK_NULL_HANDLE;
     VkSampler linearSampler = VK_NULL_HANDLE;
+
+    VkBuffer placeholderBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory placeholderMemory = VK_NULL_HANDLE;
     PFN_vkResetQueryPoolEXT resetQueryPool = nullptr;
     float timestampPeriodNs = 0.0f;
     bool timestampQueriesSupported = false;
@@ -514,6 +558,8 @@ private:
     PerfSampleWindow<120> presentGpuWindow;
     u64 skippedSurfaceWaits = 0;
     u64 swapchainRecoveries = 0;
+    u64 swapchainCreations = 0;
+    u64 presentSuboptimalQueries = 0;
     u64 acquireTimeouts = 0;
     u64 presentSkippedForDeadline = 0;
     u64 frameWaitFailures = 0;
@@ -531,6 +577,18 @@ private:
     u64 presentedFrames = 0;
     u64 directPresentedFrames = 0;
     u64 fallbackPresentedFrames = 0;
+    u64 presentQueueWaitIdleCalls = 0;
+    u64 presentQueueWaitIdleTotalNs = 0;
+    u64 presentQueueWaitIdleMaxNs = 0;
+    u64 presentFenceMarkerSubmits = 0;
+    u64 presentFenceMarkerFailures = 0;
+    u64 presentFenceWaitCalls = 0;
+    u64 presentFenceWaitTotalNs = 0;
+    u64 presentFenceWaitMaxNs = 0;
+    u64 presentFenceTokenErrors = 0;
+    u64 acquireOutOfDate = 0;
+    u64 presentOutOfDate = 0;
+    u64 presentRejectedAfterSubmit = 0;
     std::array<u64, 21> presenterDrawModeCounts{};
     u32 drawDebugLogsRemaining = 600;
     u64 fallbackReasonNeedsReadback = 0;

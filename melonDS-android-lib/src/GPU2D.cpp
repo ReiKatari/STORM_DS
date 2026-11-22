@@ -22,6 +22,8 @@
 #include "GPU.h"
 #include "GPU3D.h"
 
+
+
 namespace melonDS
 {
 using Platform::Log;
@@ -271,11 +273,11 @@ void Unit::Write8(u32 addr, u8 val)
     switch (addr & 0x00000FFF)
     {
     case 0x000:
-        DispCnt = (DispCnt & 0xFFFFFF00) | val;
+        DispCnt = (((DispCnt & 0xFFFFFF00) | val));
         if (Num) DispCnt &= 0xC0B1FFF7;
         return;
     case 0x001:
-        DispCnt = (DispCnt & 0xFFFF00FF) | (val << 8);
+        DispCnt = (((DispCnt & 0xFFFF00FF) | (val << 8)));
         if (Num) DispCnt &= 0xC0B1FFF7;
         return;
     case 0x002:
@@ -527,7 +529,7 @@ void Unit::Write32(u32 addr, u32 val)
     switch (addr & 0x00000FFF)
     {
     case 0x000:
-        DispCnt = val;
+        DispCnt = (val);
         if (Num) DispCnt &= 0xC0B1FFF7;
         return;
 

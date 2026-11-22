@@ -226,7 +226,7 @@ void customizeFirmware(const EmulatorConfiguration& configuration, Firmware& fir
     firmware.UpdateChecksums();
 }
 
-Firmware generateFirmware(const EmulatorConfiguration& configuration, int type, int instanceId) noexcept
+std::optional<Firmware> generateFirmware(const EmulatorConfiguration& configuration, int type, int instanceId) noexcept
 {
     const std::string kWifiSettingsPath = "wfcsettings.bin";
 
@@ -234,7 +234,21 @@ Firmware generateFirmware(const EmulatorConfiguration& configuration, int type, 
     Firmware firmware = Firmware(type);
     assert(firmware.Buffer() != nullptr);
 
-    if (FileHandle* f = OpenInternalFile(kWifiSettingsPath, Read))
+    FileHandle* f = nullptr;
+    if (!configuration.wfcSettingsPath.empty())
+    {
+        f = OpenFile(configuration.wfcSettingsPath, Read);
+        if (!f)
+        {
+            f = OpenFile(configuration.wfcSettingsPath, ReadWriteExisting);
+        }
+    }
+    if (!f)
+    {
+        f = OpenInternalFile(kWifiSettingsPath, Read);
+    }
+
+    if (f)
     {
         constexpr unsigned TOTAL_WFC_SETTINGS_SIZE = 3 * (sizeof(Firmware::WifiAccessPoint) + sizeof(Firmware::ExtendedWifiAccessPoint));
         const u64 fileLen = FileLength(f);

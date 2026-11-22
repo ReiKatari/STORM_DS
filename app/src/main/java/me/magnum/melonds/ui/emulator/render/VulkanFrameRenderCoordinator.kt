@@ -8,8 +8,6 @@ import android.os.HandlerThread
 import android.os.Message
 import android.view.Surface
 import androidx.core.os.bundleOf
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -39,6 +37,16 @@ class VulkanFrameRenderCoordinator(
         var pendingSurface: Surface? = null,
         var pendingWidth: Int = 0,
         var pendingHeight: Int = 0,
+    )
+
+    private data class PacingPermit(
+        val permitId: Long,
+        val controlEpoch: Long,
+        var vsyncSequence: Long,
+        var frameDeadlineNanos: Long,
+        val waitForProduct: Boolean = false,
+        var nativeWaitEpoch: Long? = null,
+        var consumed: Boolean = false,
     )
 
     private val coordinatorScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -133,6 +141,10 @@ class VulkanFrameRenderCoordinator(
         frameRenderThread.requestFrameRender(frameDeadlineNanos)
     }
 
+    override fun cancelPendingFrameRender() {
+        frameRenderThread.cancelPendingFrameRender()
+    }
+
     override fun stop() {
         if (stopped) {
             return
@@ -187,49 +199,18 @@ class VulkanFrameRenderCoordinator(
         }
         val surfaceId = synchronized(surfacesLock) {
             pendingConfigs.remove(surfaceView)
+            managedSurfaces[surfaceView]?.also {
+                it.pendingSurface = null
+            }?.surfaceId ?: 0
+        }
+        frameRenderThread.requestSurfaceDetachment(surfaceId)
+        synchronized(surfacesLock) {
             managedSurfaces[surfaceView]?.let {
-                val id = it.surfaceId
                 it.surfaceId = 0
                 it.pendingSurface = null
-                id
-            } ?: 0
-        }
-        if (Thread.currentThread() === frameRenderThread || !frameRenderThread.isAlive || stopped) {
-            if (surfaceId != 0) {
-                frameRenderThread.requestSurfaceDetachment(surfaceId)
+                it.pendingWidth = 0
+                it.pendingHeight = 0
             }
-            return
-        }
-
-        val detachLatch = CountDownLatch(1)
-        if (frameRenderThread.requestSurfaceDetachment(surfaceId, detachLatch)) {
-            try {
-                detachLatch.await(SURFACE_DETACH_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-            } catch (_: InterruptedException) {
-                Thread.currentThread().interrupt()
-            }
-        }
-    }
-
-    private fun requestSurfaceAttachmentIfNeeded(
-        surfaceView: EmulatorSurfaceView,
-        surface: Surface,
-        width: Int,
-        height: Int,
-    ) {
-        if (stopped) {
-            return
-        }
-        val shouldAttach = synchronized(surfacesLock) {
-            val managedSurface = managedSurfaces[surfaceView] ?: return@synchronized false
-            managedSurface.pendingSurface = surface
-            managedSurface.pendingWidth = width
-            managedSurface.pendingHeight = height
-            managedSurface.surfaceId == 0
-        }
-
-        if (shouldAttach) {
-            frameRenderThread.requestSurfaceAttachment(surfaceView, surface, width, height)
         }
     }
 
@@ -252,8 +233,34 @@ class VulkanFrameRenderCoordinator(
                 }
             }
         }
-        for ((view, surf, size) in toAttach) {
-            frameRenderThread.requestSurfaceAttachment(view, surf, size.first, size.second)
+        toAttach.forEach { (view, surf, dims) ->
+            frameRenderThread.requestSurfaceAttachment(view, surf, dims.first, dims.second)
+        }
+    }
+
+    private fun requestSurfaceAttachmentIfNeeded(
+        surfaceView: EmulatorSurfaceView,
+        surface: Surface,
+        width: Int,
+        height: Int,
+    ) {
+        if (stopped) {
+            return
+        }
+        val shouldAttach = synchronized(surfacesLock) {
+            val managedSurface = managedSurfaces[surfaceView] ?: return@synchronized false
+            if (managedSurface.surfaceId != 0 || managedSurface.pendingSurface != null) {
+                false
+            } else {
+                managedSurface.pendingSurface = surface
+                managedSurface.pendingWidth = width
+                managedSurface.pendingHeight = height
+                true
+            }
+        }
+
+        if (shouldAttach) {
+            frameRenderThread.requestSurfaceAttachment(surfaceView, surface, width, height)
         }
     }
 
@@ -270,23 +277,11 @@ class VulkanFrameRenderCoordinator(
 
     private suspend fun decodeBackgroundBitmap(background: RuntimeBackground): Bitmap? {
         val backgroundUri = background.background?.uri ?: return null
-        val boundsOptions = BitmapFactory.Options().apply {
-            inJustDecodeBounds = true
-        }
-        runCatching {
-            context.contentResolver.openInputStream(backgroundUri)?.use { stream ->
-                BitmapFactory.decodeStream(stream, null, boundsOptions)
-            }
-        }
-        val sampleSize = calculateBackgroundSampleSize(boundsOptions.outWidth, boundsOptions.outHeight)
-        val decodedBitmap = runCatching {
-            context.contentResolver.openInputStream(backgroundUri)?.use { stream ->
-                BitmapFactory.decodeStream(stream, null, BitmapFactory.Options().apply {
-                    inPreferredConfig = Bitmap.Config.ARGB_8888
-                    inSampleSize = sampleSize
-                })
-            }
-        }.getOrNull() ?: return null
+        val decodedBitmap = context.contentResolver.openInputStream(backgroundUri)?.use { stream ->
+            BitmapFactory.decodeStream(stream, null, BitmapFactory.Options().apply {
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+            })
+        } ?: return null
 
         if (decodedBitmap.config == Bitmap.Config.ARGB_8888) {
             return decodedBitmap
@@ -299,17 +294,6 @@ class VulkanFrameRenderCoordinator(
         return convertedBitmap
     }
 
-    private fun calculateBackgroundSampleSize(width: Int, height: Int): Int {
-        if (width <= 0 || height <= 0) {
-            return 1
-        }
-        var sampleSize = 1
-        while ((width / sampleSize) > MAX_BACKGROUND_DECODE_DIMENSION || (height / sampleSize) > MAX_BACKGROUND_DECODE_DIMENSION) {
-            sampleSize *= 2
-        }
-        return sampleSize
-    }
-
     private inner class FrameRenderThread : HandlerThread("VulkanPresentThread") {
         @Volatile
         private var handler: Handler? = null
@@ -317,7 +301,13 @@ class VulkanFrameRenderCoordinator(
         private var running = true
         private var cleanedUp = false
         private val renderStatistics = RenderStatistics()
-        private val pendingDetachLatches = mutableSetOf<CountDownLatch>()
+        private val pacingLock = Any()
+        private var pacingTransitionCount = 0
+        private var controlEpoch = 1L
+        private var nextPermitId = 1L
+        private var nextVsyncSequence = 1L
+        private var pendingPacingPermit: PacingPermit? = null
+        private var renderMessageQueued = false
 
         override fun onLooperPrepared() {
             handler = object : Handler(looper) {
@@ -339,11 +329,21 @@ class VulkanFrameRenderCoordinator(
                             msg.data.getInt(MSG_GENERATION),
                             msg.data.parcelable(MSG_BACKGROUND_BITMAP),
                         )
-                        MSG_DETACH_SURFACE -> detachSurface(msg.arg1, msg.obj as? CountDownLatch)
-                        MSG_RENDER_FRAME -> renderFrame(msg.data.getLong(MSG_FRAME_DEADLINE_NS))
+                        MSG_DETACH_SURFACE -> detachSurface(msg.arg1)
+                        MSG_RENDER_FRAME -> pumpPresentation()
                         MSG_STOP -> stopThread()
                     }
                 }
+            }
+
+            val pendingSurfaces = synchronized(surfacesLock) {
+                managedSurfaces.mapNotNull { (surfaceView, managedSurface) ->
+                    managedSurface.pendingSurface?.let { surfaceView to it }
+                }
+            }
+            pendingSurfaces.forEach { (surfaceView, surface) ->
+                val (width, height) = surfaceView.getCurrentSurfaceSize()
+                attachSurface(surfaceView, surface, width, height)
             }
         }
 
@@ -359,25 +359,73 @@ class VulkanFrameRenderCoordinator(
             return null
         }
 
+        private fun advanceControlEpochLocked() {
+            controlEpoch += 1L
+            pendingPacingPermit = null
+            renderMessageQueued = false
+        }
+
+        private fun invalidatePendingPacing(currentHandler: Handler?) {
+            synchronized(pacingLock) {
+                advanceControlEpochLocked()
+            }
+            currentHandler?.removeMessages(MSG_RENDER_FRAME)
+
+            MelonEmulator.cancelVulkanPresentationWaits()
+        }
+
+        private fun beginPacingTransition(currentHandler: Handler) {
+            synchronized(pacingLock) {
+                pacingTransitionCount += 1
+                advanceControlEpochLocked()
+            }
+            currentHandler.removeMessages(MSG_RENDER_FRAME)
+            MelonEmulator.cancelVulkanPresentationWaits()
+        }
+
+        private fun endPacingTransition() {
+            synchronized(pacingLock) {
+                pacingTransitionCount = (pacingTransitionCount - 1).coerceAtLeast(0)
+            }
+        }
+
+        private inline fun queueAfterPacingTransition(
+            currentHandler: Handler,
+            queueMessage: () -> Unit,
+        ) {
+            beginPacingTransition(currentHandler)
+            try {
+                queueMessage()
+            } finally {
+                endPacingTransition()
+            }
+        }
+
+        fun cancelPendingFrameRender() {
+            invalidatePendingPacing(getActiveHandler())
+        }
+
         fun requestSurfaceAttachment(surfaceView: EmulatorSurfaceView, surface: Surface, width: Int, height: Int) {
             if (!running) {
                 return
             }
             val currentHandler = getActiveHandler() ?: return
-            currentHandler.obtainMessage(MSG_ATTACH_SURFACE, surfaceView).also {
-                it.data = bundleOf(
-                    MSG_SURFACE to surface,
-                    MSG_WIDTH to width,
-                    MSG_HEIGHT to height,
-                )
-                try {
-                    currentHandler.sendMessage(it)
-                } catch (_: IllegalStateException) {
-                    if (handler === currentHandler) {
-                        currentHandler.removeCallbacksAndMessages(null)
-                        handler = null
+            queueAfterPacingTransition(currentHandler) {
+                currentHandler.obtainMessage(MSG_ATTACH_SURFACE, surfaceView).also {
+                    it.data = bundleOf(
+                        MSG_SURFACE to surface,
+                        MSG_WIDTH to width,
+                        MSG_HEIGHT to height,
+                    )
+                    try {
+                        currentHandler.sendMessage(it)
+                    } catch (_: IllegalStateException) {
+                        if (handler === currentHandler) {
+                            currentHandler.removeCallbacksAndMessages(null)
+                            handler = null
+                        }
+                        it.recycle()
                     }
-                    it.recycle()
                 }
             }
         }
@@ -387,19 +435,21 @@ class VulkanFrameRenderCoordinator(
                 return
             }
             val currentHandler = getActiveHandler() ?: return
-            currentHandler.obtainMessage(MSG_RESIZE_SURFACE, surfaceView).also {
-                it.data = bundleOf(
-                    MSG_WIDTH to width,
-                    MSG_HEIGHT to height,
-                )
-                try {
-                    currentHandler.sendMessage(it)
-                } catch (_: IllegalStateException) {
-                    if (handler === currentHandler) {
-                        currentHandler.removeCallbacksAndMessages(null)
-                        handler = null
+            queueAfterPacingTransition(currentHandler) {
+                currentHandler.obtainMessage(MSG_RESIZE_SURFACE, surfaceView).also {
+                    it.data = bundleOf(
+                        MSG_WIDTH to width,
+                        MSG_HEIGHT to height,
+                    )
+                    try {
+                        currentHandler.sendMessage(it)
+                    } catch (_: IllegalStateException) {
+                        if (handler === currentHandler) {
+                            currentHandler.removeCallbacksAndMessages(null)
+                            handler = null
+                        }
+                        it.recycle()
                     }
-                    it.recycle()
                 }
             }
         }
@@ -435,81 +485,105 @@ class VulkanFrameRenderCoordinator(
                 return
             }
 
-            currentHandler.obtainMessage(MSG_CONFIGURE_SURFACE, surfaceView).also {
-                it.data = bundleOf(
-                    MSG_GENERATION to generation,
-                    MSG_HAS_CONFIG to (config != null),
-                    MSG_BACKGROUND_BITMAP to backgroundBitmap,
-                )
-                try {
-                    currentHandler.sendMessage(it)
-                } catch (_: IllegalStateException) {
-                    if (handler === currentHandler) {
-                        currentHandler.removeCallbacksAndMessages(null)
-                        handler = null
+            queueAfterPacingTransition(currentHandler) {
+                currentHandler.obtainMessage(MSG_CONFIGURE_SURFACE, surfaceView).also {
+                    it.data = bundleOf(
+                        MSG_GENERATION to generation,
+                        MSG_HAS_CONFIG to (config != null),
+                        MSG_BACKGROUND_BITMAP to backgroundBitmap,
+                    )
+                    try {
+                        currentHandler.sendMessage(it)
+                    } catch (_: IllegalStateException) {
+                        if (handler === currentHandler) {
+                            currentHandler.removeCallbacksAndMessages(null)
+                            handler = null
+                        }
+                        backgroundBitmap?.recycle()
+                        it.recycle()
                     }
-                    backgroundBitmap?.recycle()
-                    it.recycle()
                 }
             }
         }
 
-        fun requestSurfaceDetachment(surfaceId: Int, completionLatch: CountDownLatch? = null): Boolean {
+        fun requestSurfaceDetachment(surfaceId: Int) {
             if (!running) {
-                completionLatch?.countDown()
-                return false
+                return
             }
-            if (surfaceId == 0 && completionLatch == null) {
-                return false
+            if (surfaceId == 0) {
+                cancelPendingFrameRender()
+                return
             }
-            val currentHandler = getActiveHandler()
-            if (currentHandler == null) {
-                completionLatch?.countDown()
-                return false
-            }
-            if (completionLatch != null) {
-                synchronized(pendingDetachLatches) {
-                    pendingDetachLatches.add(completionLatch)
-                }
-            }
-            currentHandler.obtainMessage(MSG_DETACH_SURFACE, surfaceId, 0, completionLatch).also {
-                try {
-                    return currentHandler.sendMessage(it).also { sent ->
-                        if (!sent && completionLatch != null) {
-                            synchronized(pendingDetachLatches) {
-                                pendingDetachLatches.remove(completionLatch)
-                            }
-                            completionLatch.countDown()
+            val currentHandler = getActiveHandler() ?: return
+            queueAfterPacingTransition(currentHandler) {
+                currentHandler.obtainMessage(MSG_DETACH_SURFACE, surfaceId, 0).also {
+                    try {
+                        currentHandler.sendMessage(it)
+                    } catch (_: IllegalStateException) {
+                        if (handler === currentHandler) {
+                            currentHandler.removeCallbacksAndMessages(null)
+                            handler = null
                         }
+                        it.recycle()
                     }
-                } catch (_: IllegalStateException) {
-                    if (handler === currentHandler) {
-                        currentHandler.removeCallbacksAndMessages(null)
-                        handler = null
-                    }
-                    if (completionLatch != null) {
-                        synchronized(pendingDetachLatches) {
-                            pendingDetachLatches.remove(completionLatch)
-                        }
-                        completionLatch.countDown()
-                    }
-                    it.recycle()
-                    return false
                 }
             }
         }
 
-        fun requestFrameRender(frameDeadlineNanos: Long?) {
+        fun requestFrameRender(frameDeadlineNanos: Long?, expectedControlEpoch: Long? = null) {
             if (!running) {
                 return
             }
             val currentHandler = getActiveHandler() ?: return
-            currentHandler.removeMessages(MSG_RENDER_FRAME)
+            val shouldQueueMessage = synchronized(pacingLock) {
+                if (!running || pacingTransitionCount != 0
+                    || (expectedControlEpoch != null && expectedControlEpoch != controlEpoch)
+                ) {
+                    false
+                } else {
+                    val vsyncSequence = nextVsyncSequence++
+                    val currentPermit = pendingPacingPermit
+                    if (currentPermit == null
+                        || currentPermit.consumed
+                        || currentPermit.controlEpoch != controlEpoch
+                    ) {
+                        pendingPacingPermit = PacingPermit(
+                            permitId = nextPermitId++,
+                            controlEpoch = controlEpoch,
+                            vsyncSequence = vsyncSequence,
+                            frameDeadlineNanos = frameDeadlineNanos ?: 0L,
+                            waitForProduct = expectedControlEpoch != null,
+                        )
+                    } else {
+                        currentPermit.vsyncSequence = vsyncSequence
+                        currentPermit.frameDeadlineNanos = frameDeadlineNanos ?: 0L
+                    }
+
+                    if (renderMessageQueued) {
+                        false
+                    } else {
+                        renderMessageQueued = true
+                        true
+                    }
+                }
+            }
+            if (!shouldQueueMessage) {
+                return
+            }
+
             currentHandler.obtainMessage(MSG_RENDER_FRAME).also {
-                it.data = bundleOf(MSG_FRAME_DEADLINE_NS to (frameDeadlineNanos ?: 0L))
                 try {
-                    currentHandler.sendMessage(it)
+                    if (!currentHandler.sendMessage(it)) {
+                        synchronized(pacingLock) {
+                            renderMessageQueued = false
+                            pendingPacingPermit = null
+                        }
+                    }
                 } catch (_: IllegalStateException) {
+                    synchronized(pacingLock) {
+                        renderMessageQueued = false
+                        pendingPacingPermit = null
+                    }
                     if (handler === currentHandler) {
                         currentHandler.removeCallbacksAndMessages(null)
                         handler = null
@@ -521,7 +595,11 @@ class VulkanFrameRenderCoordinator(
 
         fun requestStop() {
             running = false
-            val currentHandler = getActiveHandler() ?: return
+            val currentHandler = getActiveHandler()
+            invalidatePendingPacing(currentHandler)
+            if (currentHandler == null) {
+                return
+            }
             try {
                 currentHandler.sendMessageAtFrontOfQueue(Message.obtain(currentHandler, MSG_STOP))
             } catch (_: IllegalStateException) {
@@ -532,26 +610,172 @@ class VulkanFrameRenderCoordinator(
             }
         }
 
-        private fun renderFrame(frameDeadlineNanos: Long) {
-            if (!running) {
-                return
-            }
-            val hasPending = synchronized(surfacesLock) {
-                managedSurfaces.values.any { it.surfaceId == 0 && it.pendingSurface?.isValid == true }
-            }
-            if (hasPending) {
-                reattachPendingSurfaces()
-            }
-            val deadline = frameDeadlineNanos.takeIf { it > 0L } ?: 0L
-            val budgetDeadline = if (deadline > 0L) {
-                (deadline - renderStatistics.getPresentationBudgetMarginNs()).coerceAtLeast(0L)
-            } else {
-                0L
+        private fun startPresentationPump(): PacingPermit? = synchronized(pacingLock) {
+            renderMessageQueued = false
+            pendingPacingPermit?.takeIf {
+                running
+                    && pacingTransitionCount == 0
+                    && !it.consumed
+                    && it.controlEpoch == controlEpoch
+            }?.copy()
+        }
+
+        private fun currentPacingPermit(permitId: Long, expectedControlEpoch: Long): PacingPermit? =
+            synchronized(pacingLock) {
+                pendingPacingPermit?.takeIf {
+                    running
+                        && pacingTransitionCount == 0
+                        && !it.consumed
+                        && it.permitId == permitId
+                        && it.controlEpoch == expectedControlEpoch
+                        && controlEpoch == expectedControlEpoch
+                }?.copy()
             }
 
-            val renderStartNs = System.nanoTime()
-            MelonEmulator.presentVulkanFrame(deadline, budgetDeadline)
-            renderStatistics.trackRenderEvent(System.nanoTime() - renderStartNs)
+        private fun bindNativeWaitEpoch(permitId: Long, expectedControlEpoch: Long): Boolean {
+            val capturedWaitEpoch = MelonEmulator.captureVulkanPresentationWaitEpoch()
+            return synchronized(pacingLock) {
+                val currentPermit = pendingPacingPermit
+                if (!running
+                    || pacingTransitionCount != 0
+                    || currentPermit == null
+                    || currentPermit.consumed
+                    || currentPermit.permitId != permitId
+                    || currentPermit.controlEpoch != expectedControlEpoch
+                    || controlEpoch != expectedControlEpoch
+                ) {
+                    false
+                } else if (currentPermit.nativeWaitEpoch != null
+                    && currentPermit.nativeWaitEpoch != capturedWaitEpoch
+                ) {
+                    pendingPacingPermit = null
+                    false
+                } else {
+                    currentPermit.nativeWaitEpoch = capturedWaitEpoch
+                    true
+                }
+            }
+        }
+
+        private fun finishPacingPermit(permit: PacingPermit, consumed: Boolean) {
+            synchronized(pacingLock) {
+                val currentPermit = pendingPacingPermit
+                if (currentPermit?.permitId == permit.permitId
+                    && currentPermit.controlEpoch == permit.controlEpoch
+                    && controlEpoch == permit.controlEpoch
+                    && (!consumed || currentPermit.vsyncSequence == permit.vsyncSequence)
+                ) {
+                    currentPermit.consumed = consumed
+                    pendingPacingPermit = null
+                }
+            }
+        }
+
+        private fun pumpPresentation() {
+            val initialPermit = startPresentationPump() ?: return
+            if (!bindNativeWaitEpoch(initialPermit.permitId, initialPermit.controlEpoch)) {
+                return
+            }
+
+            if (initialPermit.waitForProduct) {
+                val permit = currentPacingPermit(initialPermit.permitId, initialPermit.controlEpoch) ?: return
+                val waitEpoch = permit.nativeWaitEpoch ?: return
+                if (MelonEmulator.waitForVulkanPresentationProduct(waitEpoch, PRODUCT_WAIT_TIMEOUT_NS)
+                    != MelonEmulator.VulkanPresentationWaitResult.PRODUCT_READY
+                ) {
+                    return
+                }
+            }
+
+            var alreadyRetriedAfterProductWake = false
+            while (running) {
+                val permit = currentPacingPermit(
+                    initialPermit.permitId,
+                    initialPermit.controlEpoch,
+                ) ?: return
+                val deadline = permit.frameDeadlineNanos.takeIf { it > 0L } ?: 0L
+                val budgetDeadline = if (deadline > 0L) {
+                    (deadline - renderStatistics.getPresentationBudgetMarginNs()).coerceAtLeast(0L)
+                } else {
+                    0L
+                }
+
+                val renderStartNs = System.nanoTime()
+                val waitEpoch = permit.nativeWaitEpoch ?: run {
+                    finishPacingPermit(
+                        permit,
+                        consumed = false,
+                    )
+                    return
+                }
+                val presentationResult = MelonEmulator.presentVulkanFrame(
+                    deadline,
+                    budgetDeadline,
+                    waitEpoch,
+                )
+                renderStatistics.trackRenderEvent(System.nanoTime() - renderStartNs)
+                if (currentPacingPermit(permit.permitId, permit.controlEpoch) == null) {
+                    return
+                }
+
+                when (presentationResult) {
+                    MelonEmulator.VulkanPresentationResult.PRESENTED,
+                    MelonEmulator.VulkanPresentationResult.NO_SURFACE,
+                    -> {
+                        finishPacingPermit(permit, consumed = true)
+                        if (MelonEmulator.isLowLatencyEnabled
+                            && presentationResult == MelonEmulator.VulkanPresentationResult.PRESENTED
+                            && !MelonEmulator.isFastForwardEnabled()
+                        ) {
+                            requestFrameRender(null, permit.controlEpoch)
+                        }
+                        return
+                    }
+
+                    MelonEmulator.VulkanPresentationResult.NO_PRODUCT -> {
+                        if (alreadyRetriedAfterProductWake) {
+                            return
+                        }
+                        val waitEpoch = permit.nativeWaitEpoch ?: run {
+                            finishPacingPermit(permit, consumed = false)
+                            return
+                        }
+                        val waitResult = MelonEmulator.waitForVulkanPresentationProduct(
+                            waitEpoch,
+                            PRODUCT_WAIT_TIMEOUT_NS,
+                        )
+                        if (currentPacingPermit(permit.permitId, permit.controlEpoch) == null) {
+                            return
+                        }
+                        when (waitResult) {
+                            MelonEmulator.VulkanPresentationWaitResult.PRODUCT_READY -> {
+                                alreadyRetriedAfterProductWake = true
+                                continue
+                            }
+                            MelonEmulator.VulkanPresentationWaitResult.TIMED_OUT -> return
+                            MelonEmulator.VulkanPresentationWaitResult.GENERATION_CHANGED,
+                            MelonEmulator.VulkanPresentationWaitResult.STOPPED,
+                            -> {
+                                finishPacingPermit(permit, consumed = false)
+                                return
+                            }
+                        }
+                    }
+
+                    MelonEmulator.VulkanPresentationResult.GPU_NOT_READY,
+                    MelonEmulator.VulkanPresentationResult.WSI_NOT_READY,
+                    MelonEmulator.VulkanPresentationResult.RECOVERABLE_SURFACE_ERROR,
+                    -> return
+
+                    MelonEmulator.VulkanPresentationResult.GENERATION_CHANGED,
+                    MelonEmulator.VulkanPresentationResult.STOPPED,
+                    MelonEmulator.VulkanPresentationResult.FATAL_ERROR,
+                    -> {
+                        finishPacingPermit(permit, consumed = false)
+                        return
+                    }
+                }
+            }
         }
 
         private fun attachSurface(surfaceView: EmulatorSurfaceView, surface: Surface?, width: Int, height: Int) {
@@ -579,16 +803,16 @@ class VulkanFrameRenderCoordinator(
             var immediateConfig: VulkanPresentationConfig? = null
             synchronized(surfacesLock) {
                 val managedSurface = managedSurfaces[surfaceView]
-                if (managedSurface == null || surfaceView.getCurrentSurface() !== surface) {
+                if (managedSurface == null || managedSurface.pendingSurface !== surface || surfaceView.getCurrentSurface() !== surface) {
                     staleSurfaceId = surfaceId
                 } else if (surfaceId != 0) {
                     managedSurface.pendingSurface = null
+                    managedSurface.pendingWidth = 0
+                    managedSurface.pendingHeight = 0
                     managedSurface.surfaceId = surfaceId
                     immediateConfig = managedSurface.config
                     shouldRefreshPresentation = true
                 } else {
-                    // Native MelonInstance was not ready yet (surfaceId == 0).
-                    // Preserve pendingSurface so reattachPendingSurfaces() will bind it immediately once ready.
                     if (surface.isValid) {
                         managedSurface.pendingSurface = surface
                         managedSurface.pendingWidth = width
@@ -663,19 +887,11 @@ class VulkanFrameRenderCoordinator(
             backgroundBitmap?.recycle()
         }
 
-        private fun detachSurface(surfaceId: Int, completionLatch: CountDownLatch?) {
-            try {
-                if (surfaceId != 0 && (running || !cleanedUp)) {
-                    MelonEmulator.detachVulkanSurface(surfaceId)
-                }
-            } finally {
-                if (completionLatch != null) {
-                    synchronized(pendingDetachLatches) {
-                        pendingDetachLatches.remove(completionLatch)
-                    }
-                    completionLatch.countDown()
-                }
+        private fun detachSurface(surfaceId: Int) {
+            if (!running && cleanedUp) {
+                return
             }
+            MelonEmulator.detachVulkanSurface(surfaceId)
         }
 
         private fun stopThread() {
@@ -701,10 +917,6 @@ class VulkanFrameRenderCoordinator(
                     it.pendingSurface = null
                 }
                 pendingConfigs.clear()
-            }
-            synchronized(pendingDetachLatches) {
-                pendingDetachLatches.forEach { it.countDown() }
-                pendingDetachLatches.clear()
             }
         }
     }
@@ -752,11 +964,9 @@ class VulkanFrameRenderCoordinator(
         const val MSG_GENERATION = "generation"
         const val MSG_HAS_CONFIG = "has-config"
         const val MSG_BACKGROUND_BITMAP = "background-bitmap"
-        const val MSG_FRAME_DEADLINE_NS = "frame-deadline"
 
-        const val SURFACE_DETACH_TIMEOUT_MS = 1500L
+        const val PRODUCT_WAIT_TIMEOUT_NS = 50_000_000L
         const val STOP_JOIN_TIMEOUT_MS = 1500L
-        const val MAX_BACKGROUND_DECODE_DIMENSION = 1920
     }
 }
 

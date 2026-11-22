@@ -29,6 +29,21 @@ class GPU;
 namespace GPU2D
 {
 
+enum class PhysicalScreen : u8
+{
+    Top = 0,
+    Bottom = 1,
+    Unknown = 0xFF,
+};
+
+struct PhysicalScanoutRoute
+{
+    bool Valid = false;
+    u8 Engine = 0xFF;
+    PhysicalScreen Screen = PhysicalScreen::Unknown;
+    u8 BackBuffer = 0xFF;
+};
+
 class Unit
 {
 public:
@@ -135,15 +150,48 @@ public:
     virtual void DrawSprites(u32 line, Unit* unit) = 0;
 
     virtual void VBlankEnd(Unit* unitA, Unit* unitB) = 0;
+
+    virtual void ResetFrameskipState() noexcept {}
     virtual bool StructuredVulkan2DSourceACaptureHasDominant2DReplay() const noexcept { return true; }
+
+    void SetFramebuffer(
+        u32* unitA,
+        u32* unitB,
+        u8 backBuffer,
+        PhysicalScreen unitAScreen)
+    {
+        Framebuffer[0] = unitA;
+        Framebuffer[1] = unitB;
+        FramebufferRoute[0] = {true, 0u, unitAScreen, backBuffer};
+        FramebufferRoute[1] = {
+            true,
+            1u,
+            unitAScreen == PhysicalScreen::Top
+                ? PhysicalScreen::Bottom
+                : unitAScreen == PhysicalScreen::Bottom
+                    ? PhysicalScreen::Top
+                    : PhysicalScreen::Unknown,
+            backBuffer,
+        };
+    }
 
     void SetFramebuffer(u32* unitA, u32* unitB)
     {
         Framebuffer[0] = unitA;
         Framebuffer[1] = unitB;
+        FramebufferRoute[0] = {};
+        FramebufferRoute[1] = {};
     }
 protected:
+    [[nodiscard]] const PhysicalScanoutRoute& GetPhysicalScanoutRoute(
+        u32 engine) const noexcept
+    {
+        static const PhysicalScanoutRoute unknown{};
+        return engine < 2u ? FramebufferRoute[engine] : unknown;
+    }
+
     u32* Framebuffer[2];
+    PhysicalScanoutRoute FramebufferRoute[2] {};
 
     Unit* CurUnit;
 };

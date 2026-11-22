@@ -40,6 +40,11 @@ object MelonDSAndroidInterface {
     )
     external fun getEmulatorGlContext(): Long
     external fun getRendererCapabilities(): Int
+    private external fun canInitializeVulkanRendererNative(): Boolean
+    external fun setVulkanCapabilityOverridesNative(
+        disableTimelineSemaphores: Boolean,
+        disableDynamicTextureIndexing: Boolean,
+    )
     private external fun canInitializeVulkanRendererForProfileNative(
         fastPathEnabled: Boolean,
     ): Boolean
@@ -77,6 +82,24 @@ object MelonDSAndroidInterface {
         return runCatching {
             getRendererCapabilities() and RENDERER_CAP_VULKAN != 0
         }.getOrDefault(false)
+    }
+
+    fun canInitializeVulkanRenderer(): Boolean {
+        return runCatching {
+            canInitializeVulkanRendererNative()
+        }.getOrDefault(false)
+    }
+
+    fun setVulkanCapabilityOverrides(
+        disableTimelineSemaphores: Boolean,
+        disableDynamicTextureIndexing: Boolean,
+    ) {
+        runCatching {
+            setVulkanCapabilityOverridesNative(
+                disableTimelineSemaphores,
+                disableDynamicTextureIndexing,
+            )
+        }
     }
 
     fun canInitializeVulkanRenderer(profile: VulkanPipelineProfile): Boolean {

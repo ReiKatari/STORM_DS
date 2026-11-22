@@ -1,54 +1,46 @@
 #ifndef MELONDS_OBOECALLBACK_H
 #define MELONDS_OBOECALLBACK_H
 
-#include <oboe/Oboe.h>
-#include <fstream>
-#include <mutex>
+#include "AudioOutputCapture.h"
 #include "MelonInstance.h"
+
+#include <oboe/Oboe.h>
+#include <atomic>
+#include <cstdint>
+#include <memory>
 
 class OboeCallback : public oboe::AudioStreamCallback {
 private:
     int _volume;
-    void (*onErrorCallback)(void);
-    std::ostream* _recordingStream;
-    float audioSampleFrac;
+    void (*onErrorCallback)(oboe::AudioStream*, std::uint64_t);
+    std::uint64_t streamGeneration;
+    std::shared_ptr<MelonDSAndroid::AudioOutputCapture> audioOutputCapture;
 
-public:
-    void setActiveInstance(std::weak_ptr<MelonDSAndroid::MelonInstance> instance)
-    {
-        std::lock_guard<std::mutex> lock(activeInstanceMutex);
-        activeInstance = std::move(instance);
-    }
-
-private:
-    std::mutex activeInstanceMutex;
-    std::weak_ptr<MelonDSAndroid::MelonInstance> activeInstance;
-
-public:
-
-    bool softLimiterEnabled = true;
-    bool bassBoostEnabled = false;
-    int bassBoostStrength = 5;
-    bool spatialAudioEnabled = false;
-    bool reverbEnabled = false;
-
-private:
     float bassFilterStateL = 0.0f;
     float bassFilterStateR = 0.0f;
-    float reverbBufferL[1024] = {0.0f};
-    float reverbBufferR[1024] = {0.0f};
+    float reverbBufferL[1024]{};
+    float reverbBufferR[1024]{};
     int reverbHead = 0;
 
+    static inline melonDS::s16 applySoftLimit(melonDS::s32 sample, bool softLimiter);
+
 public:
-    OboeCallback(int volume, void (*onErrorCallback)(void)) : OboeCallback(volume, onErrorCallback, nullptr) { };
-    OboeCallback(int volume, void (*onErrorCallback)(void), std::ostream* recordingStream);
+    std::weak_ptr<MelonDSAndroid::MelonInstance> activeInstance;
+
+    std::atomic<bool> softLimiterEnabled{true};
+    std::atomic<bool> bassBoostEnabled{false};
+    std::atomic<int> bassBoostStrength{5};
+    std::atomic<bool> spatialAudioEnabled{false};
+    std::atomic<bool> reverbEnabled{false};
+
+    OboeCallback(
+        int volume,
+        void (*onErrorCallback)(oboe::AudioStream*, std::uint64_t),
+        std::uint64_t streamGeneration,
+        std::shared_ptr<MelonDSAndroid::AudioOutputCapture> audioOutputCapture
+    );
     oboe::DataCallbackResult onAudioReady(oboe::AudioStream *stream, void *audioData, int32_t numFrames) override;
     void onErrorAfterClose(oboe::AudioStream* stream, oboe::Result result) override;
-    
-private:
-    int getNumSamplesOut(int len);
-    inline melonDS::s16 applySoftLimit(melonDS::s32 sample);
 };
-
 
 #endif //MELONDS_OBOECALLBACK_H

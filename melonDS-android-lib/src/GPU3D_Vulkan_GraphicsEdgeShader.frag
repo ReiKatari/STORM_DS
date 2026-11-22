@@ -70,9 +70,10 @@ float computeSsaoAlpha(ivec2 coord, float centerDepth)
         ivec2(0, -r1), ivec2(0, r1), ivec2(-r1, 0), ivec2(r1, 0),
         ivec2(-r2, -r2), ivec2(r2, -r2), ivec2(-r2, r2), ivec2(r2, r2)
     );
+    ivec2 maxCoord = max(textureSize(DepthBuffer, 0) - ivec2(1), ivec2(0));
     for (int i = 0; i < 8; i++)
     {
-        ivec2 sc = clamp(coord + offsets[i], ivec2(0), ivec2(int(pc.width) - 1, int(pc.height) - 1));
+        ivec2 sc = clamp(coord + offsets[i], ivec2(0), maxCoord);
         float sampleDepth = texelFetch(DepthBuffer, sc, 0).r;
         float diff = centerDepth - sampleDepth;
         if (diff > 0.00015 && diff < 0.035)
@@ -86,32 +87,28 @@ float computeSsaoAlpha(ivec2 coord, float centerDepth)
 void main()
 {
     ivec2 coord = ivec2(gl_FragCoord.xy);
-    int scale = ((pc.dispCnt & (1u << 16u)) != 0u)
-        ? max(1, int(pc.width / 256u))
-        : 1;
+    int scale = ((pc.dispCnt & (1u << 16u)) != 0u) ? max(1, int(pc.width / 256u)) : 1;
 
     vec4 ret = vec4(0.0);
     vec4 depth = texelFetch(DepthBuffer, coord, 0);
     vec4 attr = texelFetch(AttrBuffer, coord, 0);
     int polyid = int(attr.r * 63.0);
 
-    if (((pc.dispCnt & (1u << 5u)) != 0u) && attr.g > 0.75)
+    if (((pc.dispCnt & (1u << 5u)) != 0u) && attr.b > 0.75)
     {
-        ivec2 depthMax = max(textureSize(DepthBuffer, 0) - ivec2(1), ivec2(0));
-        ivec2 attrMax = max(textureSize(AttrBuffer, 0) - ivec2(1), ivec2(0));
-        ivec2 maxCoord = min(depthMax, attrMax);
-        ivec2 coordU = clamp(coord + ivec2(0, -scale), ivec2(0), maxCoord);
-        ivec2 coordD = clamp(coord + ivec2(0, scale), ivec2(0), maxCoord);
-        ivec2 coordL = clamp(coord + ivec2(-scale, 0), ivec2(0), maxCoord);
-        ivec2 coordR = clamp(coord + ivec2(scale, 0), ivec2(0), maxCoord);
-        vec4 depthU = texelFetch(DepthBuffer, coordU, 0);
-        vec4 attrU = texelFetch(AttrBuffer, coordU, 0);
-        vec4 depthD = texelFetch(DepthBuffer, coordD, 0);
-        vec4 attrD = texelFetch(AttrBuffer, coordD, 0);
-        vec4 depthL = texelFetch(DepthBuffer, coordL, 0);
-        vec4 attrL = texelFetch(AttrBuffer, coordL, 0);
-        vec4 depthR = texelFetch(DepthBuffer, coordR, 0);
-        vec4 attrR = texelFetch(AttrBuffer, coordR, 0);
+        ivec2 maxCoord = min(max(textureSize(DepthBuffer, 0) - ivec2(1), ivec2(0)), max(textureSize(AttrBuffer, 0) - ivec2(1), ivec2(0)));
+        ivec2 cU = clamp(coord + ivec2(0, -scale), ivec2(0), maxCoord);
+        ivec2 cD = clamp(coord + ivec2(0, scale), ivec2(0), maxCoord);
+        ivec2 cL = clamp(coord + ivec2(-scale, 0), ivec2(0), maxCoord);
+        ivec2 cR = clamp(coord + ivec2(scale, 0), ivec2(0), maxCoord);
+        vec4 depthU = texelFetch(DepthBuffer, cU, 0);
+        vec4 attrU = texelFetch(AttrBuffer, cU, 0);
+        vec4 depthD = texelFetch(DepthBuffer, cD, 0);
+        vec4 attrD = texelFetch(AttrBuffer, cD, 0);
+        vec4 depthL = texelFetch(DepthBuffer, cL, 0);
+        vec4 attrL = texelFetch(AttrBuffer, cL, 0);
+        vec4 depthR = texelFetch(DepthBuffer, cR, 0);
+        vec4 attrR = texelFetch(AttrBuffer, cR, 0);
 
         if (isgood(attrU, depthU.r, polyid, depth.r)
             || isgood(attrD, depthD.r, polyid, depth.r)
@@ -127,9 +124,7 @@ void main()
     {
         float aoAlpha = computeSsaoAlpha(coord, depth.r);
         if (aoAlpha > 0.0)
-        {
             ret = vec4(0.0, 0.0, 0.0, aoAlpha);
-        }
     }
 
     oColor = ret;

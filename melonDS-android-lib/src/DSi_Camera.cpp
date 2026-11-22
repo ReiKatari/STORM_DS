@@ -144,7 +144,7 @@ void DSi_CamModule::IRQ(u32 param)
 
 void DSi_CamModule::TransferScanline(u32 line)
 {
-    if (!CurCamera || !CurCamera->IsActivated() || (Cnt & (1<<4)))
+    if (Cnt & (1<<4))
     {
         Transferring = false;
         return;
@@ -153,10 +153,7 @@ void DSi_CamModule::TransferScanline(u32 line)
     if (line == 0)
     {
         if (!(Cnt & (1<<15)))
-        {
-            Transferring = false;
             return;
-        }
 
         BufferNumLines = 0;
         Transferring = true;
@@ -275,10 +272,6 @@ skip_line:
     if (done)
     {
         Transferring = false;
-        if (CurCamera && CurCamera->GetState() == 7)
-        {
-            CurCamera->SetState(3);
-        }
         return;
     }
 
@@ -410,11 +403,6 @@ void DSi_CamModule::Write16(u32 addr, u16 val)
             }
 
             Cnt = (Cnt & oldmask) | (val & ~0x0020);
-            if (!(val & (1<<15)))
-            {
-                Transferring = false;
-                DSi.CancelEvent(Event_DSi_CamTransfer);
-            }
             if (val & (1<<5))
             {
                 Cnt &= ~(1<<4);
@@ -559,14 +547,6 @@ void DSi_Camera::StartTransfer()
         FrameHeight = *(u16*)&MCURegs[0x2709];
         FrameReadMode = *(u16*)&MCURegs[0x272D];
         FrameFormat = *(u16*)&MCURegs[0x2757];
-
-        if (FrameWidth == 0 || FrameHeight == 0)
-        {
-            FrameWidth = *(u16*)&MCURegs[0x2703];
-            FrameHeight = *(u16*)&MCURegs[0x2705];
-            FrameReadMode = *(u16*)&MCURegs[0x2717];
-            FrameFormat = *(u16*)&MCURegs[0x2755];
-        }
     }
     else
     {
@@ -574,12 +554,6 @@ void DSi_Camera::StartTransfer()
         FrameHeight = 0;
         FrameReadMode = 0;
         FrameFormat = 0;
-    }
-
-    if (FrameWidth == 0 || FrameHeight == 0)
-    {
-        FrameWidth = 640;
-        FrameHeight = 480;
     }
 
     Platform::Camera_CaptureFrame(Num, FrameBuffer, 640, 480, true, DSi.UserData);
@@ -596,14 +570,6 @@ int DSi_Camera::TransferScanline(u32* buffer, int maxlen, int& nlines)
 
     if ((TransferY >= FrameHeight) || (InternalY >= 480))
         return 0;
-
-    if (FrameWidth <= 0 || FrameHeight <= 0)
-    {
-        InternalY = 480;
-        TransferY = FrameHeight;
-        nlines = 1;
-        return 0;
-    }
 
     if (FrameWidth > 640 || FrameHeight > 480 ||
         FrameWidth < 2 || FrameHeight < 2 ||

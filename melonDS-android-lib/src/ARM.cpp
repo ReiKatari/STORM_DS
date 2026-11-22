@@ -572,12 +572,7 @@ void ARMv5::PrefetchAbort()
 
 void ARMv5::DataAbort()
 {
-    static int abortLogCount = 0;
-    if (abortLogCount++ < 5)
-    {
-        Log(LogLevel::Warn, "ARM9: data abort (%08X) R0=%08X R1=%08X R2=%08X R3=%08X R4=%08X R12=%08X SP=%08X LR=%08X CPSR=%08X\n",
-            R[15], R[0], R[1], R[2], R[3], R[4], R[12], R[13], R[14], CPSR);
-    }
+    Log(LogLevel::Warn, "ARM9: data abort (%08X)\n", R[15]);
 
     u32 oldcpsr = CPSR;
     CPSR &= ~0xBF;
@@ -624,9 +619,9 @@ void ARMv5::Execute()
 #ifdef JIT_ENABLED
         if constexpr (mode == CPUExecuteMode::JIT)
         {
-            u32 instrAddr = R[15] - ((CPSR & 0x20) ? 2 : 4);
+            u32 instrAddr = R[15] - ((CPSR&0x20)?2:4);
 
-            if (__builtin_expect((u32)(instrAddr - FastBlockLookupStart) >= FastBlockLookupSize, 0)
+            if ((instrAddr < FastBlockLookupStart || instrAddr >= (FastBlockLookupStart + FastBlockLookupSize))
                 && !NDS.JIT.SetupExecutableRegion(0, instrAddr, FastBlockLookup, FastBlockLookupStart, FastBlockLookupSize))
             {
                 NDS.ARM9Timestamp = NDS.ARM9Target;
@@ -636,12 +631,12 @@ void ARMv5::Execute()
 
             JitBlockEntry block = NDS.JIT.LookUpBlock(0, FastBlockLookup,
                 instrAddr - FastBlockLookupStart, instrAddr);
-            if (__builtin_expect(block != nullptr, 1))
+            if (block)
                 ARM_Dispatch(this, block);
             else
                 NDS.JIT.CompileBlock(this);
 
-            if (__builtin_expect(StopExecution != 0, 0))
+            if (StopExecution)
             {
                 // this order is crucial otherwise idle loops waiting for an IRQ won't function
                 if (IRQ)
@@ -764,9 +759,9 @@ void ARMv4::Execute()
 #ifdef JIT_ENABLED
         if constexpr (mode == CPUExecuteMode::JIT)
         {
-            u32 instrAddr = R[15] - ((CPSR & 0x20) ? 2 : 4);
+            u32 instrAddr = R[15] - ((CPSR&0x20)?2:4);
 
-            if (__builtin_expect((u32)(instrAddr - FastBlockLookupStart) >= FastBlockLookupSize, 0)
+            if ((instrAddr < FastBlockLookupStart || instrAddr >= (FastBlockLookupStart + FastBlockLookupSize))
                 && !NDS.JIT.SetupExecutableRegion(1, instrAddr, FastBlockLookup, FastBlockLookupStart, FastBlockLookupSize))
             {
                 NDS.ARM7Timestamp = NDS.ARM7Target;
@@ -776,12 +771,12 @@ void ARMv4::Execute()
 
             JitBlockEntry block = NDS.JIT.LookUpBlock(1, FastBlockLookup,
                 instrAddr - FastBlockLookupStart, instrAddr);
-            if (__builtin_expect(block != nullptr, 1))
+            if (block)
                 ARM_Dispatch(this, block);
             else
                 NDS.JIT.CompileBlock(this);
 
-            if (__builtin_expect(StopExecution != 0, 0))
+            if (StopExecution)
             {
                 if (IRQ)
                     TriggerIRQ();

@@ -30,6 +30,7 @@ private:
     GLuint posAttribLocation;
     GLuint texCoordAttribLocation;
     bool screenshotRequested;
+    bool screenshotSucceeded;
     bool stopped;
 
     void setupFrameBuffer();
@@ -43,19 +44,16 @@ public:
     ScreenshotRenderer(u32* screenshotBuffer);
     void init();
     void renderScreenshot(GPU* gpu, Renderer renderer, Frame* renderFrame);
-    void notifyScreenshotReady();
     u32* getScreenshot();
 
-    bool takeScreenshot(bool isPaused = false);
+    bool takeScreenshot();
     bool isScreenshotPending();
-    bool hasCachedScreenshot() const noexcept { return hasValidCachedScreenshot.load(std::memory_order_relaxed); }
-    void setHasValidCachedScreenshot(bool valid) noexcept { hasValidCachedScreenshot.store(valid, std::memory_order_relaxed); }
+    void notifyScreenshotReady(bool success = true);
 
     void cleanup();
 
 private:
     bool initialized = false;
-    std::atomic<bool> hasValidCachedScreenshot{false};
 };
 
 }

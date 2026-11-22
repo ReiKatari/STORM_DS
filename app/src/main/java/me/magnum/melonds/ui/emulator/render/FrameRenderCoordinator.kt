@@ -12,5 +12,7 @@ interface FrameRenderCoordinator {
 
     fun prewarmShaders(atlasWidth: Int, atlasHeight: Int): Long = 0L
 
+    fun cancelPendingFrameRender() = Unit
+
     fun stop()
 }

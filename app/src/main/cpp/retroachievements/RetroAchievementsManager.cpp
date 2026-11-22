@@ -1,9 +1,13 @@
 #include "NDS.h"
 #include "rcheevos.h"
 #include "RetroAchievementsManager.h"
+#include "RcClientClosingCallback.h"
+#include "RcClientTransportTicketLedger.h"
 #include "LeaderboardAttemptCorrelation.h"
 #include "LeaderboardScoreboardResponse.h"
 #include "MelonDS.h"
+#include "EmulationThreadCpuPolicy.h"
+#include "ThreadLifecycleScope.h"
 #include "Platform.h"
 #include "rc_consoles.h"
 #include "types.h"
@@ -14,12 +18,15 @@
 #include <cstdlib>
 #include <cstring>
 #include <cctype>
+#include <deque>
 #include <cerrno>
 #include <limits>
 #include <jni.h>
+#include <memory>
 #include <sstream>
 #include <thread>
 #include <ctime>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -32,6 +39,304 @@ namespace RetroAchievements
 
 std::weak_ptr<MelonEventMessenger> RetroAchievementsManager::EventMessenger;
 std::atomic<JavaVM*> RetroAchievementsManager::javaVm{nullptr};
+
+struct RcClientServerCallbackMetadata
+{
+    uint64_t generation = 0;
+    uint64_t transportRequestId = 0;
+    std::string requestAction;
+    uintptr_t callbackDataToken = 0;
+    std::optional<uint64_t> leaderboardAttemptId;
+    std::optional<uint32_t> submittedLeaderboardId;
+    rc_client_server_callback_t callback = nullptr;
+    void* callbackData = nullptr;
+    rc_client_t* client = nullptr;
+};
+
+struct RcClientHttpCompletion
+{
+    uint64_t transportRequestId = 0;
+    RcClientServerCallbackMetadata metadata;
+    std::string responseBody;
+    int httpStatus = RC_API_SERVER_RESPONSE_RETRYABLE_CLIENT_ERROR;
+    bool succeeded = false;
+    bool deadlineExceeded = false;
+};
+
+class RcClientHttpCancellation final
+{
+public:
+    explicit RcClientHttpCancellation(JavaVM* bridgeVm) : bridgeVm(bridgeVm) {}
+
+    bool IsCancelled() const
+    {
+        return cancelled.load(std::memory_order_acquire);
+    }
+
+    void MarkCompleted()
+    {
+        completed.store(true, std::memory_order_release);
+    }
+
+    void RegisterConnection(JNIEnv* env, jobject connection)
+    {
+        if (!env || !connection)
+            return;
+
+        std::lock_guard lock(mutex);
+        if (cancelled.load(std::memory_order_acquire))
+        {
+            DisconnectLocked(env, connection);
+            return;
+        }
+        activeConnection = env->NewGlobalRef(connection);
+        if (env->ExceptionCheck())
+            env->ExceptionClear();
+    }
+
+    void ClearConnection(JNIEnv* env)
+    {
+        if (!env)
+            return;
+
+        std::lock_guard lock(mutex);
+        if (activeConnection)
+        {
+            env->DeleteGlobalRef(activeConnection);
+            activeConnection = nullptr;
+        }
+        if (env->ExceptionCheck())
+            env->ExceptionClear();
+    }
+
+    void Cancel()
+    {
+        if (completed.load(std::memory_order_acquire))
+            return;
+
+        std::lock_guard lock(mutex);
+        cancelled.store(true, std::memory_order_release);
+        if (!activeConnection || !bridgeVm)
+            return;
+
+        JNIEnv* env = nullptr;
+        bool attached = false;
+        const jint getEnvResult = bridgeVm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6);
+        if (getEnvResult == JNI_EDETACHED)
+        {
+            if (bridgeVm->AttachCurrentThread(&env, nullptr) != JNI_OK)
+                return;
+            attached = true;
+        }
+        if (env)
+        {
+            DisconnectLocked(env, activeConnection);
+            env->DeleteGlobalRef(activeConnection);
+            activeConnection = nullptr;
+            if (env->ExceptionCheck())
+                env->ExceptionClear();
+        }
+        if (attached)
+            bridgeVm->DetachCurrentThread();
+    }
+
+private:
+    static void DisconnectLocked(JNIEnv* env, jobject connection)
+    {
+        jclass connectionClass = env->FindClass("java/net/HttpURLConnection");
+        if (env->ExceptionCheck() || !connectionClass)
+        {
+            if (env->ExceptionCheck()) env->ExceptionClear();
+            return;
+        }
+        const jmethodID disconnect = env->GetMethodID(connectionClass, "disconnect", "()V");
+        if (!env->ExceptionCheck() && disconnect)
+            env->CallVoidMethod(connection, disconnect);
+        if (env->ExceptionCheck())
+            env->ExceptionClear();
+        env->DeleteLocalRef(connectionClass);
+    }
+
+    JavaVM* bridgeVm = nullptr;
+    std::mutex mutex;
+    std::atomic<bool> cancelled{false};
+    std::atomic<bool> completed{false};
+    jobject activeConnection = nullptr;
+};
+
+class RcClientHttpSession final
+{
+public:
+    using TicketLedger = RcClientTransportTicketLedger<
+        RcClientServerCallbackMetadata,
+        RcClientHttpCancellation,
+        RcClientHttpCompletion>;
+
+    explicit RcClientHttpSession(uint64_t generation) : generation(generation) {}
+
+    bool IsActive() const
+    {
+        return tickets.IsActive();
+    }
+
+    bool RegisterTicket(
+        const RcClientServerCallbackMetadata& metadata,
+        const std::shared_ptr<RcClientHttpCancellation>& cancellation)
+    {
+        return tickets.Register(
+            metadata.transportRequestId,
+            metadata,
+            cancellation
+        );
+    }
+
+    void BeginClosing()
+    {
+        auto terminalTickets = tickets.BeginClosing();
+        std::vector<std::shared_ptr<RcClientHttpCancellation>> cancellations;
+        {
+            std::lock_guard lock(terminalMutex);
+            if (terminalTickets.empty() && terminalTicketsStored)
+                return;
+            cancellations.reserve(terminalTickets.size());
+            for (const auto& ticket : terminalTickets)
+                cancellations.push_back(ticket.cancellation);
+            closingTickets = std::move(terminalTickets);
+            terminalTicketsStored = true;
+        }
+
+        ThreadLifecycleScope creation(setEmulationThreadCreationActive);
+        std::thread([cancellations = std::move(cancellations)]() {
+            for (const auto& cancellation : cancellations)
+            {
+                if (cancellation)
+                    cancellation->Cancel();
+            }
+        }).detach();
+    }
+
+    void DeliverTerminalCallbacksBeforeClientDestroyed()
+    {
+        std::vector<RcClientServerCallbackMetadata> callbacks;
+        {
+            std::lock_guard lock(terminalMutex);
+            if (!terminalTicketsStored)
+                return;
+            callbacks.reserve(closingTickets.size());
+            for (const auto& ticket : closingTickets)
+                callbacks.push_back(ticket.metadata);
+            closingTickets.clear();
+            terminalTicketsStored = false;
+        }
+        tickets.Close();
+
+        for (const auto& metadata : callbacks)
+            rc_client_deliver_terminal_callback(metadata.callback, metadata.callbackData);
+    }
+
+    void DiscardTerminalTicketsWithoutCallbacks()
+    {
+        std::lock_guard lock(terminalMutex);
+
+        closingTickets.clear();
+        terminalTicketsStored = false;
+        tickets.Close();
+    }
+
+    bool Finish(uint64_t transportRequestId, RcClientHttpCompletion completion)
+    {
+        return tickets.Finish(
+            transportRequestId,
+            [transportRequestId, completion = std::move(completion)](
+                const RcClientServerCallbackMetadata& metadata) mutable {
+                completion.transportRequestId = transportRequestId;
+                completion.metadata = metadata;
+                return std::move(completion);
+            }
+        );
+    }
+
+    bool PopCompletion(RcClientHttpCompletion* completion)
+    {
+        return tickets.PopCompletion(completion);
+    }
+
+    void MarkDelivered(uint64_t transportRequestId)
+    {
+        tickets.MarkDelivered(transportRequestId);
+    }
+
+    void ForgetTicket(uint64_t transportRequestId)
+    {
+        tickets.Forget(transportRequestId);
+    }
+
+    const uint64_t generation;
+
+private:
+    TicketLedger tickets;
+    std::mutex terminalMutex;
+    std::vector<TicketLedger::Ticket> closingTickets;
+    bool terminalTicketsStored = false;
+};
+
+struct RcClientBootstrapAttempt
+{
+    void Complete(int completionResult, const char* completionError)
+    {
+        std::lock_guard lock(mutex);
+        if (cancelled || completed)
+            return;
+        completed = true;
+        result = completionResult;
+        errorMessage = completionError ? completionError : "";
+        condition.notify_all();
+    }
+
+    void Cancel()
+    {
+        std::lock_guard lock(mutex);
+        cancelled = true;
+        condition.notify_all();
+    }
+
+    bool WaitFor(std::chrono::milliseconds timeout, int* completionResult, std::string* completionError)
+    {
+        std::unique_lock lock(mutex);
+        if (!condition.wait_for(lock, timeout, [this] { return completed || cancelled; }))
+            return false;
+        if (cancelled)
+            return false;
+        if (completionResult)
+            *completionResult = result;
+        if (completionError)
+            *completionError = errorMessage;
+        return completed;
+    }
+
+    void MarkActivationReady()
+    {
+        std::lock_guard lock(mutex);
+        if (cancelled)
+            return;
+        activationReady = true;
+        condition.notify_all();
+    }
+
+    bool WaitForActivation(std::chrono::milliseconds timeout)
+    {
+        std::unique_lock lock(mutex);
+        return condition.wait_for(lock, timeout, [this] { return activationReady || cancelled; }) && activationReady;
+    }
+
+    std::mutex mutex;
+    std::condition_variable condition;
+    bool completed = false;
+    bool cancelled = false;
+    bool activationReady = false;
+    int result = RC_INVALID_STATE;
+    std::string errorMessage;
+};
 
 namespace {
 
@@ -57,9 +362,16 @@ constexpr long long RC_CLIENT_PERF_WINDOW_ISOLATED_SPIKE_LOG_US_LIMIT = 50000;
 constexpr int RC_CLIENT_PERF_WINDOW_SLOW_FRAME_COUNT_LIMIT = 12;
 constexpr int RC_CLIENT_PERF_CONSECUTIVE_SLOW_WINDOWS_FOR_WARNING = 2;
 constexpr const char* RC_CLIENT_DEFAULT_IMAGE = "https://media.retroachievements.org/Images/000001.png";
-constexpr const char* RC_CLIENT_DEFAULT_USER_AGENT = "RetroArch/1.19.1 (Android) rcheevos/11.7.0";
+constexpr const char* RC_CLIENT_DEFAULT_USER_AGENT = "melonDualDS-android/0.7.0";
 constexpr int RC_CLIENT_HTTP_CONNECT_TIMEOUT_MS = 10000;
 constexpr int RC_CLIENT_HTTP_READ_TIMEOUT_MS = 15000;
+constexpr int RC_CLIENT_HTTP_QUEUE_CAPACITY = 16;
+constexpr int RC_CLIENT_HTTP_WORKER_COUNT = 2;
+constexpr auto RC_CLIENT_HTTP_TOTAL_TIMEOUT = std::chrono::milliseconds(15000);
+
+constexpr size_t RC_CLIENT_HTTP_MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
+
+std::atomic<bool> gRcClientResponseTooLarge{false};
 constexpr size_t RC_CLIENT_MAX_LOGGED_VALUE_LENGTH = 200;
 
 uint64_t AllocatePendingSubmissionId()
@@ -80,6 +392,15 @@ uint64_t AllocatePendingSubmissionSequence()
     return sequence;
 }
 
+uint64_t AllocateRcClientTransportRequestId()
+{
+    static std::atomic<uint64_t> nextId{1};
+    uint64_t id = nextId.fetch_add(1, std::memory_order_relaxed);
+    while (id == 0)
+        id = nextId.fetch_add(1, std::memory_order_relaxed);
+    return id;
+}
+
 bool AreLeaderboardDiagnosticsEnabled()
 {
     return MelonDSAndroid::areRendererDebugToolsEnabled();
@@ -91,15 +412,6 @@ int64_t LeaderboardDiagnosticNowMs()
         std::chrono::steady_clock::now().time_since_epoch()
     ).count();
 }
-
-struct RcClientAsyncResult
-{
-    std::mutex lock;
-    std::condition_variable condition;
-    bool isCompleted = false;
-    int result = RC_OK;
-    std::string errorMessage;
-};
 
 struct RcClientWaitResult
 {
@@ -544,59 +856,8 @@ void RC_CCONV OnRcClientAsyncCompleted(int result, const char* errorMessage, rc_
     if (!userdata)
         return;
 
-    auto* asyncResult = static_cast<RcClientAsyncResult*>(userdata);
-    std::lock_guard lock(asyncResult->lock);
-    asyncResult->isCompleted = true;
-    asyncResult->result = result;
-    asyncResult->errorMessage = errorMessage ? errorMessage : "";
-    asyncResult->condition.notify_all();
-}
-
-template <typename PumpFn>
-RcClientWaitResult WaitForRcClientResult(
-    rc_client_t* client,
-    rc_client_async_handle_t* asyncHandle,
-    RcClientAsyncResult* asyncResult,
-    std::chrono::milliseconds timeout,
-    PumpFn&& pumpCompleted
-)
-{
-    if (!client || !asyncResult)
-        return { false, false, RC_INVALID_STATE, "client or async result was not provided" };
-
-    const auto checkCompleted = [&]() -> std::optional<RcClientWaitResult> {
-        std::lock_guard lock(asyncResult->lock);
-        if (asyncResult->isCompleted)
-        {
-            return RcClientWaitResult {
-                asyncResult->result == RC_OK,
-                false,
-                asyncResult->result,
-                asyncResult->errorMessage,
-            };
-        }
-        return std::nullopt;
-    };
-
-    if (auto done = checkCompleted(); done.has_value())
-        return *done;
-
-    if (!asyncHandle)
-        return { false, false, RC_INVALID_STATE, "async handle was not created" };
-
-    const auto deadline = std::chrono::steady_clock::now() + timeout;
-    for (;;)
-    {
-        if (!pumpCompleted(deadline))
-        {
-            if (auto done = checkCompleted(); done.has_value())
-                return *done;
-            rc_client_abort_async(client, asyncHandle);
-            return { false, true, RC_API_SERVER_RESPONSE_RETRYABLE_CLIENT_ERROR, "timed out waiting for async rc_client result" };
-        }
-        if (auto done = checkCompleted(); done.has_value())
-            return *done;
-    }
+    auto* attempt = static_cast<RcClientBootstrapAttempt*>(userdata);
+    attempt->Complete(result, errorMessage);
 }
 
 void LogRcClientBootstrapFailure(const char* stage, int attempt, const RcClientWaitResult& waitResult)
@@ -632,7 +893,34 @@ bool LogAndClearJavaException(JNIEnv* env, const char* context, int* httpStatusC
     return true;
 }
 
-bool ReadJavaInputStream(JNIEnv* env, jobject inputStream, std::string* responseBody, int* httpStatusCode)
+bool IsRcClientTransportExpired(
+    const std::shared_ptr<RcClientHttpCancellation>& cancellation,
+    std::chrono::steady_clock::time_point deadline
+)
+{
+    return !cancellation || cancellation->IsCancelled() ||
+        std::chrono::steady_clock::now() >= deadline;
+}
+
+int RcClientTransportTimeoutMs(
+    std::chrono::steady_clock::time_point deadline,
+    int configuredTimeoutMs
+)
+{
+    const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
+        deadline - std::chrono::steady_clock::now()
+    ).count();
+    return static_cast<int>(std::max<long long>(1, std::min<long long>(configuredTimeoutMs, remaining)));
+}
+
+bool ReadJavaInputStream(
+    JNIEnv* env,
+    jobject inputStream,
+    std::string* responseBody,
+    int* httpStatusCode,
+    const std::shared_ptr<RcClientHttpCancellation>& cancellation,
+    std::chrono::steady_clock::time_point deadline
+)
 {
     if (!env || !inputStream || !responseBody)
         return false;
@@ -658,6 +946,12 @@ bool ReadJavaInputStream(JNIEnv* env, jobject inputStream, std::string* response
     bool readOk = true;
     while (true)
     {
+        if (IsRcClientTransportExpired(cancellation, deadline))
+        {
+            *httpStatusCode = RC_API_SERVER_RESPONSE_RETRYABLE_CLIENT_ERROR;
+            readOk = false;
+            break;
+        }
         jint bytesRead = env->CallIntMethod(inputStream, readMethod, buffer);
         if (LogAndClearJavaException(env, "InputStream.read", httpStatusCode))
         {
@@ -667,6 +961,19 @@ bool ReadJavaInputStream(JNIEnv* env, jobject inputStream, std::string* response
 
         if (bytesRead <= 0)
             break;
+
+        if (responseBody->size() + static_cast<size_t>(bytesRead) > RC_CLIENT_HTTP_MAX_RESPONSE_BYTES)
+        {
+            *httpStatusCode = RC_API_SERVER_RESPONSE_RETRYABLE_CLIENT_ERROR;
+            gRcClientResponseTooLarge.store(true, std::memory_order_release);
+            melonDS::Platform::Log(
+                melonDS::Platform::LogLevel::Warn,
+                "[RAClient] HTTP response exceeded bounded body limit bytes=%zu\n",
+                RC_CLIENT_HTTP_MAX_RESPONSE_BYTES
+            );
+            readOk = false;
+            break;
+        }
 
         std::vector<jbyte> chunk((size_t) bytesRead);
         env->GetByteArrayRegion(buffer, 0, bytesRead, chunk.data());
@@ -689,7 +996,212 @@ bool ExecuteRcClientHttpRequest(
     const rc_api_request_t* request,
     const char* userAgent,
     std::string* responseBody,
-    int* httpStatusCode
+    int* httpStatusCode,
+    const std::shared_ptr<RcClientHttpCancellation>& cancellation,
+    std::chrono::steady_clock::time_point deadline
+);
+
+struct RcClientHttpWorkItem
+{
+    std::shared_ptr<RcClientHttpSession> session;
+    uint64_t transportRequestId = 0;
+    std::shared_ptr<RcClientHttpCancellation> cancellation;
+    JavaVM* bridgeVm = nullptr;
+    std::string url;
+    std::string postData;
+    std::string contentType;
+    std::string userAgent;
+    std::chrono::steady_clock::time_point deadline;
+};
+
+class RcClientHttpTransport final
+{
+public:
+    static RcClientHttpTransport& Instance()
+    {
+
+        static auto* instance = new RcClientHttpTransport();
+        return *instance;
+    }
+
+    bool Submit(RcClientHttpWorkItem work)
+    {
+        {
+            std::lock_guard lock(mutex);
+            StartWorkersLocked();
+            if (
+                workQueue.size() >= RC_CLIENT_HTTP_QUEUE_CAPACITY ||
+                inFlightRequests.size() >=
+                    static_cast<size_t>(RC_CLIENT_HTTP_QUEUE_CAPACITY + RC_CLIENT_HTTP_WORKER_COUNT) ||
+                work.transportRequestId == 0 || !work.cancellation
+            )
+                return false;
+            inFlightRequests.emplace(
+                work.transportRequestId,
+                InFlightRequest{
+                    .cancellation = work.cancellation,
+                    .deadline = work.deadline,
+                }
+            );
+            workQueue.push_back(std::move(work));
+            condition.notify_one();
+            deadlineCondition.notify_one();
+        }
+        return true;
+    }
+
+private:
+    void StartWorkersLocked()
+    {
+        if (workersStarted)
+            return;
+        workersStarted = true;
+        ThreadLifecycleScope creation(setEmulationThreadCreationActive);
+        for (int index = 0; index < RC_CLIENT_HTTP_WORKER_COUNT; ++index)
+            std::thread([this] { WorkerLoop(); }).detach();
+        std::thread([this] { WatchdogLoop(); }).detach();
+    }
+
+    void CompleteRequest(uint64_t transportRequestId)
+    {
+        std::lock_guard lock(mutex);
+        inFlightRequests.erase(transportRequestId);
+        deadlineCondition.notify_one();
+    }
+
+    void WatchdogLoop()
+    {
+        for (;;)
+        {
+            std::vector<std::shared_ptr<RcClientHttpCancellation>> cancellations;
+            {
+                std::unique_lock lock(mutex);
+                for (;;)
+                {
+                    if (inFlightRequests.empty())
+                    {
+                        deadlineCondition.wait(lock);
+                        continue;
+                    }
+
+                    const auto now = std::chrono::steady_clock::now();
+                    auto nextDeadline = std::chrono::steady_clock::time_point::max();
+                    for (auto& entry : inFlightRequests)
+                    {
+                        auto& request = entry.second;
+                        if (request.cancelRequested)
+                            continue;
+                        if (request.deadline <= now)
+                        {
+                            request.cancelRequested = true;
+                            cancellations.push_back(request.cancellation);
+                        }
+                        else
+                        {
+                            nextDeadline = std::min(nextDeadline, request.deadline);
+                        }
+                    }
+                    if (!cancellations.empty())
+                        break;
+                    if (nextDeadline == std::chrono::steady_clock::time_point::max())
+                        deadlineCondition.wait(lock);
+                    else
+                        deadlineCondition.wait_until(lock, nextDeadline);
+                }
+            }
+
+            for (const auto& cancellation : cancellations)
+            {
+                if (cancellation)
+                    cancellation->Cancel();
+            }
+        }
+    }
+
+    void WorkerLoop()
+    {
+        for (;;)
+        {
+            RcClientHttpWorkItem work;
+            {
+                std::unique_lock lock(mutex);
+                condition.wait(lock, [this] { return !workQueue.empty(); });
+                work = std::move(workQueue.front());
+                workQueue.pop_front();
+            }
+
+            if (!work.session || !work.session->IsActive())
+            {
+                if (work.cancellation)
+                    work.cancellation->MarkCompleted();
+                CompleteRequest(work.transportRequestId);
+                continue;
+            }
+
+            RcClientHttpCompletion completion;
+            if (IsRcClientTransportExpired(work.cancellation, work.deadline))
+            {
+                completion.deadlineExceeded = true;
+                completion.responseBody = "{\"Success\":false,\"Error\":\"Native rc_client transport deadline expired before dispatch\"}";
+            }
+            else
+            {
+                rc_api_request_t request{};
+                request.url = work.url.c_str();
+                request.post_data = work.postData.empty() ? nullptr : work.postData.c_str();
+                request.content_type = work.contentType.empty() ? nullptr : work.contentType.c_str();
+                completion.succeeded = ExecuteRcClientHttpRequest(
+                    work.bridgeVm,
+                    &request,
+                    work.userAgent.empty() ? nullptr : work.userAgent.c_str(),
+                    &completion.responseBody,
+                    &completion.httpStatus,
+                    work.cancellation,
+                    work.deadline
+                );
+                if (!completion.succeeded && completion.responseBody.empty())
+                {
+                    completion.responseBody = "{\"Success\":false,\"Error\":\"Native rc_client transport failed\"}";
+                }
+            }
+
+            if (completion.deadlineExceeded || IsRcClientTransportExpired(work.cancellation, work.deadline))
+            {
+                completion.httpStatus = RC_API_SERVER_RESPONSE_RETRYABLE_CLIENT_ERROR;
+                completion.succeeded = false;
+            }
+
+            if (work.cancellation)
+                work.cancellation->MarkCompleted();
+            if (work.session->Finish(work.transportRequestId, std::move(completion)))
+                MelonDSAndroid::requestRetroAchievementsBootstrapService();
+            CompleteRequest(work.transportRequestId);
+        }
+    }
+
+    struct InFlightRequest
+    {
+        std::shared_ptr<RcClientHttpCancellation> cancellation;
+        std::chrono::steady_clock::time_point deadline;
+        bool cancelRequested = false;
+    };
+
+    std::mutex mutex;
+    std::condition_variable condition;
+    std::condition_variable deadlineCondition;
+    std::deque<RcClientHttpWorkItem> workQueue;
+    std::unordered_map<uint64_t, InFlightRequest> inFlightRequests;
+    bool workersStarted = false;
+};
+
+bool ExecuteRcClientHttpRequest(
+    JavaVM* bridgeVm,
+    const rc_api_request_t* request,
+    const char* userAgent,
+    std::string* responseBody,
+    int* httpStatusCode,
+    const std::shared_ptr<RcClientHttpCancellation>& cancellation,
+    std::chrono::steady_clock::time_point deadline
 )
 {
     if (!request || !request->url || !responseBody || !httpStatusCode)
@@ -697,6 +1209,12 @@ bool ExecuteRcClientHttpRequest(
 
     const auto requestStartedAt = std::chrono::steady_clock::now();
     const std::string requestAction = ResolveRcClientRequestAction(request);
+
+    if (IsRcClientTransportExpired(cancellation, deadline))
+    {
+        *httpStatusCode = RC_API_SERVER_RESPONSE_RETRYABLE_CLIENT_ERROR;
+        return false;
+    }
 
     if (!bridgeVm)
     {
@@ -760,6 +1278,9 @@ bool ExecuteRcClientHttpRequest(
     jbyteArray postDataBytes = nullptr;
     bool success = false;
     *httpStatusCode = RC_API_SERVER_RESPONSE_RETRYABLE_CLIENT_ERROR;
+
+    if (IsRcClientTransportExpired(cancellation, deadline))
+        goto cleanup;
 
     urlClass = env->FindClass("java/net/URL");
     if (LogAndClearJavaException(env, "FindClass(URL)", httpStatusCode) || !urlClass)
@@ -862,15 +1383,27 @@ bool ExecuteRcClientHttpRequest(
     if (LogAndClearJavaException(env, "URL.openConnection", httpStatusCode) || !connection)
         goto cleanup;
 
+    cancellation->RegisterConnection(env, connection);
+    if (IsRcClientTransportExpired(cancellation, deadline))
+        goto cleanup;
+
     env->CallVoidMethod(connection, setInstanceFollowRedirectsMethod, JNI_FALSE);
     if (LogAndClearJavaException(env, "HttpURLConnection.setInstanceFollowRedirects", httpStatusCode))
         goto cleanup;
 
-    env->CallVoidMethod(connection, setConnectTimeoutMethod, RC_CLIENT_HTTP_CONNECT_TIMEOUT_MS);
+    env->CallVoidMethod(
+        connection,
+        setConnectTimeoutMethod,
+        RcClientTransportTimeoutMs(deadline, RC_CLIENT_HTTP_CONNECT_TIMEOUT_MS)
+    );
     if (LogAndClearJavaException(env, "URLConnection.setConnectTimeout", httpStatusCode))
         goto cleanup;
 
-    env->CallVoidMethod(connection, setReadTimeoutMethod, RC_CLIENT_HTTP_READ_TIMEOUT_MS);
+    env->CallVoidMethod(
+        connection,
+        setReadTimeoutMethod,
+        RcClientTransportTimeoutMs(deadline, RC_CLIENT_HTTP_READ_TIMEOUT_MS)
+    );
     if (LogAndClearJavaException(env, "URLConnection.setReadTimeout", httpStatusCode))
         goto cleanup;
 
@@ -993,6 +1526,9 @@ bool ExecuteRcClientHttpRequest(
             goto cleanup;
     }
 
+    if (IsRcClientTransportExpired(cancellation, deadline))
+        goto cleanup;
+
     *httpStatusCode = env->CallIntMethod(connection, getResponseCodeMethod);
     if (LogAndClearJavaException(env, "getResponseCode", httpStatusCode))
         goto cleanup;
@@ -1012,13 +1548,19 @@ bool ExecuteRcClientHttpRequest(
 
     if (inputStream)
     {
-        if (!ReadJavaInputStream(env, inputStream, responseBody, httpStatusCode))
+        if (!ReadJavaInputStream(env, inputStream, responseBody, httpStatusCode, cancellation, deadline))
             goto cleanup;
     }
 
-    success = true;
+    success = !IsRcClientTransportExpired(cancellation, deadline);
 
 cleanup:
+    if (IsRcClientTransportExpired(cancellation, deadline))
+    {
+        success = false;
+        *httpStatusCode = RC_API_SERVER_RESPONSE_RETRYABLE_CLIENT_ERROR;
+    }
+
     if (inputStream)
     {
         env->CallVoidMethod(inputStream, closeableCloseMethod);
@@ -1036,6 +1578,8 @@ cleanup:
         env->CallVoidMethod(connection, disconnectMethod);
         LogAndClearJavaException(env, "disconnect", httpStatusCode);
     }
+
+    cancellation->ClearConnection(env);
 
     if (postDataBytes) env->DeleteLocalRef(postDataBytes);
     if (outputStream) env->DeleteLocalRef(outputStream);
@@ -1091,14 +1635,83 @@ RetroAchievementsManager::RetroAchievementsManager(melonDS::NDS* nds) : nds(nds)
 
 RetroAchievementsManager::~RetroAchievementsManager()
 {
-    std::unique_lock lock(runtimeLock);
-    DeactivateRcClientRuntimeLocked();
-    StopHttpWorkerLocked();
+    Close();
 }
 
 void RetroAchievementsManager::SetJavaVm(JavaVM* javaVm)
 {
     RetroAchievementsManager::javaVm.store(javaVm, std::memory_order_release);
+}
+
+bool RetroAchievementsManager::SetupRuntime(
+    std::list<RAAchievement> achievements,
+    std::list<RALeaderboard> leaderboards,
+    std::optional<std::string> richPresenceScript,
+    std::optional<RARuntimeBridgeConfig> runtimeBridgeConfig
+)
+{
+    std::unique_lock setupLock(runtimeSetupLock);
+    lastSetupFailureReason.store(SetupFailureReason::None, std::memory_order_release);
+    gRcClientResponseTooLarge.store(false, std::memory_order_release);
+    {
+        std::unique_lock lock(runtimeLock);
+        if (managerClosed)
+            return false;
+    }
+
+    const uint64_t setupGeneration = setupInvalidationGeneration.load(std::memory_order_acquire);
+    UnloadEverythingInternal();
+    if (setupInvalidationGeneration.load(std::memory_order_acquire) != setupGeneration)
+    {
+        UnloadEverythingInternal();
+        return false;
+    }
+    ConfigureRuntimeBridge(std::move(runtimeBridgeConfig));
+    if (setupInvalidationGeneration.load(std::memory_order_acquire) != setupGeneration)
+    {
+        UnloadEverythingInternal();
+        return false;
+    }
+    if (!LoadAchievements(std::move(achievements)) || !LoadLeaderboards(std::move(leaderboards)))
+    {
+        UnloadEverythingInternal();
+        return false;
+    }
+    if (setupInvalidationGeneration.load(std::memory_order_acquire) != setupGeneration)
+    {
+        UnloadEverythingInternal();
+        return false;
+    }
+
+    if (richPresenceScript)
+        SetupRichPresence(std::move(*richPresenceScript));
+    if (setupInvalidationGeneration.load(std::memory_order_acquire) != setupGeneration)
+    {
+        UnloadEverythingInternal();
+        return false;
+    }
+
+    const bool activated = ActivatePreferredRuntimeInternal(setupGeneration);
+    if (!activated && gRcClientResponseTooLarge.load(std::memory_order_acquire))
+    {
+
+        lastSetupFailureReason.store(SetupFailureReason::ResponseTooLarge, std::memory_order_release);
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Warn,
+            "[RAClient] runtime setup failed reason=response_too_large limit=%zu\n",
+            RC_CLIENT_HTTP_MAX_RESPONSE_BYTES
+        );
+    }
+    return activated;
+}
+
+void RetroAchievementsManager::Close()
+{
+    setupInvalidationGeneration.fetch_add(1, std::memory_order_acq_rel);
+    std::unique_lock lock(runtimeLock);
+    managerClosed = true;
+    runtimeClosing = true;
+    DeactivateRcClientRuntimeLocked();
 }
 
 void RetroAchievementsManager::ConfigureRuntimeBridge(std::optional<RARuntimeBridgeConfig> runtimeBridgeConfig)
@@ -1135,34 +1748,19 @@ bool RetroAchievementsManager::LoadLeaderboards(std::list<RALeaderboard> leaderb
 
 bool RetroAchievementsManager::ActivatePreferredRuntime()
 {
-    std::unique_lock lock(runtimeLock);
-
-    if (!runtimeBridgeConfig.has_value())
-    {
-        runtimeMode = RuntimeMode::Disabled;
-        return false;
-    }
-
-    if (!IsRcClientConfiguredLocked())
-    {
-        runtimeMode = RuntimeMode::Disabled;
-        return false;
-    }
-
-    const bool activated = TryActivateRcClientRuntimeLocked();
-    if (!activated)
-    {
-        runtimeMode = RuntimeMode::Disabled;
-        return false;
-    }
-
-    runtimeMode = runtimeBridgeConfig->runtimeMode == RARuntimeBridgeMode::RcClientOffline
-        ? RuntimeMode::RcClientOffline
-        : RuntimeMode::RcClientOnline;
-    return true;
+    std::unique_lock setupLock(runtimeSetupLock);
+    return ActivatePreferredRuntimeInternal(
+        setupInvalidationGeneration.load(std::memory_order_acquire)
+    );
 }
 
 void RetroAchievementsManager::UnloadEverything()
+{
+    setupInvalidationGeneration.fetch_add(1, std::memory_order_acq_rel);
+    UnloadEverythingInternal();
+}
+
+void RetroAchievementsManager::UnloadEverythingInternal()
 {
     std::unique_lock lock(runtimeLock);
 
@@ -1359,7 +1957,6 @@ bool RetroAchievementsManager::DoSavestate(Savestate* savestate)
 void RetroAchievementsManager::Reset()
 {
     std::unique_lock lock(runtimeLock);
-    StopHttpWorkerLocked();
     if (IsRcClientRuntimeActiveLocked())
         rc_client_reset(rcClientRuntime);
     PublishLeaderboardResetBarrierLocked();
@@ -1371,16 +1968,20 @@ void RetroAchievementsManager::FrameUpdate()
     if (!lock.owns_lock())
         return;
 
+    DrainRcClientHttpCompletionsLocked();
+    if (bootstrapInProgress && rcClientRuntime && !runtimeClosing)
+    {
+        rc_client_idle(rcClientRuntime);
+        if (rc_client_is_game_loaded(rcClientRuntime) != 0 && activeBootstrapAttempt)
+            activeBootstrapAttempt->MarkActivationReady();
+    }
+
     if ((runtimeMode == RuntimeMode::RcClientOnline || runtimeMode == RuntimeMode::RcClientOffline) && IsRcClientRuntimeActiveLocked())
     {
         const auto frameStart = std::chrono::steady_clock::now();
         const long long frameCpuStartUs = GetCurrentThreadCpuTimeUs();
-        DrainCompletedHttpResponsesLocked();
-        if (IsRcClientRuntimeActiveLocked())
-        {
-            rc_client_do_frame(rcClientRuntime);
-            PublishLeaderboardTrackerValuesLocked();
-        }
+        rc_client_do_frame(rcClientRuntime);
+        PublishLeaderboardTrackerValuesLocked();
         const long long frameCpuEndUs = GetCurrentThreadCpuTimeUs();
 
         const auto frameElapsedUs = std::chrono::duration_cast<std::chrono::microseconds>(
@@ -1486,6 +2087,7 @@ RANativePendingRetryResult RetroAchievementsManager::RetryPendingSubmissions(
         RANativePendingSubmissionType submissionType;
         uintptr_t callbackDataToken;
         bool isTerminal;
+        bool retryIssued = false;
     };
 
     std::vector<RetryPlanEntry> retryPlan;
@@ -1566,92 +2168,124 @@ RANativePendingRetryResult RetroAchievementsManager::RetryPendingSubmissions(
         return result;
     }
 
-    const auto appendTerminalResolution = [&](uint64_t submissionId) {
-        const auto terminal = terminalPendingSubmissionsById.find(submissionId);
-        if (terminal == terminalPendingSubmissionsById.end())
-            return false;
+    const uint64_t expectedRuntimeGeneration = runtimeGeneration;
+    rc_client_t* const expectedClient = rcClientRuntime;
+    bool waitsForTransport = false;
+    for (RetryPlanEntry& entry : retryPlan)
+    {
+        if (entry.isTerminal)
+            continue;
 
-        const PendingSubmissionState& submission = terminal->second;
-        if (
-            submission.submissionSessionId != result.submissionSessionId ||
-            !submission.terminalResolution.has_value() ||
-            !submission.terminalResult.has_value()
-        )
-        {
-            return false;
-        }
+        if (!rc_client_retry_pending_submission(rcClientRuntime, entry.callbackDataToken))
+            continue;
 
-        result.resolutions.push_back({
-            .submissionId = submission.submissionId,
-            .submissionType = submission.type,
-            .resolution = *submission.terminalResolution,
-            .result = *submission.terminalResult,
-        });
-        return true;
-    };
+        entry.retryIssued = true;
+        waitsForTransport = true;
+        result.forcedRetryCount++;
+    }
+
+    if (waitsForTransport)
+    {
+        lock.unlock();
+        NotifyBootstrapServiceNeeded();
+        lock.lock();
+        const auto retryDeadline = RC_CLIENT_HTTP_TOTAL_TIMEOUT + std::chrono::milliseconds(2000);
+        const bool settled = submissionResolutionCondition.wait_for(
+            lock,
+            retryDeadline,
+            [this, &retryPlan, expectedRuntimeGeneration, expectedClient, submissionSessionId = result.submissionSessionId] {
+                if (
+                    managerClosed || runtimeClosing || runtimeGeneration != expectedRuntimeGeneration ||
+                    rcClientRuntime != expectedClient || runtimeMode != RuntimeMode::RcClientOnline ||
+                    !runtimeBridgeConfig.has_value() ||
+                    runtimeBridgeConfig->submissionSessionId != submissionSessionId
+                )
+                {
+                    return true;
+                }
+
+                for (const RetryPlanEntry& entry : retryPlan)
+                {
+                    if (!entry.retryIssued)
+                        continue;
+                    const auto terminal = terminalPendingSubmissionsById.find(entry.submissionId);
+                    if (terminal != terminalPendingSubmissionsById.end())
+                        continue;
+                    const auto pending = std::find_if(
+                        pendingSubmissionsByCallbackData.begin(),
+                        pendingSubmissionsByCallbackData.end(),
+                        [&entry](const auto& candidate) {
+                            return candidate.second.submissionId == entry.submissionId;
+                        }
+                    );
+                    if (
+                        pending == pendingSubmissionsByCallbackData.end() ||
+                        pending->second.submissionSessionId != submissionSessionId
+                    )
+                    {
+
+                        return true;
+                    }
+                    if (pending->second.status == PendingSubmissionStatus::InFlight)
+                    {
+
+                        return false;
+                    }
+                }
+                return true;
+            }
+        );
+        if (!settled)
+            result.transportFailure = true;
+    }
+
+    const bool runtimeStillMatches =
+        !managerClosed && !runtimeClosing && runtimeGeneration == expectedRuntimeGeneration &&
+        rcClientRuntime == expectedClient && runtimeMode == RuntimeMode::RcClientOnline &&
+        runtimeBridgeConfig.has_value() &&
+        runtimeBridgeConfig->submissionSessionId == result.submissionSessionId;
+    if (!runtimeStillMatches)
+        result.transportFailure = true;
 
     for (const RetryPlanEntry& entry : retryPlan)
     {
-        if (entry.isTerminal)
-        {
-            if (!appendTerminalResolution(entry.submissionId))
-            {
-                result.resolutions.push_back({
-                    .submissionId = entry.submissionId,
-                    .submissionType = entry.submissionType,
-                    .resolution = RANativePendingSubmissionResolution::RetryableFailure,
-                    .result = RC_API_SERVER_RESPONSE_RETRYABLE_CLIENT_ERROR,
-                });
-            }
-            continue;
-        }
-
-        struct ScopedSyncServerCall
-        {
-            bool& flag;
-            explicit ScopedSyncServerCall(bool& target) : flag(target) { flag = true; }
-            ~ScopedSyncServerCall() { flag = false; }
-        } syncServerCallScope(waitForServerCallCompletion);
-
-        if (!rc_client_retry_pending_submission(rcClientRuntime, entry.callbackDataToken))
-        {
-            result.resolutions.push_back({
-                .submissionId = entry.submissionId,
-                .submissionType = entry.submissionType,
-                .resolution = RANativePendingSubmissionResolution::RetryableFailure,
-                .result = RC_API_SERVER_RESPONSE_RETRYABLE_CLIENT_ERROR,
-            });
-            continue;
-        }
-        result.forcedRetryCount++;
-
-        if (appendTerminalResolution(entry.submissionId))
-            continue;
-
-        const auto pending = pendingSubmissionsByCallbackData.find(entry.callbackDataToken);
+        const auto terminal = terminalPendingSubmissionsById.find(entry.submissionId);
         if (
-            pending != pendingSubmissionsByCallbackData.end() &&
-            pending->second.submissionId == entry.submissionId &&
-            pending->second.status == PendingSubmissionStatus::RetryPending &&
-            pending->second.submissionSessionId == result.submissionSessionId
+            terminal != terminalPendingSubmissionsById.end() &&
+            terminal->second.submissionSessionId == result.submissionSessionId &&
+            terminal->second.terminalResolution.has_value() &&
+            terminal->second.terminalResult.has_value()
         )
         {
             result.resolutions.push_back({
-                .submissionId = entry.submissionId,
-                .submissionType = entry.submissionType,
-                .resolution = RANativePendingSubmissionResolution::RetryableFailure,
-                .result = RC_API_SERVER_RESPONSE_RETRYABLE_CLIENT_ERROR,
+                .submissionId = terminal->second.submissionId,
+                .submissionType = terminal->second.type,
+                .resolution = *terminal->second.terminalResolution,
+                .result = *terminal->second.terminalResult,
             });
+            continue;
         }
-        else
-        {
-            result.resolutions.push_back({
-                .submissionId = entry.submissionId,
-                .submissionType = entry.submissionType,
-                .resolution = RANativePendingSubmissionResolution::RetryableFailure,
-                .result = RC_API_SERVER_RESPONSE_RETRYABLE_CLIENT_ERROR,
-            });
-        }
+
+        const auto pending = std::find_if(
+            pendingSubmissionsByCallbackData.begin(),
+            pendingSubmissionsByCallbackData.end(),
+            [&entry](const auto& candidate) {
+                return candidate.second.submissionId == entry.submissionId;
+            }
+        );
+        const bool hasRetryableOutcome =
+            entry.retryIssued && runtimeStillMatches &&
+            pending != pendingSubmissionsByCallbackData.end() &&
+            pending->second.submissionSessionId == result.submissionSessionId &&
+            pending->second.status == PendingSubmissionStatus::RetryPending;
+        if (entry.retryIssued && !hasRetryableOutcome)
+            result.transportFailure = true;
+        result.resolutions.push_back({
+            .submissionId = entry.submissionId,
+            .submissionType = entry.submissionType,
+            .resolution = RANativePendingSubmissionResolution::RetryableFailure,
+            .result = RC_API_SERVER_RESPONSE_RETRYABLE_CLIENT_ERROR,
+        });
     }
 
     melonDS::Platform::Log(
@@ -2265,291 +2899,35 @@ uint32_t RetroAchievementsManager::RcClientReadMemory(uint32_t address, uint8_t*
     return ReadMemoryRange(manager->nds, address, buffer, numBytes);
 }
 
-void RetroAchievementsManager::EnsureHttpWorkerStartedLocked()
-{
-    if (!httpWorkerThread.joinable())
-    {
-        {
-            std::lock_guard<std::mutex> queueLock(httpQueueMutex);
-            httpWorkerStop = false;
-        }
-        httpWorkerThread = std::thread(&RetroAchievementsManager::HttpWorkerLoop, this);
-    }
-}
-
-void RetroAchievementsManager::StopHttpWorkerLocked()
-{
-    std::thread workerToJoin;
-    {
-        std::lock_guard<std::mutex> queueLock(httpQueueMutex);
-        httpSessionGeneration++;
-        httpWorkerStop = true;
-        pendingHttpRequests.clear();
-        completedHttpResponses.clear();
-        workerToJoin = std::move(httpWorkerThread);
-    }
-    httpWorkerCv.notify_all();
-    httpCompletionCv.notify_all();
-    if (workerToJoin.joinable())
-        workerToJoin.join();
-    {
-        std::lock_guard<std::mutex> queueLock(httpQueueMutex);
-        httpWorkerStop = false;
-    }
-}
-
-void RetroAchievementsManager::HttpWorkerLoop()
-{
-    JavaVM* attachedVm = nullptr;
-    JNIEnv* workerEnv = nullptr;
-    bool attached = false;
-
-    auto ensureAttached = [&]() -> JavaVM* {
-        JavaVM* currentVm = javaVm.load(std::memory_order_acquire);
-        if (!attached && currentVm != nullptr)
-        {
-            jint envStatus = currentVm->GetEnv(reinterpret_cast<void**>(&workerEnv), JNI_VERSION_1_6);
-            if (envStatus == JNI_EDETACHED)
-            {
-                if (currentVm->AttachCurrentThread(&workerEnv, nullptr) == JNI_OK)
-                {
-                    attached = true;
-                    attachedVm = currentVm;
-                }
-            }
-            else if (envStatus == JNI_OK)
-            {
-                attachedVm = currentVm;
-            }
-        }
-        return currentVm;
-    };
-
-    (void)ensureAttached();
-
-    for (;;)
-    {
-        HttpWorkItem item;
-        {
-            std::unique_lock<std::mutex> queueLock(httpQueueMutex);
-            httpWorkerCv.wait(queueLock, [this]() {
-                return httpWorkerStop || !pendingHttpRequests.empty();
-            });
-            if (httpWorkerStop)
-                break;
-
-            item = std::move(pendingHttpRequests.front());
-            pendingHttpRequests.pop_front();
-            if (item.generation != httpSessionGeneration)
-                continue;
-        }
-
-        JavaVM* requestVm = ensureAttached();
-        rc_api_request_t ownedRequest{};
-        ownedRequest.url = item.url.c_str();
-        ownedRequest.post_data = item.hasPostData ? item.postData.c_str() : nullptr;
-        ownedRequest.content_type = item.hasContentType ? item.contentType.c_str() : nullptr;
-
-        std::string responseBody;
-        int httpStatus = RC_API_SERVER_RESPONSE_RETRYABLE_CLIENT_ERROR;
-        const bool requestSucceeded = ExecuteRcClientHttpRequest(
-            requestVm,
-            &ownedRequest,
-            item.userAgent.empty() ? nullptr : item.userAgent.c_str(),
-            &responseBody,
-            &httpStatus
-        );
-        if (!requestSucceeded && responseBody.empty())
-            responseBody = BuildRcClientErrorResponse("Native rc_client transport failed");
-
-        {
-            std::lock_guard<std::mutex> queueLock(httpQueueMutex);
-            if (!httpWorkerStop && item.generation == httpSessionGeneration)
-            {
-                CompletedHttpResponse completed;
-                completed.requestId = item.requestId;
-                completed.generation = item.generation;
-                completed.client = item.client;
-                completed.callback = item.callback;
-                completed.callbackData = item.callbackData;
-                completed.callbackDataToken = item.callbackDataToken;
-                completed.requestAction = std::move(item.requestAction);
-                completed.leaderboardAttemptId = item.leaderboardAttemptId;
-                completed.submittedLeaderboardId = item.submittedLeaderboardId;
-                completed.responseBody = std::move(responseBody);
-                completed.httpStatusCode = httpStatus;
-                completedHttpResponses.push_back(std::move(completed));
-                httpCompletionCv.notify_all();
-            }
-        }
-    }
-
-    if (attached && attachedVm != nullptr)
-        attachedVm->DetachCurrentThread();
-}
-
-void RetroAchievementsManager::InvokeCompletedHttpResponseLocked(const CompletedHttpResponse& completed)
-{
-    if (!rcClientRuntime || completed.client != rcClientRuntime || !completed.callback)
-        return;
-
-    const rc_api_server_response_t serverResponse = {
-        .body = completed.responseBody.c_str(),
-        .body_length = completed.responseBody.length(),
-        .http_status_code = completed.httpStatusCode,
-    };
-
-    const auto previousAttemptId = activeLeaderboardResponseAttemptId;
-    const uintptr_t previousCallbackData = activeLeaderboardResponseCallbackData;
-    const uintptr_t previousSubmissionCallbackData = activeSubmissionResponseCallbackData;
-    MelonDSAndroidLeaderboardScoreboardResponse transportScoreboard{};
-    const bool hasTransportScoreboard =
-        completed.leaderboardAttemptId.has_value() &&
-        completed.submittedLeaderboardId.has_value() &&
-        MelonDSAndroidParseLeaderboardScoreboardResponse(
-            &serverResponse,
-            completed.client,
-            *completed.submittedLeaderboardId,
-            &transportScoreboard
-        );
-    bool alreadyAccepted = false;
-    if (completed.requestAction == "awardachievement")
-    {
-        rc_api_award_achievement_response_t awardResponse{};
-        const int parseResult = rc_api_process_award_achievement_server_response(
-            &awardResponse,
-            &serverResponse
-        );
-        alreadyAccepted =
-            parseResult == RC_OK &&
-            awardResponse.response.succeeded &&
-            awardResponse.response.error_message != nullptr;
-        rc_api_destroy_award_achievement_response(&awardResponse);
-    }
-    if (completed.leaderboardAttemptId.has_value())
-    {
-        activeLeaderboardResponseAttemptId = completed.leaderboardAttemptId;
-        activeLeaderboardResponseCallbackData = completed.callbackDataToken;
-    }
-    activeSubmissionResponseCallbackData = completed.callbackDataToken;
-
-    completed.callback(&serverResponse, completed.callbackData);
-
-    if (hasTransportScoreboard)
-    {
-        auto* attempt = FindLeaderboardAttempt(*completed.leaderboardAttemptId);
-        if (
-            attempt &&
-            attempt->leaderboardId == *completed.submittedLeaderboardId &&
-            MelonDSAndroidShouldPublishLeaderboardScoreboardFallback(
-                1,
-                attempt->scoreboardSeen ? 1 : 0,
-                attempt->terminal ? 1 : 0
-            )
-        )
-        {
-            PublishLeaderboardScoreboard(
-                *attempt,
-                *completed.submittedLeaderboardId,
-                transportScoreboard.submittedScore,
-                transportScoreboard.bestScore,
-                transportScoreboard.newRank,
-                transportScoreboard.numEntries,
-                "transport_callback"
-            );
-        }
-    }
-
-    const bool retryPending =
-        rc_client_is_submission_retry_pending_token(completed.client, completed.callbackDataToken) != 0;
-    FinalizePendingSubmissionTransport(
-        completed.callbackDataToken,
-        retryPending,
-        alreadyAccepted
-    );
-    activeLeaderboardResponseAttemptId = previousAttemptId;
-    activeLeaderboardResponseCallbackData = previousCallbackData;
-    activeSubmissionResponseCallbackData = previousSubmissionCallbackData;
-    PruneUnreferencedLeaderboardAttempts();
-}
-
-void RetroAchievementsManager::DrainCompletedHttpResponsesLocked()
-{
-    std::deque<CompletedHttpResponse> readyResponses;
-    uint64_t currentGeneration = 0;
-    {
-        std::lock_guard<std::mutex> queueLock(httpQueueMutex);
-        if (completedHttpResponses.empty())
-            return;
-        currentGeneration = httpSessionGeneration;
-        readyResponses.swap(completedHttpResponses);
-    }
-
-    for (const auto& completed : readyResponses)
-    {
-        if (completed.generation != currentGeneration)
-            continue;
-        InvokeCompletedHttpResponseLocked(completed);
-    }
-}
-
-bool RetroAchievementsManager::WaitForHttpRequestLocked(uint64_t requestId, std::chrono::milliseconds timeout)
-{
-    const auto deadline = std::chrono::steady_clock::now() + timeout;
-    for (;;)
-    {
-        std::deque<CompletedHttpResponse> readyResponses;
-        uint64_t currentGeneration = 0;
-        bool foundTarget = false;
-        {
-            std::unique_lock<std::mutex> queueLock(httpQueueMutex);
-            if (completedHttpResponses.empty())
-            {
-                if (!httpCompletionCv.wait_until(queueLock, deadline, [this]() {
-                    return !completedHttpResponses.empty() || httpWorkerStop;
-                }))
-                {
-                    return false;
-                }
-            }
-            if (httpWorkerStop)
-                return false;
-            currentGeneration = httpSessionGeneration;
-            readyResponses.swap(completedHttpResponses);
-        }
-
-        for (const auto& completed : readyResponses)
-        {
-            if (completed.generation != currentGeneration)
-                continue;
-            if (completed.requestId == requestId)
-                foundTarget = true;
-            InvokeCompletedHttpResponseLocked(completed);
-        }
-
-        if (foundTarget)
-            return true;
-    }
-}
-
 void RetroAchievementsManager::RcClientServerCall(const rc_api_request_t* request, rc_client_server_callback_t callback, void* callbackData, rc_client_t* client)
 {
     if (!callback || !client)
         return;
 
     auto* manager = static_cast<RetroAchievementsManager*>(rc_client_get_userdata(client));
-    if (!manager)
+    if (!manager || manager->rcClientRuntime != client)
         return;
+    if (manager->managerClosed || manager->runtimeClosing)
+    {
+        rc_client_deliver_terminal_callback(callback, callbackData);
+        return;
+    }
 
     const std::string runtimeUserAgent = (manager->runtimeBridgeConfig.has_value() && !manager->runtimeBridgeConfig->userAgent.empty()) ?
         manager->runtimeBridgeConfig->userAgent :
         std::string();
-    const std::string requestAction = ResolveRcClientRequestAction(request);
+    RcClientServerCallbackMetadata metadata;
+    metadata.generation = manager->runtimeGeneration;
+    metadata.transportRequestId = AllocateRcClientTransportRequestId();
+    metadata.requestAction = ResolveRcClientRequestAction(request);
+    metadata.callbackDataToken = reinterpret_cast<uintptr_t>(callbackData);
+    metadata.callback = callback;
+    metadata.callbackData = callbackData;
+    metadata.client = client;
+
+    const std::string requestAction = metadata.requestAction;
     const std::string requestParameters = BuildRcClientSanitizedParameters(request);
     const std::string safeRequestUrl = BuildRcClientSafeUrl(request ? request->url : nullptr);
-    const uintptr_t callbackDataToken = reinterpret_cast<uintptr_t>(callbackData);
-    std::optional<uint64_t> leaderboardAttemptId;
-    std::optional<uint32_t> submittedLeaderboardId;
 
     if (requestAction == "submitlbentry")
     {
@@ -2566,18 +2944,18 @@ void RetroAchievementsManager::RcClientServerCall(const rc_api_request_t* reques
         {
             const uint32_t leaderboardId = static_cast<uint32_t>(*leaderboardIdParameter);
             const bool hasRetryParameter = GetRcClientFormParameter(request, "o").has_value();
-            const bool isImmediateRetry = callbackDataToken != 0 &&
-                manager->activeLeaderboardResponseCallbackData == callbackDataToken;
+            const bool isImmediateRetry = metadata.callbackDataToken != 0 &&
+                manager->activeLeaderboardResponseCallbackData == metadata.callbackDataToken;
             const bool isRetry = hasRetryParameter || isImmediateRetry;
             auto& attempt = manager->ResolveLeaderboardRequestAttempt(
                 leaderboardId,
-                callbackDataToken,
+                metadata.callbackDataToken,
                 isRetry
             );
             attempt.requestScore = static_cast<int32_t>(*scoreParameter);
             attempt.transportAttemptCount++;
-            leaderboardAttemptId = attempt.attemptId;
-            submittedLeaderboardId = leaderboardId;
+            metadata.leaderboardAttemptId = attempt.attemptId;
+            metadata.submittedLeaderboardId = leaderboardId;
             const uint64_t sequence = manager->NextLeaderboardEventSequence(attempt);
             if (AreLeaderboardDiagnosticsEnabled())
             {
@@ -2612,8 +2990,9 @@ void RetroAchievementsManager::RcClientServerCall(const rc_api_request_t* reques
     manager->PreparePendingSubmission(
         requestAction,
         request,
-        callbackDataToken,
-        leaderboardAttemptId
+        metadata.callbackDataToken,
+        metadata.leaderboardAttemptId,
+        metadata.transportRequestId
     );
 
     const bool isSubmissionRequest =
@@ -2635,16 +3014,11 @@ void RetroAchievementsManager::RcClientServerCall(const rc_api_request_t* reques
             ),
             manager->RuntimePathTraceValue()
         );
-        CompletedHttpResponse completed;
-        completed.client = client;
-        completed.callback = callback;
-        completed.callbackData = callbackData;
-        completed.callbackDataToken = callbackDataToken;
-        completed.requestAction = requestAction;
-        completed.leaderboardAttemptId = leaderboardAttemptId;
-        completed.submittedLeaderboardId = submittedLeaderboardId;
-        completed.httpStatusCode = 503;
-        manager->InvokeCompletedHttpResponseLocked(completed);
+        RcClientHttpCompletion completion;
+        completion.metadata = std::move(metadata);
+        completion.httpStatus = 503;
+        completion.responseBody = BuildRcClientErrorResponse("Submission transport is suspended");
+        manager->ProcessRcClientHttpCompletionLocked(std::move(completion));
         return;
     }
 
@@ -2653,7 +3027,11 @@ void RetroAchievementsManager::RcClientServerCall(const rc_api_request_t* reques
         manager->runtimeBridgeConfig->runtimeMode == RARuntimeBridgeMode::RcClientOffline;
     if (useOfflineTransport)
     {
-        std::string responseBody = manager->BuildRcClientOfflineResponse(requestAction);
+        RcClientHttpCompletion completion;
+        completion.metadata = std::move(metadata);
+        completion.responseBody = manager->BuildRcClientOfflineResponse(requestAction);
+        completion.httpStatus = 200;
+        completion.succeeded = true;
         melonDS::Platform::Log(
             melonDS::Platform::LogLevel::Warn,
             "[RARequest] source=rc_client_offline action=%s method=%s user_agent=%s url=%s params=%s response_bytes=%zu response_sample=%s\n",
@@ -2662,37 +3040,10 @@ void RetroAchievementsManager::RcClientServerCall(const rc_api_request_t* reques
             runtimeUserAgent.empty() ? RC_CLIENT_DEFAULT_USER_AGENT : runtimeUserAgent.c_str(),
             safeRequestUrl.c_str(),
             requestParameters.c_str(),
-            responseBody.size(),
-            BuildRcClientLoggedResponseSample(requestAction, responseBody).c_str()
+            completion.responseBody.size(),
+            BuildRcClientLoggedResponseSample(requestAction, completion.responseBody).c_str()
         );
-
-        CompletedHttpResponse completed;
-        completed.client = client;
-        completed.callback = callback;
-        completed.callbackData = callbackData;
-        completed.callbackDataToken = callbackDataToken;
-        completed.requestAction = requestAction;
-        completed.leaderboardAttemptId = leaderboardAttemptId;
-        completed.submittedLeaderboardId = submittedLeaderboardId;
-        completed.responseBody = std::move(responseBody);
-        completed.httpStatusCode = 200;
-        manager->InvokeCompletedHttpResponseLocked(completed);
-        return;
-    }
-
-    if (!request || !request->url)
-    {
-        CompletedHttpResponse completed;
-        completed.client = client;
-        completed.callback = callback;
-        completed.callbackData = callbackData;
-        completed.callbackDataToken = callbackDataToken;
-        completed.requestAction = requestAction;
-        completed.leaderboardAttemptId = leaderboardAttemptId;
-        completed.submittedLeaderboardId = submittedLeaderboardId;
-        completed.responseBody = BuildRcClientErrorResponse("Invalid rc_client request");
-        completed.httpStatusCode = RC_API_SERVER_RESPONSE_RETRYABLE_CLIENT_ERROR;
-        manager->InvokeCompletedHttpResponseLocked(completed);
+        manager->ProcessRcClientHttpCompletionLocked(std::move(completion));
         return;
     }
 
@@ -2705,55 +3056,175 @@ void RetroAchievementsManager::RcClientServerCall(const rc_api_request_t* reques
         safeRequestUrl.c_str(),
         requestParameters.c_str()
     );
-
-    manager->EnsureHttpWorkerStartedLocked();
-    uint64_t dispatchedRequestId = 0;
+    if (!manager->QueueRcClientHttpRequestLocked(request, metadata))
     {
-        std::lock_guard<std::mutex> queueLock(manager->httpQueueMutex);
-        dispatchedRequestId = manager->nextHttpRequestId++;
-        HttpWorkItem item;
-        item.requestId = dispatchedRequestId;
-        item.generation = manager->httpSessionGeneration;
-        item.client = client;
-        item.callback = callback;
-        item.callbackData = callbackData;
-        item.callbackDataToken = callbackDataToken;
-        item.url = request->url;
-        if (request->post_data && request->post_data[0] != '\0')
-        {
-            item.postData = request->post_data;
-            item.hasPostData = true;
-        }
-        if (request->content_type && request->content_type[0] != '\0')
-        {
-            item.contentType = request->content_type;
-            item.hasContentType = true;
-        }
-        item.userAgent = runtimeUserAgent;
-        item.requestAction = requestAction;
-        item.leaderboardAttemptId = leaderboardAttemptId;
-        item.submittedLeaderboardId = submittedLeaderboardId;
-        manager->pendingHttpRequests.push_back(std::move(item));
+        RcClientHttpCompletion completion;
+        completion.metadata = std::move(metadata);
+        completion.httpStatus = RC_API_SERVER_RESPONSE_RETRYABLE_CLIENT_ERROR;
+        completion.responseBody = BuildRcClientErrorResponse("Native rc_client transport queue is full or inactive");
+        manager->ProcessRcClientHttpCompletionLocked(std::move(completion));
     }
-    manager->httpWorkerCv.notify_one();
+}
 
-    if (manager->waitForServerCallCompletion)
+bool RetroAchievementsManager::QueueRcClientHttpRequestLocked(
+    const rc_api_request_t* request,
+    RcClientServerCallbackMetadata metadata
+)
+{
+    if (
+        !request || !request->url || !rcClientHttpSession || managerClosed || runtimeClosing ||
+        metadata.generation != runtimeGeneration || metadata.client != rcClientRuntime
+    )
     {
-        const auto syncTimeout = std::chrono::milliseconds(RC_CLIENT_HTTP_CONNECT_TIMEOUT_MS + RC_CLIENT_HTTP_READ_TIMEOUT_MS + 2000);
-        if (!manager->WaitForHttpRequestLocked(dispatchedRequestId, syncTimeout))
+        return false;
+    }
+
+    RcClientHttpWorkItem work;
+    work.session = rcClientHttpSession;
+    work.transportRequestId = metadata.transportRequestId;
+    work.bridgeVm = javaVm.load(std::memory_order_acquire);
+    work.cancellation = std::make_shared<RcClientHttpCancellation>(work.bridgeVm);
+    work.url = request->url;
+    work.postData = request->post_data ? request->post_data : "";
+    work.contentType = request->content_type ? request->content_type : "";
+    work.userAgent = runtimeBridgeConfig.has_value() ? runtimeBridgeConfig->userAgent : "";
+    work.deadline = std::chrono::steady_clock::now() + RC_CLIENT_HTTP_TOTAL_TIMEOUT;
+    if (!work.cancellation || !rcClientHttpSession->RegisterTicket(metadata, work.cancellation))
+        return false;
+
+    if (RcClientHttpTransport::Instance().Submit(std::move(work)))
+        return true;
+
+    rcClientHttpSession->ForgetTicket(metadata.transportRequestId);
+    return false;
+}
+
+void RetroAchievementsManager::DrainRcClientHttpCompletionsLocked()
+{
+    if (!rcClientHttpSession)
+        return;
+
+    RcClientHttpCompletion completion;
+    while (rcClientHttpSession->PopCompletion(&completion))
+        ProcessRcClientHttpCompletionLocked(std::move(completion));
+}
+
+void RetroAchievementsManager::ProcessRcClientHttpCompletionLocked(RcClientHttpCompletion&& completion)
+{
+    const auto& metadata = completion.metadata;
+    const auto markDelivered = [this, &metadata] {
+        if (rcClientHttpSession)
+            rcClientHttpSession->MarkDelivered(metadata.transportRequestId);
+    };
+    if (
+        managerClosed || runtimeClosing || metadata.generation != runtimeGeneration ||
+        !rcClientRuntime || metadata.client != rcClientRuntime || !metadata.callback
+    )
+    {
+        markDelivered();
+        return;
+    }
+
+    if (!completion.succeeded && completion.responseBody.empty())
+        completion.responseBody = BuildRcClientErrorResponse("Native rc_client transport failed");
+
+    rc_api_server_response_t serverResponse = {
+        .body = completion.responseBody.c_str(),
+        .body_length = completion.responseBody.length(),
+        .http_status_code = completion.httpStatus,
+    };
+    const auto previousAttemptId = activeLeaderboardResponseAttemptId;
+    const uintptr_t previousCallbackData = activeLeaderboardResponseCallbackData;
+    const uintptr_t previousSubmissionCallbackData = activeSubmissionResponseCallbackData;
+    MelonDSAndroidLeaderboardScoreboardResponse transportScoreboard{};
+    const bool hasTransportScoreboard =
+        metadata.leaderboardAttemptId.has_value() &&
+        metadata.submittedLeaderboardId.has_value() &&
+        MelonDSAndroidParseLeaderboardScoreboardResponse(
+            &serverResponse,
+            rcClientRuntime,
+            *metadata.submittedLeaderboardId,
+            &transportScoreboard
+        );
+    bool alreadyAccepted = false;
+    if (metadata.requestAction == "awardachievement")
+    {
+        rc_api_award_achievement_response_t awardResponse{};
+        const int parseResult = rc_api_process_award_achievement_server_response(
+            &awardResponse,
+            &serverResponse
+        );
+        alreadyAccepted =
+            parseResult == RC_OK &&
+            awardResponse.response.succeeded &&
+            awardResponse.response.error_message != nullptr;
+        rc_api_destroy_award_achievement_response(&awardResponse);
+    }
+    if (metadata.leaderboardAttemptId.has_value())
+    {
+        activeLeaderboardResponseAttemptId = metadata.leaderboardAttemptId;
+        activeLeaderboardResponseCallbackData = metadata.callbackDataToken;
+    }
+    activeSubmissionResponseCallbackData = metadata.callbackDataToken;
+
+    metadata.callback(&serverResponse, metadata.callbackData);
+
+    if (hasTransportScoreboard)
+    {
+        auto* attempt = FindLeaderboardAttempt(*metadata.leaderboardAttemptId);
+        if (
+            attempt && attempt->leaderboardId == *metadata.submittedLeaderboardId &&
+            MelonDSAndroidShouldPublishLeaderboardScoreboardFallback(
+                1,
+                attempt->scoreboardSeen ? 1 : 0,
+                attempt->terminal ? 1 : 0
+            )
+        )
         {
-            CompletedHttpResponse fallback;
-            fallback.client = client;
-            fallback.callback = callback;
-            fallback.callbackData = callbackData;
-            fallback.callbackDataToken = callbackDataToken;
-            fallback.requestAction = requestAction;
-            fallback.leaderboardAttemptId = leaderboardAttemptId;
-            fallback.submittedLeaderboardId = submittedLeaderboardId;
-            fallback.responseBody = BuildRcClientErrorResponse("Native rc_client transport timed out");
-            fallback.httpStatusCode = RC_API_SERVER_RESPONSE_RETRYABLE_CLIENT_ERROR;
-            manager->InvokeCompletedHttpResponseLocked(fallback);
+            PublishLeaderboardScoreboard(
+                *attempt,
+                *metadata.submittedLeaderboardId,
+                transportScoreboard.submittedScore,
+                transportScoreboard.bestScore,
+                transportScoreboard.newRank,
+                transportScoreboard.numEntries,
+                "transport_callback"
+            );
         }
+    }
+
+    const bool retryPending =
+        rc_client_is_submission_retry_pending_token(rcClientRuntime, metadata.callbackDataToken) != 0;
+    FinalizePendingSubmissionTransport(
+        metadata.callbackDataToken,
+        retryPending,
+        alreadyAccepted,
+        metadata.transportRequestId
+    );
+    activeLeaderboardResponseAttemptId = previousAttemptId;
+    activeLeaderboardResponseCallbackData = previousCallbackData;
+    activeSubmissionResponseCallbackData = previousSubmissionCallbackData;
+    PruneUnreferencedLeaderboardAttempts();
+    markDelivered();
+}
+
+void RetroAchievementsManager::NotifyBootstrapServiceNeeded() const
+{
+    MelonDSAndroid::requestRetroAchievementsBootstrapService();
+}
+
+void RetroAchievementsManager::ServiceBootstrapFromEmulationThread()
+{
+    std::unique_lock lock(runtimeLock);
+    if (managerClosed || runtimeClosing || !rcClientRuntime)
+        return;
+
+    DrainRcClientHttpCompletionsLocked();
+    if (bootstrapInProgress)
+    {
+        rc_client_idle(rcClientRuntime);
+        if (rc_client_is_game_loaded(rcClientRuntime) != 0 && activeBootstrapAttempt)
+            activeBootstrapAttempt->MarkActivationReady();
     }
 }
 
@@ -2766,194 +3237,288 @@ void RetroAchievementsManager::RcClientLogCallback(const char* message, const rc
     melonDS::Platform::Log(melonDS::Platform::LogLevel::Info, "[RAClient] %s\n", message);
 }
 
-bool RetroAchievementsManager::TryActivateRcClientRuntimeLocked()
+bool RetroAchievementsManager::ActivatePreferredRuntimeInternal(uint64_t expectedSetupInvalidationGeneration)
 {
-    DeactivateRcClientRuntimeLocked();
-    submissionTransportSuspended.store(false, std::memory_order_release);
-
-    if (!IsRcClientConfiguredLocked())
-        return false;
-
-    rcClientRuntime = rc_client_create(&RcClientReadMemory, &RcClientServerCall);
-    if (!rcClientRuntime)
-        return false;
-
-    rc_client_set_userdata(rcClientRuntime, this);
-    rc_client_set_event_handler(rcClientRuntime, &RcClientEventHandler);
-#ifdef NDEBUG
-    rc_client_enable_logging(rcClientRuntime, RC_CLIENT_LOG_LEVEL_ERROR, &RcClientLogCallback);
-#else
-    rc_client_enable_logging(rcClientRuntime, RC_CLIENT_LOG_LEVEL_WARN, &RcClientLogCallback);
-#endif
-    rc_client_set_allow_background_memory_reads(rcClientRuntime, 1);
-
-    const auto& config = *runtimeBridgeConfig;
-    rc_client_set_host(rcClientRuntime, config.apiHost.c_str());
-    melonDS::Platform::Log(
-        melonDS::Platform::LogLevel::Info,
-        "[RAIdentity] source=rc_client_bootstrap user_agent=%s game_id=%lld game_hash=redacted hardcore=%d unofficial=%d encore=%d host_source=%s native_client_host_configured=%d endpoint_generation=%llu\n",
-        config.userAgent.empty() ? RC_CLIENT_DEFAULT_USER_AGENT : config.userAgent.c_str(),
-        (long long) config.gameId,
-        config.hardcoreEnabled ? 1 : 0,
-        config.unofficialEnabled ? 1 : 0,
-        config.encoreEnabled ? 1 : 0,
-        config.usesProxyHost ? "raofflineproxy" : "official",
-        config.apiHost.empty() ? 0 : 1,
-        (unsigned long long) config.endpointGeneration
-    );
-    rc_client_set_hardcore_enabled(rcClientRuntime, config.hardcoreEnabled ? 1 : 0);
-    rc_client_set_unofficial_enabled(rcClientRuntime, config.unofficialEnabled ? 1 : 0);
-    rc_client_set_encore_mode_enabled(rcClientRuntime, config.encoreEnabled ? 1 : 0);
-    const bool isOfflineRuntime = config.runtimeMode == RARuntimeBridgeMode::RcClientOffline;
-    rc_client_set_spectator_mode_enabled(rcClientRuntime, isOfflineRuntime ? 1 : 0);
-    melonDS::Platform::Log(
-        melonDS::Platform::LogLevel::Info,
-        "[RAClient] runtime_flags_applied hardcore=%d unofficial=%d encore=%d spectator=%d\n",
-        config.hardcoreEnabled ? 1 : 0,
-        config.unofficialEnabled ? 1 : 0,
-        config.encoreEnabled ? 1 : 0,
-        isOfflineRuntime ? 1 : 0
-    );
-
-    auto pumpBootstrapHttp = [this](std::chrono::steady_clock::time_point deadline) -> bool {
-        bool ready = true;
-        bool stopped = false;
-        {
-            std::unique_lock<std::mutex> queueLock(httpQueueMutex);
-            if (completedHttpResponses.empty())
-            {
-                ready = httpCompletionCv.wait_until(queueLock, deadline, [this]() {
-                    return !completedHttpResponses.empty() || httpWorkerStop;
-                });
-            }
-            stopped = httpWorkerStop;
-        }
-        DrainCompletedHttpResponsesLocked();
-        return ready && !stopped;
+    struct RcClientBootstrapRuntime
+    {
+        uint64_t generation = 0;
+        rc_client_t* client = nullptr;
     };
 
-    RcClientWaitResult loginWaitResult;
-    bool loginSucceeded = false;
-    for (int attempt = 1; attempt <= RC_CLIENT_BOOTSTRAP_MAX_ATTEMPTS; ++attempt)
-    {
-        RcClientAsyncResult loginResult;
-        rc_client_async_handle_t* loginHandle = rc_client_begin_login_with_token(
-            rcClientRuntime,
-            config.username.c_str(),
-            config.apiToken.c_str(),
-            &OnRcClientAsyncCompleted,
-            &loginResult
-        );
-        loginWaitResult = WaitForRcClientResult(rcClientRuntime, loginHandle, &loginResult, RC_CLIENT_LOGIN_TIMEOUT, pumpBootstrapHttp);
-        if (loginWaitResult.succeeded)
-        {
-            loginSucceeded = true;
-            break;
-        }
+    const auto isCurrentClient = [this, expectedSetupInvalidationGeneration](
+        uint64_t generation,
+        rc_client_t* client) {
+        return !managerClosed && !runtimeClosing &&
+            setupInvalidationGeneration.load(std::memory_order_acquire) == expectedSetupInvalidationGeneration &&
+            runtimeGeneration == generation && rcClientRuntime == client;
+    };
 
-        LogRcClientBootstrapFailure("login", attempt, loginWaitResult);
-        if (attempt < RC_CLIENT_BOOTSTRAP_MAX_ATTEMPTS)
-        {
-            rc_client_logout(rcClientRuntime);
-            std::this_thread::sleep_for(RC_CLIENT_BOOTSTRAP_RETRY_DELAY);
-        }
-    }
+    const auto createFreshClient = [this, expectedSetupInvalidationGeneration](
+        RcClientBootstrapRuntime* runtime) {
+        if (!runtime)
+            return false;
 
-    if (!loginSucceeded)
-    {
-        melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Warn,
-            "[RAClient] rc_client activation failed stage=login timedOut=%d result=%d\n",
-            loginWaitResult.timedOut ? 1 : 0,
-            loginWaitResult.result
-        );
+        std::unique_lock lock(runtimeLock);
         DeactivateRcClientRuntimeLocked();
+        if (
+            managerClosed ||
+            setupInvalidationGeneration.load(std::memory_order_acquire) != expectedSetupInvalidationGeneration
+        )
+        {
+            runtimeMode = RuntimeMode::Disabled;
+            return false;
+        }
+        runtimeClosing = false;
+        submissionTransportSuspended.store(false, std::memory_order_release);
+        if (!IsRcClientConfiguredLocked())
+        {
+            runtimeMode = RuntimeMode::Disabled;
+            return false;
+        }
+
+        runtime->generation = ++runtimeGeneration;
+        rcClientHttpSession = std::make_shared<RcClientHttpSession>(runtime->generation);
+        bootstrapAttempts.clear();
+        bootstrapInProgress = true;
+        isRcClientRuntimeActive = false;
+        runtimeMode = runtimeBridgeConfig->runtimeMode == RARuntimeBridgeMode::RcClientOffline
+            ? RuntimeMode::RcClientOffline
+            : RuntimeMode::RcClientOnline;
+
+        rcClientRuntime = rc_client_create(&RcClientReadMemory, &RcClientServerCall);
+        if (!rcClientRuntime)
+        {
+            runtimeMode = RuntimeMode::Disabled;
+            DeactivateRcClientRuntimeLocked();
+            return false;
+        }
+
+        runtime->client = rcClientRuntime;
+        rc_client_set_userdata(runtime->client, this);
+        rc_client_set_event_handler(runtime->client, &RcClientEventHandler);
+#ifdef NDEBUG
+        rc_client_enable_logging(runtime->client, RC_CLIENT_LOG_LEVEL_ERROR, &RcClientLogCallback);
+#else
+        rc_client_enable_logging(runtime->client, RC_CLIENT_LOG_LEVEL_WARN, &RcClientLogCallback);
+#endif
+
+        rc_client_set_allow_background_memory_reads(runtime->client, 0);
+
+        const auto& config = *runtimeBridgeConfig;
+        rc_client_set_host(runtime->client, config.apiHost.c_str());
+        rc_client_set_hardcore_enabled(runtime->client, config.hardcoreEnabled ? 1 : 0);
+        rc_client_set_unofficial_enabled(runtime->client, config.unofficialEnabled ? 1 : 0);
+        rc_client_set_encore_mode_enabled(runtime->client, config.encoreEnabled ? 1 : 0);
+        const bool isOfflineRuntime = config.runtimeMode == RARuntimeBridgeMode::RcClientOffline;
+        rc_client_set_spectator_mode_enabled(runtime->client, isOfflineRuntime ? 1 : 0);
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Info,
+            "[RAIdentity] source=rc_client_bootstrap_async user_agent=%s game_id=%lld game_hash=redacted hardcore=%d unofficial=%d encore=%d host_source=%s native_client_host_configured=%d endpoint_generation=%llu background_memory_reads=0\n",
+            config.userAgent.empty() ? RC_CLIENT_DEFAULT_USER_AGENT : config.userAgent.c_str(),
+            (long long) config.gameId,
+            config.hardcoreEnabled ? 1 : 0,
+            config.unofficialEnabled ? 1 : 0,
+            config.encoreEnabled ? 1 : 0,
+            config.usesProxyHost ? "raofflineproxy" : "official",
+            config.apiHost.empty() ? 0 : 1,
+            (unsigned long long) config.endpointGeneration
+        );
+        return true;
+    };
+
+    const auto closeFailedClient = [this, expectedSetupInvalidationGeneration](
+        const RcClientBootstrapRuntime& runtime) {
+        std::unique_lock lock(runtimeLock);
+        if (runtimeGeneration == runtime.generation && rcClientRuntime == runtime.client)
+        {
+            runtimeMode = RuntimeMode::Disabled;
+            DeactivateRcClientRuntimeLocked();
+        }
+        return !managerClosed &&
+            setupInvalidationGeneration.load(std::memory_order_acquire) == expectedSetupInvalidationGeneration;
+    };
+
+    const auto waitForLogin = [this, &isCurrentClient](
+        const RcClientBootstrapRuntime& runtime,
+        const char* stage,
+        int attemptNumber) {
+        auto loginAttempt = std::make_shared<RcClientBootstrapAttempt>();
+        bool loginIssued = false;
+        int loginResult = RC_INVALID_STATE;
+        std::string loginError;
+        {
+            std::unique_lock lock(runtimeLock);
+            if (isCurrentClient(runtime.generation, runtime.client))
+            {
+                bootstrapAttempts.push_back(loginAttempt);
+                activeBootstrapAttempt = loginAttempt;
+                const auto& config = *runtimeBridgeConfig;
+                const rc_client_async_handle_t* loginHandle = rc_client_begin_login_with_token(
+                    runtime.client,
+                    config.username.c_str(),
+                    config.apiToken.c_str(),
+                    &OnRcClientAsyncCompleted,
+                    loginAttempt.get()
+                );
+
+                loginIssued = loginHandle != nullptr || loginAttempt->WaitFor(
+                    std::chrono::milliseconds(0), &loginResult, &loginError);
+            }
+        }
+
+        bool loggedIn = false;
+        if (loginIssued)
+        {
+            NotifyBootstrapServiceNeeded();
+            loggedIn = loginAttempt->WaitFor(
+                RC_CLIENT_LOGIN_TIMEOUT, &loginResult, &loginError) && loginResult == RC_OK;
+        }
+        if (!loggedIn)
+        {
+            RcClientWaitResult waitResult;
+            waitResult.succeeded = false;
+            waitResult.timedOut = loginIssued && loginError.empty();
+            waitResult.result = loginResult;
+            waitResult.errorMessage = loginError.empty() ? "no_async_handle_or_timeout" : loginError;
+            LogRcClientBootstrapFailure(stage, attemptNumber, waitResult);
+        }
+        return loggedIn;
+    };
+
+    const auto waitForLoad = [this, &isCurrentClient](
+        const RcClientBootstrapRuntime& runtime,
+        int attemptNumber) {
+        bool loaded = false;
+        int loadResult = RC_INVALID_STATE;
+        std::string loadError;
+        bool loadIssued = false;
+        {
+            auto loadAttempt = std::make_shared<RcClientBootstrapAttempt>();
+            {
+                std::unique_lock lock(runtimeLock);
+                if (isCurrentClient(runtime.generation, runtime.client))
+                {
+                    bootstrapAttempts.push_back(loadAttempt);
+                    activeBootstrapAttempt = loadAttempt;
+                    const auto& config = *runtimeBridgeConfig;
+                    const rc_client_async_handle_t* loadHandle = rc_client_begin_load_game(
+                        runtime.client,
+                        config.gameHash.c_str(),
+                        &OnRcClientAsyncCompleted,
+                        loadAttempt.get()
+                    );
+                    loadIssued = loadHandle != nullptr || loadAttempt->WaitFor(
+                        std::chrono::milliseconds(0), &loadResult, &loadError);
+                }
+            }
+            if (loadIssued)
+            {
+                NotifyBootstrapServiceNeeded();
+                loaded = loadAttempt->WaitFor(
+                    RC_CLIENT_LOAD_TIMEOUT, &loadResult, &loadError) && loadResult == RC_OK;
+                if (loaded)
+                    loaded = loadAttempt->WaitForActivation(RC_CLIENT_LOAD_TIMEOUT);
+            }
+            if (!loaded)
+            {
+                RcClientWaitResult waitResult;
+                waitResult.succeeded = false;
+                waitResult.timedOut = loadIssued && loadError.empty();
+                waitResult.result = loadResult;
+                waitResult.errorMessage = loadError.empty()
+                    ? "no_async_handle_timeout_or_activation_not_owned"
+                    : loadError;
+                LogRcClientBootstrapFailure("load_game", attemptNumber, waitResult);
+            }
+        }
+        return loaded;
+    };
+
+    const auto activateLoadedClient = [this, &isCurrentClient](
+        const RcClientBootstrapRuntime& runtime) {
+        std::unique_lock lock(runtimeLock);
+        if (
+            isCurrentClient(runtime.generation, runtime.client) &&
+            rc_client_is_game_loaded(runtime.client) != 0
+        )
+        {
+            isRcClientRuntimeActive = true;
+            bootstrapInProgress = false;
+            activeBootstrapAttempt.reset();
+            PublishLeaderboardResetBarrierLocked();
+            return true;
+        }
         return false;
-    }
+    };
 
-    RcClientWaitResult loadWaitResult;
-    bool loadSucceeded = false;
-    for (int attempt = 1; attempt <= RC_CLIENT_BOOTSTRAP_MAX_ATTEMPTS; ++attempt)
-    {
-        RcClientAsyncResult loadResult;
-        rc_client_async_handle_t* loadHandle = rc_client_begin_load_game(
-            rcClientRuntime,
-            config.gameHash.c_str(),
-            &OnRcClientAsyncCompleted,
-            &loadResult
-        );
-        loadWaitResult = WaitForRcClientResult(rcClientRuntime, loadHandle, &loadResult, RC_CLIENT_LOAD_TIMEOUT, pumpBootstrapHttp);
-        if (loadWaitResult.succeeded)
+    const auto createAndLogin = [&createFreshClient, &closeFailedClient, &waitForLogin](
+        RcClientBootstrapRuntime* runtime,
+        const char* stage) {
+        for (int attemptNumber = 1; attemptNumber <= RC_CLIENT_BOOTSTRAP_MAX_ATTEMPTS; ++attemptNumber)
         {
-            loadSucceeded = true;
-            break;
+            if (!createFreshClient(runtime))
+                return false;
+            if (waitForLogin(*runtime, stage, attemptNumber))
+                return true;
+            if (!closeFailedClient(*runtime))
+                return false;
+            if (attemptNumber < RC_CLIENT_BOOTSTRAP_MAX_ATTEMPTS)
+                std::this_thread::sleep_for(RC_CLIENT_BOOTSTRAP_RETRY_DELAY);
         }
-
-        LogRcClientBootstrapFailure("load_game", attempt, loadWaitResult);
-        if (attempt < RC_CLIENT_BOOTSTRAP_MAX_ATTEMPTS)
-        {
-            rc_client_unload_game(rcClientRuntime);
-            std::this_thread::sleep_for(RC_CLIENT_BOOTSTRAP_RETRY_DELAY);
-        }
-    }
-
-    if (!loadSucceeded)
-    {
-        melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Warn,
-            "[RAClient] rc_client activation failed stage=load_game timedOut=%d result=%d\n",
-            loadWaitResult.timedOut ? 1 : 0,
-            loadWaitResult.result
-        );
-        DeactivateRcClientRuntimeLocked();
         return false;
-    }
+    };
 
-    isRcClientRuntimeActive = rc_client_is_game_loaded(rcClientRuntime) != 0;
-    if (isRcClientRuntimeActive)
+    RcClientBootstrapRuntime runtime;
+    if (!createAndLogin(&runtime, "login"))
+        return false;
+
+    for (int loadAttemptNumber = 1;
+         loadAttemptNumber <= RC_CLIENT_BOOTSTRAP_MAX_ATTEMPTS;
+         ++loadAttemptNumber)
     {
-        rc_client_set_allow_background_memory_reads(rcClientRuntime, 0);
-        PublishLeaderboardResetBarrierLocked();
+        if (waitForLoad(runtime, loadAttemptNumber) && activateLoadedClient(runtime))
+            return true;
+
+        if (!closeFailedClient(runtime))
+            return false;
+
+        if (loadAttemptNumber < RC_CLIENT_BOOTSTRAP_MAX_ATTEMPTS)
+        {
+            std::this_thread::sleep_for(RC_CLIENT_BOOTSTRAP_RETRY_DELAY);
+            if (!createAndLogin(&runtime, "login_for_load_retry"))
+                return false;
+        }
     }
-    if (!isRcClientRuntimeActive)
-    {
-        melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Warn,
-            "[RAClient] rc_client activation failed stage=load_game reason=game_not_loaded\n"
-        );
-        DeactivateRcClientRuntimeLocked();
-    }
-    return isRcClientRuntimeActive;
+    return false;
 }
 
-void RetroAchievementsManager::DeactivateRcClientRuntimeLocked()
+std::shared_ptr<RcClientHttpSession> RetroAchievementsManager::DeactivateRcClientRuntimeLocked()
 {
-    StopHttpWorkerLocked();
+    runtimeClosing = true;
+    ++runtimeGeneration;
     submissionTransportSuspended.store(false, std::memory_order_release);
+    auto session = std::move(rcClientHttpSession);
+    if (session)
+        session->BeginClosing();
+    if (activeBootstrapAttempt)
+        activeBootstrapAttempt->Cancel();
+    activeBootstrapAttempt.reset();
+    bootstrapInProgress = false;
     if (rcClientRuntime)
     {
         rc_client_set_event_handler(rcClientRuntime, &NoopRcClientEventHandler);
-        const uint32_t discardedSubmissions =
-            rc_client_discard_pending_submissions(rcClientRuntime);
-        if (discardedSubmissions > 0)
-        {
-            melonDS::Platform::Log(
-                melonDS::Platform::LogLevel::Info,
-                "[RAPending] event_type=ra_pending_native_discarded submission_session_id=%llu count=%u runtime_path=%s\n",
-                static_cast<unsigned long long>(
-                    runtimeBridgeConfig.has_value()
-                        ? runtimeBridgeConfig->submissionSessionId
-                        : 0
-                ),
-                discardedSubmissions,
-                RuntimePathTraceValue()
-            );
-        }
-        rc_client_unload_game(rcClientRuntime);
-        rc_client_logout(rcClientRuntime);
+
+        if (session)
+            session->DeliverTerminalCallbacksBeforeClientDestroyed();
         rc_client_destroy(rcClientRuntime);
         rcClientRuntime = nullptr;
     }
+    else if (session)
+    {
+
+        session->DiscardTerminalTicketsWithoutCallbacks();
+    }
+    bootstrapAttempts.clear();
 
     leaderboardAttemptsById.clear();
     activeLeaderboardAttemptIds.clear();
@@ -2968,6 +3533,8 @@ void RetroAchievementsManager::DeactivateRcClientRuntimeLocked()
     isRcClientRuntimeActive = false;
     rcClientSlowWindowCount = 0;
     ResetRcClientPerformanceWindowLocked();
+    submissionResolutionCondition.notify_all();
+    return session;
 }
 
 void RetroAchievementsManager::ResetRcClientPerformanceWindowLocked()
@@ -3010,12 +3577,12 @@ std::string RetroAchievementsManager::BuildRcClientResolveHashResponse() const
 std::string RetroAchievementsManager::BuildRcClientAchievementSetsResponse() const
 {
     const auto gameId = (runtimeBridgeConfig && runtimeBridgeConfig->gameId > 0) ? runtimeBridgeConfig->gameId : 1;
-    const auto username = runtimeBridgeConfig ? runtimeBridgeConfig->username : "STORM_DS";
+    const auto username = runtimeBridgeConfig ? runtimeBridgeConfig->username : "melonDualDS";
 
     std::ostringstream response;
     response << "{\"Success\":true,"
              << "\"GameId\":" << gameId << ","
-             << "\"Title\":\"STORM DS\","
+             << "\"Title\":\"melonDualDS\","
              << "\"ConsoleId\":" << RC_CONSOLE_NINTENDO_DS << ","
              << "\"ImageIconUrl\":\"" << RC_CLIENT_DEFAULT_IMAGE << "\","
              << "\"RichPresenceGameId\":" << gameId << ","
@@ -3474,7 +4041,8 @@ RetroAchievementsManager::PendingSubmissionState* RetroAchievementsManager::Prep
     const std::string& requestAction,
     const rc_api_request_t* request,
     uintptr_t callbackDataToken,
-    std::optional<uint64_t> leaderboardAttemptId
+    std::optional<uint64_t> leaderboardAttemptId,
+    uint64_t transportRequestId
 )
 {
     if (
@@ -3490,7 +4058,12 @@ RetroAchievementsManager::PendingSubmissionState* RetroAchievementsManager::Prep
 
     const auto existing = pendingSubmissionsByCallbackData.find(callbackDataToken);
     if (existing != pendingSubmissionsByCallbackData.end())
+    {
+
+        existing->second.activeTransportRequestId = transportRequestId;
+        existing->second.status = PendingSubmissionStatus::InFlight;
         return &existing->second;
+    }
 
     PendingSubmissionState submission;
     if (requestAction == "awardachievement")
@@ -3542,6 +4115,7 @@ RetroAchievementsManager::PendingSubmissionState* RetroAchievementsManager::Prep
     submission.sequence = AllocatePendingSubmissionSequence();
     submission.submissionSessionId = runtimeBridgeConfig->submissionSessionId;
     submission.callbackDataToken = callbackDataToken;
+    submission.activeTransportRequestId = transportRequestId;
     submission.createdAtEpochMs = PendingSubmissionNowEpochMs();
     auto iterator = pendingSubmissionsByCallbackData.emplace(
         callbackDataToken,
@@ -3594,17 +4168,22 @@ void RetroAchievementsManager::MarkActivePendingSubmissionPermanentFailure(int32
 void RetroAchievementsManager::FinalizePendingSubmissionTransport(
     uintptr_t callbackDataToken,
     bool retryPending,
-    bool alreadyAccepted
+    bool alreadyAccepted,
+    uint64_t transportRequestId
 )
 {
     const auto iterator = pendingSubmissionsByCallbackData.find(callbackDataToken);
     if (iterator == pendingSubmissionsByCallbackData.end())
         return;
 
+    if (iterator->second.activeTransportRequestId != transportRequestId)
+        return;
+
     if (retryPending)
     {
         iterator->second.status = PendingSubmissionStatus::RetryPending;
         MaybePublishPendingSubmission(iterator->second);
+        submissionResolutionCondition.notify_all();
         return;
     }
 
@@ -3612,7 +4191,10 @@ void RetroAchievementsManager::FinalizePendingSubmissionTransport(
     pendingSubmissionsByCallbackData.erase(iterator);
 
     if (!submission.published)
+    {
+        submissionResolutionCondition.notify_all();
         return;
+    }
 
     const RANativePendingSubmissionResolution resolution =
         submission.permanentFailureResult.has_value()
@@ -3634,6 +4216,7 @@ void RetroAchievementsManager::FinalizePendingSubmissionTransport(
         resolution,
         result
     );
+    submissionResolutionCondition.notify_all();
 }
 
 void RetroAchievementsManager::MaybePublishPendingSubmission(PendingSubmissionState& submission)

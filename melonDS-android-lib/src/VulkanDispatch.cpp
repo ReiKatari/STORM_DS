@@ -1,5 +1,7 @@
 #include "VulkanDispatch.h"
 
+#include <array>
+#include <cstdlib>
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
@@ -10,8 +12,12 @@
 #include "Platform.h"
 
 #if MELONDS_HAS_ADRENOTOOLS
+#include <algorithm>
+#include <memory>
+#include <vector>
 #include <adrenotools/driver.h>
 #include <adrenotools/priv.h>
+#include <vulkan/vk_icd.h>
 #endif
 
 PFN_vkAcquireNextImageKHR vkAcquireNextImageKHR = nullptr;
@@ -42,6 +48,7 @@ PFN_vkCmdFillBuffer vkCmdFillBuffer = nullptr;
 PFN_vkCmdPipelineBarrier vkCmdPipelineBarrier = nullptr;
 PFN_vkCmdPushConstants vkCmdPushConstants = nullptr;
 PFN_vkCmdSetBlendConstants vkCmdSetBlendConstants = nullptr;
+PFN_vkCmdSetDepthBounds vkCmdSetDepthBounds = nullptr;
 PFN_vkCmdSetScissor vkCmdSetScissor = nullptr;
 PFN_vkCmdSetStencilCompareMask vkCmdSetStencilCompareMask = nullptr;
 PFN_vkCmdSetStencilReference vkCmdSetStencilReference = nullptr;
@@ -146,6 +153,7 @@ DriverConfiguration gConfiguration;
 void* gVulkanHandle = nullptr;
 bool gInitialized = false;
 bool gUsingCustomDriver = false;
+bool gUsingDriverSurface = false;
 
 bool sameConfiguration(const DriverConfiguration& left, const DriverConfiguration& right)
 {
@@ -159,8 +167,53 @@ bool sameConfiguration(const DriverConfiguration& left, const DriverConfiguratio
 
 void* loadSymbol(const char* name)
 {
-    return gVulkanHandle != nullptr ? dlsym(gVulkanHandle, name) : nullptr;
+    return gVulkanHandle != nullptr && !gUsingDriverSurface ? dlsym(gVulkanHandle, name) : nullptr;
 }
+
+#if MELONDS_HAS_ADRENOTOOLS
+void* openDriverWithAndroidSurface(const DriverConfiguration& config, PFN_vkGetInstanceProcAddr& entry)
+{
+    const std::string path = config.CustomDriverDir + "/" + config.CustomDriverName;
+    std::unique_ptr<void, decltype(&dlclose)> driver(dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL), &dlclose);
+    if (!driver)
+        return nullptr;
+
+    const auto get = reinterpret_cast<PFN_vkGetInstanceProcAddr>(dlsym(driver.get(), "vk_icdGetInstanceProcAddr"));
+    if (!get)
+        return nullptr;
+    auto negotiate = reinterpret_cast<PFN_vk_icdNegotiateLoaderICDInterfaceVersion>(
+        dlsym(driver.get(), "vk_icdNegotiateLoaderICDInterfaceVersion"));
+    if (!negotiate)
+        negotiate = reinterpret_cast<PFN_vk_icdNegotiateLoaderICDInterfaceVersion>(
+            get(VK_NULL_HANDLE, "vk_icdNegotiateLoaderICDInterfaceVersion"));
+    uint32_t interfaceVersion = 5;
+    if (!negotiate || negotiate(&interfaceVersion) != VK_SUCCESS || interfaceVersion != 5)
+        return nullptr;
+
+    const auto version = reinterpret_cast<PFN_vkEnumerateInstanceVersion>(get(VK_NULL_HANDLE, "vkEnumerateInstanceVersion"));
+    const auto enumerate = reinterpret_cast<PFN_vkEnumerateInstanceExtensionProperties>(
+        get(VK_NULL_HANDLE, "vkEnumerateInstanceExtensionProperties"));
+    uint32_t apiVersion = 0;
+    uint32_t count = 0;
+    if (!version || version(&apiVersion) != VK_SUCCESS || apiVersion < VK_API_VERSION_1_1 ||
+        !get(VK_NULL_HANDLE, "vkCreateInstance") || !get(VK_NULL_HANDLE, "vkEnumerateInstanceLayerProperties") ||
+        !enumerate || enumerate(nullptr, &count, nullptr) != VK_SUCCESS || count == 0)
+        return nullptr;
+
+    std::vector<VkExtensionProperties> extensions(count);
+    if (enumerate(nullptr, &count, extensions.data()) != VK_SUCCESS)
+        return nullptr;
+    const auto supports = [&](const char* name) {
+        return std::any_of(extensions.begin(), extensions.begin() + count,
+            [name](const VkExtensionProperties& ext) { return std::strcmp(ext.extensionName, name) == 0; });
+    };
+    if (!supports(VK_KHR_SURFACE_EXTENSION_NAME) || !supports(VK_KHR_ANDROID_SURFACE_EXTENSION_NAME))
+        return nullptr;
+
+    entry = get;
+    return driver.release();
+}
+#endif
 
 bool isNullInstanceGlobalProc(const char* name)
 {
@@ -183,19 +236,11 @@ void loadGlobal(T& target, const char* name)
 template <typename T>
 void loadInstance(VkInstance instance, T& target, const char* name)
 {
-    if (isNullInstanceGlobalProc(name))
-    {
-        if (target == nullptr)
-            loadGlobal(target, name);
-        return;
-    }
-    T resolved = nullptr;
+    target = nullptr;
     if (vkGetInstanceProcAddr != nullptr)
-        resolved = reinterpret_cast<T>(vkGetInstanceProcAddr(instance, name));
-    if (resolved == nullptr)
-        resolved = reinterpret_cast<T>(loadSymbol(name));
-    if (resolved != nullptr)
-        target = resolved;
+        target = reinterpret_cast<T>(vkGetInstanceProcAddr(instance, name));
+    if (target == nullptr)
+        target = reinterpret_cast<T>(loadSymbol(name));
 }
 
 
@@ -231,6 +276,7 @@ void loadGlobalSymbols()
     loadGlobal(vkCmdSetBlendConstants, "vkCmdSetBlendConstants");
     loadGlobal(vkCmdSetScissor, "vkCmdSetScissor");
     loadGlobal(vkCmdSetStencilCompareMask, "vkCmdSetStencilCompareMask");
+    loadGlobal(vkCmdSetDepthBounds, "vkCmdSetDepthBounds");
     loadGlobal(vkCmdSetStencilReference, "vkCmdSetStencilReference");
     loadGlobal(vkCmdSetStencilWriteMask, "vkCmdSetStencilWriteMask");
     loadGlobal(vkCmdSetViewport, "vkCmdSetViewport");
@@ -324,6 +370,18 @@ void loadGlobalSymbols()
     loadGlobal(vkWaitSemaphoresKHR, "vkWaitSemaphoresKHR");
 }
 
+void unloadDriver()
+{
+    if (gVulkanHandle != nullptr)
+        dlclose(gVulkanHandle);
+    gVulkanHandle = nullptr;
+    gInitialized = false;
+    gUsingCustomDriver = false;
+    gUsingDriverSurface = false;
+    vkGetInstanceProcAddr = nullptr;
+    loadGlobalSymbols();
+}
+
 void loadInstanceSymbols(VkInstance instance)
 {
     loadInstance(instance, vkAcquireNextImageKHR, "vkAcquireNextImageKHR");
@@ -356,6 +414,7 @@ void loadInstanceSymbols(VkInstance instance)
     loadInstance(instance, vkCmdSetBlendConstants, "vkCmdSetBlendConstants");
     loadInstance(instance, vkCmdSetScissor, "vkCmdSetScissor");
     loadInstance(instance, vkCmdSetStencilCompareMask, "vkCmdSetStencilCompareMask");
+    loadInstance(instance, vkCmdSetDepthBounds, "vkCmdSetDepthBounds");
     loadInstance(instance, vkCmdSetStencilReference, "vkCmdSetStencilReference");
     loadInstance(instance, vkCmdSetStencilWriteMask, "vkCmdSetStencilWriteMask");
     loadInstance(instance, vkCmdSetViewport, "vkCmdSetViewport");
@@ -451,6 +510,7 @@ void loadInstanceSymbols(VkInstance instance)
 
 void loadDeviceSymbols(VkDevice device)
 {
+
     if (vkGetDeviceProcAddr != nullptr) {
         auto resolved = reinterpret_cast<PFN_vkAcquireNextImageKHR>(vkGetDeviceProcAddr(device, "vkAcquireNextImageKHR"));
         if (resolved != nullptr)
@@ -600,6 +660,11 @@ void loadDeviceSymbols(VkDevice device)
         auto resolved = reinterpret_cast<PFN_vkCmdSetStencilCompareMask>(vkGetDeviceProcAddr(device, "vkCmdSetStencilCompareMask"));
         if (resolved != nullptr)
             vkCmdSetStencilCompareMask = resolved;
+    }
+    {
+        auto resolved = reinterpret_cast<PFN_vkCmdSetDepthBounds>(vkGetDeviceProcAddr(device, "vkCmdSetDepthBounds"));
+        if (resolved != nullptr)
+            vkCmdSetDepthBounds = resolved;
     }
     if (vkGetDeviceProcAddr != nullptr) {
         auto resolved = reinterpret_cast<PFN_vkCmdSetStencilReference>(vkGetDeviceProcAddr(device, "vkCmdSetStencilReference"));
@@ -950,19 +1015,19 @@ void ConfigureDriver(const DriverConfiguration& configuration)
     std::scoped_lock guard(gLock);
     if (gInitialized && !sameConfiguration(gConfiguration, configuration))
     {
-        if (gVulkanHandle != nullptr)
-            dlclose(gVulkanHandle);
-        gVulkanHandle = nullptr;
-        gInitialized = false;
-        gUsingCustomDriver = false;
-        vkGetInstanceProcAddr = nullptr;
-        vkGetDeviceProcAddr = nullptr;
+        unloadDriver();
         Platform::Log(
             Platform::LogLevel::Warn,
             "VulkanDriver: configuration changed; Vulkan loader will reopen on next use"
         );
     }
     gConfiguration = configuration;
+}
+
+bool IsUsingCustomDriver()
+{
+    std::scoped_lock guard(gLock);
+    return gUsingCustomDriver;
 }
 
 bool Initialize()
@@ -975,120 +1040,126 @@ bool Initialize()
         && !gConfiguration.CustomDriverDir.empty()
         && !gConfiguration.CustomDriverName.empty();
 
-    const auto containsCaseInsensitive = [](const std::string& haystack, const char* needle) -> bool {
-        if (needle == nullptr || needle[0] == '\0')
-            return false;
-        const size_t needleLen = std::strlen(needle);
-        if (haystack.size() < needleLen)
-            return false;
-        for (size_t i = 0; i + needleLen <= haystack.size(); i++)
+    auto containsCI = [](const std::string& haystack, const char* needle) -> bool {
+        const size_t nlen = std::strlen(needle);
+        if (nlen == 0 || haystack.size() < nlen) return false;
+        for (size_t i = 0; i + nlen <= haystack.size(); ++i)
         {
-            bool match = true;
-            for (size_t j = 0; j < needleLen; j++)
+            bool ok = true;
+            for (size_t j = 0; j < nlen; ++j)
             {
-                if (std::tolower(static_cast<unsigned char>(haystack[i + j])) !=
-                    std::tolower(static_cast<unsigned char>(needle[j])))
-                {
-                    match = false;
-                    break;
-                }
+                if (std::tolower(static_cast<unsigned char>(haystack[i + j])) != std::tolower(static_cast<unsigned char>(needle[j])))
+                { ok = false; break; }
             }
-            if (match)
-                return true;
+            if (ok) return true;
         }
         return false;
     };
-
-    if (requestedCustomDriver
-        && (containsCaseInsensitive(gConfiguration.CustomDriverName, "panvk")
-            || containsCaseInsensitive(gConfiguration.CustomDriverName, "panfrost")))
+    if (requestedCustomDriver && (containsCI(gConfiguration.CustomDriverName, "panvk") || containsCI(gConfiguration.CustomDriverName, "panfrost")))
     {
         setenv("PAN_I_WANT_A_BROKEN_VULKAN_DRIVER", "1", 0);
         setenv("MESA_NO_ERROR", "1", 0);
     }
 
 #if MELONDS_HAS_ADRENOTOOLS
-    if (requestedCustomDriver && !gConfiguration.HookLibDir.empty())
+    if (requestedCustomDriver)
     {
-        gVulkanHandle = adrenotools_open_libvulkan(
-            RTLD_NOW | RTLD_LOCAL,
-            ADRENOTOOLS_DRIVER_CUSTOM,
-            gConfiguration.TmpLibDir.empty() ? nullptr : gConfiguration.TmpLibDir.c_str(),
-            gConfiguration.HookLibDir.c_str(),
-            gConfiguration.CustomDriverDir.c_str(),
-            gConfiguration.CustomDriverName.c_str(),
-            nullptr,
-            nullptr
-        );
+        gVulkanHandle = openDriverWithAndroidSurface(gConfiguration, vkGetInstanceProcAddr);
+        gUsingDriverSurface = gVulkanHandle != nullptr;
+        if (!gUsingDriverSurface && !gConfiguration.HookLibDir.empty())
+        {
+            gVulkanHandle = adrenotools_open_libvulkan(
+                RTLD_NOW | RTLD_LOCAL,
+                ADRENOTOOLS_DRIVER_CUSTOM,
+                gConfiguration.TmpLibDir.empty() ? nullptr : gConfiguration.TmpLibDir.c_str(),
+                gConfiguration.HookLibDir.c_str(),
+                gConfiguration.CustomDriverDir.c_str(),
+                gConfiguration.CustomDriverName.c_str(),
+                nullptr,
+                nullptr
+            );
+        }
         if (gVulkanHandle != nullptr)
         {
             gUsingCustomDriver = true;
             Platform::Log(
                 Platform::LogLevel::Warn,
-                "VulkanDriver: source=custom(adrenotools) driver=%s result=opened",
-                gConfiguration.DisplayName.empty() ? gConfiguration.CustomDriverName.c_str() : gConfiguration.DisplayName.c_str()
+                "VulkanDriver: source=custom driver=%s result=opened surface=%s",
+                gConfiguration.DisplayName.empty() ? gConfiguration.CustomDriverName.c_str() : gConfiguration.DisplayName.c_str(),
+                gUsingDriverSurface ? "driver" : "android"
             );
         }
         else
         {
             const char* error = dlerror();
             Platform::Log(
-                Platform::LogLevel::Warn,
-                "VulkanDriver: adrenotools load failed driver=%s error=%s",
+                Platform::LogLevel::Error,
+                "VulkanDriver: custom driver load failed driver=%s error=%s; falling back to system",
                 gConfiguration.CustomDriverName.c_str(),
                 error != nullptr ? error : "unknown"
             );
         }
+    }
+#else
+    if (requestedCustomDriver)
+    {
+        Platform::Log(
+            Platform::LogLevel::Warn,
+            "VulkanDriver: custom driver requested but adrenotools is not available in this build/ABI; falling back to system"
+        );
     }
 #endif
 
-    if (requestedCustomDriver && gVulkanHandle == nullptr)
-    {
-        const std::string fullCustomPath =
-            (gConfiguration.CustomDriverDir.back() == '/')
-                ? (gConfiguration.CustomDriverDir + gConfiguration.CustomDriverName)
-                : (gConfiguration.CustomDriverDir + "/" + gConfiguration.CustomDriverName);
-        void* directHandle = dlopen(fullCustomPath.c_str(), RTLD_NOW | RTLD_LOCAL);
-        if (directHandle != nullptr)
-        {
-            if (dlsym(directHandle, "vkGetInstanceProcAddr") != nullptr)
-            {
-                gVulkanHandle = directHandle;
-                gUsingCustomDriver = true;
-                Platform::Log(
-                    Platform::LogLevel::Warn,
-                    "VulkanDriver: source=custom(direct) driver=%s result=opened",
-                    gConfiguration.DisplayName.empty() ? gConfiguration.CustomDriverName.c_str() : gConfiguration.DisplayName.c_str()
-                );
-            }
-            else
-            {
-                dlclose(directHandle);
-                Platform::Log(
-                    Platform::LogLevel::Warn,
-                    "VulkanDriver: direct custom driver missing vkGetInstanceProcAddr driver=%s; falling back to system",
-                    gConfiguration.CustomDriverName.c_str()
-                );
-            }
-        }
-        else
-        {
-            const char* error = dlerror();
-            Platform::Log(
-                Platform::LogLevel::Warn,
-                "VulkanDriver: direct dlopen failed driver=%s error=%s; falling back to system",
-                gConfiguration.CustomDriverName.c_str(),
-                error != nullptr ? error : "unknown"
-            );
-        }
-    }
-
+    const char* systemDriverLibrary = nullptr;
     if (gVulkanHandle == nullptr)
     {
-        gVulkanHandle = dlopen("libvulkan.so", RTLD_NOW | RTLD_LOCAL);
+        const char* configuredLibrary = std::getenv("MELON_VULKAN_LIBRARY");
+        if (configuredLibrary != nullptr && configuredLibrary[0] != '\0')
+        {
+            dlerror();
+            gVulkanHandle = dlopen(configuredLibrary, RTLD_NOW | RTLD_LOCAL);
+            if (gVulkanHandle == nullptr)
+            {
+                const char* error = dlerror();
+                Platform::Log(
+                    Platform::LogLevel::Error,
+                    "VulkanDriver: requested loader failed library=%s error=%s",
+                    configuredLibrary,
+                    error != nullptr ? error : "unknown"
+                );
+                return false;
+            }
+            systemDriverLibrary = configuredLibrary;
+        }
+
+#if defined(__APPLE__)
+        constexpr std::array<const char*, 2> defaultSystemLibraries = {
+            "libvulkan.dylib",
+            "libMoltenVK.dylib",
+        };
+#else
+        constexpr std::array<const char*, 1> defaultSystemLibraries = {
+            "libvulkan.so",
+        };
+#endif
+        for (const char* library : defaultSystemLibraries)
+        {
+            if (gVulkanHandle != nullptr)
+                break;
+            gVulkanHandle = dlopen(library, RTLD_NOW | RTLD_LOCAL);
+            if (gVulkanHandle != nullptr)
+                systemDriverLibrary = library;
+        }
+
         gUsingCustomDriver = false;
         if (gVulkanHandle != nullptr)
-            Platform::Log(Platform::LogLevel::Warn, "VulkanDriver: source=system");
+        {
+            Platform::Log(
+                Platform::LogLevel::Warn,
+                "VulkanDriver: source=system library=%s",
+                systemDriverLibrary != nullptr ? systemDriverLibrary : "unknown"
+            );
+        }
     }
 
     if (gVulkanHandle == nullptr)
@@ -1096,31 +1167,31 @@ bool Initialize()
         const char* error = dlerror();
         Platform::Log(
             Platform::LogLevel::Error,
-            "VulkanDriver: failed to open libvulkan.so error=%s",
+            "VulkanDriver: failed to open the Vulkan loader error=%s",
             error != nullptr ? error : "unknown"
         );
         return false;
     }
 
-    vkGetInstanceProcAddr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(loadSymbol("vkGetInstanceProcAddr"));
-    if (vkGetInstanceProcAddr != nullptr)
-        loadGlobalSymbols();
-
-    if ((vkGetInstanceProcAddr == nullptr || vkCreateInstance == nullptr) && gUsingCustomDriver)
-    {
-        Platform::Log(Platform::LogLevel::Warn, "VulkanDriver: custom driver missing global loader entrypoints; falling back to system libvulkan.so");
-        if (gVulkanHandle != nullptr)
-            dlclose(gVulkanHandle);
-        gVulkanHandle = dlopen("libvulkan.so", RTLD_NOW | RTLD_LOCAL);
-        gUsingCustomDriver = false;
+    if (!gUsingDriverSurface)
         vkGetInstanceProcAddr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(loadSymbol("vkGetInstanceProcAddr"));
-        if (vkGetInstanceProcAddr != nullptr)
-            loadGlobalSymbols();
+    if (vkGetInstanceProcAddr == nullptr)
+    {
+        Platform::Log(Platform::LogLevel::Error, "VulkanDriver: vkGetInstanceProcAddr not found");
+        unloadDriver();
+        return false;
     }
 
-    if (vkGetInstanceProcAddr == nullptr || vkCreateInstance == nullptr)
+    loadGlobalSymbols();
+    if (vkCreateInstance == nullptr ||
+        vkEnumerateInstanceExtensionProperties == nullptr ||
+        vkEnumerateInstanceLayerProperties == nullptr)
     {
-        Platform::Log(Platform::LogLevel::Error, "VulkanDriver: vkGetInstanceProcAddr/vkCreateInstance not found");
+        Platform::Log(
+            Platform::LogLevel::Error,
+            "VulkanDriver: required global entry points are unavailable"
+        );
+        unloadDriver();
         return false;
     }
 
@@ -1131,38 +1202,6 @@ bool Initialize()
         gUsingCustomDriver ? "custom" : "system"
     );
     return true;
-}
-
-bool FallbackToSystemDriver()
-{
-    std::scoped_lock guard(gLock);
-    if (!gUsingCustomDriver && !gConfiguration.UseCustomDriver)
-        return false;
-    Platform::Log(Platform::LogLevel::Warn, "VulkanDriver: forcing fallback from custom driver to system libvulkan.so");
-    if (gVulkanHandle != nullptr)
-        dlclose(gVulkanHandle);
-    gVulkanHandle = nullptr;
-    gInitialized = false;
-    gUsingCustomDriver = false;
-    gConfiguration.UseCustomDriver = false;
-    vkGetInstanceProcAddr = nullptr;
-    vkGetDeviceProcAddr = nullptr;
-
-    gVulkanHandle = dlopen("libvulkan.so", RTLD_NOW | RTLD_LOCAL);
-    if (gVulkanHandle == nullptr)
-        return false;
-    vkGetInstanceProcAddr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(loadSymbol("vkGetInstanceProcAddr"));
-    if (vkGetInstanceProcAddr == nullptr)
-        return false;
-    loadGlobalSymbols();
-    gInitialized = vkCreateInstance != nullptr;
-    return gInitialized;
-}
-
-bool IsUsingCustomDriver()
-{
-    std::scoped_lock guard(gLock);
-    return gUsingCustomDriver;
 }
 
 void LoadInstance(VkInstance instance)

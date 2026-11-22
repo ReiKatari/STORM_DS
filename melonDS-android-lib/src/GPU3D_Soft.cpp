@@ -1832,6 +1832,12 @@ u32* SoftRenderer::GetLine(int line)
 
 std::vector<u32> SoftRenderer::CaptureColorTargetForDebug() const
 {
+    if (RenderThreadRunning.load(std::memory_order_relaxed))
+    {
+        Platform::Semaphore_Wait(Sema_RenderDone);
+        Platform::Semaphore_Post(Sema_RenderDone);
+    }
+
     std::vector<u32> pixels(static_cast<size_t>(GetColorTargetWidth()) * static_cast<size_t>(GetColorTargetHeight()));
     for (u32 y = 0; y < GetColorTargetHeight(); y++)
     {

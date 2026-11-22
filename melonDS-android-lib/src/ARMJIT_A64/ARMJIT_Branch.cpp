@@ -172,6 +172,7 @@ void* Compiler::Gen_JumpTo9(int kind)
     void* res = GetRXPtr();
 
     LSR(W1, W0, 12);
+    LSL(W1, W1, 2);
     ADDI2R(W1, W1, offsetof(ARMv5, MemTimings), W2);
     LDRB(W1, RCPU, W1);
 
@@ -184,6 +185,19 @@ void* Compiler::Gen_JumpTo9(int kind)
     CSEL(W1, W3, W1, CC_EQ);
     CMP(W0, W2);
     CSINC(W1, W1, WZR, CC_HS);
+
+    auto addSequentialFetchCycles = [this]
+    {
+        LDR(INDEX_UNSIGNED, W3, RCPU, offsetof(ARMv5, RegionCodeCycles));
+        MOVI2R(W1, kCodeCacheTiming);
+        TSTI2R(W0, 0x1F);
+        CSINC(W1, W1, WZR, CC_EQ);
+        CMP(W3, 0xFF);
+        CSEL(W1, W1, W3, CC_EQ);
+        CMP(W0, W2);
+        CSINC(W1, W1, WZR, CC_HS);
+        ADD(RCycles, RCycles, W1);
+    };
 
     FixupBranch switchToThumb;
     if (kind == 0)
@@ -199,8 +213,8 @@ void* Compiler::Gen_JumpTo9(int kind)
         ADD(W0, W0, 4);
         STR(INDEX_UNSIGNED, W0, RCPU, offsetof(ARMv5, R[15]));
 
-        ADD(W1, W1, W1);
         ADD(RCycles, RCycles, W1);
+        addSequentialFetchCycles();
         RET();
     }
 
@@ -217,10 +231,10 @@ void* Compiler::Gen_JumpTo9(int kind)
         ADD(W0, W0, 2);
         STR(INDEX_UNSIGNED, W0, RCPU, offsetof(ARMv5, R[15]));
 
-        ADD(W2, W1, W1);
-        TSTI2R(W0, 0x2);
-        CSEL(W1, W1, W2, CC_EQ);
         ADD(RCycles, RCycles, W1);
+        FixupBranch oneFetch = TBNZ(W0, 1);
+        addSequentialFetchCycles();
+        SetJumpTarget(oneFetch);
         RET();
     }
 
@@ -379,7 +393,6 @@ void Compiler::T_Comp_B()
 {
     s32 offset = (s32)((CurInstr.Instr & 0x7FF) << 21) >> 20;
     Comp_JumpTo(R15 + offset + 1);
-    Comp_BranchSpecialBehaviour(true);
 }
 
 void Compiler::T_Comp_BranchXchangeReg()

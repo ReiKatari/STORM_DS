@@ -1,5 +1,6 @@
 #include "ScreenshotRenderer.h"
 #include <algorithm>
+#include <chrono>
 #include "MelonLog.h"
 #include "GPU.h"
 
@@ -10,6 +11,7 @@ ScreenshotRenderer::ScreenshotRenderer(u32* screenshotBuffer)
 {
     this->screenshotBuffer = screenshotBuffer;
     this->screenshotRequested = false;
+    this->screenshotSucceeded = false;
     this->stopped = false;
 }
 
@@ -26,42 +28,38 @@ void ScreenshotRenderer::init()
 
 void ScreenshotRenderer::renderScreenshot(GPU* gpu, Renderer renderer, Frame* renderFrame)
 {
-    if (screenshotBuffer == nullptr)
-    {
-        notifyScreenshotReady();
-        return;
-    }
-
     if (renderer == Renderer::Vulkan)
     {
         constexpr size_t screenshotPixelCount = static_cast<size_t>(256) * static_cast<size_t>(192) * 2;
         std::fill_n(screenshotBuffer, screenshotPixelCount, 0u);
         LOG_ERROR("Vulkan", "Vulkan screenshot capture must use VulkanOutput readback path");
+        notifyScreenshotReady(false);
         return;
     }
 
     if (renderer == Renderer::Software)
     {
-        if (gpu == nullptr)
+        if (gpu == nullptr || screenshotBuffer == nullptr)
         {
-            notifyScreenshotReady();
+            notifyScreenshotReady(false);
             return;
         }
         int frontBuffer = gpu->FrontBuffer;
-        if (gpu->Framebuffer[frontBuffer][0] && gpu->Framebuffer[frontBuffer][1])
+        if (!gpu->Framebuffer[frontBuffer][0] || !gpu->Framebuffer[frontBuffer][1])
         {
-            memcpy(screenshotBuffer, gpu->Framebuffer[frontBuffer][0].get(), 256 * 192 * 4);
-            memcpy(&screenshotBuffer[256 * 192], gpu->Framebuffer[frontBuffer][1].get(), 256 * 192 * 4);
-            for (size_t i = 0; i < 256 * 192 * 2; ++i)
-                screenshotBuffer[i] |= 0xFF000000;
-            hasValidCachedScreenshot.store(true, std::memory_order_relaxed);
+            notifyScreenshotReady(false);
+            return;
         }
+        memcpy(screenshotBuffer, gpu->Framebuffer[frontBuffer][0].get(), 256 * 192 * 4);
+        memcpy(&screenshotBuffer[256 * 192], gpu->Framebuffer[frontBuffer][1].get(), 256 * 192 * 4);
+        for (size_t i = 0; i < 256 * 192 * 2; ++i)
+            screenshotBuffer[i] |= 0xFF000000;
     }
     else
     {
-        if (renderFrame == nullptr || renderFrame->frameTexture == 0)
+        if (renderFrame == nullptr || renderFrame->frameTexture == 0 || screenshotBuffer == nullptr)
         {
-            notifyScreenshotReady();
+            notifyScreenshotReady(false);
             return;
         }
         glDisable(GL_SCISSOR_TEST);
@@ -90,9 +88,7 @@ void ScreenshotRenderer::renderScreenshot(GPU* gpu, Renderer renderer, Frame* re
         glBindFramebuffer(GL_READ_FRAMEBUFFER, frameBuffer);
         glReadBuffer(GL_COLOR_ATTACHMENT0);
         glReadPixels(0, 0, SCREENSHOT_WIDTH, SCREENSHOT_HEIGHT, GL_RGBA, GL_UNSIGNED_BYTE, screenshotBuffer);
-        for (size_t i = 0; i < 256 * 192 * 2; ++i)
-            screenshotBuffer[i] |= 0xFF000000;
-        hasValidCachedScreenshot.store(true, std::memory_order_relaxed);
+        for (size_t i = 0; i < 256 * 192 * 2; ++i) screenshotBuffer[i] |= 0xFF000000;
 
         glBindVertexArray(0);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -108,28 +104,18 @@ u32* ScreenshotRenderer::getScreenshot()
     return screenshotBuffer;
 }
 
-bool ScreenshotRenderer::takeScreenshot(bool isPaused)
+bool ScreenshotRenderer::takeScreenshot()
 {
-    if (isPaused && hasValidCachedScreenshot.load(std::memory_order_relaxed))
-    {
-        return true;
-    }
-
     std::unique_lock lock(screenshotMutex);
-
+    if (stopped)
+        return false;
+    screenshotSucceeded = false;
     screenshotRequested = true;
-    bool success = screenshotCondition.wait_for(lock, std::chrono::milliseconds(300), [this] {
+    const bool completed = screenshotCondition.wait_for(lock, std::chrono::seconds(2), [this] {
         return !screenshotRequested || stopped;
     });
-
-    if (!success)
-    {
-        screenshotRequested = false;
-        if (hasValidCachedScreenshot.load(std::memory_order_relaxed) && !stopped)
-            return true;
-    }
-
-    return success && !stopped;
+    screenshotRequested = false;
+    return completed && !stopped && screenshotSucceeded;
 }
 
 bool ScreenshotRenderer::isScreenshotPending()
@@ -275,24 +261,23 @@ void ScreenshotRenderer::setupVertexBuffers()
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 }
 
-void ScreenshotRenderer::notifyScreenshotReady()
+void ScreenshotRenderer::notifyScreenshotReady(bool success)
 {
     std::lock_guard lock(screenshotMutex);
+    screenshotSucceeded = success;
     screenshotRequested = false;
     screenshotCondition.notify_all();
 }
 
 void ScreenshotRenderer::cleanup()
 {
-    if (!initialized)
-        return;
-
-    hasValidCachedScreenshot.store(false, std::memory_order_relaxed);
     {
         std::lock_guard lock(screenshotMutex);
         stopped = true;
         screenshotCondition.notify_all();
     }
+    if (!initialized)
+        return;
     glDeleteShader(screenshotRenderVertexShader);
     glDeleteShader(screenshotRenderFragmentShader);
     glDeleteProgram(screenshotRenderShader);

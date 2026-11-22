@@ -1,6 +1,7 @@
 #include "VulkanOutput.h"
 
 #include <algorithm>
+#include <atomic>
 #include <android/log.h>
 #include <sys/system_properties.h>
 #include <array>
@@ -9,6 +10,9 @@
 #include <mutex>
 #include <utility>
 #include <vector>
+#if defined(__aarch64__)
+#include <arm_neon.h>
+#endif
 
 #include "GPU.h"
 #include "GPU2D_Soft.h"
@@ -17,12 +21,10 @@
 #include "Platform.h"
 #include "VulkanContext.h"
 #include "VulkanDispatch.h"
-#include "VulkanCompositorShaderData.h"
-#include "VulkanCompositorCompatibilityShaderData.h"
-#include "VulkanAccumulate3dShaderData.h"
-#include "VulkanAccumulate3dCompatibilityShaderData.h"
-#include "VulkanAccumulate3dScale8ShaderData.h"
-#include "VulkanRuntimeControls.h"
+#include "VulkanPipelinePolicy.h"
+#include "VulkanFaithfulObjScanlineShaderData.h"
+#include "VulkanFaithfulShaderData.h"
+#include "VulkanRenderer3dNativeProjectionShaderData.h"
 
 namespace MelonDSAndroid
 {
@@ -36,9 +38,7 @@ namespace
 constexpr int kScreenWidth = 256;
 constexpr int kScreenHeight = 192;
 constexpr int kAcceleratedStride = kScreenWidth * 3 + 1;
-constexpr VkDeviceSize kPackedBufferSize = static_cast<VkDeviceSize>(kScreenHeight) * static_cast<VkDeviceSize>(kAcceleratedStride) * sizeof(melonDS::u32);
-constexpr VkDeviceSize kCapture3dBufferSize = static_cast<VkDeviceSize>(kScreenWidth) * static_cast<VkDeviceSize>(kScreenHeight) * sizeof(melonDS::u32);
-constexpr u64 kValidationWaitTimeoutNs = 8'000'000'000ull;
+constexpr u64 kValidationWaitTimeoutNs = 2'000'000'000ull;
 constexpr melonDS::u32 kMetaFlagRegularCaptureUses3d = 1u << 21u;
 constexpr melonDS::u32 kMetaFlagVramCaptureUses3d = 1u << 22u;
 constexpr melonDS::u32 kMetaFlagForceLive3dCompMode7 = 1u << 18u;
@@ -50,347 +50,54 @@ constexpr melonDS::u32 kRenderer2DDebugFeature3DBackground = 1u << 6u;
 constexpr melonDS::u32 kClass4StructuredAboveStableSamplesFor30Fps = 2u;
 constexpr melonDS::u32 kSourceAFullHighresCarryFrames = 2u;
 
-bool screenUsesFullRegularComp7(const SoftPackedScreenStats& stats)
+void writeFaithfulMaskedScreen(u32* destination, const u32* colors,
+                              const u32* mask)
 {
-    constexpr u32 dominantPixelThreshold = (kScreenWidth * kScreenHeight) / 2u;
-    constexpr u32 dominantLineThreshold = kScreenHeight / 2u;
-    return stats.DisplayModeCounts[1] > dominantLineThreshold
-        && stats.CompModeCounts[7] > dominantPixelThreshold
-        && stats.RegularCaptureUses3dLines > (kScreenHeight / 2u)
-        && stats.VramCaptureUses3dLines == 0u
-        && stats.StructuredSlotPixels > dominantPixelThreshold;
+    constexpr size_t pixels = kScreenWidth * kScreenHeight;
+    if (colors == nullptr)
+    {
+        if (mask != nullptr)
+            std::memcpy(destination, mask, pixels * sizeof(u32));
+        else
+            std::memset(destination, 0, pixels * sizeof(u32));
+        return;
+    }
+
+#if defined(__aarch64__)
+    static_assert(pixels % 4u == 0u);
+    const uint32x4_t causalBit = vdupq_n_u32(1u << 26u);
+    for (size_t i = 0u; i < pixels; i += 4u)
+    {
+        const uint32x4_t color = vbicq_u32(vld1q_u32(colors + i), causalBit);
+        const uint32x4_t causal = mask != nullptr
+            ? vld1q_u32(mask + i) : vdupq_n_u32(0u);
+        vst1q_u32(destination + i, vorrq_u32(color, causal));
+    }
+#else
+    for (size_t i = 0u; i < pixels; i++)
+        destination[i] = (colors[i] & ~(1u << 26u))
+            | (mask != nullptr ? mask[i] : 0u);
+#endif
 }
 
-bool screenIsFullPassiveComp2(const SoftPackedScreenStats& stats)
+bool faithfulPassTimingEnabled()
 {
-    constexpr u32 screenPixels = kScreenWidth * kScreenHeight;
-    return stats.DisplayModeCounts[0] == 0u
-        && stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-        && stats.DisplayModeCounts[2] == 0u
-        && stats.DisplayModeCounts[3] == 0u
-        && stats.CompModeCounts[0] == 0u
-        && stats.CompModeCounts[1] == 0u
-        && stats.CompModeCounts[2] == screenPixels
-        && stats.CompModeCounts[3] == 0u
-        && stats.CompModeCounts[4] == 0u
-        && stats.CompModeCounts[5] == 0u
-        && stats.CompModeCounts[6] == 0u
-        && stats.CompModeCounts[7] == 0u
-        && stats.CaptureBackedComp4Pixels == 0u
-        && stats.CaptureBackedComp4Lines == 0u
-        && stats.RegularCaptureUses3dLines == 0u
-        && stats.VramCaptureUses3dLines == 0u
-        && stats.ForceLive3dCompMode7Lines == 0u
-        && stats.StructuredSlotPixels == screenPixels
-        && stats.StructuredAbovePixels == 0u
-        && stats.Structured2DOnlyPixels == 0u
-        && stats.ProtectedBlackPixels == 0u;
-}
-
-bool screenIsFullRegularComp7CaptureSlotWithAbove(
-    const SoftPackedScreenStats& stats)
-{
-    constexpr u32 screenPixels = kScreenWidth * kScreenHeight;
-    return stats.DisplayModeCounts[0] == 0u
-        && stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-        && stats.DisplayModeCounts[2] == 0u
-        && stats.DisplayModeCounts[3] == 0u
-        && stats.CompModeCounts[0] == 0u
-        && stats.CompModeCounts[1] == 0u
-        && stats.CompModeCounts[2] == 0u
-        && stats.CompModeCounts[3] == 0u
-        && stats.CompModeCounts[4] == 0u
-        && stats.CompModeCounts[5] == 0u
-        && stats.CompModeCounts[6] == 0u
-        && stats.CompModeCounts[7] == screenPixels
-        && stats.CaptureBackedComp4Pixels == 0u
-        && stats.CaptureBackedComp4Lines == 0u
-        && stats.RegularCaptureUses3dLines
-            == static_cast<u32>(kScreenHeight)
-        && stats.VramCaptureUses3dLines == 0u
-        && stats.StructuredSlotPixels == screenPixels
-        && stats.StructuredAbovePixels == screenPixels
-        && stats.Structured2DOnlyPixels == 0u
-        && stats.ProtectedBlackPixels == 0u;
-}
-
-bool screenUsesPlainFullComp4(const SoftPackedScreenStats& stats)
-{
-    constexpr u32 dominantLineThreshold = kScreenHeight / 2u;
-    constexpr u32 nearlyFullPixelThreshold = (kScreenWidth * kScreenHeight * 7u) / 8u;
-    return stats.DisplayModeCounts[1] > dominantLineThreshold
-        && stats.CompModeCounts[4] > nearlyFullPixelThreshold
-        && stats.StructuredSlotPixels > nearlyFullPixelThreshold
-        && stats.VramCaptureUses3dLines == 0u
-        && stats.ForceLive3dCompMode7Lines == 0u;
-}
-
-bool screenProvidesResolvedMixedComp4Comp7(const SoftPackedScreenStats& stats)
-{
-    constexpr u32 screenPixels = kScreenWidth * kScreenHeight;
-    constexpr u32 sparsePixels = screenPixels / 8u;
-    constexpr u32 nearlyFullPixels = (screenPixels * 7u) / 8u;
-    return stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-        && stats.CompModeCounts[4] > nearlyFullPixels
-        && stats.CompModeCounts[7] > 0u
-        && stats.CompModeCounts[7] <= sparsePixels
-        && stats.CompModeCounts[4] + stats.CompModeCounts[7] == screenPixels
-        && stats.CaptureBackedComp4Pixels == 0u
-        && stats.CaptureBackedComp4Lines == 0u
-        && stats.RegularCaptureUses3dLines == 0u
-        && stats.VramCaptureUses3dLines == 0u
-        && stats.ForceLive3dCompMode7Lines == 0u
-        && stats.StructuredSlotPixels == screenPixels
-        && stats.StructuredAbovePixels == stats.CompModeCounts[7]
-        && stats.StructuredAboveVisiblePixels + stats.StructuredAboveBlackPixels
-            == stats.StructuredAbovePixels
-        && stats.Structured2DOnlyPixels == 0u
-        && stats.Structured2DOnlyVisiblePixels == 0u
-        && stats.Plane0VisiblePixels == stats.CompModeCounts[4]
-        && stats.Plane1VisiblePixels == stats.StructuredAboveVisiblePixels
-        && stats.ProtectedBlackPixels == stats.StructuredAboveBlackPixels
-        && stats.ProtectedBlackTargetsTopPixels == stats.ProtectedBlackPixels
-        && stats.ProtectedBlackTargetsBottomPixels == 0u;
-}
-
-bool screenProvidesResolvedMixedRegularComp4Comp7(const SoftPackedScreenStats& stats)
-{
-    constexpr u32 screenPixels = kScreenWidth * kScreenHeight;
-    constexpr u32 meaningfulPixels = screenPixels / 4u;
-    constexpr u32 dominantPixels = screenPixels / 2u;
-    constexpr u32 nearlyFullPixels = (screenPixels * 7u) / 8u;
-    return stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-        && stats.CompModeCounts[4] > meaningfulPixels
-        && stats.CompModeCounts[7] > dominantPixels
-        && stats.CompModeCounts[4] + stats.CompModeCounts[7] == screenPixels
-        && stats.CaptureBackedComp4Pixels == 0u
-        && stats.CaptureBackedComp4Lines == 0u
-        && stats.RegularCaptureUses3dLines == static_cast<u32>(kScreenHeight)
-        && stats.VramCaptureUses3dLines == 0u
-        && stats.ForceLive3dCompMode7Lines == 0u
-        && stats.StructuredSlotPixels == screenPixels
-        && stats.StructuredAbovePixels == stats.CompModeCounts[7]
-        && stats.StructuredAboveVisiblePixels + stats.StructuredAboveBlackPixels
-            == stats.StructuredAbovePixels
-        && stats.Structured2DOnlyPixels == 0u
-        && stats.Structured2DOnlyVisiblePixels == 0u
-        && stats.Plane0VisiblePixels > meaningfulPixels
-        && stats.Plane0VisiblePixels + stats.Plane1VisiblePixels > nearlyFullPixels
-        && stats.Plane1VisiblePixels == stats.StructuredAboveVisiblePixels
-        && stats.ProtectedBlackPixels == stats.StructuredAboveBlackPixels
-        && stats.ProtectedBlackTargetsTopPixels == 0u
-        && stats.ProtectedBlackTargetsBottomPixels == stats.ProtectedBlackPixels;
-}
-
-bool screenUsesSourceAFullHighresSlot(const SoftPackedScreenStats& stats)
-{
-    constexpr u32 nearlyFullPixelThreshold = (kScreenWidth * kScreenHeight * 7u) / 8u;
-    return stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-        && stats.CompModeCounts[7] >= nearlyFullPixelThreshold
-        && stats.StructuredSlotPixels >= nearlyFullPixelThreshold
-        && stats.Plane0VisiblePixels >= nearlyFullPixelThreshold
-        && stats.Plane1VisiblePixels == 0u
-        && stats.StructuredAbovePixels == 0u
-        && stats.StructuredAboveVisiblePixels == 0u
-        && stats.Structured2DOnlyPixels == 0u
-        && stats.Structured2DOnlyVisiblePixels == 0u
-        && stats.RegularCaptureUses3dLines == 0u
-        && stats.VramCaptureUses3dLines == 0u
-        && stats.ForceLive3dCompMode7Lines == 0u
-        && stats.CaptureBackedComp4Lines == 0u;
-}
-
-bool screenUsesSourceAComp4Hold(const SoftPackedScreenStats& stats)
-{
-    constexpr u32 nearlyFullPixelThreshold = (kScreenWidth * kScreenHeight * 7u) / 8u;
-    return stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-        && stats.CompModeCounts[4] >= nearlyFullPixelThreshold
-        && stats.StructuredSlotPixels >= nearlyFullPixelThreshold
-        && stats.Plane0VisiblePixels == 0u
-        && stats.Plane1VisiblePixels == 0u
-        && stats.StructuredAboveVisiblePixels == 0u
-        && stats.Structured2DOnlyPixels == 0u
-        && stats.Structured2DOnlyVisiblePixels == 0u
-        && stats.ProtectedBlackPixels == 0u
-        && stats.VramCaptureUses3dLines == 0u
-        && stats.ForceLive3dCompMode7Lines == 0u;
-}
-
-bool screenUsesSourceAReplay2DOnly(const SoftPackedScreenStats& stats)
-{
-    constexpr u32 nearlyFullPixelThreshold = (kScreenWidth * kScreenHeight * 7u) / 8u;
-    constexpr u32 tinyStructuredSlotThreshold = kScreenWidth / 8u;
-    return stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-        && stats.CompModeCounts[7] >= nearlyFullPixelThreshold
-        && stats.Structured2DOnlyPixels >= nearlyFullPixelThreshold
-        && stats.Structured2DOnlyVisiblePixels >= nearlyFullPixelThreshold
-        && stats.Plane0VisiblePixels >= nearlyFullPixelThreshold
-        && stats.Plane1VisiblePixels == 0u
-        && stats.StructuredAboveVisiblePixels == 0u
-        && stats.StructuredSlotPixels <= tinyStructuredSlotThreshold
-        && stats.ProtectedBlackPixels == 0u
-        && stats.VramCaptureUses3dLines == 0u
-        && stats.ForceLive3dCompMode7Lines == 0u
-        && stats.CaptureBackedComp4Lines == 0u;
-}
-
-bool screenCanContinueSourceAFullHighresSlot(const SoftPackedScreenStats& stats)
-{
-    constexpr u32 dominantPixelThreshold = (kScreenWidth * kScreenHeight) / 2u;
-    constexpr u32 dominantLineThreshold = kScreenHeight / 2u;
-    constexpr u32 smallProtectedBlackThreshold = kScreenWidth;
-    return stats.DisplayModeCounts[1] > dominantLineThreshold
-        && stats.CompModeCounts[7] > dominantPixelThreshold
-        && stats.StructuredSlotPixels > dominantPixelThreshold
-        && stats.Plane1VisiblePixels == 0u
-        && stats.StructuredAboveVisiblePixels == 0u
-        && stats.Structured2DOnlyVisiblePixels == 0u
-        && stats.ProtectedBlackPixels <= smallProtectedBlackThreshold
-        && stats.VramCaptureUses3dLines == 0u
-        && stats.ForceLive3dCompMode7Lines == 0u;
-}
-
-bool screenCanContinueSourceAComp4Hold(const SoftPackedScreenStats& stats)
-{
-    constexpr u32 dominantPixelThreshold = (kScreenWidth * kScreenHeight) / 2u;
-    constexpr u32 dominantLineThreshold = kScreenHeight / 2u;
-    return stats.DisplayModeCounts[1] > dominantLineThreshold
-        && stats.CompModeCounts[4] > dominantPixelThreshold
-        && stats.StructuredSlotPixels > dominantPixelThreshold
-        && stats.Plane0VisiblePixels == 0u
-        && stats.Plane1VisiblePixels == 0u
-        && stats.StructuredAboveVisiblePixels == 0u
-        && stats.Structured2DOnlyVisiblePixels == 0u
-        && stats.ProtectedBlackPixels == 0u
-        && stats.VramCaptureUses3dLines == 0u
-        && stats.ForceLive3dCompMode7Lines == 0u;
-}
-
-bool screenCanContinueSourceAReplay2DOnly(const SoftPackedScreenStats& stats)
-{
-    constexpr u32 dominantPixelThreshold = (kScreenWidth * kScreenHeight) / 2u;
-    constexpr u32 dominantLineThreshold = kScreenHeight / 2u;
-    constexpr u32 smallStructuredSlotThreshold = kScreenWidth;
-    return stats.DisplayModeCounts[1] > dominantLineThreshold
-        && stats.CompModeCounts[7] > dominantPixelThreshold
-        && stats.Structured2DOnlyVisiblePixels > dominantPixelThreshold
-        && stats.Plane0VisiblePixels > dominantPixelThreshold
-        && stats.Plane1VisiblePixels == 0u
-        && stats.StructuredAboveVisiblePixels == 0u
-        && stats.StructuredSlotPixels <= smallStructuredSlotThreshold
-        && stats.ProtectedBlackPixels == 0u
-        && stats.VramCaptureUses3dLines == 0u
-        && stats.ForceLive3dCompMode7Lines == 0u;
-}
-
-bool screenHasVisibleStructured2d(const SoftPackedScreenStats& stats)
-{
-    return stats.StructuredAboveVisiblePixels > 0u
-        || stats.Structured2DOnlyPixels > 0u
-        || stats.Structured2DOnlyVisiblePixels > 0u;
-}
-
-bool screenHasVisible2dOverlay(const SoftPackedScreenStats& stats)
-{
-    return stats.Plane0VisiblePixels > 0u
-        || stats.Plane1VisiblePixels > 0u
-        || stats.StructuredAboveVisiblePixels > 0u
-        || stats.Structured2DOnlyVisiblePixels > 0u
-        || stats.ProtectedBlackPixels > 0u;
-}
-
-bool screenHasOnlyOwnedProtectedBlack(const SoftPackedScreenStats& stats, bool topScreen)
-{
-    if (stats.ProtectedBlackPixels == 0u)
+    if (!areRendererDebugToolsEnabled())
         return false;
 
-    const bool ownedProtectedBlack =
-        topScreen
-            ? (stats.ProtectedBlackTargetsTopPixels == stats.ProtectedBlackPixels
-                && stats.ProtectedBlackTargetsBottomPixels == 0u)
-            : (stats.ProtectedBlackTargetsBottomPixels == stats.ProtectedBlackPixels
-                && stats.ProtectedBlackTargetsTopPixels == 0u);
-    return ownedProtectedBlack
-        && stats.Plane0VisiblePixels == 0u
-        && stats.Plane1VisiblePixels == 0u
-        && stats.StructuredAboveVisiblePixels == 0u
-        && stats.StructuredAboveBlackPixels == 0u
-        && stats.Structured2DOnlyVisiblePixels == 0u;
-}
-
-bool screenRequiresPackedDirectFallback(const SoftPackedScreenStats& stats)
-{
-    constexpr u32 dominantLineThreshold = kScreenHeight / 2u;
-    constexpr u32 visible2dThreshold = kScreenWidth;
-    const bool emptyStructured2d =
-        stats.DisplayModeCounts[1] > dominantLineThreshold
-        && stats.CompModeCounts[7] > visible2dThreshold
-        && stats.Plane0VisiblePixels == 0u
-        && stats.Plane1VisiblePixels == 0u
-        && stats.StructuredAboveVisiblePixels == 0u
-        && stats.Structured2DOnlyPixels > visible2dThreshold
-        && stats.Structured2DOnlyVisiblePixels <= visible2dThreshold
-        && stats.RegularCaptureUses3dLines == 0u
-        && stats.VramCaptureUses3dLines == 0u
-        && stats.ForceLive3dCompMode7Lines == 0u;
-    const bool mixedCaptureOverlay =
-        stats.DisplayModeCounts[1] > dominantLineThreshold
-        && (stats.RegularCaptureUses3dLines > 0u || stats.VramCaptureUses3dLines > 0u)
-        && stats.StructuredAboveVisiblePixels > visible2dThreshold
-        && stats.ProtectedBlackPixels > visible2dThreshold
-        && stats.ForceLive3dCompMode7Lines == 0u;
-    return emptyStructured2d || mixedCaptureOverlay;
-}
-
-bool screenNeedsComposedReplayForEmptyStructured2d(const SoftPackedScreenStats& stats)
-{
-    constexpr u32 nearlyFullPixelThreshold = (kScreenWidth * kScreenHeight * 7u) / 8u;
-    return screenRequiresPackedDirectFallback(stats)
-        && stats.CompModeCounts[7] > nearlyFullPixelThreshold
-        && stats.Structured2DOnlyPixels > nearlyFullPixelThreshold
-        && stats.Structured2DOnlyVisiblePixels == 0u
-        && stats.StructuredSlotPixels == 0u
-        && stats.StructuredAbovePixels == 0u;
-}
-
-bool screenHasNeutralLineMeta(const std::array<u32, SoftPackedFrameSnapshot::kLineCount>& lineMeta)
-{
-    for (u32 meta : lineMeta)
-    {
-        const u32 displayMode = (meta >> 16u) & 0x3u;
-        const u32 brightnessMode = ((meta >> 8u) & 0xFFu) >> 6u;
-        const int xOffset = static_cast<int>((meta >> 24u) & 0xFFu)
-            - (((meta >> 16u) & 0x80u) != 0u ? 256 : 0);
-        if (displayMode != 1u || brightnessMode != 0u || xOffset != 0)
-            return false;
-    }
-    return true;
-}
-
-bool packedPlane0IsEmpty(const SoftPackedScreenStats& stats)
-{
-    return stats.Plane0UsefulPixels == 0u
-        && stats.Plane0VisiblePixels == 0u
-        && stats.Plane0OpaqueBlackPixels == 0u;
-}
-
-bool packedPlane1IsEmpty(const SoftPackedScreenStats& stats)
-{
-    return stats.Plane1UsefulPixels == 0u
-        && stats.Plane1VisiblePixels == 0u
-        && stats.Plane1OpaqueBlackPixels == 0u;
-}
-
-bool packedControlIsEmpty(const SoftPackedScreenStats& stats)
-{
-    return stats.CaptureBackedComp4Lines == 0u
-        && stats.RegularCaptureUses3dLines == 0u
-        && stats.VramCaptureUses3dLines == 0u
-        && stats.ForceLive3dCompMode7Lines == 0u
-        && stats.StructuredSlotPixels == 0u
-        && stats.StructuredAbovePixels == 0u
-        && stats.Structured2DOnlyPixels == 0u
-        && stats.ProtectedBlackPixels == 0u;
+    static const bool explicitlyRequested = [] {
+        if (std::getenv("MELON_VULKAN_FAITHFUL_PASS_TIMING") != nullptr)
+            return true;
+#ifdef __ANDROID__
+        char value[PROP_VALUE_MAX] = {};
+        return __system_property_get(
+                   "debug.melonds.vulkan.faithful_pass_timing", value) > 0
+            && value[0] == '1';
+#else
+        return false;
+#endif
+    }();
+    return explicitlyRequested;
 }
 
 struct FastHighresOverlay2DRegion
@@ -402,647 +109,6 @@ struct FastHighresOverlay2DRegion
     u32 maxY = 0;
 };
 
-FastHighresOverlay2DRegion screenFastHighresOverlay2DRegion(
-    const SoftPackedScreenStats& stats,
-    bool neutralLineMeta,
-    bool topScreen)
-{
-    const u32 overlayPixels = stats.StructuredAboveVisiblePixels + stats.StructuredAboveBlackPixels;
-    const u32 overlayWidth = stats.StructuredAboveMaxX >= stats.StructuredAboveMinX
-        ? (stats.StructuredAboveMaxX - stats.StructuredAboveMinX + 1u)
-        : 0u;
-    const u32 overlayHeight = stats.StructuredAboveMaxY >= stats.StructuredAboveMinY
-        ? (stats.StructuredAboveMaxY - stats.StructuredAboveMinY + 1u)
-        : 0u;
-    const u32 overlayArea = overlayWidth * overlayHeight;
-    u32 visible2DMinX = kScreenWidth;
-    u32 visible2DMinY = kScreenHeight;
-    u32 visible2DMaxX = 0u;
-    u32 visible2DMaxY = 0u;
-    bool hasVisible2DBounds = false;
-    const auto includeVisibleBounds = [&](u32 minX, u32 minY, u32 maxX, u32 maxY) {
-        if (!hasVisible2DBounds)
-        {
-            visible2DMinX = minX;
-            visible2DMinY = minY;
-            visible2DMaxX = maxX;
-            visible2DMaxY = maxY;
-            hasVisible2DBounds = true;
-            return;
-        }
-
-        visible2DMinX = std::min(visible2DMinX, minX);
-        visible2DMinY = std::min(visible2DMinY, minY);
-        visible2DMaxX = std::max(visible2DMaxX, maxX);
-        visible2DMaxY = std::max(visible2DMaxY, maxY);
-    };
-    if (overlayPixels > 0u && overlayArea > 0u)
-        includeVisibleBounds(stats.StructuredAboveMinX, stats.StructuredAboveMinY, stats.StructuredAboveMaxX, stats.StructuredAboveMaxY);
-    if (stats.Plane0VisiblePixels > 0u)
-        includeVisibleBounds(stats.Plane0VisibleMinX, stats.Plane0VisibleMinY, stats.Plane0VisibleMaxX, stats.Plane0VisibleMaxY);
-    if (stats.Plane1VisiblePixels > 0u)
-        includeVisibleBounds(stats.Plane1VisibleMinX, stats.Plane1VisibleMinY, stats.Plane1VisibleMaxX, stats.Plane1VisibleMaxY);
-    const u32 visible2DWidth = hasVisible2DBounds && visible2DMaxX >= visible2DMinX
-        ? (visible2DMaxX - visible2DMinX + 1u)
-        : 0u;
-    const u32 visible2DHeight = hasVisible2DBounds && visible2DMaxY >= visible2DMinY
-        ? (visible2DMaxY - visible2DMinY + 1u)
-        : 0u;
-    const u32 visible2DArea = visible2DWidth * visible2DHeight;
-    const u32 structuredPlainOverlayPixels =
-        stats.StructuredAboveVisiblePixels
-        + stats.StructuredAboveBlackPixels
-        + stats.Structured2DOnlyVisiblePixels
-        + stats.ProtectedBlackPixels;
-    const u32 structuredCoveragePixels =
-        stats.StructuredSlotPixels + stats.Structured2DOnlyPixels;
-    constexpr u32 smallPlainStructuredOverlayPixelThreshold =
-        static_cast<u32>(SoftPackedFrameSnapshot::kPixelCount / 8u);
-    if (neutralLineMeta
-        && stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-        && structuredCoveragePixels >= static_cast<u32>(SoftPackedFrameSnapshot::kPixelCount)
-        && structuredPlainOverlayPixels > 0u
-        && structuredPlainOverlayPixels <= smallPlainStructuredOverlayPixelThreshold
-        && stats.Plane0VisiblePixels == stats.Structured2DOnlyVisiblePixels
-        && stats.Plane1VisiblePixels <= overlayPixels
-        && visible2DArea > 0u
-        && stats.RegularCaptureUses3dLines == 0u
-        && stats.VramCaptureUses3dLines == 0u
-        && stats.ForceLive3dCompMode7Lines == 0u
-        && stats.CaptureBackedComp4Lines == 0u)
-    {
-        return {true, visible2DMinX, visible2DMinY, visible2DMaxX, visible2DMaxY};
-    }
-
-    if (neutralLineMeta
-        && stats.StructuredSlotPixels >= static_cast<u32>(SoftPackedFrameSnapshot::kPixelCount)
-        && overlayPixels > 0u
-        && stats.Plane1VisiblePixels <= overlayPixels
-        && visible2DArea > 0u
-        && visible2DArea <= static_cast<u32>(SoftPackedFrameSnapshot::kPixelCount / 2u)
-        && stats.Structured2DOnlyVisiblePixels == 0u
-        && stats.VramCaptureUses3dLines == 0u
-        && stats.ForceLive3dCompMode7Lines == 0u)
-    {
-        return {true, visible2DMinX, visible2DMinY, visible2DMaxX, visible2DMaxY};
-    }
-
-    if (stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-        && stats.RegularCaptureUses3dLines > 0u
-        && stats.VramCaptureUses3dLines == 0u
-        && stats.ForceLive3dCompMode7Lines == 0u
-        && stats.CaptureBackedComp4Lines == 0u
-        && (stats.ProtectedBlackPixels > static_cast<u32>(SoftPackedFrameSnapshot::kPixelCount / 4u)
-            || stats.StructuredSlotPixels >= static_cast<u32>(SoftPackedFrameSnapshot::kPixelCount))
-        && visible2DArea > 0u
-        && visible2DArea <= static_cast<u32>(SoftPackedFrameSnapshot::kPixelCount / 4u))
-    {
-        return {true, visible2DMinX, visible2DMinY, visible2DMaxX, visible2DMaxY};
-    }
-
-    const u32 structured2DOnlyWidth = stats.Structured2DOnlyMaxX >= stats.Structured2DOnlyMinX
-        ? (stats.Structured2DOnlyMaxX - stats.Structured2DOnlyMinX + 1u)
-        : 0u;
-    const u32 structured2DOnlyHeight = stats.Structured2DOnlyMaxY >= stats.Structured2DOnlyMinY
-        ? (stats.Structured2DOnlyMaxY - stats.Structured2DOnlyMinY + 1u)
-        : 0u;
-    const u32 structured2DOnlyArea = structured2DOnlyWidth * structured2DOnlyHeight;
-    constexpr u32 nearlyFullPixelThreshold = (kScreenWidth * kScreenHeight * 7u) / 8u;
-    constexpr u32 smallOverlayPixelThreshold = (kScreenWidth * kScreenHeight) / 8u;
-    constexpr u32 dominantPlainCaptureOverlayPixelThreshold = (kScreenWidth * kScreenHeight * 3u) / 4u;
-    if (stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-        && stats.RegularCaptureUses3dLines > (kScreenHeight / 2u)
-        && stats.VramCaptureUses3dLines == 0u
-        && stats.ForceLive3dCompMode7Lines == 0u
-        && stats.CaptureBackedComp4Lines == 0u
-        && stats.StructuredSlotPixels >= nearlyFullPixelThreshold
-        && stats.StructuredAboveVisiblePixels == 0u
-        && stats.StructuredAboveBlackPixels == 0u
-        && stats.Structured2DOnlyVisiblePixels > 0u
-        && stats.Structured2DOnlyVisiblePixels <= dominantPlainCaptureOverlayPixelThreshold
-        && stats.Plane0VisiblePixels == stats.Structured2DOnlyVisiblePixels
-        && stats.Plane1VisiblePixels == 0u
-        && stats.ProtectedBlackPixels == 0u
-        && structured2DOnlyArea > 0u
-        && structured2DOnlyArea <= dominantPlainCaptureOverlayPixelThreshold)
-    {
-        return {true, stats.Structured2DOnlyMinX, stats.Structured2DOnlyMinY,
-            stats.Structured2DOnlyMaxX, stats.Structured2DOnlyMaxY};
-    }
-
-    const u32 structuredVisibleOverlayPixels =
-        stats.StructuredAboveVisiblePixels
-        + stats.StructuredAboveBlackPixels
-        + stats.Structured2DOnlyVisiblePixels;
-    const bool plainStructuredOverlay =
-        structuredVisibleOverlayPixels > 0u
-        && stats.Plane0VisiblePixels == stats.Structured2DOnlyVisiblePixels
-        && stats.Plane1VisiblePixels <= (stats.StructuredAboveVisiblePixels + stats.StructuredAboveBlackPixels)
-        && stats.ProtectedBlackPixels == 0u
-        && visible2DArea > 0u;
-    const bool ownedProtectedBlackOnly =
-        screenHasOnlyOwnedProtectedBlack(stats, topScreen);
-    if (stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-        && stats.RegularCaptureUses3dLines > (kScreenHeight / 2u)
-        && stats.VramCaptureUses3dLines == 0u
-        && stats.ForceLive3dCompMode7Lines == 0u
-        && stats.CaptureBackedComp4Lines == 0u
-        && stats.StructuredSlotPixels > static_cast<u32>(kScreenWidth)
-        && stats.CompModeCounts[7] > static_cast<u32>(kScreenWidth)
-        && (plainStructuredOverlay || ownedProtectedBlackOnly))
-    {
-        if (ownedProtectedBlackOnly && !plainStructuredOverlay)
-            return {true, 0u, 0u, static_cast<u32>(kScreenWidth - 1), static_cast<u32>(kScreenHeight - 1)};
-
-        return {true, visible2DMinX, visible2DMinY, visible2DMaxX, visible2DMaxY};
-    }
-
-    return {};
-}
-
-bool screenCanUseHighresHistoryForStructured2dOnly(const SoftPackedScreenStats& stats)
-{
-    constexpr u32 nearlyFullPixelThreshold = (kScreenWidth * kScreenHeight * 7u) / 8u;
-    return stats.DisplayModeCounts[1] > (kScreenHeight / 2u)
-        && stats.CompModeCounts[7] > nearlyFullPixelThreshold
-        && stats.Structured2DOnlyVisiblePixels > nearlyFullPixelThreshold
-        && stats.StructuredSlotPixels == 0u
-        && stats.StructuredAboveVisiblePixels == 0u
-        && stats.StructuredAboveBlackPixels == 0u
-        && (stats.Plane0VisiblePixels == 0u
-            || stats.Plane0VisiblePixels > nearlyFullPixelThreshold)
-        && stats.Plane1VisiblePixels == 0u
-        && stats.ProtectedBlackPixels == 0u
-        && stats.RegularCaptureUses3dLines == 0u
-        && stats.VramCaptureUses3dLines == 0u
-        && stats.ForceLive3dCompMode7Lines == 0u;
-}
-
-bool screenUsesFullRegularComp7WithDominantAbove(const SoftPackedScreenStats& stats)
-{
-    constexpr u32 dominantPixelThreshold = (kScreenWidth * kScreenHeight) / 2u;
-    return screenUsesFullRegularComp7(stats)
-        && stats.StructuredAboveVisiblePixels > dominantPixelThreshold;
-}
-
-bool screenUsesPlainStructuredComp7HandoffSlotCompatibility(
-    const SoftPackedScreenStats& stats)
-{
-    constexpr u32 nearlyFullPixelThreshold = (kScreenWidth * kScreenHeight * 7u) / 8u;
-    constexpr u32 dominantLineThreshold = kScreenHeight / 2u;
-    return stats.DisplayModeCounts[1] > dominantLineThreshold
-        && stats.CompModeCounts[7] > nearlyFullPixelThreshold
-        && stats.StructuredSlotPixels > nearlyFullPixelThreshold
-        && stats.StructuredAbovePixels == 0u
-        && stats.StructuredAboveVisiblePixels == 0u
-        && stats.Structured2DOnlyPixels == 0u
-        && stats.Plane0VisiblePixels == 0u
-        && stats.Plane1VisiblePixels == 0u
-        && stats.RegularCaptureUses3dLines == 0u
-        && stats.VramCaptureUses3dLines == 0u
-        && stats.ForceLive3dCompMode7Lines == 0u;
-}
-
-bool screenUsesPlainStructuredComp7HandoffSlotFastPath(
-    const SoftPackedScreenStats& stats)
-{
-    constexpr u32 nearlyFullPixelThreshold = (kScreenWidth * kScreenHeight * 7u) / 8u;
-    constexpr u32 invisible2dFillerThreshold = (kScreenWidth * kScreenHeight) / 8u;
-    constexpr u32 dominantLineThreshold = kScreenHeight / 2u;
-    return stats.DisplayModeCounts[1] > dominantLineThreshold
-        && stats.CompModeCounts[7] > nearlyFullPixelThreshold
-        && stats.StructuredSlotPixels > nearlyFullPixelThreshold
-        && stats.StructuredAbovePixels == 0u
-        && stats.StructuredAboveVisiblePixels == 0u
-        && (stats.Structured2DOnlyPixels == 0u
-            || (stats.Structured2DOnlyPixels <= invisible2dFillerThreshold
-                && stats.Structured2DOnlyVisiblePixels == 0u))
-        && stats.Plane0VisiblePixels == 0u
-        && stats.Plane1VisiblePixels == 0u
-        && stats.RegularCaptureUses3dLines == 0u
-        && stats.VramCaptureUses3dLines == 0u
-        && stats.ForceLive3dCompMode7Lines == 0u;
-}
-
-bool screenUsesPlainStructured3dSlot(const SoftPackedScreenStats& stats)
-{
-    constexpr u32 nearlyFullPixelThreshold = (kScreenWidth * kScreenHeight * 7u) / 8u;
-    constexpr u32 dominantLineThreshold = kScreenHeight / 2u;
-    return stats.DisplayModeCounts[1] > dominantLineThreshold
-        && stats.StructuredSlotPixels > nearlyFullPixelThreshold
-        && stats.StructuredAbovePixels == 0u
-        && stats.StructuredAboveVisiblePixels == 0u
-        && stats.Structured2DOnlyPixels == 0u
-        && stats.Plane0VisiblePixels == 0u
-        && stats.Plane1VisiblePixels == 0u
-        && stats.RegularCaptureUses3dLines == 0u
-        && stats.VramCaptureUses3dLines == 0u
-        && stats.ForceLive3dCompMode7Lines == 0u;
-}
-
-bool screenUsesRegularComp7EmptyPrimarySlot(const SoftPackedScreenStats& stats)
-{
-    constexpr u32 nearlyFullPixelThreshold = (kScreenWidth * kScreenHeight * 7u) / 8u;
-    constexpr u32 dominantLineThreshold = kScreenHeight / 2u;
-    return stats.DisplayModeCounts[1] > dominantLineThreshold
-        && stats.RegularCaptureUses3dLines > dominantLineThreshold
-        && stats.VramCaptureUses3dLines == 0u
-        && stats.ForceLive3dCompMode7Lines == 0u
-        && stats.CompModeCounts[7] > nearlyFullPixelThreshold
-        && stats.StructuredSlotPixels > nearlyFullPixelThreshold
-        && stats.StructuredAbovePixels == 0u
-        && stats.StructuredAboveVisiblePixels == 0u
-        && stats.Structured2DOnlyPixels == 0u
-        && stats.Structured2DOnlyVisiblePixels == 0u
-        && stats.Plane0VisiblePixels == 0u
-        && stats.Plane1VisiblePixels == 0u;
-}
-
-bool screenUsesPureFullRegular3dCapture(const SoftPackedScreenStats& stats)
-{
-    constexpr u32 screenPixels = kScreenWidth * kScreenHeight;
-    return stats.DisplayModeCounts[1] == kScreenHeight
-        && stats.RegularCaptureUses3dLines == kScreenHeight
-        && stats.VramCaptureUses3dLines == 0u
-        && stats.ForceLive3dCompMode7Lines == 0u
-        && stats.CaptureBackedComp4Lines == 0u
-        && stats.StructuredSlotPixels > ((screenPixels * 7u) / 8u)
-        && stats.StructuredAbovePixels == 0u
-        && stats.StructuredAboveVisiblePixels == 0u
-        && stats.Structured2DOnlyPixels == 0u
-        && stats.Structured2DOnlyVisiblePixels == 0u
-        && stats.Plane0VisiblePixels == 0u
-        && stats.Plane1VisiblePixels == 0u
-        && stats.ProtectedBlackPixels == 0u;
-}
-
-bool screenUsesFullStructuredCompMode2Slot(
-    const std::array<u32, SoftPackedFrameSnapshot::kPixelCount>& control,
-    const std::array<u32, SoftPackedFrameSnapshot::kLineCount>& lineMeta)
-{
-    constexpr u32 nearlyFullPixelThreshold = (kScreenWidth * kScreenHeight * 7u) / 8u;
-    u32 matchingPixels = 0;
-    for (int y = 0; y < kScreenHeight; y++)
-    {
-        const u32 meta = lineMeta[static_cast<size_t>(y)];
-        const u32 displayMode = (meta >> 16u) & 0x3u;
-        if (displayMode != 1u
-            || (meta & (kMetaFlagRegularCaptureUses3d
-                | kMetaFlagVramCaptureUses3d
-                | kMetaFlagForceLive3dCompMode7)) != 0u)
-        {
-            continue;
-        }
-
-        const size_t rowBase = static_cast<size_t>(y) * static_cast<size_t>(kScreenWidth);
-        for (int x = 0; x < kScreenWidth; x++)
-        {
-            const u32 controlAlpha = control[rowBase + static_cast<size_t>(x)] >> 24u;
-            const u32 compMode = controlAlpha & 0xFu;
-            const bool structuredSlot = (controlAlpha & 0x40u) != 0u;
-            const bool structuredAbove = structuredSlot && (controlAlpha & 0x80u) != 0u;
-            if (compMode == 2u && structuredSlot && !structuredAbove)
-                matchingPixels++;
-        }
-    }
-
-    return matchingPixels > nearlyFullPixelThreshold;
-}
-
-bool screenUsesFullVramCaptureOnly(const SoftPackedScreenStats& stats)
-{
-    constexpr u32 dominantLineThreshold = kScreenHeight / 2u;
-    return stats.DisplayModeCounts[2] > dominantLineThreshold
-        && stats.VramCaptureUses3dLines > dominantLineThreshold
-        && stats.DisplayModeCounts[1] == 0u
-        && stats.RegularCaptureUses3dLines == 0u
-        && stats.ForceLive3dCompMode7Lines == 0u
-        && stats.StructuredSlotPixels == 0u
-        && stats.StructuredAbovePixels == 0u
-        && stats.StructuredAboveVisiblePixels == 0u
-        && stats.Structured2DOnlyPixels == 0u
-        && stats.Structured2DOnlyVisiblePixels == 0u;
-}
-
-u32 countLineMetaDisplayMode(
-    const std::array<u32, SoftPackedFrameSnapshot::kLineCount>& lineMeta,
-    u32 displayMode)
-{
-    u32 count = 0u;
-    for (u32 y = 0; y < SoftPackedFrameSnapshot::kLineCount; y++)
-    {
-        const u32 meta = lineMeta[static_cast<size_t>(y)];
-        if (((meta >> 16u) & 0x3u) == displayMode)
-            count++;
-    }
-    return count;
-}
-
-u32 countLineMetaFlag(
-    const std::array<u32, SoftPackedFrameSnapshot::kLineCount>& lineMeta,
-    u32 flag)
-{
-    u32 count = 0u;
-    for (u32 y = 0; y < SoftPackedFrameSnapshot::kLineCount; y++)
-    {
-        if ((lineMeta[static_cast<size_t>(y)] & flag) != 0u)
-            count++;
-    }
-    return count;
-}
-
-bool screenUsesRegularCaptureHighresComposition(
-    const SoftPackedScreenStats& stats,
-    const std::array<u32, SoftPackedFrameSnapshot::kLineCount>& lineMeta)
-{
-    constexpr u32 dominantLineThreshold = kScreenHeight / 2u;
-    const u32 displayMode1Lines = std::max(stats.DisplayModeCounts[1], countLineMetaDisplayMode(lineMeta, 1u));
-    const u32 regularLines = std::max(stats.RegularCaptureUses3dLines, countLineMetaFlag(lineMeta, kMetaFlagRegularCaptureUses3d));
-    const u32 vramLines = std::max(stats.VramCaptureUses3dLines, countLineMetaFlag(lineMeta, kMetaFlagVramCaptureUses3d));
-    const u32 forceLiveLines = std::max(stats.ForceLive3dCompMode7Lines, countLineMetaFlag(lineMeta, kMetaFlagForceLive3dCompMode7));
-    return displayMode1Lines > dominantLineThreshold
-        && regularLines > dominantLineThreshold
-        && vramLines == 0u
-        && stats.CaptureBackedComp4Lines == 0u
-        && forceLiveLines == 0u;
-}
-
-bool screenCanUseRegularCaptureHighresComposition(
-    const SoftPackedScreenStats& stats,
-    const std::array<u32, SoftPackedFrameSnapshot::kLineCount>& lineMeta)
-{
-    constexpr u32 dominantLineThreshold = kScreenHeight / 2u;
-    const u32 displayMode1Lines = std::max(stats.DisplayModeCounts[1], countLineMetaDisplayMode(lineMeta, 1u));
-    const u32 vramLines = std::max(stats.VramCaptureUses3dLines, countLineMetaFlag(lineMeta, kMetaFlagVramCaptureUses3d));
-    return displayMode1Lines > dominantLineThreshold
-        && vramLines == 0u
-        && stats.CaptureBackedComp4Lines == 0u
-        && !screenHasVisible2dOverlay(stats);
-}
-
-bool screenForceLiveCanUseHighresComposition(
-    const SoftPackedScreenStats& stats,
-    const std::array<u32, SoftPackedFrameSnapshot::kLineCount>& lineMeta)
-{
-    constexpr u32 dominantLineThreshold = kScreenHeight / 2u;
-    const u32 forceLiveLines = std::max(stats.ForceLive3dCompMode7Lines, countLineMetaFlag(lineMeta, kMetaFlagForceLive3dCompMode7));
-    return forceLiveLines > dominantLineThreshold;
-}
-
-bool frameCanUseRegularCaptureHighresComposition(
-    const SoftPackedScreenStats& topStats,
-    const std::array<u32, SoftPackedFrameSnapshot::kLineCount>& topLineMeta,
-    const SoftPackedScreenStats& bottomStats,
-    const std::array<u32, SoftPackedFrameSnapshot::kLineCount>& bottomLineMeta)
-{
-    constexpr u32 dominantLineThreshold = kScreenHeight / 2u;
-    const bool topUsesRegularCapture =
-        std::max(topStats.RegularCaptureUses3dLines, countLineMetaFlag(topLineMeta, kMetaFlagRegularCaptureUses3d)) > dominantLineThreshold;
-    const bool bottomUsesRegularCapture =
-        std::max(bottomStats.RegularCaptureUses3dLines, countLineMetaFlag(bottomLineMeta, kMetaFlagRegularCaptureUses3d)) > dominantLineThreshold;
-    return (topUsesRegularCapture || bottomUsesRegularCapture)
-        && screenCanUseRegularCaptureHighresComposition(topStats, topLineMeta)
-        && screenCanUseRegularCaptureHighresComposition(bottomStats, bottomLineMeta);
-}
-
-bool frameCanUseForceLiveHighresHistory(
-    const SoftPackedScreenStats& topStats,
-    const std::array<u32, SoftPackedFrameSnapshot::kLineCount>& topLineMeta,
-    const SoftPackedScreenStats& bottomStats,
-    const std::array<u32, SoftPackedFrameSnapshot::kLineCount>& bottomLineMeta)
-{
-    const bool topUsesForceLiveHighres =
-        screenForceLiveCanUseHighresComposition(topStats, topLineMeta);
-    const bool bottomUsesForceLiveHighres =
-        screenForceLiveCanUseHighresComposition(bottomStats, bottomLineMeta);
-    return (topUsesForceLiveHighres || bottomUsesForceLiveHighres)
-        && screenCanUseRegularCaptureHighresComposition(topStats, topLineMeta)
-        && screenCanUseRegularCaptureHighresComposition(bottomStats, bottomLineMeta);
-}
-
-bool screenUsesVramCaptureToStructuredComp7Replay(
-    const SoftPackedScreenStats& vramStats,
-    const SoftPackedScreenStats& structuredStats)
-{
-    constexpr u32 dominantLineThreshold = kScreenHeight / 2u;
-    constexpr u32 dominantPixelThreshold = (kScreenWidth * kScreenHeight) / 2u;
-    return vramStats.DisplayModeCounts[2] > dominantLineThreshold
-        && vramStats.VramCaptureUses3dLines > dominantLineThreshold
-        && vramStats.RegularCaptureUses3dLines == 0u
-        && structuredStats.DisplayModeCounts[1] > dominantLineThreshold
-        && structuredStats.CompModeCounts[7] > dominantPixelThreshold
-        && structuredStats.StructuredSlotPixels > dominantPixelThreshold
-        && structuredStats.RegularCaptureUses3dLines == 0u
-        && structuredStats.VramCaptureUses3dLines == 0u
-        && structuredStats.ForceLive3dCompMode7Lines == 0u;
-}
-
-bool screenHasStructuredHandoffOverlay(const SoftPackedScreenStats& stats)
-{
-    constexpr u32 dominantPixelThreshold = (kScreenWidth * kScreenHeight * 4u) / 5u;
-    constexpr u32 sparseHandoffSlotThreshold = (kScreenWidth * kScreenHeight) / 5u;
-    constexpr u32 overlayVisibleThreshold = kScreenWidth * 4u;
-    constexpr u32 dominantLineThreshold = kScreenHeight / 2u;
-    return stats.DisplayModeCounts[1] > dominantLineThreshold
-        && stats.StructuredSlotPixels > dominantPixelThreshold
-        && stats.CompModeCounts[4] > dominantPixelThreshold
-        && stats.CompModeCounts[7] > 0u
-        && stats.CompModeCounts[7] < sparseHandoffSlotThreshold
-        && stats.StructuredAboveVisiblePixels > overlayVisibleThreshold
-        && stats.RegularCaptureUses3dLines == 0u
-        && stats.VramCaptureUses3dLines == 0u
-        && stats.ForceLive3dCompMode7Lines == 0u;
-}
-
-bool screenUsesFullStructured2dOnlyDisplay(const SoftPackedScreenStats& stats)
-{
-    constexpr u32 nearlyFullPixelThreshold = (kScreenWidth * kScreenHeight * 7u) / 8u;
-    constexpr u32 dominantLineThreshold = kScreenHeight / 2u;
-    return stats.DisplayModeCounts[1] > dominantLineThreshold
-        && stats.CompModeCounts[7] > nearlyFullPixelThreshold
-        && stats.Structured2DOnlyPixels > nearlyFullPixelThreshold
-        && stats.StructuredSlotPixels == 0u
-        && stats.StructuredAbovePixels == 0u
-        && stats.RegularCaptureUses3dLines == 0u
-        && stats.VramCaptureUses3dLines == 0u
-        && stats.ForceLive3dCompMode7Lines == 0u;
-}
-
-bool screenUsesStructuredHandoffWithoutCurrent3dCompatibility(
-    const SoftPackedScreenStats& stats,
-    const SoftPackedScreenStats& oppositeStats)
-{
-    constexpr u32 dominantPixelThreshold = (kScreenWidth * kScreenHeight * 4u) / 5u;
-    constexpr u32 overlayVisibleThreshold = kScreenWidth * 4u;
-    constexpr u32 dominantLineThreshold = kScreenHeight / 2u;
-    const bool structuredHandoffScreen =
-        stats.DisplayModeCounts[1] > dominantLineThreshold
-        && stats.StructuredSlotPixels > dominantPixelThreshold
-        && stats.StructuredAboveVisiblePixels > overlayVisibleThreshold
-        && stats.CompModeCounts[7] > 0u
-        && stats.RegularCaptureUses3dLines == 0u
-        && stats.VramCaptureUses3dLines == 0u
-        && stats.ForceLive3dCompMode7Lines == 0u;
-    const bool oppositeIsHandoffTarget =
-        screenUsesFullStructured2dOnlyDisplay(oppositeStats)
-        || screenUsesPlainStructuredComp7HandoffSlotCompatibility(oppositeStats)
-        || screenUsesPlainStructured3dSlot(oppositeStats);
-    return structuredHandoffScreen && oppositeIsHandoffTarget;
-}
-
-bool screenUsesStructuredHandoffWithoutCurrent3dFastPath(
-    const SoftPackedScreenStats& stats,
-    const SoftPackedScreenStats& oppositeStats)
-{
-    constexpr u32 dominantPixelThreshold = (kScreenWidth * kScreenHeight * 4u) / 5u;
-    constexpr u32 overlayVisibleThreshold = kScreenWidth * 4u;
-    constexpr u32 dominantLineThreshold = kScreenHeight / 2u;
-    const bool structuredHandoffScreen =
-        stats.DisplayModeCounts[1] > dominantLineThreshold
-        && stats.StructuredSlotPixels > dominantPixelThreshold
-        && stats.StructuredAboveVisiblePixels > overlayVisibleThreshold
-        && stats.CompModeCounts[7] > 0u
-        && stats.RegularCaptureUses3dLines == 0u
-        && stats.VramCaptureUses3dLines == 0u
-        && stats.ForceLive3dCompMode7Lines == 0u;
-    const bool oppositeIsHandoffTarget =
-        screenUsesFullStructured2dOnlyDisplay(oppositeStats)
-        || screenUsesPlainStructuredComp7HandoffSlotFastPath(oppositeStats)
-        || screenUsesPlainStructured3dSlot(oppositeStats);
-    return structuredHandoffScreen && oppositeIsHandoffTarget;
-}
-
-melonDS::u32 expandPackedColor6ToRgba8(melonDS::u32 packedColor)
-{
-    const melonDS::u32 r6 = packedColor & 0xFFu;
-    const melonDS::u32 g6 = (packedColor >> 8u) & 0xFFu;
-    const melonDS::u32 b6 = (packedColor >> 16u) & 0xFFu;
-    const melonDS::u32 r8 = ((r6 & 0x3Fu) << 2u) | ((r6 & 0x3Fu) >> 4u);
-    const melonDS::u32 g8 = ((g6 & 0x3Fu) << 2u) | ((g6 & 0x3Fu) >> 4u);
-    const melonDS::u32 b8 = ((b6 & 0x3Fu) << 2u) | ((b6 & 0x3Fu) >> 4u);
-    return r8 | (g8 << 8u) | (b8 << 16u) | 0xFF000000u;
-}
-
-bool packedBufferNeedsCapture3dSource(const melonDS::u32* packedBuffer)
-{
-    if (packedBuffer == nullptr)
-        return false;
-
-    for (int y = 0; y < kScreenHeight; y++)
-    {
-        const size_t rowBase = static_cast<size_t>(y) * static_cast<size_t>(kAcceleratedStride);
-        const melonDS::u32 meta = packedBuffer[rowBase + static_cast<size_t>(kScreenWidth * 3)];
-        if ((meta & (kMetaFlagRegularCaptureUses3d | kMetaFlagVramCaptureUses3d)) != 0u)
-            return true;
-
-        for (int x = 0; x < kScreenWidth; x++)
-        {
-            const melonDS::u32 val1 = packedBuffer[rowBase + static_cast<size_t>(x)];
-            const melonDS::u32 val2 = packedBuffer[rowBase + static_cast<size_t>(kScreenWidth + x)];
-            const melonDS::u32 val3 = packedBuffer[rowBase + static_cast<size_t>((kScreenWidth * 2) + x)];
-            const bool captureBackedComp4 =
-                val1 == kPacked3dPlaceholder
-                && val2 == kPacked3dPlaceholder
-                && (((val3 >> 24u) & 0xFu) == 4u);
-            if (captureBackedComp4)
-                return true;
-        }
-    }
-
-    return false;
-}
-
-bool softPackedSnapshotNeedsCapture3dSourceCompatibility(const SoftPackedFrameSnapshot& snapshot)
-{
-    if (!snapshot.valid)
-        return false;
-
-    const auto screenNeedsCapture3d = [](const SoftPackedScreenStats& stats) {
-        return stats.CaptureBackedComp4Lines > 0u
-            || stats.RegularCaptureUses3dLines > 0u
-            || stats.VramCaptureUses3dLines > 0u;
-    };
-
-    return screenNeedsCapture3d(snapshot.topScreenStats)
-        || screenNeedsCapture3d(snapshot.bottomScreenStats);
-}
-
-bool softPackedSnapshotNeedsCapture3dSourceFastPath(const SoftPackedFrameSnapshot& snapshot)
-{
-    if (!snapshot.valid)
-        return false;
-
-    const auto screenNeedsCapture3d = [](const SoftPackedScreenStats& stats) {
-        return stats.CaptureBackedComp4Lines > 0u
-            || stats.RegularCaptureUses3dLines > 0u
-            || stats.VramCaptureUses3dLines > 0u
-            || stats.ForceLive3dCompMode7Lines > 0u;
-    };
-
-    return screenNeedsCapture3d(snapshot.topScreenStats)
-        || screenNeedsCapture3d(snapshot.bottomScreenStats);
-}
-
-bool screenUsesStructured2dOnlyCaptureReplay(
-    const SoftPackedScreenStats& stats,
-    const SoftPackedScreenStats& oppositeStats,
-    bool hasCapture3dSource)
-{
-    constexpr u32 screenPixels = kScreenWidth * kScreenHeight;
-    constexpr u32 protectedBlackReplayThreshold = screenPixels / 4u;
-    constexpr u32 visibleStructuredOverlayThreshold = kScreenWidth * 4u;
-    constexpr u32 dominantStructuredSlotThreshold = screenPixels / 2u;
-    return hasCapture3dSource
-        && stats.Plane0VisiblePixels == 0u
-        && stats.Plane1VisiblePixels == 0u
-        && stats.StructuredAboveVisiblePixels == 0u
-        && stats.Structured2DOnlyVisiblePixels == 0u
-        && stats.ProtectedBlackPixels > protectedBlackReplayThreshold
-        && stats.RegularCaptureUses3dLines == 0u
-        && stats.VramCaptureUses3dLines == 0u
-        && stats.ForceLive3dCompMode7Lines == 0u
-        && oppositeStats.RegularCaptureUses3dLines == 0u
-        && oppositeStats.VramCaptureUses3dLines == 0u
-        && oppositeStats.StructuredSlotPixels <= dominantStructuredSlotThreshold
-        && oppositeStats.StructuredAboveVisiblePixels > visibleStructuredOverlayThreshold;
-}
-
-u32 markStructured2dOnlyCaptureReplayLines(
-    std::array<u32, SoftPackedFrameSnapshot::kLineCount>& lineMeta)
-{
-    u32 markedLines = 0u;
-    for (u32 y = 0; y < SoftPackedFrameSnapshot::kLineCount; y++)
-    {
-        u32& meta = lineMeta[static_cast<size_t>(y)];
-        const bool structuredDisplayLine =
-            ((meta >> 16u) & 0x3u) == 1u
-            && (meta & (kMetaFlagRegularCaptureUses3d
-                | kMetaFlagVramCaptureUses3d
-                | kMetaFlagForceLive3dCompMode7)) == 0u;
-        if (!structuredDisplayLine)
-            continue;
-
-        meta |= kMetaFlagForceLive3dCompMode7;
-        markedLines++;
-    }
-    return markedLines;
-}
-
-bool capture3dSourceHasAnyUsefulPixel(const melonDS::u32* capture3dSource)
-{
-    if (capture3dSource == nullptr)
-        return false;
-
-    constexpr size_t kCapturePixelCount = static_cast<size_t>(kScreenWidth) * static_cast<size_t>(kScreenHeight);
-    for (size_t i = 0; i < kCapturePixelCount; i++)
-    {
-        const melonDS::u32 pixel = capture3dSource[i];
-        if (pixel != 0u && pixel != kPacked3dPlaceholder)
-            return true;
-    }
-
-    return false;
-}
 
 bool capture3dSourceLineHasAnyUsefulPixel(const melonDS::u32* capture3dSource, int line)
 {
@@ -1060,72 +126,10 @@ bool capture3dSourceLineHasAnyUsefulPixel(const melonDS::u32* capture3dSource, i
     return false;
 }
 
-bool capture3dSourcePixelIsUseful(melonDS::u32 pixel)
-{
-    return pixel != 0u && pixel != kPacked3dPlaceholder;
 }
 
-bool capture3dSourcePixelIsNonBlackUseful(melonDS::u32 pixel)
-{
-    return capture3dSourcePixelIsUseful(pixel)
-        && (pixel & 0x00FFFFFFu) != 0u;
-}
-
-bool capture3dSourcePixelIsOpaqueBlack(melonDS::u32 pixel)
-{
-    return capture3dSourcePixelIsUseful(pixel)
-        && (pixel & 0x00FFFFFFu) == 0u;
-}
-
-bool capture3dSourceLineIsSolidOpaqueBlack(const melonDS::u32* capture3dSource, int line)
-{
-    if (capture3dSource == nullptr || line < 0 || line >= kScreenHeight)
-        return false;
-
-    const size_t rowOffset = static_cast<size_t>(line) * static_cast<size_t>(kScreenWidth);
-    for (int x = 0; x < kScreenWidth; x++)
-    {
-        if (capture3dSource[rowOffset + static_cast<size_t>(x)] != 0xFF000000u)
-            return false;
-    }
-
-    return true;
-}
-
-VkWriteDescriptorSet makeImageDescriptorWrite(
-    VkDescriptorSet descriptorSet,
-    melonDS::u32 binding,
-    const VkDescriptorImageInfo* imageInfo)
-{
-    VkWriteDescriptorSet write{};
-    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    write.dstSet = descriptorSet;
-    write.dstBinding = binding;
-    write.descriptorCount = 1;
-    write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    write.pImageInfo = imageInfo;
-    return write;
-}
-
-VkWriteDescriptorSet makeBufferDescriptorWrite(
-    VkDescriptorSet descriptorSet,
-    melonDS::u32 binding,
-    const VkDescriptorBufferInfo* bufferInfo)
-{
-    VkWriteDescriptorSet write{};
-    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    write.dstSet = descriptorSet;
-    write.dstBinding = binding;
-    write.descriptorCount = 1;
-    write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    write.pBufferInfo = bufferInfo;
-    return write;
-}
-
-}
-
-VulkanOutput::VulkanOutput(melonDS::VulkanPipelineProfile pipelineProfile)
-    : pipelineProfile(pipelineProfile),
+VulkanOutput::VulkanOutput(bool lowLatencyEnabled)
+    : lowLatencyEnabled(lowLatencyEnabled),
       lastValidTopPacked(kPackedScreenWordCount),
       lastValidBottomPacked(kPackedScreenWordCount),
       exactVisibleRegularComp7TopPacked(kPackedScreenWordCount)
@@ -1160,6 +164,8 @@ bool VulkanOutput::init()
     timestampPeriodNs = melonDS::VulkanContext::Get().GetTimestampPeriod();
     timestampQueriesSupported = melonDS::VulkanContext::Get().SupportsTimestamps();
 
+    faithfulPassTimingSessionEnabled = faithfulPassTimingEnabled();
+
     if (useTimelineSemaphores && (waitSemaphores == nullptr || getSemaphoreCounterValue == nullptr))
     {
         melonDS::Platform::Log(
@@ -1178,7 +184,7 @@ bool VulkanOutput::init()
         return false;
     }
 
-    if (!createSyncObjects() || !createCommandObjects() || !createCompositorResources() || !createAccumulateResources())
+    if (!createSyncObjects() || !createCommandObjects())
     {
         shutdown();
         return false;
@@ -1186,6 +192,9 @@ bool VulkanOutput::init()
 
     initialized = true;
     timelineValue = 0;
+    for (FaithfulUse& use : faithfulSlotUse)
+        use = {};
+    faithfulTemporalUse = {};
     melonDS::Platform::Log(
         melonDS::Platform::LogLevel::Warn,
         "VulkanOutput: sync path initialized (timeline=%d)",
@@ -1200,9 +209,20 @@ void VulkanOutput::shutdown()
         vkDeviceWaitIdle(device);
 
     destroyFrameResources();
+    {
+
+        std::scoped_lock lifetimeLock(faithfulLifetimeLock);
+        if (device != VK_NULL_HANDLE)
+            vkDeviceWaitIdle(device);
+        faithfulNativeFallbackEpoch = 0u;
+        faithfulNativeFallbackSequence = 0u;
+        faithfulNativeFallbackGpuBacked = false;
+        destroyCapturaHighresLocked();
+        destroyFaithfulAtlas();
+        destroyFaithfulDebugLocked();
+    }
+    destroyFaithfulPipelineCache();
     destroySameBankMode2SourceCaches();
-    destroyAccumulateResources();
-    destroyCompositorResources();
 
     if (timelineSemaphore != VK_NULL_HANDLE)
     {
@@ -1232,12 +252,19 @@ void VulkanOutput::shutdown()
     resetQueryPool = nullptr;
     timestampPeriodNs = 0.0f;
     timestampQueriesSupported = false;
+    faithfulPassTimingSessionEnabled = false;
     timelineValue = 0;
+    for (FaithfulUse& use : faithfulSlotUse)
+        use = {};
+    faithfulTemporalUse = {};
     lastPreparedFrame = nullptr;
     lastTopRendererSourceFrame = nullptr;
     lastBottomRendererSourceFrame = nullptr;
     lastTopComposedFrame = nullptr;
     lastBottomComposedFrame = nullptr;
+
+    topEmptyStructured2dReplayRun = 0u;
+    bottomEmptyStructured2dReplayRun = 0u;
     std::fill(lastValidTopPacked.begin(), lastValidTopPacked.end(), 0u);
     std::fill(lastValidBottomPacked.begin(), lastValidBottomPacked.end(), 0u);
     std::fill(
@@ -1290,41 +317,8 @@ VulkanOutputTemporalStats VulkanOutput::takeTemporalStatsSnapshotAndReset()
     return snapshot;
 }
 
-void VulkanOutput::releaseCompatibilityTemporalFrameReferences()
-{
-    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
-    std::lock_guard<std::mutex> lock(temporalReferenceLock);
-    lastPreparedFrame = nullptr;
-    lastTopRendererSourceFrame = nullptr;
-    lastBottomRendererSourceFrame = nullptr;
-    lastTopComposedFrame = nullptr;
-    lastBottomComposedFrame = nullptr;
-    lastValidTopPackedAvailable = false;
-    lastValidBottomPackedAvailable = false;
-    lastPackedScreenSwapValid = false;
-    lastPackedScreenSwap = false;
-    framesSinceTopLive3D = 1024;
-    framesSinceBottomLive3D = 1024;
-    class4AsymmetricCadenceActive = false;
-    class4AsymmetricCadencePhase = 0;
-    class4BottomAboveHashValid = false;
-    class4BottomAboveHash = 0;
-    class4BottomAboveStableFrames = 0;
-    class4BottomAboveMotionActive = false;
-    class4NoAboveVramStructuredActive = false;
-    for (auto& [resourceFrame, resource] : resources)
-    {
-        (void)resourceFrame;
-        resource.previousTopSourceFrame = nullptr;
-        resource.previousTopSourcePending = false;
-        resource.previousBottomSourceFrame = nullptr;
-        resource.previousBottomSourcePending = false;
-    }
-}
-
 void VulkanOutput::releaseTemporalFrameReferences()
 {
-    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     std::lock_guard<std::mutex> lock(temporalReferenceLock);
     if (areRendererDebugBgObjLogsEnabled())
     {
@@ -1339,6 +333,9 @@ void VulkanOutput::releaseTemporalFrameReferences()
     lastBottomRendererSourceFrame = nullptr;
     lastTopComposedFrame = nullptr;
     lastBottomComposedFrame = nullptr;
+
+    topEmptyStructured2dReplayRun = 0u;
+    bottomEmptyStructured2dReplayRun = 0u;
     exactVisibleRegularComp7TopPackedValid = false;
     exactVisibleRegularComp7TopPackedFrameId = 0u;
     lastValidTopPackedAvailable = false;
@@ -1381,7 +378,6 @@ bool VulkanOutput::releaseTemporalFrameReferencesFor(Frame* frame)
     if (frame == nullptr)
         return false;
 
-    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     std::lock_guard<std::mutex> lock(temporalReferenceLock);
     for (const auto& [resourceFrame, resource] : resources)
     {
@@ -1447,7 +443,6 @@ void VulkanOutput::markFramePreviousSourcesSubmitted(Frame* frame)
     if (frame == nullptr)
         return;
 
-    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     std::lock_guard<std::mutex> lock(temporalReferenceLock);
     auto iterator = resources.find(frame);
     if (iterator == resources.end())
@@ -1457,8 +452,13 @@ void VulkanOutput::markFramePreviousSourcesSubmitted(Frame* frame)
     iterator->second.previousBottomSourcePending = false;
 }
 
-void VulkanOutput::invalidateTemporalHistory(melonDS::VulkanPipelineProfile pipelineProfile)
+void VulkanOutput::invalidateTemporalHistory()
 {
+    {
+        std::scoped_lock lifetimeLock(faithfulLifetimeLock);
+        faithfulDiagnosticPayload.invalidate();
+    }
+    setFaithfulNativeFallbackIdentity(0u, 0u, false);
     if (areRendererDebugBgObjLogsEnabled())
     {
         melonDS::Platform::Log(
@@ -1466,16 +466,7 @@ void VulkanOutput::invalidateTemporalHistory(melonDS::VulkanPipelineProfile pipe
             "VulkanTemporal[Invalidate]: invalidateTemporalHistory"
         );
     }
-    if (!melonDS::UsesVulkanFastPath(pipelineProfile))
-    {
-        releaseCompatibilityTemporalFrameReferences();
-    }
-    else
-    {
-        releaseTemporalFrameReferences();
-    }
-    accumulatedTopHighresValid = false;
-    accumulatedBottomHighresValid = false;
+    releaseTemporalFrameReferences();
     for (SameBankMode2SourceCache& cache : sameBankMode2SourceCaches)
     {
         cache.valid = false;
@@ -1607,7 +598,8 @@ bool VulkanOutput::createTimestampQueryPool(VkQueryPool& queryPool)
     VkQueryPoolCreateInfo queryPoolCreateInfo{};
     queryPoolCreateInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
     queryPoolCreateInfo.queryType = VK_QUERY_TYPE_TIMESTAMP;
-    queryPoolCreateInfo.queryCount = 2;
+    queryPoolCreateInfo.queryCount =
+        faithfulPassTimingSessionEnabled ? 8u : 2u;
 
     if (vkCreateQueryPool(device, &queryPoolCreateInfo, nullptr, &queryPool) != VK_SUCCESS)
     {
@@ -1615,6 +607,6568 @@ bool VulkanOutput::createTimestampQueryPool(VkQueryPool& queryPool)
         queryPool = VK_NULL_HANDLE;
     }
 
+    return true;
+}
+
+namespace {
+constexpr VkDeviceSize kFaithfulAtlasABG        = 0x000000;
+constexpr VkDeviceSize kFaithfulAtlasBBG        = 0x080000;
+constexpr VkDeviceSize kFaithfulAtlasAOBJ       = 0x0A0000;
+constexpr VkDeviceSize kFaithfulAtlasBOBJ       = 0x0E0000;
+constexpr VkDeviceSize kFaithfulAtlasABGExtPal  = 0x100000;
+constexpr VkDeviceSize kFaithfulAtlasBBGExtPal  = 0x108000;
+constexpr VkDeviceSize kFaithfulAtlasAOBJExtPal = 0x110000;
+constexpr VkDeviceSize kFaithfulAtlasBOBJExtPal = 0x112000;
+constexpr VkDeviceSize kFaithfulAtlasPalette    = 0x114000;
+constexpr VkDeviceSize kFaithfulAtlasOAM        = 0x114800;
+constexpr VkDeviceSize kFaithfulAtlasBancos     = 0x115000;
+
+constexpr VkDeviceSize kFaithfulAtlasLineas     = 0x195000;
+
+constexpr VkDeviceSize kFaithfulAtlasCapStash   = 0x1F5000;
+
+constexpr VkDeviceSize kFaithfulAtlasModo2      = 0x225000;
+constexpr VkDeviceSize kFaithfulAtlasLine3D     = 0x23D000;
+constexpr VkDeviceSize kFaithfulAtlasSize       = 0x26D000;
+
+constexpr VkDeviceSize kFaithfulAtlasVivo       = kFaithfulAtlasSize;
+constexpr VkDeviceSize kFaithfulAtlasTotal      = 2u * kFaithfulAtlasSize;
+
+constexpr u32 kFaithfulCausalAbiVersion = 6u;
+constexpr u32 kFaithfulCausalHeaderRoutesValid = 1u << 0u;
+constexpr u32 kFaithfulCausalHeaderFullLineageValid = 1u << 1u;
+constexpr u32 kFaithfulCausalHeaderVisibleAllNative = 1u << 2u;
+constexpr size_t kFaithfulCausalPhysicalScreenCount = 2u;
+constexpr size_t kFaithfulCausalScreenWidth = 256u;
+constexpr size_t kFaithfulCausalScreenHeight = 192u;
+constexpr size_t kFaithfulCausalRouteLineCount =
+    kFaithfulCausalPhysicalScreenCount * kFaithfulCausalScreenHeight;
+constexpr size_t kFaithfulCausalVisiblePixelCount =
+    kFaithfulCausalPhysicalScreenCount
+    * kFaithfulCausalScreenWidth * kFaithfulCausalScreenHeight;
+constexpr size_t kFaithfulCausalProductCapacity =
+    melonDS::GPU2D::SoftRenderer::kFaithfulVisibleProductTableCapacity;
+
+struct alignas(16) FaithfulCausalHeaderGpu
+{
+    u32 Valid = 0u;
+    u32 Version = 0u;
+    u32 GenerationLo = 0u;
+    u32 GenerationHi = 0u;
+    u32 ProductCount = 0u;
+    u32 CaptureEpochLo = 0u;
+    u32 CaptureEpochHi = 0u;
+    u32 RouteLineCount = 0u;
+    u32 VisiblePixelCount = 0u;
+    u32 RouteOffsetWords = 0u;
+    u32 LineageOffsetWords = 0u;
+    u32 ProductOffsetWords = 0u;
+    u32 TotalWords = 0u;
+    u32 Reserved0 = 0u;
+    u32 Reserved1 = 0u;
+    u32 Reserved2 = 0u;
+};
+
+struct alignas(16) FaithfulCausalRouteLiveGpu
+{
+    u32 RouteFlags = 0u;
+    u32 LiveFlags = 0u;
+    u32 LogicalVCounts = 0u;
+    u32 SourceCoordinates = 0u;
+    u32 ProductEpochLo = 0u;
+    u32 ProductEpochHi = 0u;
+    u32 ProductSequenceLo = 0u;
+    u32 ProductSequenceHi = 0u;
+};
+
+struct alignas(16) FaithfulCausalProductGpu
+{
+    u32 EpochLo = 0u;
+    u32 EpochHi = 0u;
+    u32 IdLo = 0u;
+    u32 IdHi = 0u;
+    u32 Dimensions = 0u;
+    u32 KindFlags = 0u;
+    u32 Reserved0 = 0u;
+    u32 Reserved1 = 0u;
+};
+
+struct alignas(16) FaithfulCausalBoundLiveGpu
+{
+    u32 Valid = 0u;
+    u32 Flags = 0u;
+    u32 EpochLo = 0u;
+    u32 EpochHi = 0u;
+    u32 SequenceLo = 0u;
+    u32 SequenceHi = 0u;
+    u32 Dimensions = 0u;
+    u32 Reserved = 0u;
+};
+
+struct alignas(16) FaithfulCausalCaptureRecipeHeaderGpu
+{
+    u32 Valid = 0u;
+    u32 Version = 0u;
+    u32 ProductEpochLo = 0u;
+    u32 ProductEpochHi = 0u;
+    u32 ProductIdLo = 0u;
+    u32 ProductIdHi = 0u;
+    u32 CaptureCnt = 0u;
+    u32 Dimensions = 0u;
+    u32 LineOffsetWords = 0u;
+    u32 PixelOffsetWords = 0u;
+    u32 LineCount = 0u;
+    u32 Flags = 0u;
+    u32 RenderEpochLo = 0u;
+    u32 RenderEpochHi = 0u;
+    u32 RenderSequenceLo = 0u;
+    u32 RenderSequenceHi = 0u;
+};
+
+struct alignas(16) FaithfulCausalCaptureRecipeLineGpu
+{
+    u32 Flags = 0u;
+    u32 SourceCoordinates = 0u;
+    u32 RenderEpochLo = 0u;
+    u32 RenderEpochHi = 0u;
+    u32 RenderSequenceLo = 0u;
+    u32 RenderSequenceHi = 0u;
+    u32 CaptureParameters = 0u;
+    u32 SourceBLineOffsetPixels = 0u;
+};
+
+struct alignas(16) FaithfulCausalCaptureRecipeSourceAGpu
+{
+    u32 Raw0 = 0u;
+    u32 Raw1 = 0u;
+    u32 Control = 0u;
+    u32 Native3d = 0u;
+};
+
+static_assert(sizeof(FaithfulCausalHeaderGpu) == 64u);
+static_assert(sizeof(FaithfulCausalRouteLiveGpu) == 32u);
+static_assert(sizeof(FaithfulCausalProductGpu) == 32u);
+static_assert(sizeof(FaithfulCausalBoundLiveGpu) == 32u);
+static_assert(sizeof(FaithfulCausalCaptureRecipeHeaderGpu) == 64u);
+static_assert(sizeof(FaithfulCausalCaptureRecipeLineGpu) == 32u);
+static_assert(sizeof(FaithfulCausalCaptureRecipeSourceAGpu) == 16u);
+static_assert(sizeof(
+    melonDS::GPU2D::SoftRenderer::FaithfulCaptureSourceARecipe) == 16u);
+static_assert(alignof(
+    melonDS::GPU2D::SoftRenderer::FaithfulCaptureSourceARecipe) == 16u);
+static_assert(offsetof(
+    melonDS::GPU2D::SoftRenderer::FaithfulCaptureSourceARecipe, Raw0) == 0u);
+static_assert(offsetof(
+    melonDS::GPU2D::SoftRenderer::FaithfulCaptureSourceARecipe, Native3d)
+    == 12u);
+static_assert(sizeof(
+    melonDS::GPU2D::SoftRenderer::FaithfulCapturePixelRecipe) == 48u);
+static_assert(offsetof(
+    melonDS::GPU2D::SoftRenderer::FaithfulCapturePixelRecipe, Raw0) == 0u);
+static_assert(offsetof(
+    melonDS::GPU2D::SoftRenderer::FaithfulCapturePixelRecipe, Raw1) == 4u);
+static_assert(offsetof(
+    melonDS::GPU2D::SoftRenderer::FaithfulCapturePixelRecipe, Control) == 8u);
+static_assert(offsetof(
+    melonDS::GPU2D::SoftRenderer::FaithfulCapturePixelRecipe, Native3d) == 12u);
+static_assert(sizeof(melonDS::GPU2D::SoftRenderer::FaithfulVisiblePixelLineage)
+    == 16u);
+static_assert(sizeof(melonDS::GPU2D::SoftRenderer::FaithfulVisibleLineageRow)
+    == 16u);
+static_assert(sizeof(melonDS::GPU2D::SoftRenderer::FaithfulVisibleProductHandleEntry)
+    == 32u);
+
+constexpr VkDeviceSize kFaithfulCausalRouteOffset =
+    sizeof(FaithfulCausalHeaderGpu);
+constexpr VkDeviceSize kFaithfulCausalLineageRowOffset =
+    kFaithfulCausalRouteOffset
+    + kFaithfulCausalRouteLineCount * sizeof(FaithfulCausalRouteLiveGpu);
+constexpr VkDeviceSize kFaithfulCausalLineageOffset =
+    kFaithfulCausalLineageRowOffset
+    + kFaithfulCausalRouteLineCount
+        * sizeof(melonDS::GPU2D::SoftRenderer::FaithfulVisibleLineageRow);
+constexpr VkDeviceSize kFaithfulCausalProductOffset =
+    kFaithfulCausalLineageOffset
+    + kFaithfulCausalVisiblePixelCount
+        * sizeof(melonDS::GPU2D::SoftRenderer::FaithfulVisiblePixelLineage);
+constexpr VkDeviceSize kFaithfulCausalBoundLiveOffset =
+    kFaithfulCausalProductOffset
+    + kFaithfulCausalProductCapacity * sizeof(FaithfulCausalProductGpu);
+constexpr VkDeviceSize kFaithfulCausalCaptureRecipeHeaderOffset =
+    kFaithfulCausalBoundLiveOffset + sizeof(FaithfulCausalBoundLiveGpu);
+constexpr VkDeviceSize kFaithfulCausalCaptureRecipeLineOffset =
+    kFaithfulCausalCaptureRecipeHeaderOffset
+    + sizeof(FaithfulCausalCaptureRecipeHeaderGpu);
+constexpr VkDeviceSize kFaithfulCausalCaptureRecipePixelOffset =
+    kFaithfulCausalCaptureRecipeLineOffset
+    + kFaithfulCausalScreenHeight
+        * sizeof(FaithfulCausalCaptureRecipeLineGpu);
+constexpr VkDeviceSize kFaithfulCausalCaptureMaterialOffset =
+    kFaithfulCausalCaptureRecipePixelOffset
+    + kFaithfulCausalScreenWidth * kFaithfulCausalScreenHeight
+        * sizeof(melonDS::GPU2D::SoftRenderer::FaithfulCapturePixelRecipe);
+constexpr VkDeviceSize kFaithfulCausalCaptureBackgroundOffset =
+    kFaithfulCausalCaptureMaterialOffset
+    + kFaithfulCausalScreenWidth * kFaithfulCausalScreenHeight
+        * sizeof(u16);
+constexpr VkDeviceSize kFaithfulCausalBufferSize =
+    kFaithfulCausalCaptureBackgroundOffset
+    + kFaithfulCausalScreenWidth * kFaithfulCausalScreenHeight
+        * sizeof(melonDS::GPU2D::SoftRenderer::FaithfulCaptureBackgroundOperand);
+
+static_assert((kFaithfulCausalRouteOffset % 16u) == 0u);
+static_assert((kFaithfulCausalLineageRowOffset % 16u) == 0u);
+static_assert((kFaithfulCausalLineageOffset % 16u) == 0u);
+static_assert((kFaithfulCausalProductOffset % 16u) == 0u);
+static_assert((kFaithfulCausalBoundLiveOffset % 16u) == 0u);
+static_assert((kFaithfulCausalCaptureRecipeHeaderOffset % 16u) == 0u);
+static_assert((kFaithfulCausalCaptureRecipeLineOffset % 16u) == 0u);
+static_assert((kFaithfulCausalCaptureRecipePixelOffset % 16u) == 0u);
+static_assert((kFaithfulCausalCaptureMaterialOffset % 16u) == 0u);
+static_assert((kFaithfulCausalBufferSize % 16u) == 0u);
+static_assert(kFaithfulCausalBoundLiveOffset == 1'624'128u);
+static_assert(kFaithfulCausalCaptureRecipeHeaderOffset == 1'624'160u);
+static_assert(kFaithfulCausalCaptureRecipeLineOffset == 1'624'224u);
+static_assert(kFaithfulCausalCaptureRecipePixelOffset == 1'630'368u);
+static_assert(kFaithfulCausalCaptureMaterialOffset == 3'989'664u);
+static_assert(kFaithfulCausalCaptureBackgroundOffset == 4'087'968u);
+static_assert(kFaithfulCausalBufferSize == 4'874'400u);
+static_assert(sizeof(melonDS::GPU2D::SoftRenderer::FaithfulCaptureBackgroundOperand)
+    == 16u);
+
+template <typename Copy>
+inline void copiarTrozosSucios(u8* dst, const u8* src, size_t bytes,
+                               const melonDS::u64* mascara, size_t palabras,
+                               const Copy& copy)
+{
+    for (size_t w = 0; w < palabras; w++)
+    {
+        melonDS::u64 m = mascara[w];
+        while (m != 0)
+        {
+            const int bit = __builtin_ctzll(m);
+            m &= m - 1;
+            const size_t off = ((w * 64u) + (size_t)bit) * 512u;
+            if (off >= bytes) break;
+            copy(dst + off, src + off, std::min<size_t>(512u, bytes - off));
+        }
+    }
+}
+}
+
+struct VulkanOutput::FaithfulCaptureMaterializationNode
+{
+    using Lease = melonDS::GPU2D::SoftRenderer::FaithfulCaptureProductLease;
+
+    struct Key
+    {
+        u64 epoch = 0u;
+        u64 id = 0u;
+
+        [[nodiscard]] bool valid() const noexcept
+        {
+            return epoch != 0u && id != 0u;
+        }
+
+        [[nodiscard]] bool operator==(const Key& other) const noexcept
+        {
+            return epoch == other.epoch && id == other.id;
+        }
+
+        [[nodiscard]] bool operator<(const Key& other) const noexcept
+        {
+            return epoch < other.epoch
+                || (epoch == other.epoch && id < other.id);
+        }
+    };
+
+    Lease product {};
+    std::vector<Lease> directCaptureParents {};
+    std::vector<Key> highresParents {};
+
+    std::vector<Key> nativeFrontiers {};
+    bool requiresSourceA = false;
+    u64 sourceARenderEpoch = 0u;
+    u64 sourceARenderSequence = 0u;
+};
+
+struct VulkanOutput::FaithfulCaptureMaterializationPlan
+{
+    using Key = FaithfulCaptureMaterializationNode::Key;
+
+    u64 generation = 0u;
+    u64 captureEpoch = 0u;
+    std::vector<Key> requiredTerminals {};
+    std::vector<Key> visibleRoots {};
+    std::vector<Key> visibleWorkingSet {};
+    std::vector<Key> currentWorkingSet {};
+    std::vector<Key> nativeFrontiers {};
+    std::vector<FaithfulCaptureMaterializationNode> nodes {};
+    std::vector<size_t> visibleDependencyOrder {};
+    std::vector<size_t> currentDependencyOrder {};
+    Key current {};
+    bool visibleExact = false;
+    bool currentExact = false;
+    bool missing = false;
+    bool cycle = false;
+    bool overflow = false;
+    bool currentOverflow = false;
+    u32 ambiguousPixels = 0u;
+};
+
+bool VulkanOutput::ensureFaithfulAtlas()
+{
+    bool listos = true;
+    for (u32 j = 0; j < kFielRanuras; j++)
+        listos = listos && faithfulAtlasBuffer[j] != VK_NULL_HANDLE;
+    if (listos)
+        return true;
+    if (device == VK_NULL_HANDLE)
+        return false;
+
+    destroyFaithfulAtlas();
+    std::array<u32, kFielRanuras> memoryTypeIndices{};
+    auto crearAnillo = [&](VkMemoryPropertyFlags propiedades) -> bool
+    {
+        VkPhysicalDeviceMemoryProperties memoryProperties{};
+        vkGetPhysicalDeviceMemoryProperties(
+            melonDS::VulkanContext::Get().GetPhysicalDevice(),
+            &memoryProperties);
+        for (u32 j = 0; j < kFielRanuras; j++)
+        {
+            VkBufferCreateInfo bi{};
+            bi.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+            bi.size = kFaithfulAtlasTotal;
+            bi.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+            bi.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+            if (vkCreateBuffer(device, &bi, nullptr,
+                               &faithfulAtlasBuffer[j]) != VK_SUCCESS)
+                return false;
+
+            VkMemoryRequirements req{};
+            vkGetBufferMemoryRequirements(device, faithfulAtlasBuffer[j], &req);
+            VkMemoryAllocateInfo alloc{};
+            alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+            alloc.allocationSize = req.size;
+            alloc.memoryTypeIndex = findMemoryType(req.memoryTypeBits,
+                                                   propiedades);
+            if (alloc.memoryTypeIndex == UINT32_MAX
+                || vkAllocateMemory(device, &alloc, nullptr,
+                                    &faithfulAtlasMemory[j]) != VK_SUCCESS
+                || vkBindBufferMemory(device, faithfulAtlasBuffer[j],
+                                      faithfulAtlasMemory[j], 0) != VK_SUCCESS
+                || vkMapMemory(device, faithfulAtlasMemory[j], 0,
+                               VK_WHOLE_SIZE, 0,
+                               &faithfulAtlasMappedPtr[j]) != VK_SUCCESS)
+            {
+                return false;
+            }
+            if (!faithfulAtlasPre[j].allocate())
+                return false;
+            memoryTypeIndices[j] = alloc.memoryTypeIndex;
+            faithfulAtlasMemoryFlags[j] = memoryProperties
+                .memoryTypes[alloc.memoryTypeIndex].propertyFlags;
+            if ((faithfulAtlasMemoryFlags[j]
+                    & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0u
+                && faithfulFlushMappedMemoryRanges == nullptr
+                && vkGetDeviceProcAddr != nullptr)
+            {
+                faithfulFlushMappedMemoryRanges =
+                    reinterpret_cast<PFN_vkFlushMappedMemoryRanges>(
+                        vkGetDeviceProcAddr(
+                            device, "vkFlushMappedMemoryRanges"));
+            }
+            if ((faithfulAtlasMemoryFlags[j]
+                    & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0u
+                && faithfulFlushMappedMemoryRanges == nullptr)
+            {
+                return false;
+            }
+            faithfulAtlasDeviceVisible[j] = false;
+            faithfulAtlasPrimed[j] = false;
+        }
+        return true;
+    };
+
+    bool anilloCacheado = crearAnillo(
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
+            | VK_MEMORY_PROPERTY_HOST_CACHED_BIT);
+    if (!anilloCacheado)
+    {
+        destroyFaithfulAtlas();
+        memoryTypeIndices.fill(UINT32_MAX);
+        if (!crearAnillo(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
+                         | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))
+        {
+            destroyFaithfulAtlas();
+            melonDS::Platform::Log(
+                melonDS::Platform::LogLevel::Error,
+                "VulkanOutput: fallo creando el atlas fiel");
+            return false;
+        }
+    }
+
+    if (areRendererDebugToolsEnabled())
+    {
+        for (u32 j = 0; j < kFielRanuras; j++)
+        {
+            melonDS::Platform::Log(
+                melonDS::Platform::LogLevel::Warn,
+                "VulkanRuntime[FaithfulAtlasMemory]: slot=%u type=%u "
+                "flags=0x%X cached=%u coherent=%u flush=%u bytes=%llu "
+                "preferredCached=%u",
+                j, memoryTypeIndices[j],
+                static_cast<unsigned>(faithfulAtlasMemoryFlags[j]),
+                (faithfulAtlasMemoryFlags[j]
+                    & VK_MEMORY_PROPERTY_HOST_CACHED_BIT) != 0u ? 1u : 0u,
+                (faithfulAtlasMemoryFlags[j]
+                    & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0u ? 1u : 0u,
+                (faithfulAtlasMemoryFlags[j]
+                    & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0u ? 1u : 0u,
+                static_cast<unsigned long long>(kFaithfulAtlasTotal),
+                anilloCacheado ? 1u : 0u);
+        }
+    }
+    return true;
+}
+
+bool VulkanOutput::flushFaithfulAtlasWritesLocked(u32 slot)
+{
+    if (slot >= kFielRanuras)
+        return false;
+
+    faithfulAtlasDeviceVisible[slot] = false;
+    if (faithfulAtlasMappedPtr[slot] == nullptr
+        || faithfulAtlasMemory[slot] == VK_NULL_HANDLE)
+    {
+        return false;
+    }
+    if ((faithfulAtlasMemoryFlags[slot]
+            & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0u)
+    {
+        faithfulAtlasDeviceVisible[slot] = true;
+        return true;
+    }
+
+    VkMappedMemoryRange range{};
+    range.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+    range.memory = faithfulAtlasMemory[slot];
+    range.offset = 0u;
+    range.size = VK_WHOLE_SIZE;
+    if (faithfulFlushMappedMemoryRanges == nullptr)
+        return false;
+    const VkResult result =
+        faithfulFlushMappedMemoryRanges(device, 1u, &range);
+    faithfulAtlasDeviceVisible[slot] = result == VK_SUCCESS;
+    if (result != VK_SUCCESS)
+    {
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Error,
+            "VulkanOutput: faithful atlas flush failed slot=%u result=%d",
+            slot, static_cast<int>(result));
+    }
+    return result == VK_SUCCESS;
+}
+
+void VulkanOutput::destroyFaithfulAtlas()
+{
+    faithfulDiagnosticPayload.invalidate();
+    for (u32 j = 0; j < kFielRanuras; j++)
+    {
+        if (faithfulAtlasMappedPtr[j] != nullptr)
+        {
+            vkUnmapMemory(device, faithfulAtlasMemory[j]);
+            faithfulAtlasMappedPtr[j] = nullptr;
+        }
+        if (faithfulAtlasBuffer[j] != VK_NULL_HANDLE)
+        {
+            vkDestroyBuffer(device, faithfulAtlasBuffer[j], nullptr);
+            faithfulAtlasBuffer[j] = VK_NULL_HANDLE;
+        }
+        if (faithfulAtlasMemory[j] != VK_NULL_HANDLE)
+        {
+            vkFreeMemory(device, faithfulAtlasMemory[j], nullptr);
+            faithfulAtlasMemory[j] = VK_NULL_HANDLE;
+        }
+        faithfulAtlasPre[j].reset();
+        faithfulAtlasMemoryFlags[j] = 0u;
+        faithfulAtlasDeviceVisible[j] = false;
+        faithfulAtlasPrimed[j] = false;
+    }
+
+    faithfulFlushMappedMemoryRanges = nullptr;
+}
+
+static bool ssaaTecho()
+{
+
+    return true;
+}
+
+static bool faithfulCaptureHighresEnabled()
+{
+    static const bool enabled = [] {
+        if (std::getenv("MELON_SIN_CAP_HIGHRES") != nullptr)
+            return false;
+        char value[PROP_VALUE_MAX] = {};
+        if (__system_property_get(
+                "debug.melonds.cap_highres", value) > 0
+            && value[0] == '0')
+        {
+            return false;
+        }
+        return true;
+    }();
+    return enabled;
+}
+
+static bool trazaCapActiva()
+{
+    static const bool activa = [] {
+        if (std::getenv("MELON_TRAZA_CAP") != nullptr)
+            return true;
+        char v[PROP_VALUE_MAX] = {};
+        return __system_property_get("debug.melonds.traza_cap", v) > 0
+               && v[0] == '1';
+    }();
+    return activa;
+}
+
+bool VulkanOutput::swapEfectivoFiel(melonDS::GPU& gpu) const
+{
+    auto* sr = dynamic_cast<melonDS::GPU2D::SoftRenderer*>(&gpu.GetRenderer2D());
+    if (sr != nullptr)
+        return (sr->GetFaithfulPrevFrameMeta()[0] & 1u) != 0u;
+    return ((gpu.NDS.PowerControl9 >> 15) & 1u) != 0u;
+}
+
+void VulkanOutput::uploadFaithfulAtlasPreFrame(melonDS::GPU& gpu, bool desdeTail)
+{
+    std::scoped_lock lifetimeLock(faithfulLifetimeLock);
+    uploadFaithfulAtlasPreFrameLocked(gpu, desdeTail);
+}
+
+void VulkanOutput::noteFaithfulCertifiedCaptureLossLocked() noexcept
+{
+    if (faithfulPublishedCaptureTerminalCount != 0u
+        || faithfulRequiredCaptureTerminalCount != 0u)
+    {
+        faithfulCaptureLineageInvalidationPending = true;
+        return;
+    }
+    for (u32 slot = 0u; slot < 4u; slot++)
+    {
+        if (capHighresSlotState[slot]
+                == FaithfulCaptureSlotState::Certified)
+        {
+            faithfulCaptureLineageInvalidationPending = true;
+            return;
+        }
+    }
+}
+
+void VulkanOutput::publishFaithfulCertifiedCaptureTerminals(
+    melonDS::GPU& gpu, u32 outputScale)
+{
+    std::scoped_lock lifetimeLock(faithfulLifetimeLock);
+    auto* const sr = dynamic_cast<melonDS::GPU2D::SoftRenderer*>(
+        &gpu.GetRenderer2D());
+    if (sr == nullptr)
+        return;
+
+    const bool highresConsumerReady = outputScale > 1u
+        && faithfulCaptureHighresEnabled()
+        && ensureFaithfulPipeline()
+        && ensureCapturaHighres(outputScale);
+    if (highresConsumerReady != faithfulHighresConsumerActive)
+    {
+        faithfulHighresConsumerActive = highresConsumerReady;
+        faithfulCaptureLineageInvalidationPending = true;
+    }
+    if (faithfulCaptureLineageInvalidationPending)
+    {
+
+        gpu.InvalidateFaithfulCaptureLineage();
+        faithfulCaptureLineageInvalidationPending = false;
+        capHighresProductEpoch = 0u;
+        for (u32 slot = 0u; slot < 4u; slot++)
+        {
+            capHighresProducto[slot] = {};
+            capHighresSlotState[slot] =
+                FaithfulCaptureSlotState::Empty;
+            capHighresSealAttempt[slot] = 0u;
+        }
+        for (auto& plan : faithfulCapturePlans)
+            plan.reset();
+        faithfulPublishedCaptureTerminals.fill({});
+        faithfulRequiredCaptureTerminals.fill({});
+        faithfulPublishedCaptureTerminalCount = 0u;
+        faithfulRequiredCaptureTerminalCount = 0u;
+        faithfulPublishedCaptureTerminalEpoch = 0u;
+        faithfulRequiredCaptureTerminalEpoch = 0u;
+        faithfulPublishedCaptureTerminalGeneration = 0u;
+        faithfulRequiredCaptureTerminalGeneration = 0u;
+        capHighresValida = false;
+        faithfulCaptureSealNeedsClear = true;
+        faithfulNativeFrontiers.fill({});
+        faithfulNativeFrontierCount = 0u;
+        faithfulNativeFrontierEpoch = 0u;
+        capHighresRejectKey = {};
+        capHighresRejectStreak = 0u;
+    }
+
+    if (!faithfulHighresConsumerActive)
+    {
+        faithfulPublishedCaptureTerminals.fill({});
+        faithfulRequiredCaptureTerminals.fill({});
+        faithfulPublishedCaptureTerminalCount = 0u;
+        faithfulRequiredCaptureTerminalCount = 0u;
+        faithfulPublishedCaptureTerminalEpoch = 0u;
+        faithfulRequiredCaptureTerminalEpoch = 0u;
+        faithfulRequiredCaptureTerminalGeneration = 0u;
+        faithfulPublishedCaptureTerminalGeneration =
+            sr->SetFaithfulCertifiedCaptureTerminals(0u, nullptr, 0u);
+        (void)sr->SetFaithfulCaptureNativeFrontiers(0u, nullptr, 0u);
+        return;
+    }
+
+    const u64 epoch = gpu.GetFaithfulCaptureProductEpoch();
+    std::array<melonDS::GPU2D::SoftRenderer::FaithfulCaptureKey, 4>
+        certified {};
+    size_t count = 0u;
+    for (u32 slot = 0u; slot < 4u; slot++)
+    {
+        const auto& product = capHighresProducto[slot];
+        if (capHighresSlotState[slot]
+                != FaithfulCaptureSlotState::Certified
+            || !product.valid || !product.complete
+            || !product.highresEligible || !product.materialComplete
+            || !product.causalMetadataComplete
+            || !product.recipeComplete || product.lease == nullptr
+            || product.productEpoch == 0u
+            || product.productEpoch != epoch || product.productId == 0u)
+        {
+            continue;
+        }
+        certified[count++] = {product.productEpoch, product.productId};
+    }
+    std::sort(certified.begin(), certified.begin() + count,
+        [](const auto& lhs, const auto& rhs) {
+            return lhs.Epoch < rhs.Epoch
+                || (lhs.Epoch == rhs.Epoch && lhs.Id < rhs.Id);
+        });
+    count = static_cast<size_t>(std::distance(certified.begin(),
+        std::unique(certified.begin(), certified.begin() + count,
+            [](const auto& lhs, const auto& rhs) {
+                return lhs.Epoch == rhs.Epoch && lhs.Id == rhs.Id;
+            })));
+    faithfulPublishedCaptureTerminals.fill({});
+    faithfulPublishedCaptureTerminalCount = static_cast<u8>(count);
+    faithfulPublishedCaptureTerminalEpoch = epoch;
+    for (size_t index = 0u; index < count; index++)
+    {
+        faithfulPublishedCaptureTerminals[index] = {
+            certified[index].Epoch, certified[index].Id};
+    }
+    faithfulPublishedCaptureTerminalGeneration =
+        sr->SetFaithfulCertifiedCaptureTerminals(
+            epoch, certified.data(), count);
+
+    std::array<melonDS::GPU2D::SoftRenderer::FaithfulCaptureKey, 4>
+        frontiers {};
+    size_t frontierCount = 0u;
+    if (faithfulNativeFrontierEpoch == epoch)
+    {
+        for (u8 index = 0u; index < faithfulNativeFrontierCount; index++)
+        {
+            frontiers[frontierCount++] = {
+                faithfulNativeFrontiers[index].epoch,
+                faithfulNativeFrontiers[index].id};
+        }
+    }
+    (void)sr->SetFaithfulCaptureNativeFrontiers(
+        epoch, frontierCount != 0u ? frontiers.data() : nullptr,
+        frontierCount);
+}
+
+void VulkanOutput::uploadFaithfulAtlasPreFrameLocked(melonDS::GPU& gpu,
+                                                      bool desdeTail)
+{
+    auto* sr = dynamic_cast<melonDS::GPU2D::SoftRenderer*>(&gpu.GetRenderer2D());
+    if (sr == nullptr)
+        return;
+
+    sr->DeriveFaithfulPendingVramDirty();
+
+    const u32 ranuraPre = lowLatencyEnabled || desdeTail
+        ? (faithfulRing + 1u) % kFielRanuras
+        : (faithfulRing + 2u) % kFielRanuras;
+    if (faithfulAtlasMappedPtr[ranuraPre] == nullptr)
+        return;
+
+    static_assert(kFaithfulPreBytes == kFaithfulAtlasModo2);
+    faithfulAtlasDeviceVisible[ranuraPre] = false;
+    faithfulDiagnosticPayload.invalidateSlot(ranuraPre);
+    auto& pending = faithfulAtlasPre[ranuraPre];
+    u8* atlas = pending.data();
+    const auto copyPre = [&](void* destination, const void* source, size_t bytes) {
+        pending.copy(static_cast<u8*>(destination) - atlas, source, bytes);
+    };
+
+    if (faithfulEpocaVista != gpu.VRAMCacheEpoch)
+    {
+        faithfulEpocaVista = gpu.VRAMCacheEpoch;
+        std::memset(faithfulAtlasPrimed, 0, sizeof(faithfulAtlasPrimed));
+        std::memset(faithfulBancosCebados, 0, sizeof(faithfulBancosCebados));
+        std::memset(faithfulPendiente, 0, sizeof(faithfulPendiente));
+
+        std::memset(faithfulCapStashSeqVista, 0xFF, sizeof(faithfulCapStashSeqVista));
+    }
+    const auto& d = sr->GetFaithfulDirtyMasks();
+
+    const auto orMask = [](uint64_t* dst, const melonDS::u64* src, size_t n) {
+        for (size_t i = 0; i < n; i++) dst[i] |= src[i];
+    };
+    for (u32 j = 0; j < kFielRanuras; j++)
+    {
+        orMask(faithfulPendiente[j].ABG, d.ABG, 16);
+        orMask(faithfulPendiente[j].BBG, d.BBG, 4);
+        orMask(faithfulPendiente[j].AOBJ, d.AOBJ, 8);
+        orMask(faithfulPendiente[j].BOBJ, d.BOBJ, 4);
+        orMask(faithfulPendiente[j].ABGExtPal, d.ABGExtPal, 1);
+        orMask(faithfulPendiente[j].BBGExtPal, d.BBGExtPal, 1);
+        orMask(faithfulPendiente[j].AOBJExtPal, d.AOBJExtPal, 1);
+        orMask(faithfulPendiente[j].BOBJExtPal, d.BOBJExtPal, 1);
+    }
+    const PendienteFiel aplicar = faithfulPendiente[ranuraPre];
+    std::memset(&faithfulPendiente[ranuraPre], 0, sizeof(PendienteFiel));
+
+    {
+        bool sucioP6b = !faithfulAtlasPrimed[ranuraPre];
+        const unsigned char* pb = reinterpret_cast<const unsigned char*>(&aplicar);
+        for (size_t iP = 0; iP < sizeof(PendienteFiel) && !sucioP6b; iP++)
+            sucioP6b = pb[iP] != 0;
+        if (sucioP6b)
+            fielHuboSubidaSucia = true;
+    }
+
+    if (!faithfulAtlasPrimed[ranuraPre])
+    {
+
+        copyPre(atlas + kFaithfulAtlasABG,  gpu.VRAMFlat_ABG,  sizeof(gpu.VRAMFlat_ABG));
+        copyPre(atlas + kFaithfulAtlasBBG,  gpu.VRAMFlat_BBG,  sizeof(gpu.VRAMFlat_BBG));
+        copyPre(atlas + kFaithfulAtlasAOBJ, gpu.VRAMFlat_AOBJ, sizeof(gpu.VRAMFlat_AOBJ));
+        copyPre(atlas + kFaithfulAtlasBOBJ, gpu.VRAMFlat_BOBJ, sizeof(gpu.VRAMFlat_BOBJ));
+        copyPre(atlas + kFaithfulAtlasABGExtPal,  gpu.VRAMFlat_ABGExtPal,  sizeof(gpu.VRAMFlat_ABGExtPal));
+        copyPre(atlas + kFaithfulAtlasBBGExtPal,  gpu.VRAMFlat_BBGExtPal,  sizeof(gpu.VRAMFlat_BBGExtPal));
+        copyPre(atlas + kFaithfulAtlasAOBJExtPal, gpu.VRAMFlat_AOBJExtPal, sizeof(gpu.VRAMFlat_AOBJExtPal));
+        copyPre(atlas + kFaithfulAtlasBOBJExtPal, gpu.VRAMFlat_BOBJExtPal, sizeof(gpu.VRAMFlat_BOBJExtPal));
+        faithfulAtlasPrimed[ranuraPre] = true;
+        std::memset(&faithfulPendiente[ranuraPre], 0, sizeof(PendienteFiel));
+    }
+    else
+    {
+        copiarTrozosSucios(atlas + kFaithfulAtlasABG,  (const u8*)gpu.VRAMFlat_ABG,  sizeof(gpu.VRAMFlat_ABG),  (const melonDS::u64*)aplicar.ABG,  16, copyPre);
+        copiarTrozosSucios(atlas + kFaithfulAtlasBBG,  (const u8*)gpu.VRAMFlat_BBG,  sizeof(gpu.VRAMFlat_BBG),  (const melonDS::u64*)aplicar.BBG,  4, copyPre);
+        copiarTrozosSucios(atlas + kFaithfulAtlasAOBJ, (const u8*)gpu.VRAMFlat_AOBJ, sizeof(gpu.VRAMFlat_AOBJ), (const melonDS::u64*)aplicar.AOBJ, 8, copyPre);
+        copiarTrozosSucios(atlas + kFaithfulAtlasBOBJ, (const u8*)gpu.VRAMFlat_BOBJ, sizeof(gpu.VRAMFlat_BOBJ), (const melonDS::u64*)aplicar.BOBJ, 4, copyPre);
+        copiarTrozosSucios(atlas + kFaithfulAtlasABGExtPal,  (const u8*)gpu.VRAMFlat_ABGExtPal,  sizeof(gpu.VRAMFlat_ABGExtPal),  (const melonDS::u64*)aplicar.ABGExtPal,  1, copyPre);
+        copiarTrozosSucios(atlas + kFaithfulAtlasBBGExtPal,  (const u8*)gpu.VRAMFlat_BBGExtPal,  sizeof(gpu.VRAMFlat_BBGExtPal),  (const melonDS::u64*)aplicar.BBGExtPal,  1, copyPre);
+        copiarTrozosSucios(atlas + kFaithfulAtlasAOBJExtPal, (const u8*)gpu.VRAMFlat_AOBJExtPal, sizeof(gpu.VRAMFlat_AOBJExtPal), (const melonDS::u64*)aplicar.AOBJExtPal, 1, copyPre);
+        copiarTrozosSucios(atlas + kFaithfulAtlasBOBJExtPal, (const u8*)gpu.VRAMFlat_BOBJExtPal, sizeof(gpu.VRAMFlat_BOBJExtPal), (const melonDS::u64*)aplicar.BOBJExtPal, 1, copyPre);
+    }
+
+    {
+
+        static u32 capDestPrevio = 0xFFFFFFFFu;
+        u32 capDestActual = 0xFFFFFFFFu;
+
+        const u32* metaCapSrc = desdeTail ? sr->GetFaithfulPrevFrameMeta()
+                                          : sr->GetFaithfulFrameMeta();
+        const u32 capCntFot = metaCapSrc[5];
+        if ((capCntFot & (1u << 31)) != 0u)
+            capDestActual = (capCntFot >> 16) & 0x3u;
+
+        const u32 cntLatchPack = metaCapSrc[4];
+        const auto cntBanco = [&](u32 banco) -> u8 {
+            return desdeTail ? (u8)((cntLatchPack >> (banco * 8u)) & 0xFFu)
+                             : gpu.VRAMCNT[banco];
+        };
+
+        static const bool logTail = getenv("MELON_LOG_TAIL") != nullptr;
+        static u32 logTailFot = 0;
+        if (logTail)
+            fprintf(stderr,
+                    "[tail] t=%u swapVivo=%u swapLatch=%u capVivo=%08X "
+                    "capLatch=%08X cntVivo=%02X%02X%02X%02X cntLatch=%08X capRan=%u\n",
+                    logTailFot++, (u32)((gpu.NDS.PowerControl9 >> 15) & 1u),
+                    sr->GetFaithfulFrameMeta()[0] & 1u,
+                    gpu.GPU2D_A.CaptureCnt, sr->GetFaithfulFrameMeta()[5],
+                    gpu.VRAMCNT[3], gpu.VRAMCNT[2], gpu.VRAMCNT[1], gpu.VRAMCNT[0],
+                    cntLatchPack, sr->GetFaithfulFrameMeta()[1]);
+
+        static const bool tintaBanco = [] {
+#ifdef __ANDROID__
+            char v[92] = {};
+            if (__system_property_get("debug.melonds.tinta_banco", v) > 0)
+                return v[0] == '1';
+#endif
+            return std::getenv("MELON_TINTA_BANCO") != nullptr;
+        }();
+        for (u32 bancoCap : {capDestPrevio, capDestActual})
+        {
+            if (bancoCap > 3u) continue;
+            u8* dstBanco = atlas + kFaithfulAtlasBancos + (size_t)bancoCap * 0x20000u;
+            copyPre(dstBanco, gpu.VRAM[bancoCap], 0x20000u);
+            if (tintaBanco)
+            {
+                for (u32 filaB = 0; filaB < 192u; filaB++)
+                {
+                    u8* fila = dstBanco + (size_t)filaB * 512u;
+                    bool cero = true;
+                    for (u32 bx = 0; bx < 512u && cero; bx += 8u)
+                        cero = *reinterpret_cast<const u64*>(fila + bx) == 0u;
+                    if (cero)
+                    {
+                        u16* px = reinterpret_cast<u16*>(fila);
+                        for (u32 bx = 0; bx < 256u; bx++)
+                            px[bx] = 0xFC1Fu;
+                    }
+                }
+            }
+            const u8 cnt = cntBanco(bancoCap);
+            if ((cnt & 0x80u) != 0u)
+            {
+                const u32 mst = cnt & 0x7u;
+                const u32 ofs = (cnt >> 3) & 0x3u;
+                size_t destinoFlat = SIZE_MAX;
+                if (mst == 1u)
+                    destinoFlat = kFaithfulAtlasABG + ((size_t)ofs << 17);
+                else if (mst == 2u && bancoCap < 2u)
+                    destinoFlat = kFaithfulAtlasAOBJ + ((size_t)(ofs & 1u) << 17);
+                else if (mst == 4u && bancoCap == 2u)
+                    destinoFlat = kFaithfulAtlasBBG;
+                else if (mst == 4u && bancoCap == 3u)
+                    destinoFlat = kFaithfulAtlasBOBJ;
+                if (destinoFlat != SIZE_MAX)
+                    copyPre(atlas + destinoFlat, gpu.VRAM[bancoCap], 0x20000u);
+                if (logTail)
+                    fprintf(stderr,
+                            "[tail]   empuje banco=%u cnt=%02X mst=%u ofs=%u flat=%zX\n",
+                            bancoCap, cnt, mst, ofs, destinoFlat);
+            }
+            else if (logTail)
+                fprintf(stderr, "[tail]   empuje banco=%u cnt=%02X SIN habilitar\n",
+                        bancoCap, cnt);
+            if (capDestActual == capDestPrevio) break;
+        }
+        capDestPrevio = capDestActual;
+        bool* bancosCebados = faithfulBancosCebados[ranuraPre];
+        for (u32 banco = 0; banco < 4u; banco++)
+        {
+
+            const u8 cnt = gpu.VRAMCNT[banco];
+            const bool lcdc = (cnt & 0x80u) != 0u && (cnt & 0x07u) == 0u;
+            u8* dstB = atlas + kFaithfulAtlasBancos + (size_t)banco * 0x20000u;
+            if (!lcdc) { bancosCebados[banco] = false; continue; }
+
+            auto& sucio = gpu.VRAMDirty_LCDC[banco];
+            for (u32 w = 0; w < 4u; w++)
+                for (u32 j = 0; j < kFielRanuras; j++)
+                    faithfulPendiente[j].Bancos[banco][w] |= sucio.Data[w];
+            sucio.Clear();
+            if (!bancosCebados[banco])
+            {
+                copyPre(dstB, gpu.VRAM[banco], 0x20000u);
+                bancosCebados[banco] = true;
+                std::memset(faithfulPendiente[ranuraPre].Bancos[banco], 0,
+                            sizeof(faithfulPendiente[ranuraPre].Bancos[banco]));
+                continue;
+            }
+            for (u32 w = 0; w < 4u; w++)
+            {
+                u64 bits = faithfulPendiente[ranuraPre].Bancos[banco][w];
+                faithfulPendiente[ranuraPre].Bancos[banco][w] = 0u;
+                while (bits != 0u)
+                {
+                    const int b2 = __builtin_ctzll(bits);
+                    bits &= bits - 1u;
+                    const size_t off = ((w * 64u) + (size_t)b2) * 512u;
+                    if (off < 0x20000u)
+                        copyPre(dstB + off, (const u8*)gpu.VRAM[banco] + off, 512u);
+                }
+            }
+        }
+    }
+
+    for (u32 par = 0; par < 2u; par++)
+    {
+        const u32 seqCap = sr->GetFaithfulCapEscritaSeq(par);
+        if (faithfulCapStashSeqVista[ranuraPre][par] != seqCap
+            || !faithfulAtlasPrimed[ranuraPre])
+        {
+            copyPre(atlas + kFaithfulAtlasCapStash + (size_t)par * 0x18000u,
+                        sr->GetFaithfulCapEscrita(par), 0x18000u);
+            faithfulCapStashSeqVista[ranuraPre][par] = seqCap;
+        }
+    }
+
+    sr->ClearFaithfulDirty();
+    faithfulPreListo = true;
+
+    if (const char* prefF = getenv("MELON_VOLCAR_FLATS"))
+    {
+        static u32 nF = 0;
+        char rutaF[512];
+        const struct { const char* n; const void* p; size_t t; } vols[] = {
+            {"bbg", gpu.VRAMFlat_BBG, sizeof(gpu.VRAMFlat_BBG)},
+            {"bobj", gpu.VRAMFlat_BOBJ, sizeof(gpu.VRAMFlat_BOBJ)},
+            {"abg", gpu.VRAMFlat_ABG, sizeof(gpu.VRAMFlat_ABG)},
+            {"bH", gpu.VRAM_H, sizeof(gpu.VRAM_H)},
+            {"bI", gpu.VRAM_I, sizeof(gpu.VRAM_I)},
+        };
+        for (const auto& v : vols)
+        {
+            std::snprintf(rutaF, sizeof(rutaF), "%s-%u-%s.bin", prefF, nF, v.n);
+            if (FILE* f = std::fopen(rutaF, "wb"))
+            { std::fwrite(v.p, 1, v.t, f); std::fclose(f); }
+        }
+        nF++;
+    }
+}
+
+bool VulkanOutput::uploadFaithfulCaptureRecipeLocked(
+    const FaithfulCaptureMaterializationNode& node, u32 targetSlot)
+{
+    if (faithfulRing >= kFielRanuras || targetSlot >= 4u
+        || faithfulCausalMapped[faithfulRing] == nullptr
+        || node.product == nullptr)
+    {
+        return false;
+    }
+
+    u8* const bytes = static_cast<u8*>(
+        faithfulCausalMapped[faithfulRing]);
+
+    auto* const recipeMarker = reinterpret_cast<
+        FaithfulCausalCaptureRecipeHeaderGpu*>(
+            bytes + kFaithfulCausalCaptureRecipeHeaderOffset);
+    recipeMarker->Valid = 0u;
+    std::atomic_thread_fence(std::memory_order_release);
+
+    const auto& record = *node.product;
+    const auto& product = record.Metadata;
+    if (!product.Valid
+        || !product.MaterialComplete
+        || !product.CausalMetadataComplete
+        || !product.RecipeComplete
+        || !product.Complete
+        || product.ProductEpoch == 0u
+        || product.ProductId == 0u
+        || product.Width != kFaithfulCausalScreenWidth
+        || product.Height != kFaithfulCausalScreenHeight)
+    {
+        return false;
+    }
+
+    using RecipeEncoding = melonDS::GPU2D::SoftRenderer::
+        FaithfulCaptureRecipeEncoding;
+    const bool sourceAOnly =
+        record.RecipeEncoding == RecipeEncoding::SourceAOnly;
+    if (record.RecipeEncoding != RecipeEncoding::FullSourceAB
+        && !sourceAOnly)
+    {
+        return false;
+    }
+    const u8 captureMode = static_cast<u8>(
+        (product.CaptureCnt >> 29u) & 0x3u);
+    const u8 effectiveEva = static_cast<u8>(std::min<u32>(
+        product.CaptureCnt & 0x1Fu, 16u));
+    const u8 effectiveEvb = static_cast<u8>(std::min<u32>(
+        (product.CaptureCnt >> 8u) & 0x1Fu, 16u));
+    if (sourceAOnly
+        && !(captureMode == 0u
+            || (captureMode >= 2u
+                && effectiveEva != 0u && effectiveEvb == 0u)))
+    {
+        return false;
+    }
+
+    const auto low32 = [](u64 value) -> u32 {
+        return static_cast<u32>(value & 0xFFFFFFFFull);
+    };
+    const auto high32 = [](u64 value) -> u32 {
+        return static_cast<u32>(value >> 32u);
+    };
+
+    struct ParentResolution
+    {
+        u64 epoch = 0u;
+        u64 id = 0u;
+        u32 slot = 4u;
+        u32 width = 0u;
+        u32 height = 0u;
+        bool native = false;
+        bool reject = false;
+    };
+    std::array<ParentResolution, 4> parentTable {};
+    size_t parentTableCount = 0u;
+    const auto residentSlotOf = [&](u64 epoch, u64 id) -> u32 {
+        for (u32 slot = 0u; slot < 4u; slot++)
+        {
+            const auto& resident = capHighresProducto[slot];
+            if (capHighresSlotState[slot]
+                    != FaithfulCaptureSlotState::Empty
+                && resident.valid && resident.complete
+                && resident.highresEligible && resident.materialComplete
+                && resident.causalMetadataComplete
+                && resident.recipeComplete
+                && resident.productEpoch == epoch
+                && resident.productId == id)
+            {
+
+                return slot;
+            }
+        }
+        return 4u;
+    };
+    for (const auto& parentKey : record.DirectCaptureParents)
+    {
+        if (parentTableCount >= parentTable.size())
+            return false;
+        ParentResolution entry {};
+        entry.epoch = parentKey.Epoch;
+        entry.id = parentKey.Id;
+        entry.slot = residentSlotOf(parentKey.Epoch, parentKey.Id);
+        const FaithfulCaptureMaterializationNode::Key key{
+            parentKey.Epoch, parentKey.Id};
+        const bool frontier = entry.slot >= 4u
+            && std::find(node.nativeFrontiers.begin(),
+                   node.nativeFrontiers.end(), key)
+                != node.nativeFrontiers.end();
+        const auto held = std::find_if(
+            node.directCaptureParents.begin(),
+            node.directCaptureParents.end(),
+            [&](const auto& parent) {
+                return parent != nullptr
+                    && parent->Metadata.ProductEpoch == parentKey.Epoch
+                    && parent->Metadata.ProductId == parentKey.Id;
+            });
+        const melonDS::GPU2D::SoftRenderer::FaithfulCaptureProductRecord* parent =
+            held != node.directCaptureParents.end() ? held->get() : nullptr;
+        if (frontier)
+        {
+
+            entry.native = true;
+            entry.width = kFaithfulCausalScreenWidth;
+            entry.height = kFaithfulCausalScreenHeight;
+        }
+        else if (parent == nullptr)
+        {
+
+            if (entry.slot >= 4u)
+                entry.reject = true;
+            else
+            {
+                entry.width = capHighresProducto[entry.slot].width;
+                entry.height = capHighresProducto[entry.slot].height;
+            }
+        }
+        else if (!parent->Metadata.Valid
+                 || !parent->Metadata.MaterialComplete
+                 || !parent->Metadata.Complete)
+        {
+            entry.reject = true;
+        }
+        else if (!parent->Metadata.Uses3d)
+        {
+            entry.native = true;
+            entry.width = parent->Metadata.Width;
+            entry.height = parent->Metadata.Height;
+        }
+        else if (!parent->Metadata.HighresEligible
+                 || !parent->Metadata.CausalMetadataComplete
+                 || !parent->Metadata.RecipeComplete
+                 || entry.slot >= 4u || entry.slot == targetSlot)
+        {
+            entry.reject = true;
+        }
+        else
+        {
+            entry.width = parent->Metadata.Width;
+            entry.height = parent->Metadata.Height;
+        }
+        parentTable[parentTableCount++] = entry;
+    }
+
+    auto* const gpuRecipeLines = reinterpret_cast<
+        FaithfulCausalCaptureRecipeLineGpu*>(
+            bytes + kFaithfulCausalCaptureRecipeLineOffset);
+    for (size_t y = 0u; y < kFaithfulCausalScreenHeight; y++)
+    {
+        const auto& src = record.CausalLines[y];
+        if (sourceAOnly
+            && (!src.Exact
+                || src.ProductEpoch != product.ProductEpoch
+                || src.ProductId != product.ProductId
+                || src.CaptureLine != y
+                || src.CaptureMode != captureMode
+                || src.Eva != effectiveEva
+                || src.Evb != effectiveEvb
+                || src.SourceA == melonDS::GPU2D::SoftRenderer::
+                    FaithfulCaptureSourceAKind::None
+                || src.SourceB != melonDS::GPU2D::SoftRenderer::
+                    FaithfulCaptureSourceBKind::None
+                || src.SourceBLineage != melonDS::GPU2D::SoftRenderer::
+                    FaithfulCaptureSourceBLineage::NotApplicable
+                || src.SourceBCaptureProductEpoch != 0u
+                || src.SourceBCaptureProductId != 0u
+                || src.SourceBLineOffsetPixels != 0u
+                || src.SourceBCaptureSourceXBase != 0xFFFFu
+                || src.SourceBCaptureSourceY != 0xFFFFu
+                || src.SourceBBank != 0xFFu
+                || src.SourceB3dResolved
+                || src.SourceBUses3d
+                || src.SourceBHasCaptureProduct))
+        {
+            return false;
+        }
+        auto& dst = gpuRecipeLines[y];
+        dst.Flags = (src.Exact ? 1u : 0u)
+            | (static_cast<u32>(src.SourceA) << 8u)
+            | (static_cast<u32>(src.SourceB) << 12u)
+            | (static_cast<u32>(src.SourceBLineage) << 16u)
+            | (src.SourceB3dResolved ? (1u << 20u) : 0u)
+            | (src.SourceBUses3d ? (1u << 21u) : 0u)
+            | (src.SourceARenderProduct.Valid ? (1u << 22u) : 0u);
+        dst.SourceCoordinates =
+            static_cast<u32>(src.SourceARenderXPos)
+            | (static_cast<u32>(src.SourceARenderY) << 16u);
+        dst.RenderEpochLo = low32(src.SourceARenderProduct.Epoch);
+        dst.RenderEpochHi = high32(src.SourceARenderProduct.Epoch);
+        dst.RenderSequenceLo = low32(src.SourceARenderProduct.Sequence);
+        dst.RenderSequenceHi = high32(src.SourceARenderProduct.Sequence);
+        dst.CaptureParameters = static_cast<u32>(src.CaptureMode)
+            | (static_cast<u32>(src.Eva) << 8u)
+            | (static_cast<u32>(src.Evb) << 16u)
+            | (static_cast<u32>(src.SourceBBank) << 24u);
+        dst.SourceBLineOffsetPixels = src.SourceBLineOffsetPixels;
+    }
+
+    if (sourceAOnly)
+    {
+        if (record.SourceARecipe.size()
+                != kFaithfulCausalScreenWidth
+                    * kFaithfulCausalScreenHeight
+            || !record.FullSourceABRecipe.empty())
+        {
+            return false;
+        }
+        auto* const compact = reinterpret_cast<
+            FaithfulCausalCaptureRecipeSourceAGpu*>(
+                bytes + kFaithfulCausalCaptureRecipePixelOffset);
+        std::memcpy(
+            compact, record.SourceARecipe.data(),
+            record.SourceARecipe.size()
+                * sizeof(record.SourceARecipe[0]));
+    }
+    else
+    {
+        if (record.FullSourceABRecipe.size()
+                != kFaithfulCausalScreenWidth
+                    * kFaithfulCausalScreenHeight
+            || !record.SourceARecipe.empty())
+        {
+            return false;
+        }
+
+        using PixelRecipe =
+            melonDS::GPU2D::SoftRenderer::FaithfulCapturePixelRecipe;
+        constexpr u32 kKindCaptureProduct = static_cast<u32>(
+            melonDS::GPU2D::SoftRenderer::
+                FaithfulCaptureSourceBPixelKind::CaptureProduct);
+        constexpr u32 kKindAmbiguous = static_cast<u32>(
+            melonDS::GPU2D::SoftRenderer::
+                FaithfulCaptureSourceBPixelKind::Ambiguous);
+        constexpr u32 kKindNative = static_cast<u32>(
+            melonDS::GPU2D::SoftRenderer::
+                FaithfulCaptureSourceBPixelKind::Native);
+        auto* const uploadedRecipe = reinterpret_cast<PixelRecipe*>(
+            bytes + kFaithfulCausalCaptureRecipePixelOffset);
+        const PixelRecipe* const hostRecipe = record.FullSourceABRecipe.data();
+        for (size_t y = 0u; y < kFaithfulCausalScreenHeight; y++)
+        {
+            const size_t lineStart = y * kFaithfulCausalScreenWidth;
+            const PixelRecipe* const srcLine = hostRecipe + lineStart;
+            PixelRecipe* const dstLine = uploadedRecipe + lineStart;
+            if (!record.CausalLines[y].SourceBHasCaptureProduct)
+            {
+
+                bool plain = true;
+                for (size_t x = 0u; plain && x < kFaithfulCausalScreenWidth; x++)
+                {
+                    const u32 valueKind = srcLine[x].SourceBValueKind;
+                    if ((valueKind & (1u << 24u)) == 0u
+                        || ((valueKind >> 16u) & 0xFFu) == kKindAmbiguous)
+                    {
+                        return false;
+                    }
+                    plain = ((valueKind >> 16u) & 0xFFu) != kKindCaptureProduct;
+                }
+                if (plain)
+                {
+                    std::memcpy(dstLine, srcLine,
+                        kFaithfulCausalScreenWidth * sizeof(PixelRecipe));
+                    continue;
+                }
+            }
+            for (size_t x = 0u; x < kFaithfulCausalScreenWidth; x++)
+            {
+                PixelRecipe operand = srcLine[x];
+                const u32 kind = (operand.SourceBValueKind >> 16u) & 0xFFu;
+                if ((operand.SourceBValueKind & (1u << 24u)) == 0u
+                    || kind == kKindAmbiguous)
+                {
+                    return false;
+                }
+                if (kind == kKindCaptureProduct)
+                {
+                    const ParentResolution* entry = nullptr;
+                    for (size_t i = 0u; i < parentTableCount; i++)
+                    {
+                        if (parentTable[i].epoch == operand.SourceBProductEpoch
+                            && parentTable[i].id == operand.SourceBProductId)
+                        {
+                            entry = &parentTable[i];
+                            break;
+                        }
+                    }
+                    if (entry == nullptr || entry->reject)
+                        return false;
+                    const u32 sourceX = operand.SourceBCoordinates & 0xFFFFu;
+                    const u32 sourceY = operand.SourceBCoordinates >> 16u;
+                    if (sourceX >= entry->width || sourceY >= entry->height)
+                        return false;
+                    if (entry->native)
+                    {
+                        operand.SourceBValueKind =
+                            (operand.SourceBValueKind & 0xFF00FFFFu)
+                            | (kKindNative << 16u);
+                        operand.SourceBSlot = 0u;
+                    }
+                    else
+                    {
+                        operand.SourceBSlot = entry->slot + 1u;
+                    }
+                }
+                dstLine[x] = operand;
+            }
+        }
+    }
+
+    const bool hasBackground = !record.SourceABackground.empty();
+    if (hasBackground)
+    {
+        using BackgroundOperand = melonDS::GPU2D::SoftRenderer::
+            FaithfulCaptureBackgroundOperand;
+        if (record.SourceABackground.size()
+                != kFaithfulCausalScreenWidth * kFaithfulCausalScreenHeight
+            || (product.CaptureCnt & (1u << 24u)) != 0u)
+            return false;
+        auto* const destination = reinterpret_cast<BackgroundOperand*>(
+            bytes + kFaithfulCausalCaptureBackgroundOffset);
+        for (size_t pixel = 0u; pixel < record.SourceABackground.size(); pixel++)
+        {
+            auto operand = record.SourceABackground[pixel];
+            if (operand.ProductId != 0u)
+            {
+                const ParentResolution* entry = nullptr;
+                for (size_t i = 0u; i < parentTableCount; i++)
+                {
+                    if (parentTable[i].epoch == product.ProductEpoch
+                        && parentTable[i].id == operand.ProductId)
+                    {
+                        entry = &parentTable[i];
+                        break;
+                    }
+                }
+                if (entry == nullptr || entry->reject
+                    || (operand.Coordinates & 0xFFFFu) >= entry->width
+                    || (operand.Coordinates >> 16u) >= entry->height)
+                    return false;
+                if (entry->native)
+                    operand = {};
+                else
+                    operand.Slot = entry->slot + 1u;
+            }
+            destination[pixel] = operand;
+        }
+    }
+
+    std::memcpy(bytes + kFaithfulCausalCaptureMaterialOffset,
+                record.Material.data(),
+                record.Material.size() * sizeof(record.Material[0]));
+
+    FaithfulCausalCaptureRecipeHeaderGpu recipeHeader{};
+    recipeHeader.Version = sourceAOnly ? 3u : 2u;
+    recipeHeader.ProductEpochLo = low32(product.ProductEpoch);
+    recipeHeader.ProductEpochHi = high32(product.ProductEpoch);
+    recipeHeader.ProductIdLo = low32(product.ProductId);
+    recipeHeader.ProductIdHi = high32(product.ProductId);
+    recipeHeader.CaptureCnt = product.CaptureCnt;
+    recipeHeader.Dimensions = static_cast<u32>(product.Width)
+        | (static_cast<u32>(product.Height) << 16u);
+    recipeHeader.LineOffsetWords = static_cast<u32>(
+        kFaithfulCausalCaptureRecipeLineOffset / sizeof(u32));
+    recipeHeader.PixelOffsetWords = static_cast<u32>(
+        kFaithfulCausalCaptureRecipePixelOffset / sizeof(u32));
+    recipeHeader.LineCount = product.Height;
+    recipeHeader.Flags = (product.Valid ? 1u : 0u)
+        | (product.MaterialComplete ? (1u << 1u) : 0u)
+        | (product.CausalMetadataComplete ? (1u << 2u) : 0u)
+        | (product.RecipeComplete ? (1u << 3u) : 0u)
+        | (product.Complete ? (1u << 4u) : 0u)
+        | (product.HighresEligible ? (1u << 5u) : 0u)
+        | (product.Uses3d ? (1u << 6u) : 0u)
+        | (product.SourceIdentity.Valid ? (1u << 7u) : 0u)
+        | (sourceAOnly ? (1u << 8u) : 0u)
+        | (hasBackground ? (1u << 9u) : 0u);
+    recipeHeader.RenderEpochLo = low32(
+        product.SourceIdentity.RenderProductEpoch);
+    recipeHeader.RenderEpochHi = high32(
+        product.SourceIdentity.RenderProductEpoch);
+    recipeHeader.RenderSequenceLo = low32(product.SourceIdentity.Sequence);
+    recipeHeader.RenderSequenceHi = high32(product.SourceIdentity.Sequence);
+    recipeHeader.Valid = 0u;
+    std::memcpy(bytes + kFaithfulCausalCaptureRecipeHeaderOffset,
+                &recipeHeader, sizeof(recipeHeader));
+    std::atomic_thread_fence(std::memory_order_release);
+    reinterpret_cast<FaithfulCausalCaptureRecipeHeaderGpu*>(
+        bytes + kFaithfulCausalCaptureRecipeHeaderOffset)->Valid = 1u;
+    return true;
+}
+
+void VulkanOutput::uploadFaithfulCausalPrevLocked(melonDS::GPU& gpu)
+{
+    if (faithfulRing < kFielRanuras)
+        faithfulCapturePlans[faithfulRing].reset();
+    if (faithfulRing >= kFielRanuras
+        || faithfulCausalMapped[faithfulRing] == nullptr)
+    {
+        return;
+    }
+
+    u8* const bytes = static_cast<u8*>(faithfulCausalMapped[faithfulRing]);
+    auto* const headerMarker =
+        reinterpret_cast<FaithfulCausalHeaderGpu*>(bytes);
+    auto* const boundLiveMarker =
+        reinterpret_cast<FaithfulCausalBoundLiveGpu*>(
+            bytes + kFaithfulCausalBoundLiveOffset);
+    auto* const recipeMarker =
+        reinterpret_cast<FaithfulCausalCaptureRecipeHeaderGpu*>(
+            bytes + kFaithfulCausalCaptureRecipeHeaderOffset);
+    headerMarker->Valid = 0u;
+    boundLiveMarker->Valid = 0u;
+    recipeMarker->Valid = 0u;
+    std::atomic_thread_fence(std::memory_order_release);
+
+    auto* const sr = dynamic_cast<melonDS::GPU2D::SoftRenderer*>(
+        &gpu.GetRenderer2D());
+    if (sr == nullptr)
+        return;
+
+    const auto low32 = [](u64 value) -> u32 {
+        return static_cast<u32>(value & 0xFFFFFFFFull);
+    };
+    const auto high32 = [](u64 value) -> u32 {
+        return static_cast<u32>(value >> 32u);
+    };
+    const u64 captureEpoch = gpu.GetFaithfulCaptureProductEpoch();
+
+    using PhysicalScreen = melonDS::GPU2D::PhysicalScreen;
+    const auto* const routesTop = sr->GetFaithfulPrevPhysicalScanoutLines(
+        PhysicalScreen::Top);
+    const auto* const routesBottom = sr->GetFaithfulPrevPhysicalScanoutLines(
+        PhysicalScreen::Bottom);
+    const auto* const liveTop = sr->GetFaithfulPrevLiveRenderProductLines(
+        PhysicalScreen::Top);
+    const auto* const liveBottom = sr->GetFaithfulPrevLiveRenderProductLines(
+        PhysicalScreen::Bottom);
+    const u64 routeGeneration =
+        sr->GetFaithfulPrevPhysicalScanoutGeneration();
+    const auto routeUnavailable = [&](const char* reason) {
+        if (std::getenv("MELON_SONDA_RUTA_FISICA") != nullptr
+            || std::getenv("MELON_SONDA_REGISTRY") != nullptr)
+        {
+            std::fprintf(stderr,
+                "[causal-route] valid=0 full=0 reason=%s epoch=%llu "
+                "generation=%llu\n",
+                reason, static_cast<unsigned long long>(captureEpoch),
+                static_cast<unsigned long long>(routeGeneration));
+        }
+    };
+    if (captureEpoch == 0u || routeGeneration == 0u
+        || routesTop == nullptr || routesBottom == nullptr
+        || liveTop == nullptr || liveBottom == nullptr)
+    {
+        routeUnavailable("unavailable");
+        return;
+    }
+    bool routesExact = true;
+    u8 scanoutBackBuffer = 0xFFu;
+    for (size_t y = 0u; y < kFaithfulCausalScreenHeight; y++)
+    {
+        const auto& top = routesTop[y];
+        const auto& bottom = routesBottom[y];
+        if (y == 0u && top.Valid && top.Route.Valid)
+            scanoutBackBuffer = top.Route.BackBuffer;
+        routesExact = routesExact
+            && top.Valid && top.Route.Valid
+            && top.Route.Screen == PhysicalScreen::Top
+            && top.Route.Engine < 2u && top.Route.BackBuffer < 2u
+            && bottom.Valid && bottom.Route.Valid
+            && bottom.Route.Screen == PhysicalScreen::Bottom
+            && bottom.Route.Engine < 2u && bottom.Route.BackBuffer < 2u
+            && top.Route.Engine != bottom.Route.Engine
+            && top.Route.BackBuffer == bottom.Route.BackBuffer
+            && top.Route.BackBuffer == scanoutBackBuffer;
+    }
+    if (!routesExact)
+    {
+        routeUnavailable("incomplete");
+        return;
+    }
+
+    const auto packRoute = [](const auto& metadata) -> u32 {
+        return (metadata.Valid ? 1u : 0u)
+            | (metadata.Route.Valid ? 2u : 0u)
+            | (static_cast<u32>(metadata.Route.Engine) << 8u)
+            | (static_cast<u32>(metadata.Route.Screen) << 16u)
+            | (static_cast<u32>(metadata.Route.BackBuffer) << 24u);
+    };
+    const auto packLive = [](const auto& metadata) -> u32 {
+        return (metadata.Valid ? 1u : 0u)
+            | (metadata.Route.Valid ? 2u : 0u)
+            | (metadata.Product.Valid ? 4u : 0u)
+            | (metadata.Direct3DEnabled ? 8u : 0u)
+            | (metadata.ForceBlank ? 16u : 0u)
+            | (static_cast<u32>(metadata.Route.Engine) << 8u)
+            | (static_cast<u32>(metadata.Route.Screen) << 16u)
+            | (static_cast<u32>(metadata.Route.BackBuffer) << 24u);
+    };
+    auto* const gpuLines = reinterpret_cast<FaithfulCausalRouteLiveGpu*>(
+        bytes + kFaithfulCausalRouteOffset);
+    const auto uploadScreenLines = [&](size_t screen,
+                                       const auto* routes,
+                                       const auto* live) {
+        for (size_t y = 0u; y < kFaithfulCausalScreenHeight; y++)
+        {
+            const auto& route = routes[y];
+            const auto& liveLine = live[y];
+            FaithfulCausalRouteLiveGpu& dst =
+                gpuLines[screen * kFaithfulCausalScreenHeight + y];
+            dst.RouteFlags = packRoute(route);
+            dst.LiveFlags = packLive(liveLine);
+            dst.LogicalVCounts = static_cast<u32>(route.LogicalVCount)
+                | (static_cast<u32>(liveLine.LogicalVCount) << 16u);
+            dst.SourceCoordinates =
+                static_cast<u32>(static_cast<u16>(liveLine.SourceXBase))
+                | (static_cast<u32>(liveLine.SourceY) << 16u);
+            dst.ProductEpochLo = low32(liveLine.Product.Epoch);
+            dst.ProductEpochHi = high32(liveLine.Product.Epoch);
+            dst.ProductSequenceLo = low32(liveLine.Product.Sequence);
+            dst.ProductSequenceHi = high32(liveLine.Product.Sequence);
+        }
+    };
+    uploadScreenLines(0u, routesTop, liveTop);
+    uploadScreenLines(1u, routesBottom, liveBottom);
+
+    FaithfulCausalHeaderGpu routeHeader{};
+    routeHeader.Version = kFaithfulCausalAbiVersion;
+    routeHeader.GenerationLo = low32(routeGeneration);
+    routeHeader.GenerationHi = high32(routeGeneration);
+    routeHeader.CaptureEpochLo = low32(captureEpoch);
+    routeHeader.CaptureEpochHi = high32(captureEpoch);
+    routeHeader.RouteLineCount =
+        static_cast<u32>(kFaithfulCausalRouteLineCount);
+    routeHeader.VisiblePixelCount =
+        static_cast<u32>(kFaithfulCausalVisiblePixelCount);
+    routeHeader.RouteOffsetWords =
+        static_cast<u32>(kFaithfulCausalRouteOffset / sizeof(u32));
+    routeHeader.LineageOffsetWords =
+        static_cast<u32>(kFaithfulCausalLineageOffset / sizeof(u32));
+    routeHeader.ProductOffsetWords =
+        static_cast<u32>(kFaithfulCausalProductOffset / sizeof(u32));
+    routeHeader.TotalWords =
+        static_cast<u32>(kFaithfulCausalBufferSize / sizeof(u32));
+    routeHeader.Valid = kFaithfulCausalHeaderRoutesValid;
+    std::atomic_thread_fence(std::memory_order_release);
+    std::memcpy(bytes, &routeHeader, sizeof(routeHeader));
+    const auto keepRouteOnly = [&](const char* reason) {
+        if (std::getenv("MELON_SONDA_RUTA_FISICA") != nullptr
+            || std::getenv("MELON_SONDA_REGISTRY") != nullptr)
+        {
+            std::fprintf(stderr,
+                "[causal-route] valid=1 full=0 reason=%s epoch=%llu "
+                "generation=%llu lines=%zu\n",
+                reason, static_cast<unsigned long long>(captureEpoch),
+                static_cast<unsigned long long>(routeGeneration),
+                kFaithfulCausalRouteLineCount);
+        }
+    };
+
+    const auto* const rowsTop = sr->GetFaithfulPrevVisibleLineageRows(
+        PhysicalScreen::Top);
+    const auto* const rowsBottom = sr->GetFaithfulPrevVisibleLineageRows(
+        PhysicalScreen::Bottom);
+    const auto* const lineageTop = sr->GetFaithfulPrevVisibleDensePixelLineage(
+        PhysicalScreen::Top);
+    const auto* const lineageBottom = sr->GetFaithfulPrevVisibleDensePixelLineage(
+        PhysicalScreen::Bottom);
+    const auto* const productTable = sr->GetFaithfulPrevVisibleProductTable();
+    const u16 productCount = sr->GetFaithfulPrevVisibleProductCount();
+    const u64 generation = sr->GetFaithfulPrevVisibleLineageGeneration();
+    const bool visibleAllNative = sr->IsFaithfulPrevVisibleAllNative();
+    if (generation == 0u || generation != routeGeneration
+        || (!visibleAllNative
+            && (rowsTop == nullptr || rowsBottom == nullptr
+                || lineageTop == nullptr || lineageBottom == nullptr
+                || productTable == nullptr || productCount < 2u
+                || static_cast<size_t>(productCount)
+                    > kFaithfulCausalProductCapacity)))
+    {
+        keepRouteOnly("lineage");
+        return;
+    }
+
+    const auto* const requiredTerminals =
+        sr->GetFaithfulRequiredCaptureTerminals();
+    const u8 requiredTerminalCount =
+        sr->GetFaithfulRequiredCaptureTerminalCount();
+    const u64 requiredTerminalEpoch =
+        sr->GetFaithfulRequiredCaptureTerminalEpoch();
+    const u64 requiredTerminalGeneration =
+        sr->GetFaithfulRequiredCaptureTerminalGeneration();
+    const auto rejectTerminalAck = [&](const char* reason) {
+        if (std::getenv("MELON_SONDA_REGISTRY") != nullptr)
+        {
+            std::fprintf(stderr,
+                "[capture-terminal-ack] accepted=0 reason=%s "
+                "captureEpoch=%llu published=%llu:%llu/%u "
+                "required=%llu:%llu/%u\n",
+                reason,
+                static_cast<unsigned long long>(captureEpoch),
+                static_cast<unsigned long long>(
+                    faithfulPublishedCaptureTerminalEpoch),
+                static_cast<unsigned long long>(
+                    faithfulPublishedCaptureTerminalGeneration),
+                static_cast<unsigned>(faithfulPublishedCaptureTerminalCount),
+                static_cast<unsigned long long>(requiredTerminalEpoch),
+                static_cast<unsigned long long>(requiredTerminalGeneration),
+                static_cast<unsigned>(requiredTerminalCount));
+        }
+    };
+    if (captureEpoch == 0u || requiredTerminalCount > 4u
+        || faithfulPublishedCaptureTerminalCount > 4u
+        || faithfulPublishedCaptureTerminalEpoch == 0u
+        || requiredTerminalEpoch == 0u
+        || faithfulPublishedCaptureTerminalEpoch != captureEpoch
+        || requiredTerminalEpoch != captureEpoch
+        || faithfulPublishedCaptureTerminalGeneration == 0u
+        || requiredTerminalGeneration
+            != faithfulPublishedCaptureTerminalGeneration
+        || (requiredTerminalCount != 0u && requiredTerminals == nullptr))
+    {
+
+        rejectTerminalAck("envelope");
+        keepRouteOnly("terminal-envelope");
+        return;
+    }
+    std::vector<FaithfulCaptureMaterializationNode::Key>
+        handshakeRequired {};
+    for (u8 index = 0u; index < requiredTerminalCount; index++)
+    {
+        const auto& key = requiredTerminals[index];
+        if (!key.Valid() || key.Epoch != captureEpoch)
+        {
+            rejectTerminalAck("required-key");
+            keepRouteOnly("terminal-key");
+            return;
+        }
+        if (std::find(handshakeRequired.begin(), handshakeRequired.end(),
+                FaithfulCaptureMaterializationNode::Key{key.Epoch, key.Id})
+            != handshakeRequired.end())
+        {
+            rejectTerminalAck("required-duplicate");
+            keepRouteOnly("terminal-duplicate");
+            return;
+        }
+        const bool published = std::find_if(
+            faithfulPublishedCaptureTerminals.begin(),
+            faithfulPublishedCaptureTerminals.begin()
+                + faithfulPublishedCaptureTerminalCount,
+            [&](const auto& candidate) {
+                return candidate.epoch == key.Epoch
+                    && candidate.id == key.Id;
+            }) != faithfulPublishedCaptureTerminals.begin()
+                + faithfulPublishedCaptureTerminalCount;
+        if (!published)
+        {
+            rejectTerminalAck("required-not-published");
+            keepRouteOnly("terminal-not-published");
+            return;
+        }
+        handshakeRequired.push_back({key.Epoch, key.Id});
+    }
+    std::sort(handshakeRequired.begin(), handshakeRequired.end());
+    faithfulRequiredCaptureTerminals.fill({});
+    faithfulRequiredCaptureTerminalCount = static_cast<u8>(
+        handshakeRequired.size());
+    faithfulRequiredCaptureTerminalGeneration =
+        requiredTerminalGeneration;
+    faithfulRequiredCaptureTerminalEpoch = requiredTerminalEpoch;
+    const u8 acknowledgedPublishedCount =
+        faithfulPublishedCaptureTerminalCount;
+    for (size_t index = 0u; index < handshakeRequired.size(); index++)
+    {
+        faithfulRequiredCaptureTerminals[index] = {
+            handshakeRequired[index].epoch, handshakeRequired[index].id};
+    }
+
+    faithfulPublishedCaptureTerminals.fill({});
+    faithfulPublishedCaptureTerminalCount = 0u;
+    faithfulPublishedCaptureTerminalEpoch = 0u;
+    faithfulPublishedCaptureTerminalGeneration = 0u;
+    if (std::getenv("MELON_SONDA_REGISTRY") != nullptr)
+    {
+        std::fprintf(stderr,
+            "[capture-terminal-ack] accepted=1 epoch=%llu generation=%llu "
+            "published=%u required=%u subset=1 required0=%llu\n",
+            static_cast<unsigned long long>(requiredTerminalEpoch),
+            static_cast<unsigned long long>(requiredTerminalGeneration),
+            static_cast<unsigned>(acknowledgedPublishedCount),
+            static_cast<unsigned>(faithfulRequiredCaptureTerminalCount),
+            static_cast<unsigned long long>(
+                faithfulRequiredCaptureTerminalCount != 0u
+                    ? faithfulRequiredCaptureTerminals[0].id : 0u));
+    }
+
+    auto plan = std::make_shared<FaithfulCaptureMaterializationPlan>();
+    plan->generation = generation;
+    plan->captureEpoch = captureEpoch;
+    plan->requiredTerminals = handshakeRequired;
+    const auto residentCaptureSlot = [&](const auto& key) -> u32 {
+        if (!key.valid())
+            return 4u;
+        for (u32 slot = 0u; slot < 4u; slot++)
+        {
+            const auto& resident = capHighresProducto[slot];
+            if (capHighresSlotState[slot]
+                    != FaithfulCaptureSlotState::Empty
+                && resident.valid && resident.complete
+                && resident.highresEligible && resident.materialComplete
+                && resident.causalMetadataComplete
+                && resident.recipeComplete
+                && resident.productEpoch == key.epoch
+                && resident.productId == key.id)
+            {
+
+                return slot;
+            }
+        }
+        return 4u;
+    };
+    bool visibleLineageExact = true;
+    std::array<bool, kFaithfulCausalProductCapacity> visibleRootSeen{};
+    const auto appendVisibleRoot = [&](const auto& visible,
+                                       u32 horizontalSpan) {
+        const u32 handle = visible.OperandA & 0xFFFFu;
+            const u32 sourceX = (visible.OperandA >> 16u) & 0xFFu;
+            const u32 sourceY = (visible.OperandA >> 24u) & 0xFFu;
+            const u32 compositeOp = visible.Control & 0x7u;
+            const u32 postEffect = (visible.Control >> 3u) & 0x3u;
+            const bool exact = (visible.Control & (1u << 6u)) != 0u;
+            const u32 handleB = visible.OperandB & 0xFFFFu;
+            const bool canonicalNative = visible.OperandA == 0u
+                && visible.OperandB == 0u && visible.Control == 0u
+                && visible.NativeOperandRgb666 == 0u;
+            if (canonicalNative)
+            {
+                return;
+            }
+
+            constexpr u32 kSupportedControlMask = 0x7u
+                | (0x3u << 3u) | (1u << 6u) | (0x1Fu << 18u);
+            const bool supportedReplace = (compositeOp == 1u || compositeOp == 5u)
+                && exact
+                && postEffect <= 2u && handle >= 2u
+                && handle < productCount && visible.OperandB == 0u
+                && visible.NativeOperandRgb666 == 0u
+                && (visible.Control & ~kSupportedControlMask) == 0u;
+            if (!supportedReplace
+                || handle <= 1u || handle >= productCount
+                || handleB != 0u)
+            {
+                visibleLineageExact = false;
+                plan->ambiguousPixels += horizontalSpan;
+                return;
+            }
+            const auto& product = productTable[handle];
+            if (product.KindFlags != 2u
+                || product.Reserved0 != 0u || product.Reserved1 != 0u
+                || product.Epoch != captureEpoch || product.Id == 0u
+                || product.Width() == 0u || product.Width() > 256u
+                || product.Height() == 0u || product.Height() > 192u
+                || sourceX >= product.Width() || sourceY >= product.Height()
+                || horizontalSpan == 0u
+                || sourceX + horizontalSpan > product.Width())
+            {
+                visibleLineageExact = false;
+                plan->ambiguousPixels += horizontalSpan;
+                return;
+            }
+
+            if (!visibleRootSeen[handle])
+            {
+                visibleRootSeen[handle] = true;
+                plan->visibleRoots.push_back({product.Epoch, product.Id});
+            }
+    };
+    const auto appendVisibleRows = [&](const auto* rows,
+                                       const auto* dense) {
+        using RowKind = melonDS::GPU2D::SoftRenderer::
+            FaithfulVisibleLineageRowKind;
+        for (size_t y = 0u; y < kFaithfulCausalScreenHeight; y++)
+        {
+            const auto& row = rows[y];
+            const RowKind kind = static_cast<RowKind>(row.Kind);
+            if (kind == RowKind::Native)
+            {
+                if (row.OperandA != 0u || row.Control != 0u
+                    || row.Reserved != 0u)
+                {
+                    visibleLineageExact = false;
+                    plan->ambiguousPixels += kFaithfulCausalScreenWidth;
+                }
+                continue;
+            }
+            if (kind == RowKind::UniformReplace)
+            {
+                if (row.Reserved != 0u)
+                {
+                    visibleLineageExact = false;
+                    plan->ambiguousPixels += kFaithfulCausalScreenWidth;
+                    continue;
+                }
+                melonDS::GPU2D::SoftRenderer::FaithfulVisiblePixelLineage
+                    visible {};
+                visible.OperandA = row.OperandA;
+                visible.Control = row.Control;
+                appendVisibleRoot(
+                    visible, kFaithfulCausalScreenWidth);
+                continue;
+            }
+            if (kind == RowKind::Dense)
+            {
+                if (row.OperandA != 0u || row.Control != 0u
+                    || row.Reserved != 0u)
+                {
+                    visibleLineageExact = false;
+                    plan->ambiguousPixels += kFaithfulCausalScreenWidth;
+                    continue;
+                }
+                const auto* const denseRow = dense
+                    + y * kFaithfulCausalScreenWidth;
+                for (size_t x = 0u; x < kFaithfulCausalScreenWidth; x++)
+                    appendVisibleRoot(denseRow[x], 1u);
+                continue;
+            }
+
+            visibleLineageExact = false;
+            plan->ambiguousPixels += kFaithfulCausalScreenWidth;
+        }
+    };
+    if (!visibleAllNative)
+    {
+        appendVisibleRows(rowsTop, lineageTop);
+        appendVisibleRows(rowsBottom, lineageBottom);
+    }
+    std::sort(plan->visibleRoots.begin(), plan->visibleRoots.end());
+    plan->visibleRoots.erase(std::unique(plan->visibleRoots.begin(),
+        plan->visibleRoots.end()), plan->visibleRoots.end());
+
+    u64 ringEpoch = 0u;
+    u64 ringMinSequence = std::numeric_limits<u64>::max();
+    std::array<u64, kFielRanuras> ringSequences {};
+    size_t ringCount = 0u;
+    bool ringSameEpoch = true;
+    for (const auto& [ringFrame, ringResource] : resources)
+    {
+        (void)ringFrame;
+        if (!ringResource.hasRenderer3dSnapshot
+            || !ringResource.renderer3dSnapshotSourceIdentityValid
+            || ringResource.renderer3dSnapshotSourceSequence == 0u)
+        {
+            continue;
+        }
+        if (ringCount == 0u)
+            ringEpoch = ringResource.renderer3dSnapshotSourceEpoch;
+        else if (ringEpoch != ringResource.renderer3dSnapshotSourceEpoch)
+            ringSameEpoch = false;
+        if (ringCount < ringSequences.size())
+            ringSequences[ringCount] =
+                ringResource.renderer3dSnapshotSourceSequence;
+        ringCount++;
+        ringMinSequence = std::min(ringMinSequence,
+            ringResource.renderer3dSnapshotSourceSequence);
+    }
+
+    const bool ringComplete = ringSameEpoch
+        && ringCount >= static_cast<size_t>(kFielRanuras);
+    const auto sourceOutsideRing = [&](u64 renderEpoch,
+                                       u64 renderSequence) -> bool {
+        if (!ringComplete || renderEpoch == 0u || renderSequence == 0u)
+            return false;
+        if (renderEpoch != ringEpoch)
+            return true;
+        for (size_t i = 0u; i < ringSequences.size(); i++)
+        {
+            if (ringSequences[i] == renderSequence)
+                return false;
+        }
+        return renderSequence < ringMinSequence;
+    };
+    const auto rejectedRepeatedly = [&](const auto& key) -> bool {
+        return capHighresRejectStreak >= kFaithfulCaptureRejectFrontier
+            && capHighresRejectKey.epoch == key.epoch
+            && capHighresRejectKey.id == key.id;
+    };
+    const char* frontierReason = nullptr;
+    const auto irrecoverable = [&](const auto& key, bool requiresSourceA,
+                                   u64 renderEpoch, u64 renderSequence) {
+        frontierReason = nullptr;
+        if (requiresSourceA && sourceOutsideRing(renderEpoch, renderSequence))
+            frontierReason = "ring";
+        else if (rejectedRepeatedly(key))
+            frontierReason = "rejects";
+        return frontierReason != nullptr;
+    };
+    const bool sondaRegistry = std::getenv("MELON_SONDA_REGISTRY") != nullptr
+        || areRendererDebugBgObjLogsEnabled();
+    if (sondaRegistry)
+    {
+        u32 ringSnapshots = 0u;
+        u32 ringIdentities = 0u;
+        for (const auto& [ringFrame, ringResource] : resources)
+        {
+            (void)ringFrame;
+            ringSnapshots += ringResource.hasRenderer3dSnapshot ? 1u : 0u;
+            ringIdentities +=
+                ringResource.renderer3dSnapshotSourceIdentityValid ? 1u : 0u;
+        }
+        melonDS::Platform::Log(melonDS::Platform::LogLevel::Warn,
+            "[capture-ring] resources=%zu snapshots=%u identities=%u valid=%zu "
+            "sameEpoch=%u complete=%u epoch=%llu min=%llu",
+            resources.size(), ringSnapshots, ringIdentities, ringCount,
+            ringSameEpoch ? 1u : 0u, ringComplete ? 1u : 0u,
+            static_cast<unsigned long long>(ringEpoch),
+            static_cast<unsigned long long>(
+                ringComplete ? ringMinSequence : 0u));
+    }
+    const auto noteFrontier = [&](const auto& key, const char* reason) {
+        if (std::find(plan->nativeFrontiers.begin(),
+                plan->nativeFrontiers.end(), key)
+            != plan->nativeFrontiers.end())
+        {
+            return;
+        }
+        plan->nativeFrontiers.push_back(key);
+        if (std::getenv("MELON_SONDA_REGISTRY") != nullptr
+            || areRendererDebugBgObjLogsEnabled())
+        {
+            melonDS::Platform::Log(melonDS::Platform::LogLevel::Warn,
+                "[capture-frontier] epoch=%llu key=%llu reason=%s "
+                "ringComplete=%u ringMin=%llu rejects=%u",
+                static_cast<unsigned long long>(key.epoch),
+                static_cast<unsigned long long>(key.id), reason,
+                ringComplete ? 1u : 0u,
+                static_cast<unsigned long long>(
+                    ringComplete ? ringMinSequence : 0u),
+                capHighresRejectStreak);
+        }
+    };
+
+    std::vector<u8> nodeStates {};
+    const auto findNode = [&](const auto& key) -> size_t {
+        for (size_t index = 0u; index < plan->nodes.size(); index++)
+        {
+            const auto& metadata = plan->nodes[index].product->Metadata;
+            if (metadata.ProductEpoch == key.epoch
+                && metadata.ProductId == key.id)
+            {
+                return index;
+            }
+        }
+        return static_cast<size_t>(-1);
+    };
+    const auto acquireNode = [&](const auto& key) -> size_t {
+        size_t existing = findNode(key);
+        if (existing != static_cast<size_t>(-1))
+            return existing;
+        auto lease = sr->AcquireFaithfulCaptureProduct(key.epoch, key.id);
+        if (lease == nullptr)
+            return static_cast<size_t>(-1);
+        const auto& metadata = lease->Metadata;
+        if (!metadata.Valid || !metadata.MaterialComplete
+            || !metadata.Complete || !metadata.HighresEligible
+            || !metadata.CausalMetadataComplete || !metadata.RecipeComplete
+            || !metadata.Uses3d
+            || metadata.ProductEpoch != key.epoch
+            || metadata.ProductId != key.id
+            || metadata.ProductEpoch != captureEpoch
+            || metadata.Width != kFaithfulCausalScreenWidth
+            || metadata.Height != kFaithfulCausalScreenHeight)
+        {
+            return static_cast<size_t>(-1);
+        }
+
+        FaithfulCaptureMaterializationNode node {};
+        node.product = std::move(lease);
+
+        node.requiresSourceA = metadata.SourceIdentity.Valid;
+        if (node.requiresSourceA)
+        {
+            node.sourceARenderEpoch =
+                metadata.SourceIdentity.RenderProductEpoch;
+            node.sourceARenderSequence = metadata.SourceIdentity.Sequence;
+            if (node.sourceARenderEpoch == 0u
+                || node.sourceARenderSequence == 0u)
+                return static_cast<size_t>(-1);
+        }
+
+        for (const auto& parent : node.product->DirectCaptureParents)
+        {
+            const FaithfulCaptureMaterializationNode::Key parentKey{
+                parent.Epoch, parent.Id};
+            if (!parentKey.valid() || parentKey.epoch != captureEpoch
+                || parentKey == key)
+            {
+                return static_cast<size_t>(-1);
+            }
+            auto parentLease = sr->AcquireFaithfulCaptureProduct(
+                parentKey.epoch, parentKey.id);
+            if (parentLease == nullptr)
+            {
+                const u32 residentSlot = residentCaptureSlot(parentKey);
+                if (residentSlot >= 4u)
+                {
+
+                    if (std::find(node.nativeFrontiers.begin(),
+                            node.nativeFrontiers.end(), parentKey)
+                        == node.nativeFrontiers.end())
+                    {
+                        node.nativeFrontiers.push_back(parentKey);
+                    }
+                    noteFrontier(parentKey, "lease");
+                    continue;
+                }
+                if (std::find(node.highresParents.begin(),
+                        node.highresParents.end(), parentKey)
+                    == node.highresParents.end())
+                {
+                    node.highresParents.push_back(parentKey);
+                }
+                continue;
+            }
+            if (!parentLease->Metadata.Valid
+                || !parentLease->Metadata.MaterialComplete
+                || !parentLease->Metadata.Complete
+                || parentLease->Metadata.ProductEpoch != parentKey.epoch
+                || parentLease->Metadata.ProductId != parentKey.id)
+            {
+                return static_cast<size_t>(-1);
+            }
+            const auto alreadyHeld = std::find_if(
+                node.directCaptureParents.begin(),
+                node.directCaptureParents.end(),
+                [&](const auto& held) {
+                    return held != nullptr
+                        && held->Metadata.ProductEpoch == parentKey.epoch
+                        && held->Metadata.ProductId == parentKey.id;
+                });
+            if (alreadyHeld == node.directCaptureParents.end())
+                node.directCaptureParents.push_back(parentLease);
+
+            if (parentLease->Metadata.Uses3d
+                && residentCaptureSlot(parentKey) >= 4u
+                && irrecoverable(parentKey,
+                       parentLease->Metadata.SourceIdentity.Valid,
+                       parentLease->Metadata.SourceIdentity.RenderProductEpoch,
+                       parentLease->Metadata.SourceIdentity.Sequence))
+            {
+                if (std::find(node.nativeFrontiers.begin(),
+                        node.nativeFrontiers.end(), parentKey)
+                    == node.nativeFrontiers.end())
+                {
+                    node.nativeFrontiers.push_back(parentKey);
+                }
+                noteFrontier(parentKey, frontierReason);
+                continue;
+            }
+            if (parentLease->Metadata.Uses3d
+                && std::find(node.highresParents.begin(),
+                       node.highresParents.end(), parentKey)
+                    == node.highresParents.end())
+            {
+                node.highresParents.push_back(parentKey);
+            }
+        }
+        std::sort(node.highresParents.begin(), node.highresParents.end());
+        plan->nodes.push_back(std::move(node));
+        nodeStates.push_back(0u);
+        return plan->nodes.size() - 1u;
+    };
+
+    const auto visit = [&](auto&& self, const auto& key,
+                           std::vector<size_t>& order,
+                           std::vector<FaithfulCaptureMaterializationNode::Key>&
+                               workingSet,
+                           bool& missing, bool& cycle,
+                           u32 depth = 0u) -> bool {
+        if (std::find(workingSet.begin(), workingSet.end(), key)
+                == workingSet.end())
+        {
+            workingSet.push_back(key);
+        }
+        if (residentCaptureSlot(key) < 4u)
+            return true;
+        const size_t index = acquireNode(key);
+        if (index == static_cast<size_t>(-1))
+        {
+            missing = true;
+            return false;
+        }
+        if (nodeStates[index] == 1u)
+        {
+            cycle = true;
+            nodeStates[index] = 3u;
+            return false;
+        }
+        if (nodeStates[index] == 3u)
+        {
+            missing = true;
+            return false;
+        }
+        if (nodeStates[index] == 2u)
+            return true;
+        {
+
+            const auto& own = plan->nodes[index];
+            if (irrecoverable(key, own.requiresSourceA,
+                    own.sourceARenderEpoch, own.sourceARenderSequence))
+            {
+                noteFrontier(key, frontierReason);
+                workingSet.erase(std::remove(workingSet.begin(),
+                    workingSet.end(), key), workingSet.end());
+                nodeStates[index] = 2u;
+                return true;
+            }
+        }
+
+        nodeStates[index] = 1u;
+        const auto parents = plan->nodes[index].highresParents;
+        for (const auto& parent : parents)
+        {
+
+            if (depth + 1u >= kFaithfulCaptureChainMax
+                && residentCaptureSlot(parent) >= 4u)
+            {
+                auto& child = plan->nodes[index];
+                if (std::find(child.nativeFrontiers.begin(),
+                        child.nativeFrontiers.end(), parent)
+                    == child.nativeFrontiers.end())
+                {
+                    child.nativeFrontiers.push_back(parent);
+                }
+                noteFrontier(parent, "depth");
+                continue;
+            }
+            if (!self(self, parent, order, workingSet, missing, cycle,
+                      depth + 1u))
+            {
+                nodeStates[index] = 3u;
+                return false;
+            }
+        }
+        nodeStates[index] = 2u;
+        order.push_back(index);
+        return true;
+    };
+
+    bool visibleMissing = false;
+    bool visibleCycle = false;
+    plan->visibleExact = visibleLineageExact;
+    for (const auto& root : plan->visibleRoots)
+    {
+        if (!visit(visit, root, plan->visibleDependencyOrder,
+                   plan->visibleWorkingSet,
+                   visibleMissing, visibleCycle))
+        {
+            plan->visibleExact = false;
+        }
+    }
+    std::vector<FaithfulCaptureMaterializationNode::Key>
+        requiredVisibleWorkingSet = plan->requiredTerminals;
+    for (const auto& key : plan->visibleWorkingSet)
+    {
+        if (std::find(requiredVisibleWorkingSet.begin(),
+                      requiredVisibleWorkingSet.end(), key)
+                == requiredVisibleWorkingSet.end())
+        {
+            requiredVisibleWorkingSet.push_back(key);
+        }
+    }
+    plan->overflow = requiredVisibleWorkingSet.size() > 4u;
+    plan->visibleExact = plan->visibleExact
+        && !visibleMissing && !visibleCycle && !plan->overflow;
+    plan->missing = visibleMissing;
+    plan->cycle = visibleCycle;
+
+    const auto& current = sr->GetFaithfulCaptureProduct();
+    if (current.Valid && current.HighresEligible
+        && current.ProductEpoch == captureEpoch && current.ProductId != 0u)
+    {
+        plan->current = {current.ProductEpoch, current.ProductId};
+        bool currentMissing = false;
+        bool currentCycle = false;
+        std::fill(nodeStates.begin(), nodeStates.end(), 0u);
+        plan->currentExact = visit(visit, plan->current,
+            plan->currentDependencyOrder, plan->currentWorkingSet,
+            currentMissing, currentCycle);
+        std::vector<FaithfulCaptureMaterializationNode::Key>
+            completeWorkingSet = requiredVisibleWorkingSet;
+        for (const auto& key : plan->currentWorkingSet)
+        {
+            if (std::find(completeWorkingSet.begin(),
+                          completeWorkingSet.end(), key)
+                    == completeWorkingSet.end())
+            {
+                completeWorkingSet.push_back(key);
+            }
+        }
+        plan->currentOverflow = completeWorkingSet.size() > 4u;
+        plan->currentExact = plan->currentExact && !plan->currentOverflow;
+        plan->missing = plan->missing || currentMissing;
+        plan->cycle = plan->cycle || currentCycle;
+    }
+    std::sort(plan->nativeFrontiers.begin(), plan->nativeFrontiers.end());
+    plan->nativeFrontiers.erase(std::unique(plan->nativeFrontiers.begin(),
+        plan->nativeFrontiers.end()), plan->nativeFrontiers.end());
+    if (sondaRegistry)
+    {
+        melonDS::Platform::Log(melonDS::Platform::LogLevel::Warn,
+            "[capture-plan] roots=%zu nodes=%zu working=%zu required=%zu "
+            "current=%llu currentWorking=%zu exact=%u currentExact=%u "
+            "overflow=%u currentOverflow=%u missing=%u cycle=%u ambiguous=%u "
+            "frontiers=%zu",
+            plan->visibleRoots.size(), plan->nodes.size(),
+            plan->visibleWorkingSet.size(), plan->requiredTerminals.size(),
+            static_cast<unsigned long long>(plan->current.id),
+            plan->currentWorkingSet.size(),
+            plan->visibleExact ? 1u : 0u, plan->currentExact ? 1u : 0u,
+            plan->overflow ? 1u : 0u, plan->currentOverflow ? 1u : 0u,
+            plan->missing ? 1u : 0u, plan->cycle ? 1u : 0u,
+            plan->ambiguousPixels, plan->nativeFrontiers.size());
+    }
+    faithfulNativeFrontiers.fill({});
+    faithfulNativeFrontierCount = 0u;
+    faithfulNativeFrontierEpoch = captureEpoch;
+    for (const auto& key : plan->nativeFrontiers)
+    {
+        if (faithfulNativeFrontierCount >= faithfulNativeFrontiers.size())
+            break;
+        faithfulNativeFrontiers[faithfulNativeFrontierCount++] = {
+            key.epoch, key.id};
+    }
+    faithfulCapturePlans[faithfulRing] = std::move(plan);
+
+    if (!visibleAllNative)
+    {
+        using LineageRow = melonDS::GPU2D::SoftRenderer::
+            FaithfulVisibleLineageRow;
+        using RowKind = melonDS::GPU2D::SoftRenderer::
+            FaithfulVisibleLineageRowKind;
+        u8* const rowBytes = bytes + kFaithfulCausalLineageRowOffset;
+        constexpr size_t kRowBytesPerScreen =
+            kFaithfulCausalScreenHeight * sizeof(LineageRow);
+        std::memcpy(rowBytes, rowsTop, kRowBytesPerScreen);
+        std::memcpy(
+            rowBytes + kRowBytesPerScreen, rowsBottom, kRowBytesPerScreen);
+
+        u8* const lineageBytes = bytes + kFaithfulCausalLineageOffset;
+        constexpr size_t kDenseLineBytes = kFaithfulCausalScreenWidth
+            * sizeof(melonDS::GPU2D::SoftRenderer::
+                FaithfulVisiblePixelLineage);
+        const auto uploadDenseRows = [&](size_t screen, const auto* rows,
+                                         const auto* dense) {
+            for (size_t y = 0u; y < kFaithfulCausalScreenHeight; y++)
+            {
+                if (static_cast<RowKind>(rows[y].Kind) != RowKind::Dense)
+                    continue;
+                const size_t lineIndex =
+                    screen * kFaithfulCausalScreenHeight + y;
+                std::memcpy(
+                    lineageBytes + lineIndex * kDenseLineBytes,
+                    dense + y * kFaithfulCausalScreenWidth,
+                    kDenseLineBytes);
+            }
+        };
+        uploadDenseRows(0u, rowsTop, lineageTop);
+        uploadDenseRows(1u, rowsBottom, lineageBottom);
+
+        auto* const gpuProducts = reinterpret_cast<FaithfulCausalProductGpu*>(
+            bytes + kFaithfulCausalProductOffset);
+        for (u16 handle = 0u; handle < productCount; handle++)
+        {
+            const auto& src = productTable[handle];
+            FaithfulCausalProductGpu& dst = gpuProducts[handle];
+            dst.EpochLo = low32(src.Epoch);
+            dst.EpochHi = high32(src.Epoch);
+            dst.IdLo = low32(src.Id);
+            dst.IdHi = high32(src.Id);
+            dst.Dimensions = src.Dimensions;
+            dst.KindFlags = src.KindFlags;
+
+            dst.Reserved0 = 0u;
+            dst.Reserved1 = 0u;
+        }
+    }
+
+    if (!visibleAllNative
+        && std::getenv("MELON_SONDA_CAUSAL_B2") != nullptr)
+    {
+        for (size_t screen = 0u; screen < 2u; screen++)
+        {
+            const auto* const lineages =
+                sr->GetFaithfulPrevVisiblePixelLineage(
+                    screen == 0u
+                        ? PhysicalScreen::Top
+                        : PhysicalScreen::Bottom);
+            if (lineages == nullptr)
+                continue;
+            u32 native = 0u;
+            u32 ambiguous = 0u;
+            u32 replace = 0u;
+            u32 exact = 0u;
+            u32 handleInRange = 0u;
+            u32 captureKind = 0u;
+            u32 epochMatch = 0u;
+            u32 coordinatesValid = 0u;
+            u32 b2Candidate = 0u;
+            u32 productLo = 0u;
+            u32 productHi = 0u;
+            for (size_t pixel = 0u;
+                 pixel < kFaithfulCausalScreenWidth
+                     * kFaithfulCausalScreenHeight;
+                 pixel++)
+            {
+                const auto& lineage = lineages[pixel];
+                const u16 handle = static_cast<u16>(lineage.OperandA & 0xFFFFu);
+                const u32 sourceX = (lineage.OperandA >> 16u) & 0xFFu;
+                const u32 sourceY = (lineage.OperandA >> 24u) & 0xFFu;
+                const u32 compositeOp = lineage.Control & 0x7u;
+                const u32 postEffect = (lineage.Control >> 3u) & 0x3u;
+                const bool isExact = (lineage.Control & (1u << 6u)) != 0u;
+                native += handle == 0u ? 1u : 0u;
+                ambiguous += handle == 1u ? 1u : 0u;
+                replace += compositeOp == 1u ? 1u : 0u;
+                exact += isExact ? 1u : 0u;
+                if (handle <= 1u || handle >= productCount)
+                    continue;
+                handleInRange++;
+                const auto& product = productTable[handle];
+                const bool isCapture = (product.KindFlags & 0xFFu) == 2u;
+                captureKind += isCapture ? 1u : 0u;
+                const bool sameEpoch = product.Epoch == captureEpoch;
+                epochMatch += sameEpoch ? 1u : 0u;
+                const u32 width = product.Dimensions & 0xFFFFu;
+                const u32 height = product.Dimensions >> 16u;
+                const bool coords = width > 0u && width <= 256u
+                    && height > 0u && height <= 192u
+                    && sourceX < width && sourceY < height;
+                coordinatesValid += coords ? 1u : 0u;
+                if (compositeOp == 1u && isExact && postEffect <= 2u
+                    && isCapture && sameEpoch && coords)
+                {
+                    b2Candidate++;
+                    if ((productLo | productHi) == 0u)
+                    {
+                        productLo = static_cast<u32>(
+                            product.Id & 0xFFFFFFFFull);
+                        productHi = static_cast<u32>(product.Id >> 32u);
+                    }
+                }
+            }
+            std::fprintf(stderr,
+                "[causal-b2] gen=%016llX epoch=%016llX products=%u "
+                "screen=%zu native=%u ambiguous=%u replace=%u exact=%u "
+                "handle=%u capture=%u epochMatch=%u coords=%u "
+                "candidate=%u first=%08X%08X\n",
+                static_cast<unsigned long long>(generation),
+                static_cast<unsigned long long>(captureEpoch),
+                static_cast<unsigned>(productCount), screen,
+                native, ambiguous, replace, exact, handleInRange,
+                captureKind, epochMatch, coordinatesValid, b2Candidate,
+                productHi, productLo);
+        }
+    }
+
+    FaithfulCausalHeaderGpu header{};
+    header.Version = kFaithfulCausalAbiVersion;
+    header.GenerationLo = low32(generation);
+    header.GenerationHi = high32(generation);
+    header.ProductCount = visibleAllNative ? 0u : productCount;
+    header.CaptureEpochLo = low32(captureEpoch);
+    header.CaptureEpochHi = high32(captureEpoch);
+    header.RouteLineCount = static_cast<u32>(kFaithfulCausalRouteLineCount);
+    header.VisiblePixelCount =
+        static_cast<u32>(kFaithfulCausalVisiblePixelCount);
+    header.RouteOffsetWords =
+        static_cast<u32>(kFaithfulCausalRouteOffset / sizeof(u32));
+    header.LineageOffsetWords =
+        static_cast<u32>(kFaithfulCausalLineageOffset / sizeof(u32));
+    header.ProductOffsetWords =
+        static_cast<u32>(kFaithfulCausalProductOffset / sizeof(u32));
+    header.TotalWords =
+        static_cast<u32>(kFaithfulCausalBufferSize / sizeof(u32));
+    header.Valid = kFaithfulCausalHeaderRoutesValid
+        | (visibleAllNative
+            ? kFaithfulCausalHeaderVisibleAllNative
+            : kFaithfulCausalHeaderFullLineageValid);
+    std::atomic_thread_fence(std::memory_order_release);
+    std::memcpy(bytes, &header, sizeof(header));
+    if (std::getenv("MELON_SONDA_RUTA_FISICA") != nullptr
+        || std::getenv("MELON_SONDA_REGISTRY") != nullptr)
+    {
+        std::fprintf(stderr,
+            "[causal-route] valid=1 full=%u allNative=%u "
+            "reason=complete epoch=%llu generation=%llu lines=%zu "
+            "products=%u\n",
+            visibleAllNative ? 0u : 1u,
+            visibleAllNative ? 1u : 0u,
+            static_cast<unsigned long long>(captureEpoch),
+            static_cast<unsigned long long>(generation),
+            kFaithfulCausalRouteLineCount,
+            static_cast<unsigned>(visibleAllNative ? 0u : productCount));
+    }
+}
+
+void VulkanOutput::uploadFaithfulAtlas(melonDS::GPU& gpu)
+{
+    std::scoped_lock lifetimeLock(faithfulLifetimeLock);
+
+    if (const auto bridge = resources.find(&bridgeRenderer3dFrame);
+        bridge != resources.end() && bridge->second.hasRenderer3dSnapshot)
+    {
+        u64 epoch = 0u, minimum = std::numeric_limits<u64>::max();
+        u32 count = 0u;
+        bool sameEpoch = true;
+        for (const auto& [owner, source] : resources)
+        {
+            if (owner == &bridgeRenderer3dFrame || !source.hasRenderer3dSnapshot
+                || !source.renderer3dSnapshotSourceIdentityValid)
+                continue;
+            if (count++ == 0u) epoch = source.renderer3dSnapshotSourceEpoch;
+            else if (epoch != source.renderer3dSnapshotSourceEpoch) sameEpoch = false;
+            minimum = std::min(minimum, source.renderer3dSnapshotSourceSequence);
+        }
+        if (sameEpoch && count >= kFielRanuras
+            && (epoch != bridge->second.renderer3dSnapshotSourceEpoch
+                || minimum > bridge->second.renderer3dSnapshotSourceSequence))
+            clearRenderer3dSnapshotPublication(bridge->second, false);
+    }
+    auto* sr = dynamic_cast<melonDS::GPU2D::SoftRenderer*>(&gpu.GetRenderer2D());
+    if (sr == nullptr)
+        return;
+
+    if (!faithfulPreListo
+        || !faithfulAtlasPrimed[(faithfulRing + 1u) % kFielRanuras])
+        uploadFaithfulAtlasPreFrameLocked(gpu, true);
+    faithfulPreListo = false;
+
+    faithfulRing = (faithfulRing + 1u) % kFielRanuras;
+    faithfulDiagnosticPayload.invalidateSlot(faithfulRing);
+    if (faithfulAtlasMappedPtr[faithfulRing] == nullptr)
+        return;
+    {
+        std::scoped_lock commandLock(commandPoolLock);
+        const bool retired =
+            waitFaithfulUseLocked(faithfulSlotUse[faithfulRing]);
+        if (!retired)
+        {
+            melonDS::Platform::Log(
+                melonDS::Platform::LogLevel::Error,
+                "VulkanOutput: faithful tail upload could not retire slot %u",
+                faithfulRing);
+            return;
+        }
+    }
+
+    faithfulAtlasDeviceVisible[faithfulRing] = false;
+    faithfulAtlasPre[faithfulRing].publishTo(faithfulAtlasMappedPtr[faithfulRing]);
+    const bool faithfulPipelineReady = ensureFaithfulPipeline();
+    if (faithfulPipelineReady)
+    {
+        const auto sellarProducto = [](const auto& src,
+                                       FaithfulCaptureProductStamp& dst) {
+            dst = {};
+            dst.valid = src.Valid;
+            dst.complete = src.Complete;
+            dst.highresEligible = src.HighresEligible;
+            dst.materialComplete = src.MaterialComplete;
+            dst.causalMetadataComplete = src.CausalMetadataComplete;
+            dst.recipeComplete = src.RecipeComplete;
+            dst.uses3d = src.Uses3d;
+            dst.sourceIdentityValid = src.SourceIdentity.Valid;
+            dst.sourceScreenSwap = src.SourceIdentity.ScreenSwap;
+            dst.productId = src.ProductId;
+            dst.productEpoch = src.ProductEpoch;
+            dst.sourceRenderProductEpoch =
+                src.SourceIdentity.RenderProductEpoch;
+            dst.sourceSequence = src.SourceIdentity.Sequence;
+            dst.captureCnt = src.CaptureCnt;
+            dst.frameSequence = src.FrameSequence;
+            dst.destinationOffsetPixels = src.DestinationOffsetPixels;
+            dst.sourcePolygonCount = src.SourceIdentity.PolygonCount;
+            dst.sourceCaptureCnt = src.SourceIdentity.CaptureCnt;
+            dst.width = src.Width;
+            dst.height = src.Height;
+            dst.destinationBank = src.DestinationBank;
+        };
+        sellarProducto(sr->GetFaithfulCaptureProduct(), capProductoVivo);
+        sellarProducto(sr->GetFaithfulPrevCaptureProduct(), capProductoPrev);
+        const u64 epochProducto = capProductoVivo.productEpoch != 0u
+            ? capProductoVivo.productEpoch : capProductoPrev.productEpoch;
+        if (epochProducto != 0u && capHighresProductEpoch != epochProducto)
+        {
+
+            for (auto& producto : capHighresProducto) producto = {};
+            for (auto& plan : faithfulCapturePlans)
+                plan.reset();
+            faithfulPublishedCaptureTerminals.fill({});
+            faithfulRequiredCaptureTerminals.fill({});
+            faithfulPublishedCaptureTerminalCount = 0u;
+            faithfulRequiredCaptureTerminalCount = 0u;
+            faithfulPublishedCaptureTerminalEpoch = 0u;
+            faithfulRequiredCaptureTerminalEpoch = 0u;
+            faithfulPublishedCaptureTerminalGeneration = 0u;
+            faithfulRequiredCaptureTerminalGeneration = 0u;
+            capHighresProductEpoch = epochProducto;
+            capHighresPrevInicial = false;
+            capHighresPrev2Inicial = false;
+            for (u32 slot = 0u; slot < 4u; slot++)
+            {
+                capHighresSlotState[slot] =
+                    FaithfulCaptureSlotState::Empty;
+                capHighresSealAttempt[slot] = 0u;
+            }
+            capFrescaPar[0] = capFrescaPar[1] = false;
+            capHighresValida = false;
+            faithfulCaptureSealNeedsClear = true;
+        }
+    }
+
+    if (faithfulSealReadbackPending[faithfulRing]
+        && faithfulSealReadbackMapped[faithfulRing] != nullptr)
+    {
+        const u32* selloRetirado = static_cast<const u32*>(
+            faithfulSealReadbackMapped[faithfulRing]);
+        const u64 productId = static_cast<u64>(selloRetirado[0])
+            | (static_cast<u64>(selloRetirado[1]) << 32u);
+        const u64 productEpoch = static_cast<u64>(selloRetirado[12])
+            | (static_cast<u64>(selloRetirado[13]) << 32u);
+        const u64 keyProductId = static_cast<u64>(selloRetirado[14])
+            | (static_cast<u64>(selloRetirado[15]) << 32u);
+        const u32 submittedSlot = faithfulSealReadbackSlot[faithfulRing];
+        const u64 submittedEpoch = faithfulSealReadbackEpoch[faithfulRing];
+        const u64 submittedProduct =
+            faithfulSealReadbackProduct[faithfulRing];
+        const u64 submittedAttempt =
+            faithfulSealReadbackAttempt[faithfulRing];
+        const bool expectedKeyMatches = submittedEpoch != 0u
+            && submittedProduct != 0u
+            && productEpoch == submittedEpoch
+            && productId == submittedProduct
+            && keyProductId == submittedProduct;
+        bool expectedAttemptMatches = false;
+        if (submittedSlot < 4u && submittedAttempt != 0u)
+        {
+            const auto& resident = capHighresProducto[submittedSlot];
+            expectedAttemptMatches =
+                capHighresSlotState[submittedSlot]
+                    == FaithfulCaptureSlotState::PendingSeal
+                && capHighresSealAttempt[submittedSlot] == submittedAttempt
+                && resident.productEpoch == submittedEpoch
+                && resident.productId == submittedProduct;
+        }
+        const bool certified = expectedKeyMatches
+            && expectedAttemptMatches
+            && selloRetirado[2] == 0u
+            && selloRetirado[3] == 256u * 192u
+            && selloRetirado[4] == 0u
+            && selloRetirado[6] == 256u * 192u;
+
+        if (expectedAttemptMatches)
+        {
+            if (certified)
+            {
+                capHighresSlotState[submittedSlot] =
+                    FaithfulCaptureSlotState::Certified;
+            }
+            else
+            {
+                capHighresProducto[submittedSlot] = {};
+                capHighresSlotState[submittedSlot] =
+                    FaithfulCaptureSlotState::Empty;
+                capHighresSealAttempt[submittedSlot] = 0u;
+            }
+            capHighresValida = false;
+            for (u32 slot = 0u; slot < 4u; slot++)
+            {
+                const auto& product = capHighresProducto[slot];
+                if (capHighresSlotState[slot]
+                        != FaithfulCaptureSlotState::Empty
+                    && product.valid && product.complete
+                    && product.highresEligible
+                    && product.materialComplete
+                    && product.causalMetadataComplete
+                    && product.recipeComplete)
+                {
+                    capHighresValida = true;
+                    break;
+                }
+            }
+        }
+        if (std::getenv("MELON_SONDA_CAPID") != nullptr
+            || areRendererDebugBgObjLogsEnabled())
+        {
+            melonDS::Platform::Log(melonDS::Platform::LogLevel::Warn,
+                "RendererDebug[FaithfulMaterialSeal]: ring=%u epoch=%llu "
+                "product=%llu "
+                "mismatches=%u compared=%u material=%u/%u source=%u/%u "
+                "firstSource=%u(%u,%u) projected=%08X native=%08X "
+                "route=%08X expected=%llu:%llu attempt=%llu match=%u/%u "
+                "certified=%u",
+                faithfulRing,
+                static_cast<unsigned long long>(productEpoch),
+                static_cast<unsigned long long>(productId),
+                selloRetirado[2], selloRetirado[3],
+                selloRetirado[4], selloRetirado[6],
+                selloRetirado[5], selloRetirado[7],
+                selloRetirado[8], selloRetirado[8] & 0xFFu,
+                selloRetirado[8] >> 8u,
+                selloRetirado[9], selloRetirado[10], selloRetirado[11],
+                static_cast<unsigned long long>(submittedEpoch),
+                static_cast<unsigned long long>(submittedProduct),
+                static_cast<unsigned long long>(submittedAttempt),
+                expectedKeyMatches ? 1u : 0u,
+                expectedAttemptMatches ? 1u : 0u,
+                certified ? 1u : 0u);
+        }
+    }
+    faithfulSealReadbackPending[faithfulRing] = false;
+    faithfulSealReadbackSlot[faithfulRing] = 4u;
+    faithfulSealReadbackEpoch[faithfulRing] = 0u;
+    faithfulSealReadbackProduct[faithfulRing] = 0u;
+    faithfulSealReadbackAttempt[faithfulRing] = 0u;
+
+    if (faithfulPipelineReady)
+        uploadFaithfulCausalPrevLocked(gpu);
+    u8* atlas = static_cast<u8*>(faithfulAtlasMappedPtr[faithfulRing]);
+
+    if (faithfulPipelineReady && faithfulRegsMapped[faithfulRing] != nullptr)
+    {
+        u8* regs = static_cast<u8*>(faithfulRegsMapped[faithfulRing]);
+        std::memcpy(regs, sr->GetFaithfulPrevLineRegs(0),
+                    192u * 32u * 4u);
+        std::memcpy(regs + 192u * 32u * 4u,
+                    sr->GetFaithfulPrevLineRegs(1), 192u * 32u * 4u);
+        std::memcpy(regs + 2u * 192u * 32u * 4u,
+                    sr->GetFaithfulPrevFrameMeta(), 16u * 4u);
+
+        std::memcpy(regs + (2u * 192u * 32u + 16u) * 4u,
+                    sr->GetFaithfulLineRegs(0), 192u * 32u * 4u);
+        std::memcpy(regs + (2u * 192u * 32u + 16u + 192u * 32u) * 4u,
+                    sr->GetFaithfulLineRegs(1), 192u * 32u * 4u);
+
+        static const bool swapVivoEnv =
+            std::getenv("MELON_SWAP_VIVO") != nullptr;
+        if (swapVivoEnv)
+            reinterpret_cast<u32*>(regs + 2u * 192u * 32u * 4u)[0] =
+                sr->GetFaithfulFrameMeta()[0];
+
+        else if (std::getenv("MELON_SWAP_SCANOUT") != nullptr)
+            reinterpret_cast<u32*>(regs + 2u * 192u * 32u * 4u)[0] =
+                sr->GetFaithfulPrevSwapScanout() & 1u;
+
+        const u32 swapVivo = sr->GetFaithfulPrevFrameMeta()[0] & 1u;
+
+        {
+
+            static const bool fichaViva =
+                std::getenv("MELON_FICHA_VIVA") != nullptr;
+            const u32* metaPrev = fichaViva ? sr->GetFaithfulFrameMeta()
+                                            : sr->GetFaithfulPrevFrameMeta();
+            capFichaActiva = metaPrev[1] != 0u;
+            capFichaCnt = metaPrev[5];
+            capFichaSwap = swapVivo != 0u;
+            const u32 fotSeq = metaPrev[8];
+            capFichaSalto = capUltimoFotSeq != 0u
+                && fotSeq != capUltimoFotSeq + 1u;
+            capUltimoFotSeq = fotSeq;
+
+            capFichaNpPrev = capFichaNp;
+            capFichaNp = gpu.GPU3D.RenderNumPolygons;
+
+            diagInvalidaciones = 0u;
+            if (metaPrev[10] != 0u)
+            {
+                const u32 paridadSup = ((capFichaCnt >> 16u) & 3u) & 1u;
+                capFrescaPar[paridadSup] = false;
+                diagInvalidaciones |= 1u;
+
+                if (capHighresSlotState[paridadSup] != FaithfulCaptureSlotState::Empty)
+                {
+                    capHighresSlotState[paridadSup] = FaithfulCaptureSlotState::Empty;
+                    diagInvalidaciones |= 2u;
+                }
+                capSelloPar[paridadSup] = 0xFFu;
+                capVetoIdentidadPar[paridadSup] = true;
+            }
+        }
+
+        capHighresIniABG = 0xFFFFFFFFu;
+        capHighresIniBBG = 0xFFFFFFFFu;
+        capHighresIniObj = 0xFFFFFFFFu;
+
+        capFichaDispA0 = sr->GetFaithfulPrevLineRegs(0)[0];
+        capFichaDispB0 = sr->GetFaithfulPrevLineRegs(1)[0];
+        capFichaPreA = (sr->GetFaithfulPrevFrameMeta()[6] & 1u) != 0u;
+        capFichaPrevSinCaptura = sr->GetFaithfulPrevFrameMeta()[1] == 0u;
+        capFichaPreB = (sr->GetFaithfulPrevFrameMeta()[6] & 2u) != 0u;
+        capVivaDispA0 = sr->GetFaithfulLineRegs(0)[0];
+        const u32* metaViva = sr->GetFaithfulFrameMeta();
+        capVivaPreA = (metaViva[6] & 1u) != 0u;
+        capVivaActiva = metaViva[1] != 0u;
+        capVivaCnt = metaViva[5];
+        capVivaFotSeq = metaViva[8];
+        if (capHighresValida)
+        {
+
+            const u32 cntPack = sr->GetFaithfulPrevFrameMeta()[4];
+            for (u32 j = 0; j < 2u; j++)
+            {
+                const u32 banco = capHighresBancoPar[j];
+                if (banco > 3u) continue;
+                if (!capFrescaPar[banco & 1u]) continue;
+                const u8 cnt = (u8)((cntPack >> (banco * 8u)) & 0xFFu);
+                if ((cnt & 0x80u) == 0u) continue;
+                const u32 mst = cnt & 0x7u;
+                const u32 ofs = (cnt >> 3) & 0x3u;
+
+                const u32 par30 = (banco & 1u) << 30;
+                if (mst == 1u)
+                { capHighresIniABG = ((ofs << 17) + capHighresOfsPar[j]) | par30;
+                  capHighresSel = j; break; }
+                if (mst == 4u && banco == 2u)
+                { capHighresIniBBG = capHighresOfsPar[j] | par30;
+                  capHighresSel = j; break; }
+                if (mst == 4u && banco == 3u)
+                { capHighresIniObj = capHighresOfsPar[j] | par30;
+                  capHighresSel = j; break; }
+            }
+        }
+        std::memcpy(regs + (2u * 192u * 32u + 2u) * 4u, &capHighresIniABG, 4u);
+        std::memcpy(regs + (2u * 192u * 32u + 3u) * 4u, &capHighresIniBBG, 4u);
+        std::memcpy(regs + (2u * 192u * 32u + 7u) * 4u, &capHighresIniObj, 4u);
+        if (trazaCapActiva())
+            melonDS::Platform::Log(melonDS::Platform::LogLevel::Warn,
+                "[cap] act=%d cnt=%08X iniA=%08X iniB=%08X",
+                capFichaActiva ? 1 : 0, capFichaCnt,
+                capHighresIniABG, capHighresIniBBG);
+
+        if (std::getenv("MELON_SONDA_RUTA_FISICA") != nullptr)
+        {
+            const u32 swapShader = reinterpret_cast<const u32*>(
+                regs + 2u * 192u * 32u * 4u)[0] & 1u;
+            u32 validas = 0u;
+            u32 distintas = 0u;
+            u32 directas = 0u;
+            u32 sinProducto = 0u;
+            u64 secuenciaPrimera[2] = {};
+            bool secuenciaUniforme[2] = {true, true};
+            for (u32 pantalla = 0u; pantalla < 2u; pantalla++)
+            {
+                const auto fisica = pantalla == 0u
+                    ? melonDS::GPU2D::PhysicalScreen::Top
+                    : melonDS::GPU2D::PhysicalScreen::Bottom;
+                const auto* rutas = sr->GetFaithfulPrevPhysicalScanoutLines(
+                    fisica);
+                const auto* lineas3d =
+                    sr->GetFaithfulPrevLiveRenderProductLines(fisica);
+                if (rutas == nullptr) continue;
+                const u32 motorShader = swapShader != 0u
+                    ? pantalla : (1u - pantalla);
+                for (u32 y = 0u; y < 192u; y++)
+                {
+                    const auto& ruta = rutas[y];
+                    if (ruta.Valid)
+                    {
+                        validas++;
+                        if (ruta.Route.Engine != motorShader) distintas++;
+                    }
+                    if (lineas3d == nullptr) continue;
+                    const auto& linea = lineas3d[y];
+                    if (!linea.Valid || !linea.Direct3DEnabled) continue;
+                    directas++;
+                    if (!linea.Product.Valid)
+                    {
+                        sinProducto++;
+                        continue;
+                    }
+                    if (secuenciaPrimera[pantalla] == 0u)
+                        secuenciaPrimera[pantalla] = linea.Product.Sequence;
+                    else if (secuenciaPrimera[pantalla]
+                             != linea.Product.Sequence)
+                        secuenciaUniforme[pantalla] = false;
+                }
+            }
+            struct ResumenLineageCapturado
+            {
+                u64 epoch = 0u;
+                u64 product = 0u;
+                u32 exactas = 0u;
+                bool uniforme = true;
+            };
+            const auto resumirLineage = [](const auto* lineas) {
+                ResumenLineageCapturado resumen {};
+                if (lineas == nullptr) return resumen;
+                for (u32 y = 0u; y < 192u; y++)
+                {
+                    const auto& linea = lineas[y];
+                    if (!linea.ValidExact || linea.TaggedPixelCount == 0u)
+                        continue;
+                    resumen.exactas++;
+                    if (resumen.product == 0u)
+                    {
+                        resumen.epoch = linea.ProductEpoch;
+                        resumen.product = linea.ProductId;
+                    }
+                    else if (resumen.epoch != linea.ProductEpoch
+                        || resumen.product != linea.ProductId)
+                    {
+                        resumen.uniforme = false;
+                    }
+                }
+                return resumen;
+            };
+            const ResumenLineageCapturado lineageActual = resumirLineage(
+                sr->GetFaithfulCaptureLineProducts(1u));
+            const ResumenLineageCapturado lineagePrevio = resumirLineage(
+                sr->GetFaithfulPrevCaptureLineProducts(1u));
+            struct ResumenVisibleFisico
+            {
+                u32 native = 0u;
+                u32 ambiguous = 0u;
+                u32 capture = 0u;
+                u32 live = 0u;
+                u32 unknown = 0u;
+                u32 exact = 0u;
+                u64 captureEpoch = 0u;
+                u64 captureProduct = 0u;
+                bool captureUniform = true;
+            };
+            const auto resumirVisible = [](const auto* pixels,
+                                            const auto* table,
+                                            u16 productCount) {
+                ResumenVisibleFisico resumen {};
+                if (pixels == nullptr || table == nullptr
+                    || productCount < 2u)
+                {
+                    return resumen;
+                }
+                for (u32 pixel = 0u; pixel < 256u * 192u; pixel++)
+                {
+                    const auto& lineage = pixels[pixel];
+                    const u16 handle =
+                        static_cast<u16>(lineage.OperandA & 0xFFFFu);
+                    if (((lineage.Control >> 6u) & 1u) != 0u)
+                        resumen.exact++;
+                    if (handle == 0u)
+                    {
+                        resumen.native++;
+                        continue;
+                    }
+                    if (handle == 1u || handle >= productCount)
+                    {
+                        resumen.ambiguous++;
+                        continue;
+                    }
+                    const auto& product = table[handle];
+                    switch (product.Kind())
+                    {
+                    case melonDS::GPU2D::SoftRenderer::FaithfulVisibleProductKind::Capture:
+                        resumen.capture++;
+                        if (resumen.captureProduct == 0u)
+                        {
+                            resumen.captureEpoch = product.Epoch;
+                            resumen.captureProduct = product.Id;
+                        }
+                        else if (resumen.captureEpoch != product.Epoch
+                            || resumen.captureProduct != product.Id)
+                        {
+                            resumen.captureUniform = false;
+                        }
+                        break;
+                    case melonDS::GPU2D::SoftRenderer::FaithfulVisibleProductKind::LiveRender:
+                        resumen.live++;
+                        break;
+                    case melonDS::GPU2D::SoftRenderer::FaithfulVisibleProductKind::Ambiguous:
+                        resumen.ambiguous++;
+                        break;
+                    case melonDS::GPU2D::SoftRenderer::FaithfulVisibleProductKind::Native:
+                        resumen.native++;
+                        break;
+                    default:
+                        resumen.unknown++;
+                        break;
+                    }
+                }
+                return resumen;
+            };
+            const auto* visibleTable = sr->GetFaithfulVisibleProductTable();
+            const auto* prevVisibleTable =
+                sr->GetFaithfulPrevVisibleProductTable();
+            const u16 visibleCount = sr->GetFaithfulVisibleProductCount();
+            const u16 prevVisibleCount =
+                sr->GetFaithfulPrevVisibleProductCount();
+            const ResumenVisibleFisico visibleCurrentTop = resumirVisible(
+                sr->GetFaithfulVisiblePixelLineage(
+                    melonDS::GPU2D::PhysicalScreen::Top),
+                visibleTable, visibleCount);
+            const ResumenVisibleFisico visibleCurrentBottom = resumirVisible(
+                sr->GetFaithfulVisiblePixelLineage(
+                    melonDS::GPU2D::PhysicalScreen::Bottom),
+                visibleTable, visibleCount);
+            const ResumenVisibleFisico visiblePrevTop = resumirVisible(
+                sr->GetFaithfulPrevVisiblePixelLineage(
+                    melonDS::GPU2D::PhysicalScreen::Top),
+                prevVisibleTable, prevVisibleCount);
+            const ResumenVisibleFisico visiblePrevBottom = resumirVisible(
+                sr->GetFaithfulPrevVisiblePixelLineage(
+                    melonDS::GPU2D::PhysicalScreen::Bottom),
+                prevVisibleTable, prevVisibleCount);
+            std::fprintf(stderr,
+                "[ruta-fisica] frame=%u swapShader=%u valid=%u mismatch=%u "
+                "direct=%u missingProduct=%u topSeq=%llu/%u botSeq=%llu/%u "
+                "lineageBcur=%llu:%llu/%u/%u lineageBprev=%llu:%llu/%u/%u\n",
+                sr->GetFaithfulPrevFrameMeta()[8], swapShader, validas,
+                distintas, directas, sinProducto,
+                static_cast<unsigned long long>(secuenciaPrimera[0]),
+                secuenciaUniforme[0] ? 1u : 0u,
+                static_cast<unsigned long long>(secuenciaPrimera[1]),
+                secuenciaUniforme[1] ? 1u : 0u,
+                static_cast<unsigned long long>(lineageActual.epoch),
+                static_cast<unsigned long long>(lineageActual.product),
+                lineageActual.exactas, lineageActual.uniforme ? 1u : 0u,
+                static_cast<unsigned long long>(lineagePrevio.epoch),
+                static_cast<unsigned long long>(lineagePrevio.product),
+                lineagePrevio.exactas, lineagePrevio.uniforme ? 1u : 0u);
+            const auto imprimirVisible = [sr](const char* generation,
+                                               const char* screen,
+                                               u64 generationId,
+                                               const ResumenVisibleFisico& v) {
+                std::fprintf(stderr,
+                    "[visible-fisico] frame=%u generation=%s:%llu screen=%s "
+                    "native=%u ambiguous=%u capture=%u live=%u unknown=%u "
+                    "exact=%u captureKey=%llu:%llu/%u\n",
+                    sr->GetFaithfulPrevFrameMeta()[8], generation,
+                    static_cast<unsigned long long>(generationId), screen,
+                    v.native, v.ambiguous, v.capture, v.live, v.unknown,
+                    v.exact,
+                    static_cast<unsigned long long>(v.captureEpoch),
+                    static_cast<unsigned long long>(v.captureProduct),
+                    v.captureUniform ? 1u : 0u);
+            };
+            imprimirVisible("current", "top",
+                sr->GetFaithfulVisibleLineageGeneration(), visibleCurrentTop);
+            imprimirVisible("current", "bottom",
+                sr->GetFaithfulVisibleLineageGeneration(),
+                visibleCurrentBottom);
+            imprimirVisible("prev", "top",
+                sr->GetFaithfulPrevVisibleLineageGeneration(), visiblePrevTop);
+            imprimirVisible("prev", "bottom",
+                sr->GetFaithfulPrevVisibleLineageGeneration(),
+                visiblePrevBottom);
+        }
+        if (faithful3dMapped[faithfulRing] != nullptr)
+        {
+            std::memset(faithful3dMapped[faithfulRing], 0, 256u * 192u * 4u);
+
+            const std::vector<u32>& stashSubida =
+                faithful3dStashPrev.size() == 256u * 192u
+                    ? faithful3dStashPrev
+                    : faithful3dStash;
+            if (stashSubida.size() == 256u * 192u)
+                std::memcpy(faithful3dMapped[faithfulRing], stashSubida.data(),
+                            stashSubida.size() * 4u);
+        }
+    }
+
+    std::memcpy(atlas + kFaithfulAtlasPalette, sr->GetFaithfulPrevPaletteLatch(), 0x800);
+    std::memcpy(atlas + kFaithfulAtlasOAM,     sr->GetFaithfulPrevOAMLatch(),     0x800);
+
+    static const bool faseNM2 =
+        std::getenv("MELON_M2_FILAS_N") != nullptr;
+    {
+        std::memcpy(atlas + kFaithfulAtlasModo2,
+                    faseNM2 ? sr->GetFaithfulModo2Linea()
+                            : sr->GetFaithfulPrevModo2Linea(), 0x18000u);
+    }
+
+    constexpr size_t kPixelesPantalla = 192u * 256u;
+    constexpr size_t kBytesLineas = 2u * kPixelesPantalla * sizeof(u32);
+    const auto publicarLineas = [](u8* destino,
+                                      const u32* colores,
+                                      const u32* mascaraA,
+                                      const u32* mascaraB,
+                                      bool aceptarMascaraANula) {
+        const bool aplicarMascaras = mascaraB != nullptr
+            && (aceptarMascaraANula || mascaraA != nullptr);
+        if (!aplicarMascaras)
+        {
+            if (colores != nullptr)
+                std::memcpy(destino, colores, kBytesLineas);
+            return;
+        }
+
+        u32* const lineas = reinterpret_cast<u32*>(destino);
+        writeFaithfulMaskedScreen(lineas, colores, mascaraA);
+        writeFaithfulMaskedScreen(lineas + kPixelesPantalla,
+            colores != nullptr ? colores + kPixelesPantalla : nullptr,
+            mascaraB);
+    };
+
+    const u32* const coloresPrev =
+        (sr->GetFaithfulPrevFrameMeta()[6] & 3u) != 0u
+            ? sr->GetFaithfulPrevLineaCompuesta() : nullptr;
+
+    const u32* const mascaraPrevA = faseNM2
+        ? nullptr : sr->GetFaithfulPrevCaptureProductPixelMask(0u);
+    const u32* const mascaraPrevB =
+        sr->GetFaithfulPrevCaptureProductPixelMask(1u);
+    publicarLineas(atlas + kFaithfulAtlasLineas, coloresPrev,
+                   mascaraPrevA, mascaraPrevB, true);
+    if ((sr->GetFaithfulPrevFrameMeta()[6] & 1u) != 0u)
+        std::memcpy(atlas + kFaithfulAtlasLine3D,
+                    sr->GetFaithfulPrevLine3DOperands(),
+                    kPixelesPantalla * sizeof(u32));
+
+    {
+        if (capProductoVivo.valid && capProductoVivo.materialComplete
+            && capProductoVivo.destinationBank < 4u)
+        {
+            const u16* material = sr->GetFaithfulCaptureProductMaterial(
+                capProductoVivo.productEpoch, capProductoVivo.productId);
+            if (material != nullptr)
+            {
+                if (std::getenv("MELON_SONDA_CAPID") != nullptr)
+                {
+                    u64 hash = 1469598103934665603ull;
+                    u32 noCero = 0u;
+                    for (size_t i = 0u; i < 256u * 192u; i++)
+                    {
+                        const u16 pixel = material[i];
+                        noCero += (pixel & 0x7FFFu) != 0u ? 1u : 0u;
+                        hash ^= static_cast<u8>(pixel);
+                        hash *= 1099511628211ull;
+                        hash ^= static_cast<u8>(pixel >> 8u);
+                        hash *= 1099511628211ull;
+                    }
+                    std::fprintf(stderr,
+                        "[cap-material] epoch=%llu product=%llu "
+                        "render=%llu:%llu nonzero=%u hash=%016llX\n",
+                        static_cast<unsigned long long>(
+                            capProductoVivo.productEpoch),
+                        static_cast<unsigned long long>(
+                            capProductoVivo.productId),
+                        static_cast<unsigned long long>(
+                            capProductoVivo.sourceRenderProductEpoch),
+                        static_cast<unsigned long long>(
+                            capProductoVivo.sourceSequence),
+                        noCero, static_cast<unsigned long long>(hash));
+                }
+            }
+        }
+    }
+
+    if (!flushFaithfulAtlasWritesLocked(faithfulRing))
+        faithfulAtlasPrimed[faithfulRing] = false;
+}
+
+void VulkanOutput::destroyFaithfulDebugLocked()
+{
+    faithfulDiagnosticPayload.invalidate();
+    noteFaithfulCertifiedCaptureLossLocked();
+    faithfulPipelineReady = false;
+
+    for (auto& [frame, resource] : resources)
+    {
+        (void)frame;
+        destroyRenderer3dNativeProjection(resource);
+    }
+    for (auto& pipeline : faithfulModePipeline)
+    {
+        if (pipeline != VK_NULL_HANDLE)
+        {
+            vkDestroyPipeline(device, pipeline, nullptr);
+            pipeline = VK_NULL_HANDLE;
+        }
+    }
+    for (auto& pipeline : faithfulCaptureSourceAOnlyPipeline)
+    {
+        if (pipeline != VK_NULL_HANDLE)
+        {
+            vkDestroyPipeline(device, pipeline, nullptr);
+            pipeline = VK_NULL_HANDLE;
+        }
+    }
+    if (faithfulFinalNativeCellPipeline != VK_NULL_HANDLE)
+    {
+        vkDestroyPipeline(
+            device, faithfulFinalNativeCellPipeline, nullptr);
+        faithfulFinalNativeCellPipeline = VK_NULL_HANDLE;
+    }
+    faithfulFinalNativeSubtileSize = 4u;
+    if (faithfulObjScanlinePipeline != VK_NULL_HANDLE)
+    {
+        vkDestroyPipeline(device, faithfulObjScanlinePipeline, nullptr);
+        faithfulObjScanlinePipeline = VK_NULL_HANDLE;
+    }
+    if (faithfulPipeline != VK_NULL_HANDLE) { vkDestroyPipeline(device, faithfulPipeline, nullptr); faithfulPipeline = VK_NULL_HANDLE; }
+    if (renderer3dNativeProjectionPipeline != VK_NULL_HANDLE) { vkDestroyPipeline(device, renderer3dNativeProjectionPipeline, nullptr); renderer3dNativeProjectionPipeline = VK_NULL_HANDLE; }
+    if (renderer3dNativeProjectionPipeLayout != VK_NULL_HANDLE) { vkDestroyPipelineLayout(device, renderer3dNativeProjectionPipeLayout, nullptr); renderer3dNativeProjectionPipeLayout = VK_NULL_HANDLE; }
+    if (renderer3dNativeProjectionSetLayout != VK_NULL_HANDLE) { vkDestroyDescriptorSetLayout(device, renderer3dNativeProjectionSetLayout, nullptr); renderer3dNativeProjectionSetLayout = VK_NULL_HANDLE; }
+    if (faithfulPipeLayout != VK_NULL_HANDLE) { vkDestroyPipelineLayout(device, faithfulPipeLayout, nullptr); faithfulPipeLayout = VK_NULL_HANDLE; }
+    if (faithfulDescPool != VK_NULL_HANDLE) { vkDestroyDescriptorPool(device, faithfulDescPool, nullptr); faithfulDescPool = VK_NULL_HANDLE; for (u32 j = 0; j < kFielRanuras; j++) faithfulDescSet[j] = VK_NULL_HANDLE; }
+    if (faithfulSampler != VK_NULL_HANDLE) { vkDestroySampler(device, faithfulSampler, nullptr); faithfulSampler = VK_NULL_HANDLE; }
+    if (faithfulSetLayout != VK_NULL_HANDLE) { vkDestroyDescriptorSetLayout(device, faithfulSetLayout, nullptr); faithfulSetLayout = VK_NULL_HANDLE; }
+    if (faithfulOutView != VK_NULL_HANDLE) { vkDestroyImageView(device, faithfulOutView, nullptr); faithfulOutView = VK_NULL_HANDLE; }
+    if (faithfulOutImage != VK_NULL_HANDLE) { vkDestroyImage(device, faithfulOutImage, nullptr); faithfulOutImage = VK_NULL_HANDLE; }
+    if (faithfulOutMemory != VK_NULL_HANDLE) { vkFreeMemory(device, faithfulOutMemory, nullptr); faithfulOutMemory = VK_NULL_HANDLE; }
+    if (faithfulReadMapped != nullptr) { vkUnmapMemory(device, faithfulReadMemory); faithfulReadMapped = nullptr; }
+    if (faithfulReadBuffer != VK_NULL_HANDLE) { vkDestroyBuffer(device, faithfulReadBuffer, nullptr); faithfulReadBuffer = VK_NULL_HANDLE; }
+    if (faithfulReadMemory != VK_NULL_HANDLE) { vkFreeMemory(device, faithfulReadMemory, nullptr); faithfulReadMemory = VK_NULL_HANDLE; }
+    for (u32 j = 0; j < kFielRanuras; j++)
+    {
+        faithfulCapturePlans[j].reset();
+        if (faithfulRegsMapped[j] != nullptr) { vkUnmapMemory(device, faithfulRegsMemory[j]); faithfulRegsMapped[j] = nullptr; }
+        if (faithfulRegsBuffer[j] != VK_NULL_HANDLE) { vkDestroyBuffer(device, faithfulRegsBuffer[j], nullptr); faithfulRegsBuffer[j] = VK_NULL_HANDLE; }
+        if (faithfulRegsMemory[j] != VK_NULL_HANDLE) { vkFreeMemory(device, faithfulRegsMemory[j], nullptr); faithfulRegsMemory[j] = VK_NULL_HANDLE; }
+        if (faithfulCausalMapped[j] != nullptr) { vkUnmapMemory(device, faithfulCausalMemory[j]); faithfulCausalMapped[j] = nullptr; }
+        if (faithfulCausalBuffer[j] != VK_NULL_HANDLE) { vkDestroyBuffer(device, faithfulCausalBuffer[j], nullptr); faithfulCausalBuffer[j] = VK_NULL_HANDLE; }
+        if (faithfulCausalMemory[j] != VK_NULL_HANDLE) { vkFreeMemory(device, faithfulCausalMemory[j], nullptr); faithfulCausalMemory[j] = VK_NULL_HANDLE; }
+        if (faithful3dMapped[j] != nullptr) { vkUnmapMemory(device, faithful3dMemory[j]); faithful3dMapped[j] = nullptr; }
+        if (faithful3dBuffer[j] != VK_NULL_HANDLE) { vkDestroyBuffer(device, faithful3dBuffer[j], nullptr); faithful3dBuffer[j] = VK_NULL_HANDLE; }
+        if (faithful3dMemory[j] != VK_NULL_HANDLE) { vkFreeMemory(device, faithful3dMemory[j], nullptr); faithful3dMemory[j] = VK_NULL_HANDLE; }
+        if (faithfulSealReadbackMapped[j] != nullptr) { vkUnmapMemory(device, faithfulSealReadbackMemory[j]); faithfulSealReadbackMapped[j] = nullptr; }
+        if (faithfulSealReadbackBuffer[j] != VK_NULL_HANDLE) { vkDestroyBuffer(device, faithfulSealReadbackBuffer[j], nullptr); faithfulSealReadbackBuffer[j] = VK_NULL_HANDLE; }
+        if (faithfulSealReadbackMemory[j] != VK_NULL_HANDLE) { vkFreeMemory(device, faithfulSealReadbackMemory[j], nullptr); faithfulSealReadbackMemory[j] = VK_NULL_HANDLE; }
+        faithfulSealReadbackPending[j] = false;
+        faithfulSealReadbackSlot[j] = 4u;
+        faithfulSealReadbackEpoch[j] = 0u;
+        faithfulSealReadbackProduct[j] = 0u;
+        faithfulSealReadbackAttempt[j] = 0u;
+    }
+    if (faithfulObjBuffer != VK_NULL_HANDLE) { vkDestroyBuffer(device, faithfulObjBuffer, nullptr); faithfulObjBuffer = VK_NULL_HANDLE; }
+    if (faithfulObjMemory != VK_NULL_HANDLE) { vkFreeMemory(device, faithfulObjMemory, nullptr); faithfulObjMemory = VK_NULL_HANDLE; }
+    if (faithfulB1Buffer != VK_NULL_HANDLE) { vkDestroyBuffer(device, faithfulB1Buffer, nullptr); faithfulB1Buffer = VK_NULL_HANDLE; }
+    if (faithfulB1Memory != VK_NULL_HANDLE) { vkFreeMemory(device, faithfulB1Memory, nullptr); faithfulB1Memory = VK_NULL_HANDLE; }
+    if (faithfulCaptureSealBuffer != VK_NULL_HANDLE) { vkDestroyBuffer(device, faithfulCaptureSealBuffer, nullptr); faithfulCaptureSealBuffer = VK_NULL_HANDLE; }
+    if (faithfulCaptureSealMemory != VK_NULL_HANDLE) { vkFreeMemory(device, faithfulCaptureSealMemory, nullptr); faithfulCaptureSealMemory = VK_NULL_HANDLE; }
+    faithfulCaptureSealNeedsClear = true;
+    for (u32 slot = 0u; slot < 4u; slot++)
+    {
+        capHighresSlotState[slot] = FaithfulCaptureSlotState::Empty;
+        capHighresSealAttempt[slot] = 0u;
+        capHighresProducto[slot] = {};
+    }
+    capHighresValida = false;
+    faithfulOutImageInitialized = false;
+}
+
+void VulkanOutput::destroyCapturaHighresLocked()
+{
+    noteFaithfulCertifiedCaptureLossLocked();
+    faithfulHighresConsumerActive = false;
+    capHighresPrevInicial = false;
+    capHighresPrev2Inicial = false;
+    for (u32 slot = 0u; slot < 4u; slot++)
+    {
+        if (device != VK_NULL_HANDLE)
+        {
+            if (capHighresView[slot] != VK_NULL_HANDLE)
+                vkDestroyImageView(device, capHighresView[slot], nullptr);
+            if (capHighresImage[slot] != VK_NULL_HANDLE)
+                vkDestroyImage(device, capHighresImage[slot], nullptr);
+            if (capHighresMem[slot] != VK_NULL_HANDLE)
+                vkFreeMemory(device, capHighresMem[slot], nullptr);
+        }
+        capHighresView[slot] = VK_NULL_HANDLE;
+        capHighresImage[slot] = VK_NULL_HANDLE;
+        capHighresMem[slot] = VK_NULL_HANDLE;
+        capHighresLayoutInitialized[slot] = false;
+        capHighresSlotState[slot] = FaithfulCaptureSlotState::Empty;
+        capHighresSealAttempt[slot] = 0u;
+        capHighresProducto[slot] = {};
+    }
+    capHighresBancoPar[0] = capHighresBancoPar[1] = 0xFFFFFFFFu;
+    capHighresOfsPar[0] = capHighresOfsPar[1] = 0u;
+    capVetoIdentidadPar[0] = capVetoIdentidadPar[1] = false;
+    capHighresProductEpoch = 0u;
+    for (auto& plan : faithfulCapturePlans)
+        plan.reset();
+    faithfulPublishedCaptureTerminals.fill({});
+    faithfulRequiredCaptureTerminals.fill({});
+    faithfulPublishedCaptureTerminalCount = 0u;
+    faithfulRequiredCaptureTerminalCount = 0u;
+    faithfulPublishedCaptureTerminalEpoch = 0u;
+    faithfulRequiredCaptureTerminalEpoch = 0u;
+    faithfulPublishedCaptureTerminalGeneration = 0u;
+    faithfulRequiredCaptureTerminalGeneration = 0u;
+    faithfulCaptureSealNeedsClear = true;
+    capHighresValida = false;
+    capHighresEscala = 0u;
+}
+
+namespace
+{
+u64 a1Fnv1a64(u64 h, const unsigned char* data, std::size_t len)
+{
+    for (std::size_t i = 0; i < len; i++)
+    {
+        h ^= data[i];
+        h *= 1099511628211ull;
+    }
+    return h;
+}
+}
+
+bool VulkanOutput::ensureFaithfulPipelineCache()
+{
+    if (faithfulPipelineCache != VK_NULL_HANDLE)
+        return true;
+    if (device == VK_NULL_HANDLE || physicalDevice == VK_NULL_HANDLE)
+        return false;
+
+    VkPhysicalDeviceProperties deviceProperties{};
+    vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
+    char uuidHex[2 * VK_UUID_SIZE + 1]{};
+    for (u32 i = 0; i < VK_UUID_SIZE; i++)
+        std::snprintf(uuidHex + 2 * i, 3, "%02x", deviceProperties.pipelineCacheUUID[i]);
+    u64 shaderHash = 14695981039346656037ull;
+    shaderHash = a1Fnv1a64(shaderHash, melonDS_android_vulkan_faithful_comp_spv,
+                           melonDS_android_vulkan_faithful_comp_spv_len);
+    shaderHash = a1Fnv1a64(shaderHash, melonDS_android_vulkan_faithful_obj_scanline_comp_spv,
+                           melonDS_android_vulkan_faithful_obj_scanline_comp_spv_len);
+    shaderHash = a1Fnv1a64(shaderHash, melonDS_android_vulkan_renderer3d_native_projection_comp_spv,
+                           melonDS_android_vulkan_renderer3d_native_projection_comp_spv_len);
+    char cacheFileName[256]{};
+    std::snprintf(
+        cacheFileName, sizeof(cacheFileName),
+        "vulkan_output_pipeline_cache_v1_%08x_%08x_%08x_%s_%016llx.bin",
+        deviceProperties.vendorID, deviceProperties.deviceID, deviceProperties.driverVersion,
+        uuidHex, static_cast<unsigned long long>(shaderHash));
+    faithfulPipelineCacheFile = cacheFileName;
+
+    std::vector<u8> cacheData;
+    if (melonDS::Platform::FileHandle* cacheFile = melonDS::Platform::OpenLocalFile(
+            faithfulPipelineCacheFile, melonDS::Platform::FileMode::Read))
+    {
+        const u64 cacheSize = melonDS::Platform::FileLength(cacheFile);
+        if (cacheSize > 0 && cacheSize <= (64ull * 1024ull * 1024ull))
+        {
+            cacheData.resize(static_cast<std::size_t>(cacheSize));
+            if (melonDS::Platform::FileRead(cacheData.data(), 1, cacheSize, cacheFile) != cacheSize)
+                cacheData.clear();
+        }
+        melonDS::Platform::CloseFile(cacheFile);
+    }
+
+    VkPipelineCacheCreateInfo cacheCreateInfo{};
+    cacheCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+    cacheCreateInfo.initialDataSize = cacheData.size();
+    cacheCreateInfo.pInitialData = cacheData.empty() ? nullptr : cacheData.data();
+    VkResult cacheResult = vkCreatePipelineCache(device, &cacheCreateInfo, nullptr, &faithfulPipelineCache);
+    bool rejected = false;
+    if (cacheResult != VK_SUCCESS && !cacheData.empty())
+    {
+
+        rejected = true;
+        cacheCreateInfo.initialDataSize = 0;
+        cacheCreateInfo.pInitialData = nullptr;
+        cacheResult = vkCreatePipelineCache(device, &cacheCreateInfo, nullptr, &faithfulPipelineCache);
+    }
+    if (cacheResult != VK_SUCCESS)
+    {
+        faithfulPipelineCache = VK_NULL_HANDLE;
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Warn,
+            "VulkanOutput: pipeline cache unavailable (%d)", static_cast<int>(cacheResult));
+        return false;
+    }
+    faithfulPipelineCacheSavedBytes = rejected ? 0 : cacheData.size();
+    melonDS::Platform::Log(
+        melonDS::Platform::LogLevel::Warn,
+        "VulkanOutput: pipeline cache ready (%s, %llu bytes preloaded, rejected=%d)",
+        faithfulPipelineCacheFile.c_str(),
+        static_cast<unsigned long long>(cacheData.size()), rejected ? 1 : 0);
+    return true;
+}
+
+void VulkanOutput::saveFaithfulPipelineCacheIfGrown()
+{
+    if (device == VK_NULL_HANDLE || faithfulPipelineCache == VK_NULL_HANDLE || faithfulPipelineCacheFile.empty())
+        return;
+    std::size_t cacheSize = 0;
+    if (vkGetPipelineCacheData(device, faithfulPipelineCache, &cacheSize, nullptr) != VK_SUCCESS || cacheSize == 0)
+        return;
+    if (cacheSize == faithfulPipelineCacheSavedBytes)
+        return;
+    std::vector<u8> cacheData(cacheSize);
+    if (vkGetPipelineCacheData(device, faithfulPipelineCache, &cacheSize, cacheData.data()) != VK_SUCCESS || cacheSize == 0)
+        return;
+    melonDS::Platform::FileHandle* cacheFile = melonDS::Platform::OpenLocalFile(
+        faithfulPipelineCacheFile, melonDS::Platform::FileMode::Write);
+    if (cacheFile == nullptr)
+        return;
+    const u64 written = melonDS::Platform::FileWrite(cacheData.data(), 1, cacheSize, cacheFile);
+    melonDS::Platform::FileFlush(cacheFile);
+    melonDS::Platform::CloseFile(cacheFile);
+    if (written == cacheSize)
+    {
+        faithfulPipelineCacheSavedBytes = cacheSize;
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Warn,
+            "VulkanOutput: saved pipeline cache (%s, %llu bytes)",
+            faithfulPipelineCacheFile.c_str(), static_cast<unsigned long long>(cacheSize));
+    }
+}
+
+void VulkanOutput::destroyFaithfulPipelineCache()
+{
+    if (faithfulPipelineCache == VK_NULL_HANDLE)
+        return;
+    saveFaithfulPipelineCacheIfGrown();
+    vkDestroyPipelineCache(device, faithfulPipelineCache, nullptr);
+    faithfulPipelineCache = VK_NULL_HANDLE;
+}
+
+bool VulkanOutput::ensureFaithfulPipeline()
+{
+
+    constexpr VkDeviceSize kRegsBytes = (2u * (2u * 192u * 32u) + 16u) * 4u;
+    constexpr VkDeviceSize kSalidaBytes = 256u * 384u * 4u;
+    if (faithfulPipelineReady)
+        return true;
+    if (device == VK_NULL_HANDLE)
+        return false;
+
+    destroyFaithfulDebugLocked();
+
+    const bool a1Traza = areRendererDebugToolsEnabled();
+    const u64 a1InicioNs = a1Traza ? PerfNowNs() : 0u;
+    u64 a1PasoNs = a1InicioNs;
+    const auto a1Marca = [&](const char* paso) {
+        if (!a1Traza)
+            return;
+        const u64 ahora = PerfNowNs();
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Warn,
+            "VulkanPerf[A1Faithful]: paso=%s ms=%.1f acum=%.1f",
+            paso,
+            static_cast<double>(ahora - a1PasoNs) / 1e6,
+            static_cast<double>(ahora - a1InicioNs) / 1e6);
+        a1PasoNs = ahora;
+    };
+    if (!ensureFaithfulAtlas())
+        return false;
+    a1Marca("atlas");
+    bool committed = false;
+    const auto rollbackFn = [&](void*) {
+        if (!committed)
+            destroyFaithfulDebugLocked();
+    };
+    const std::unique_ptr<void, decltype(rollbackFn)> rollback(
+        reinterpret_cast<void*>(1), rollbackFn);
+
+    auto crearBufer = [&](VkBuffer& b, VkDeviceMemory& m, void** mapa,
+                          VkDeviceSize tam, VkBufferUsageFlags uso) -> bool {
+        VkBufferCreateInfo bi{};
+        bi.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bi.size = tam; bi.usage = uso; bi.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        if (vkCreateBuffer(device, &bi, nullptr, &b) != VK_SUCCESS) return false;
+        VkMemoryRequirements req{}; vkGetBufferMemoryRequirements(device, b, &req);
+        VkMemoryAllocateInfo ai{};
+        ai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        ai.allocationSize = req.size;
+        ai.memoryTypeIndex = findMemoryType(req.memoryTypeBits,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        if (ai.memoryTypeIndex == UINT32_MAX
+            || vkAllocateMemory(device, &ai, nullptr, &m) != VK_SUCCESS
+            || vkBindBufferMemory(device, b, m, 0) != VK_SUCCESS) return false;
+        if (mapa != nullptr && vkMapMemory(device, m, 0, tam, 0, mapa) != VK_SUCCESS) return false;
+        return true;
+    };
+
+    for (u32 j = 0; j < kFielRanuras; j++)
+    {
+        if (!crearBufer(faithfulRegsBuffer[j], faithfulRegsMemory[j], &faithfulRegsMapped[j],
+                        kRegsBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)) return false;
+        if (!crearBufer(faithfulCausalBuffer[j], faithfulCausalMemory[j],
+                        &faithfulCausalMapped[j], kFaithfulCausalBufferSize,
+                        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)) return false;
+        std::memset(faithfulCausalMapped[j], 0,
+                    static_cast<size_t>(kFaithfulCausalBufferSize));
+        if (!crearBufer(faithful3dBuffer[j], faithful3dMemory[j], &faithful3dMapped[j],
+                        256u * 192u * 4u, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)) return false;
+        if (!crearBufer(faithfulSealReadbackBuffer[j],
+                        faithfulSealReadbackMemory[j],
+                        &faithfulSealReadbackMapped[j],
+                        16u * sizeof(u32),
+                        VK_BUFFER_USAGE_TRANSFER_DST_BIT)) return false;
+        std::memset(faithfulSealReadbackMapped[j], 0, 16u * sizeof(u32));
+    }
+    if (!crearBufer(faithfulReadBuffer, faithfulReadMemory, &faithfulReadMapped,
+                    kSalidaBytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT)) return false;
+
+    VkImageCreateInfo ii{};
+    ii.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    ii.imageType = VK_IMAGE_TYPE_2D;
+    ii.format = VK_FORMAT_R8G8B8A8_UNORM;
+    ii.extent = {256u, 384u, 1u};
+    ii.mipLevels = 1; ii.arrayLayers = 1;
+    ii.samples = VK_SAMPLE_COUNT_1_BIT;
+    ii.tiling = VK_IMAGE_TILING_OPTIMAL;
+
+    ii.usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT
+             | VK_IMAGE_USAGE_SAMPLED_BIT;
+    ii.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    if (vkCreateImage(device, &ii, nullptr, &faithfulOutImage) != VK_SUCCESS) return false;
+    VkMemoryRequirements req{}; vkGetImageMemoryRequirements(device, faithfulOutImage, &req);
+    VkMemoryAllocateInfo ai{};
+    ai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    ai.allocationSize = req.size;
+    ai.memoryTypeIndex = findMemoryType(req.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if (ai.memoryTypeIndex == UINT32_MAX
+        || vkAllocateMemory(device, &ai, nullptr, &faithfulOutMemory) != VK_SUCCESS
+        || vkBindImageMemory(device, faithfulOutImage, faithfulOutMemory, 0) != VK_SUCCESS)
+        return false;
+    VkImageViewCreateInfo vi{};
+    vi.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    vi.image = faithfulOutImage;
+    vi.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    vi.format = ii.format;
+    vi.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    if (vkCreateImageView(device, &vi, nullptr, &faithfulOutView) != VK_SUCCESS) return false;
+
+    VkDescriptorSetLayoutBinding binds[16]{};
+    binds[0] = {0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+    binds[1] = {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+    binds[2] = {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+    binds[3] = {3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+    binds[4] = {4, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+    binds[5] = {5, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+    binds[6] = {6, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+
+    binds[7] = {7, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+
+    binds[8] = {8, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+
+    binds[9] = {9, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+
+    binds[10] = {10, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+    binds[11] = {11, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+
+    binds[12] = {12, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+
+    binds[13] = {13, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+
+    binds[14] = {14, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1,
+                 VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+
+    binds[15] = {15, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1,
+                 VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+    VkDescriptorSetLayoutCreateInfo li{};
+    li.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    li.bindingCount = 16; li.pBindings = binds;
+    if (vkCreateDescriptorSetLayout(device, &li, nullptr, &faithfulSetLayout) != VK_SUCCESS) return false;
+    VkPushConstantRange pcr{};
+    pcr.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    pcr.offset = 0; pcr.size = 12;
+    VkPipelineLayoutCreateInfo pli{};
+    pli.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pli.setLayoutCount = 1; pli.pSetLayouts = &faithfulSetLayout;
+    pli.pushConstantRangeCount = 1; pli.pPushConstantRanges = &pcr;
+    if (vkCreatePipelineLayout(device, &pli, nullptr, &faithfulPipeLayout) != VK_SUCCESS) return false;
+
+    {
+        VkBufferCreateInfo bi{};
+        bi.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bi.size = 16u * 4u * sizeof(u32);
+        bi.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
+                 | VK_BUFFER_USAGE_TRANSFER_SRC_BIT
+                 | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        bi.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        if (vkCreateBuffer(device, &bi, nullptr,
+                           &faithfulCaptureSealBuffer) != VK_SUCCESS)
+            return false;
+        VkMemoryRequirements req{};
+        vkGetBufferMemoryRequirements(device, faithfulCaptureSealBuffer, &req);
+        VkMemoryAllocateInfo ami{};
+        ami.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        ami.allocationSize = req.size;
+        ami.memoryTypeIndex = findMemoryType(
+            req.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        if (ami.memoryTypeIndex == UINT32_MAX
+            || vkAllocateMemory(device, &ami, nullptr,
+                                &faithfulCaptureSealMemory) != VK_SUCCESS
+            || vkBindBufferMemory(device, faithfulCaptureSealBuffer,
+                                  faithfulCaptureSealMemory, 0) != VK_SUCCESS)
+            return false;
+        faithfulCaptureSealNeedsClear = true;
+    }
+
+    VkShaderModuleCreateInfo smi{};
+    smi.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    smi.codeSize = melonDS_android_vulkan_faithful_comp_spv_len;
+    smi.pCode = reinterpret_cast<const uint32_t*>(melonDS_android_vulkan_faithful_comp_spv);
+    VkShaderModule sm = VK_NULL_HANDLE;
+    a1Marca("recursos");
+
+    ensureFaithfulPipelineCache();
+    if (vkCreateShaderModule(device, &smi, nullptr, &sm) != VK_SUCCESS) return false;
+    a1Marca("moduloGeneral");
+    VkComputePipelineCreateInfo cpi{};
+    cpi.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+    cpi.stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    cpi.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+    cpi.stage.module = sm;
+    cpi.stage.pName = "main";
+    cpi.layout = faithfulPipeLayout;
+
+    struct FaithfulPipelineSpecialization
+    {
+        u32 mode = 0xFFFFFFFFu;
+        u32 captureRecipeEncoding = 0xFFFFFFFFu;
+        u32 finalInvocationMode = 0xFFFFFFFFu;
+        u32 finalNativeSubtileSize = 4u;
+    };
+    VkSpecializationMapEntry specializationEntries[4]{};
+    specializationEntries[0].constantID = 0u;
+    specializationEntries[0].offset = offsetof(
+        FaithfulPipelineSpecialization, mode);
+    specializationEntries[0].size = sizeof(u32);
+    specializationEntries[1].constantID = 1u;
+    specializationEntries[1].offset = offsetof(
+        FaithfulPipelineSpecialization, captureRecipeEncoding);
+    specializationEntries[1].size = sizeof(u32);
+    specializationEntries[2].constantID = 2u;
+    specializationEntries[2].offset = offsetof(
+        FaithfulPipelineSpecialization, finalInvocationMode);
+    specializationEntries[2].size = sizeof(u32);
+    specializationEntries[3].constantID = 3u;
+    specializationEntries[3].offset = offsetof(
+        FaithfulPipelineSpecialization, finalNativeSubtileSize);
+    specializationEntries[3].size = sizeof(u32);
+    VkSpecializationInfo modeSpecialization{};
+    modeSpecialization.mapEntryCount = 4u;
+    modeSpecialization.pMapEntries = specializationEntries;
+    modeSpecialization.dataSize = sizeof(FaithfulPipelineSpecialization);
+    cpi.stage.pSpecializationInfo = &modeSpecialization;
+    FaithfulPipelineSpecialization specialization{};
+
+    specialization.mode = 0u;
+    specialization.captureRecipeEncoding = 0xFFFFFFFFu;
+    specialization.finalInvocationMode = 0u;
+    modeSpecialization.pData = &specialization;
+    if (vkCreateComputePipelines(device, faithfulPipelineCache, 1, &cpi, nullptr,
+                                 &faithfulPipeline) != VK_SUCCESS)
+    {
+        vkDestroyShaderModule(device, sm, nullptr);
+        return false;
+    }
+    a1Marca("pipeGeneral");
+    for (u32 mode = 1u; mode <= 6u; mode++)
+    {
+
+        if (mode == 2u)
+            continue;
+        specialization.mode = mode;
+        specialization.captureRecipeEncoding = 0xFFFFFFFFu;
+        specialization.finalInvocationMode = 0u;
+        modeSpecialization.pData = &specialization;
+        if (vkCreateComputePipelines(device, faithfulPipelineCache, 1, &cpi, nullptr,
+                                     &faithfulModePipeline[mode]) != VK_SUCCESS)
+        {
+            vkDestroyShaderModule(device, sm, nullptr);
+            return false;
+        }
+        {
+            char a1Nombre[24];
+            std::snprintf(a1Nombre, sizeof(a1Nombre), "pipeModo%u", mode);
+            a1Marca(a1Nombre);
+        }
+    }
+    VkPhysicalDeviceSubgroupProperties subgroupProperties{};
+    subgroupProperties.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES;
+    VkPhysicalDeviceProperties2 physicalDeviceProperties{};
+    physicalDeviceProperties.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+    physicalDeviceProperties.pNext = &subgroupProperties;
+    auto getPhysicalDeviceProperties2 =
+        reinterpret_cast<PFN_vkGetPhysicalDeviceProperties2>(
+            vkGetInstanceProcAddr(
+                instance, "vkGetPhysicalDeviceProperties2"));
+    if (getPhysicalDeviceProperties2 == nullptr)
+    {
+        getPhysicalDeviceProperties2 =
+            reinterpret_cast<PFN_vkGetPhysicalDeviceProperties2>(
+                vkGetInstanceProcAddr(
+                    instance, "vkGetPhysicalDeviceProperties2KHR"));
+    }
+    if (getPhysicalDeviceProperties2 != nullptr)
+        getPhysicalDeviceProperties2(
+            physicalDevice, &physicalDeviceProperties);
+    const bool computeSubgroupsSupported =
+        (subgroupProperties.supportedStages & VK_SHADER_STAGE_COMPUTE_BIT)
+        != 0u;
+    faithfulFinalNativeSubtileSize =
+        computeSubgroupsSupported && subgroupProperties.subgroupSize >= 64u
+            ? 2u : 4u;
+    melonDS::Platform::Log(
+        melonDS::Platform::LogLevel::Warn,
+        "VulkanOutput: faithful final specialization subgroup=%u "
+        "compute=%u subtile=%u",
+        subgroupProperties.subgroupSize,
+        computeSubgroupsSupported ? 1u : 0u,
+        faithfulFinalNativeSubtileSize);
+    specialization.mode = 1u;
+    specialization.captureRecipeEncoding = 0xFFFFFFFFu;
+    specialization.finalInvocationMode = 1u;
+    specialization.finalNativeSubtileSize =
+        faithfulFinalNativeSubtileSize;
+    modeSpecialization.pData = &specialization;
+    if (vkCreateComputePipelines(
+            device, faithfulPipelineCache, 1, &cpi, nullptr,
+            &faithfulFinalNativeCellPipeline) != VK_SUCCESS)
+    {
+        vkDestroyShaderModule(device, sm, nullptr);
+        return false;
+    }
+    a1Marca("pipeFinalNativo");
+    for (u32 variant = 0u; variant < 2u; variant++)
+    {
+        specialization.mode = 4u + variant;
+        specialization.captureRecipeEncoding = 1u;
+        specialization.finalInvocationMode = 0u;
+        specialization.finalNativeSubtileSize = 4u;
+        modeSpecialization.pData = &specialization;
+        if (vkCreateComputePipelines(
+                device, faithfulPipelineCache, 1, &cpi, nullptr,
+                &faithfulCaptureSourceAOnlyPipeline[variant]) != VK_SUCCESS)
+        {
+            vkDestroyShaderModule(device, sm, nullptr);
+            return false;
+        }
+        a1Marca(variant == 0u ? "pipeCapturaA0" : "pipeCapturaA1");
+    }
+    vkDestroyShaderModule(device, sm, nullptr);
+
+    VkShaderModuleCreateInfo objShaderModuleInfo{};
+    objShaderModuleInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    objShaderModuleInfo.codeSize =
+        melonDS_android_vulkan_faithful_obj_scanline_comp_spv_len;
+    objShaderModuleInfo.pCode = reinterpret_cast<const uint32_t*>(
+        melonDS_android_vulkan_faithful_obj_scanline_comp_spv);
+    VkShaderModule objShaderModule = VK_NULL_HANDLE;
+    if (vkCreateShaderModule(device, &objShaderModuleInfo, nullptr,
+                             &objShaderModule) != VK_SUCCESS)
+        return false;
+    VkComputePipelineCreateInfo objPipelineInfo{};
+    objPipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+    objPipelineInfo.stage.sType =
+        VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    objPipelineInfo.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+    objPipelineInfo.stage.module = objShaderModule;
+    objPipelineInfo.stage.pName = "main";
+    objPipelineInfo.layout = faithfulPipeLayout;
+    const VkResult objPipelineResult = vkCreateComputePipelines(
+        device, faithfulPipelineCache, 1u, &objPipelineInfo, nullptr,
+        &faithfulObjScanlinePipeline);
+    vkDestroyShaderModule(device, objShaderModule, nullptr);
+    if (objPipelineResult != VK_SUCCESS)
+        return false;
+    a1Marca("pipeObj");
+
+    if (faithfulSampler == VK_NULL_HANDLE)
+    {
+        VkSamplerCreateInfo si{};
+        si.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        si.magFilter = VK_FILTER_NEAREST;
+        si.minFilter = VK_FILTER_NEAREST;
+        si.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        si.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        si.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        si.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        if (vkCreateSampler(device, &si, nullptr, &faithfulSampler) != VK_SUCCESS)
+            return false;
+    }
+
+    const bool nativeProjectionPipelineEnabled = true;
+    if (nativeProjectionPipelineEnabled)
+    {
+        VkDescriptorSetLayoutBinding projectionBindings[2]{};
+        projectionBindings[0] = {
+            0u, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1u,
+            VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+        projectionBindings[1] = {
+            1u, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1u,
+            VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+        VkDescriptorSetLayoutCreateInfo projectionSetInfo{};
+        projectionSetInfo.sType =
+            VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        projectionSetInfo.bindingCount = 2u;
+        projectionSetInfo.pBindings = projectionBindings;
+        if (vkCreateDescriptorSetLayout(
+                device, &projectionSetInfo, nullptr,
+                &renderer3dNativeProjectionSetLayout) != VK_SUCCESS)
+            return false;
+
+        VkPushConstantRange projectionPush{};
+        projectionPush.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+        projectionPush.offset = 0u;
+        projectionPush.size = 2u * sizeof(u32);
+        VkPipelineLayoutCreateInfo projectionLayoutInfo{};
+        projectionLayoutInfo.sType =
+            VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        projectionLayoutInfo.setLayoutCount = 1u;
+        projectionLayoutInfo.pSetLayouts =
+            &renderer3dNativeProjectionSetLayout;
+        projectionLayoutInfo.pushConstantRangeCount = 1u;
+        projectionLayoutInfo.pPushConstantRanges = &projectionPush;
+        if (vkCreatePipelineLayout(
+                device, &projectionLayoutInfo, nullptr,
+                &renderer3dNativeProjectionPipeLayout) != VK_SUCCESS)
+            return false;
+
+        VkShaderModuleCreateInfo projectionModuleInfo{};
+        projectionModuleInfo.sType =
+            VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        projectionModuleInfo.codeSize =
+            melonDS_android_vulkan_renderer3d_native_projection_comp_spv_len;
+        projectionModuleInfo.pCode = reinterpret_cast<const uint32_t*>(
+            melonDS_android_vulkan_renderer3d_native_projection_comp_spv);
+        VkShaderModule projectionModule = VK_NULL_HANDLE;
+        if (vkCreateShaderModule(
+                device, &projectionModuleInfo, nullptr,
+                &projectionModule) != VK_SUCCESS)
+            return false;
+        VkComputePipelineCreateInfo projectionPipelineInfo{};
+        projectionPipelineInfo.sType =
+            VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+        projectionPipelineInfo.stage.sType =
+            VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        projectionPipelineInfo.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+        projectionPipelineInfo.stage.module = projectionModule;
+        projectionPipelineInfo.stage.pName = "main";
+        projectionPipelineInfo.layout =
+            renderer3dNativeProjectionPipeLayout;
+        const VkResult projectionResult = vkCreateComputePipelines(
+            device, faithfulPipelineCache, 1u, &projectionPipelineInfo, nullptr,
+            &renderer3dNativeProjectionPipeline);
+        vkDestroyShaderModule(device, projectionModule, nullptr);
+        if (projectionResult != VK_SUCCESS)
+            return false;
+        a1Marca("pipeProyeccion");
+    }
+    VkDescriptorPoolSize tam[3] = {
+        {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 6 * kFielRanuras},
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 8 * kFielRanuras},
+        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2 * kFielRanuras},
+    };
+    VkDescriptorPoolCreateInfo dpi{};
+    dpi.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    dpi.maxSets = kFielRanuras; dpi.poolSizeCount = 3; dpi.pPoolSizes = tam;
+    if (vkCreateDescriptorPool(device, &dpi, nullptr, &faithfulDescPool) != VK_SUCCESS) return false;
+    VkDescriptorSetLayout capas2[kFielRanuras];
+    for (u32 j = 0; j < kFielRanuras; j++) capas2[j] = faithfulSetLayout;
+    VkDescriptorSetAllocateInfo dsa{};
+    dsa.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    dsa.descriptorPool = faithfulDescPool;
+    dsa.descriptorSetCount = kFielRanuras; dsa.pSetLayouts = capas2;
+    if (vkAllocateDescriptorSets(device, &dsa, faithfulDescSet) != VK_SUCCESS) return false;
+
+    {
+        VkBufferCreateInfo bi{};
+        bi.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bi.size = 2u * 192u * 256u * 4u;
+        bi.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+        bi.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        if (vkCreateBuffer(device, &bi, nullptr, &faithfulObjBuffer) != VK_SUCCESS) return false;
+        VkMemoryRequirements req{}; vkGetBufferMemoryRequirements(device, faithfulObjBuffer, &req);
+        VkMemoryAllocateInfo ami{};
+        ami.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        ami.allocationSize = req.size;
+        ami.memoryTypeIndex = findMemoryType(req.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        if (ami.memoryTypeIndex == UINT32_MAX
+            || vkAllocateMemory(device, &ami, nullptr, &faithfulObjMemory) != VK_SUCCESS
+            || vkBindBufferMemory(device, faithfulObjBuffer, faithfulObjMemory, 0) != VK_SUCCESS)
+            return false;
+    }
+
+    {
+        VkBufferCreateInfo bi{};
+        bi.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bi.size = 2u * 192u * 256u * 2u * 4u;
+        bi.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+        bi.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        if (vkCreateBuffer(device, &bi, nullptr, &faithfulB1Buffer) != VK_SUCCESS) return false;
+        VkMemoryRequirements req{}; vkGetBufferMemoryRequirements(device, faithfulB1Buffer, &req);
+        VkMemoryAllocateInfo ami{};
+        ami.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        ami.allocationSize = req.size;
+        ami.memoryTypeIndex = findMemoryType(req.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        if (ami.memoryTypeIndex == UINT32_MAX
+            || vkAllocateMemory(device, &ami, nullptr, &faithfulB1Memory) != VK_SUCCESS
+            || vkBindBufferMemory(device, faithfulB1Buffer, faithfulB1Memory, 0) != VK_SUCCESS)
+            return false;
+    }
+    constexpr VkDeviceSize kRegsBytes2 = (2u * (2u * 192u * 32u) + 16u) * 4u;
+    for (u32 j = 0; j < kFielRanuras; j++)
+    {
+        VkDescriptorImageInfo di{VK_NULL_HANDLE, faithfulOutView, VK_IMAGE_LAYOUT_GENERAL};
+        VkDescriptorBufferInfo dbRegs{faithfulRegsBuffer[j], 0, kRegsBytes2};
+        VkDescriptorBufferInfo dbAtlas{faithfulAtlasBuffer[j], 0, VK_WHOLE_SIZE};
+        VkDescriptorBufferInfo db3d{faithful3dBuffer[j], 0, VK_WHOLE_SIZE};
+        VkDescriptorBufferInfo dbObj{faithfulObjBuffer, 0, VK_WHOLE_SIZE};
+        VkDescriptorBufferInfo dbB1{faithfulB1Buffer, 0, VK_WHOLE_SIZE};
+        VkDescriptorBufferInfo dbSeal{faithfulCaptureSealBuffer, 0,
+                                      16u * 4u * sizeof(u32)};
+        VkDescriptorBufferInfo dbCausal{faithfulCausalBuffer[j], 0,
+                                        kFaithfulCausalBufferSize};
+        VkDescriptorBufferInfo dbNativeProjection{
+            faithful3dBuffer[j], 0, 256u * 192u * sizeof(u32)};
+
+        VkDescriptorImageInfo di3e{VK_NULL_HANDLE, faithfulOutView, VK_IMAGE_LAYOUT_GENERAL};
+        VkDescriptorImageInfo diCap{VK_NULL_HANDLE, faithfulOutView, VK_IMAGE_LAYOUT_GENERAL};
+        VkDescriptorImageInfo diMuestra{faithfulSampler, faithfulOutView,
+                                        VK_IMAGE_LAYOUT_GENERAL};
+        VkDescriptorImageInfo diLiveCausal{faithfulSampler, faithfulOutView,
+                                           VK_IMAGE_LAYOUT_GENERAL};
+        VkWriteDescriptorSet ws[13]{};
+        for (int i = 0; i < 9; i++)
+        {
+            ws[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            ws[i].dstSet = faithfulDescSet[j];
+            ws[i].dstBinding = (u32)i;
+            ws[i].descriptorCount = 1;
+        }
+        ws[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;  ws[0].pImageInfo = &di;
+        ws[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER; ws[1].pBufferInfo = &dbRegs;
+        ws[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER; ws[2].pBufferInfo = &dbAtlas;
+        ws[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER; ws[3].pBufferInfo = &db3d;
+        ws[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;  ws[4].pImageInfo = &di3e;
+        ws[5].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER; ws[5].pBufferInfo = &dbObj;
+        ws[6].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER; ws[6].pBufferInfo = &dbB1;
+        ws[7].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;  ws[7].pImageInfo = &diCap;
+        ws[8].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER; ws[8].pImageInfo = &diMuestra;
+        ws[9].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        ws[9].dstSet = faithfulDescSet[j];
+        ws[9].dstBinding = 12;
+        ws[9].descriptorCount = 1;
+        ws[9].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        ws[9].pBufferInfo = &dbSeal;
+        ws[10].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        ws[10].dstSet = faithfulDescSet[j];
+        ws[10].dstBinding = 13;
+        ws[10].descriptorCount = 1;
+        ws[10].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        ws[10].pBufferInfo = &dbCausal;
+        ws[11].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        ws[11].dstSet = faithfulDescSet[j];
+        ws[11].dstBinding = 14;
+        ws[11].descriptorCount = 1;
+        ws[11].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        ws[11].pImageInfo = &diLiveCausal;
+        ws[12].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        ws[12].dstSet = faithfulDescSet[j];
+        ws[12].dstBinding = 15;
+        ws[12].descriptorCount = 1;
+        ws[12].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        ws[12].pBufferInfo = &dbNativeProjection;
+        vkUpdateDescriptorSets(device, 13, ws, 0, nullptr);
+    }
+    faithfulPipelineReady = true;
+    a1Marca("descriptoresYResto");
+    saveFaithfulPipelineCacheIfGrown();
+    a1Marca("guardarCache");
+    if (renderer3dNativeProjectionPipeline != VK_NULL_HANDLE)
+    {
+        renderer3dNativeProjectionPipelineGeneration++;
+        if (renderer3dNativeProjectionPipelineGeneration == 0u)
+            renderer3dNativeProjectionPipelineGeneration++;
+    }
+    committed = true;
+    return true;
+}
+
+bool VulkanOutput::ensureCapturaHighres(u32 escala)
+{
+    if (capHighresEscala == escala)
+    {
+        bool completas = true;
+        for (u32 slot = 0u; slot < 4u; slot++)
+        {
+            completas = completas
+                && capHighresImage[slot] != VK_NULL_HANDLE
+                && capHighresMem[slot] != VK_NULL_HANDLE
+                && capHighresView[slot] != VK_NULL_HANDLE;
+        }
+        if (completas)
+            return true;
+    }
+
+    if (!waitFaithfulUseLocked(faithfulTemporalUse))
+        return false;
+    destroyCapturaHighresLocked();
+    bool committed = false;
+    const auto rollbackFn = [&](void*) {
+        if (!committed)
+            destroyCapturaHighresLocked();
+    };
+    const std::unique_ptr<void, decltype(rollbackFn)> rollback(
+        reinterpret_cast<void*>(1), rollbackFn);
+
+    for (int j = 0; j < 4; j++)
+    {
+        VkImageCreateInfo ii{};
+        ii.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        ii.imageType = VK_IMAGE_TYPE_2D;
+        ii.format = VK_FORMAT_R8G8B8A8_UNORM;
+        ii.extent = {256u * escala, 192u * escala, 1u};
+        ii.mipLevels = 1; ii.arrayLayers = 1;
+        ii.samples = VK_SAMPLE_COUNT_1_BIT;
+        ii.tiling = VK_IMAGE_TILING_OPTIMAL;
+        ii.usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT
+                 | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+        ii.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        const VkResult rImg = vkCreateImage(device, &ii, nullptr, &capHighresImage[j]);
+        if (rImg != VK_SUCCESS)
+        {
+            melonDS::Platform::Log(melonDS::Platform::LogLevel::Error,
+                "[capd] ensureCapturaHighres: vkCreateImage fallo (%d) esc=%u", (int)rImg, escala);
+            return false;
+        }
+        VkMemoryRequirements req{}; vkGetImageMemoryRequirements(device, capHighresImage[j], &req);
+        VkMemoryAllocateInfo ai{};
+        ai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        ai.allocationSize = req.size;
+        ai.memoryTypeIndex = findMemoryType(req.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        if (ai.memoryTypeIndex == UINT32_MAX
+            || vkAllocateMemory(device, &ai, nullptr, &capHighresMem[j]) != VK_SUCCESS
+            || vkBindImageMemory(device, capHighresImage[j], capHighresMem[j], 0) != VK_SUCCESS)
+        {
+            melonDS::Platform::Log(melonDS::Platform::LogLevel::Error,
+                "[capd] ensureCapturaHighres: memoria fallo (tipo=%u) esc=%u",
+                ai.memoryTypeIndex, escala);
+            return false;
+        }
+        VkImageViewCreateInfo vi{};
+        vi.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        vi.image = capHighresImage[j];
+        vi.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        vi.format = ii.format;
+        vi.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        if (vkCreateImageView(device, &vi, nullptr, &capHighresView[j]) != VK_SUCCESS) return false;
+    }
+    capHighresEscala = escala;
+
+    capHighresRejectKey = {};
+    capHighresRejectStreak = 0u;
+    committed = true;
+    return true;
+}
+
+bool VulkanOutput::dispatchFaithfulCompositor(Frame* frame, FrameResource& resource,
+                                              const VulkanCompositionInputs* inputsParam)
+{
+
+    VulkanCompositionInputs entradasLocales = inputsParam != nullptr
+        ? *inputsParam : VulkanCompositionInputs{};
+    const VulkanCompositionInputs* inputs = inputsParam != nullptr ? &entradasLocales : nullptr;
+    static int trazas = 0;
+    const auto rejectCompose = [&](const char* reason) {
+        if (areRendererDebugToolsEnabled())
+        {
+            melonDS::Platform::Log(melonDS::Platform::LogLevel::Warn,
+                "VulkanCompose[Rejected]: reason=%s frameId=%llu generation=%llu size=%ux%u",
+                reason,
+                static_cast<unsigned long long>(frame != nullptr ? frame->frameId : 0u),
+                static_cast<unsigned long long>(frame != nullptr ? frame->publicationGeneration : 0u),
+                resource.width, resource.height);
+        }
+        return false;
+    };
+
+    if (frame != nullptr && resource.faithfulComposedFrameId == frame->frameId)
+        return true;
+    const u32 escala = resource.width / 256u;
+    if (escala < 1u || escala > 8u
+        || resource.width != 256u * escala || resource.height != 386u * escala)
+    {
+        if (trazas < 3) { trazas++; std::fprintf(stderr, "[fiel-disp] tam %ux%u\n", resource.width, resource.height); }
+        return rejectCompose("output_geometry");
+    }
+    std::scoped_lock lifetimeLock(faithfulLifetimeLock);
+    FrameResource* faithfulNativeFallbackSource = nullptr;
+
+    faithfulDiagnosticPayload.invalidateSlot(faithfulRing);
+    if (faithfulNativeFallbackGpuBacked)
+    {
+        faithfulNativeFallbackSource =
+            findExactFaithfulNativeProjectionLocked(
+                faithfulNativeFallbackEpoch,
+                faithfulNativeFallbackSequence,
+                &resource);
+        if (faithfulNativeFallbackSource == nullptr)
+        {
+
+            snapshotDiferidoRenderer = nullptr;
+            return rejectCompose("missing_exact_native_projection");
+        }
+    }
+    const u32 nativeFallbackEncoding = faithfulNativeFallbackSource != nullptr
+        ? 0x10000000u : 0u;
+    if (!faithfulAtlasDeviceVisible[faithfulRing])
+        return rejectCompose("atlas_not_device_visible");
+
+    if (resource.image == VK_NULL_HANDLE || resource.imageView == VK_NULL_HANDLE)
+    {
+        snapshotDiferidoRenderer = nullptr;
+        return rejectCompose("missing_output_image");
+    }
+
+    if (snapshotDiferidoRenderer != nullptr && inputs != nullptr)
+    {
+        const u32 rw = snapshotDiferidoRenderer->GetColorTargetWidth();
+        const u32 rh = snapshotDiferidoRenderer->GetColorTargetHeight();
+        if (rw != 0u && rh != 0u)
+        {
+            u32 dw = rw, dh = rh;
+            renderer3dSnapshotDstDims(rw, rh, resource.width, dw, dh);
+            const bool recrear = resource.renderer3dSnapshot == VK_NULL_HANDLE
+                || resource.renderer3dSnapshotView == VK_NULL_HANDLE
+                || resource.snapshotWidth != dw || resource.snapshotHeight != dh;
+            if (recrear
+                && (!waitFaithfulLiveSnapshotUseLocked(resource)
+                    || !ensureRenderer3dSnapshot(resource, dw, dh)))
+            {
+                snapshotDiferidoRenderer = nullptr;
+                rechazosFuente3D.fetch_add(1u, std::memory_order_relaxed);
+                return rejectCompose("snapshot_3d_geometria");
+            }
+            entradasLocales.sourceImage = resource.renderer3dSnapshot;
+            entradasLocales.sourceImageView = resource.renderer3dSnapshotView;
+            entradasLocales.rendererWidth = dw;
+            entradasLocales.rendererHeight = dh;
+        }
+    }
+
+    const bool stash3dForzado = escala > 1u
+        && (inputs == nullptr
+            || inputs->sourceImageView == VK_NULL_HANDLE
+            || inputs->rendererWidth < 256u * escala
+            || (inputs->rendererWidth % (256u * escala)) != 0u
+            || inputs->rendererHeight * 4u != inputs->rendererWidth * 3u);
+    const u32 ratio3d = (!stash3dForzado && escala > 1u && inputs != nullptr)
+        ? inputs->rendererWidth / (256u * escala) : 1u;
+
+    static const bool f2Sampler = [] {
+        if (std::getenv("MELON_SIN_F2") != nullptr)
+            return false;
+        if (std::getenv("MELON_F2_SAMPLER") != nullptr)
+            return true;
+#ifdef __ANDROID__
+        char vF2[PROP_VALUE_MAX] = {};
+        if (__system_property_get("debug.melonds.f2_sampler", vF2) > 0
+            && vF2[0] == '1')
+            return true;
+#endif
+        return false;
+    }();
+    const bool f2Activo = f2Sampler && escala > 1u && !stash3dForzado
+        && inputs != nullptr && inputs->sourceImage != VK_NULL_HANDLE
+        && inputs->sourceImageView != VK_NULL_HANDLE;
+    if (std::getenv("MELON_FIEL_TRAZA3D") != nullptr && escala > 1u)
+        std::fprintf(stderr, "[fiel-3d] esc=%u stash=%d r=%ux%u vista=%d\n",
+            escala, stash3dForzado ? 1 : 0,
+            inputs != nullptr ? inputs->rendererWidth : 0u,
+            inputs != nullptr ? inputs->rendererHeight : 0u,
+            (inputs != nullptr && inputs->sourceImageView != VK_NULL_HANDLE) ? 1 : 0);
+    if (!ensureFaithfulPipeline())
+    {
+        if (trazas < 6) { trazas++; std::fprintf(stderr, "[fiel-disp] sin pipeline\n"); }
+        return rejectCompose("pipeline_unavailable");
+    }
+    std::scoped_lock commandLock(commandPoolLock);
+
+    if (!waitFaithfulUseLocked(faithfulSlotUse[faithfulRing]))
+        return rejectCompose("faithful_slot_wait");
+
+    FaithfulCausalHeaderGpu* causalRouteHeaderCpu = nullptr;
+    bool causalRouteHeaderCpuValid = false;
+    const char* causalRouteRejectReason = "header";
+    if (faithfulCausalMapped[faithfulRing] != nullptr)
+    {
+        u8* const causalBytes = static_cast<u8*>(
+            faithfulCausalMapped[faithfulRing]);
+        causalRouteHeaderCpu =
+            reinterpret_cast<FaithfulCausalHeaderGpu*>(causalBytes);
+        const auto& header = *causalRouteHeaderCpu;
+        causalRouteHeaderCpuValid =
+            (header.Valid & kFaithfulCausalHeaderRoutesValid) != 0u
+            && (header.Valid & ~(kFaithfulCausalHeaderRoutesValid
+                | kFaithfulCausalHeaderFullLineageValid
+                | kFaithfulCausalHeaderVisibleAllNative)) == 0u
+            && header.Version == kFaithfulCausalAbiVersion
+            && (header.GenerationLo | header.GenerationHi) != 0u
+            && (header.CaptureEpochLo | header.CaptureEpochHi) != 0u
+            && header.RouteLineCount == kFaithfulCausalRouteLineCount
+            && header.VisiblePixelCount
+                == kFaithfulCausalVisiblePixelCount
+            && header.RouteOffsetWords
+                == kFaithfulCausalRouteOffset / sizeof(u32)
+            && header.LineageOffsetWords
+                == kFaithfulCausalLineageOffset / sizeof(u32)
+            && header.ProductOffsetWords
+                == kFaithfulCausalProductOffset / sizeof(u32)
+            && header.TotalWords
+                == kFaithfulCausalBufferSize / sizeof(u32);
+        if (causalRouteHeaderCpuValid)
+        {
+            causalRouteRejectReason = "line";
+            const auto* const lines =
+                reinterpret_cast<const FaithfulCausalRouteLiveGpu*>(
+                    causalBytes + kFaithfulCausalRouteOffset);
+            u32 scanoutBackBuffer = 0xFFu;
+            for (u32 y = 0u;
+                 causalRouteHeaderCpuValid
+                    && y < kFaithfulCausalScreenHeight;
+                 y++)
+            {
+                const u32 topFlags = lines[y].RouteFlags;
+                const u32 bottomFlags = lines[
+                    kFaithfulCausalScreenHeight + y].RouteFlags;
+                const u32 topEngine = (topFlags >> 8u) & 0xFFu;
+                const u32 bottomEngine = (bottomFlags >> 8u) & 0xFFu;
+                const u32 topScreen = (topFlags >> 16u) & 0xFFu;
+                const u32 bottomScreen = (bottomFlags >> 16u) & 0xFFu;
+                const u32 topBackBuffer = (topFlags >> 24u) & 0xFFu;
+                const u32 bottomBackBuffer =
+                    (bottomFlags >> 24u) & 0xFFu;
+                if (y == 0u)
+                    scanoutBackBuffer = topBackBuffer;
+                causalRouteHeaderCpuValid =
+                    (topFlags & 0xFFu) == 0x03u
+                    && (bottomFlags & 0xFFu) == 0x03u
+                    && topEngine < 2u && bottomEngine < 2u
+                    && topEngine != bottomEngine
+                    && topScreen == 0u && bottomScreen == 1u
+                    && topBackBuffer < 2u && bottomBackBuffer < 2u
+                    && topBackBuffer == bottomBackBuffer
+                    && topBackBuffer == scanoutBackBuffer;
+            }
+        }
+    }
+    if (!causalRouteHeaderCpuValid)
+    {
+        snapshotDiferidoRenderer = nullptr;
+        if (std::getenv("MELON_SONDA_RUTA_FISICA") != nullptr
+            || std::getenv("MELON_SONDA_REGISTRY") != nullptr)
+        {
+            std::fprintf(stderr,
+                "[causal-route-dispatch] accepted=0 reason=%s ring=%u\n",
+                causalRouteRejectReason, faithfulRing);
+        }
+        return rejectCompose(causalRouteRejectReason);
+    }
+    if (trazas < 9) { trazas++; std::fprintf(stderr, "[fiel-disp] DISPARANDO\n"); }
+    {
+        static const bool logDisp = getenv("MELON_LOG_TAIL") != nullptr;
+        if (logDisp)
+        {
+            static u32 nDisp = 0;
+            u32 meta0 = 0xFFu; u32 bbgNz = 0;
+            if (faithfulRegsMapped[faithfulRing] != nullptr)
+                meta0 = static_cast<const u32*>(
+                    faithfulRegsMapped[faithfulRing])[2u * 192u * 32u] & 1u;
+            u32 bobjNz = 0;
+            if (faithfulAtlasMappedPtr[faithfulRing] != nullptr)
+            {
+                const u16* bbg = reinterpret_cast<const u16*>(
+                    static_cast<const u8*>(faithfulAtlasMappedPtr[faithfulRing])
+                    + kFaithfulAtlasBBG);
+                for (u32 i = 0; i < 256u * 192u; i += 64u)
+                    if (bbg[i] != 0) bbgNz++;
+                const u16* bobj = reinterpret_cast<const u16*>(
+                    static_cast<const u8*>(faithfulAtlasMappedPtr[faithfulRing])
+                    + kFaithfulAtlasBOBJ);
+                for (u32 i = 0; i < 64u * 1024u; i += 64u)
+                    if (bobj[i] != 0) bobjNz++;
+            }
+            std::fprintf(stderr, "[disp] n=%u ring=%u meta0=%u bbgNz=%u bobjNz=%u\n",
+                         nDisp, faithfulRing, meta0, bbgNz, bobjNz);
+
+            if (const char* pref = getenv("MELON_VOLCAR_STAGING"))
+            {
+                char ruta[512];
+                std::snprintf(ruta, sizeof(ruta), "%s-regs-%u.bin", pref, nDisp);
+                if (FILE* f = std::fopen(ruta, "wb"))
+                {
+                    std::fwrite(faithfulRegsMapped[faithfulRing], 4,
+                                2u * 192u * 32u + 16u, f);
+                    std::fclose(f);
+                }
+                std::snprintf(ruta, sizeof(ruta), "%s-atlas-%u.bin", pref, nDisp);
+                if (FILE* f = std::fopen(ruta, "wb"))
+                {
+                    std::fwrite(faithfulAtlasMappedPtr[faithfulRing], 1,
+                                kFaithfulAtlasSize, f);
+                    std::fclose(f);
+                }
+                std::snprintf(ruta, sizeof(ruta), "%s-d3d-%u.bin", pref, nDisp);
+                if (faithful3dMapped[faithfulRing] != nullptr)
+                    if (FILE* f = std::fopen(ruta, "wb"))
+                    {
+                        std::fwrite(faithful3dMapped[faithfulRing], 4,
+                                    256u * 192u, f);
+                        std::fclose(f);
+                    }
+            }
+            nDisp++;
+        }
+    }
+
+    const bool capHighresProp = faithfulCaptureHighresEnabled();
+    using CaptureKeyLocal = FaithfulCaptureMaterializationNode::Key;
+    const auto sameCaptureKey = [](const CaptureKeyLocal& lhs,
+                                   const CaptureKeyLocal& rhs) {
+        return lhs == rhs;
+    };
+    const auto stampNode = [](const FaithfulCaptureMaterializationNode& node) {
+        FaithfulCaptureProductStamp stamp {};
+        if (node.product == nullptr)
+            return stamp;
+        const auto& src = node.product->Metadata;
+        stamp.valid = src.Valid;
+        stamp.complete = src.Complete;
+        stamp.highresEligible = src.HighresEligible;
+        stamp.materialComplete = src.MaterialComplete;
+        stamp.causalMetadataComplete = src.CausalMetadataComplete;
+        stamp.recipeComplete = src.RecipeComplete;
+        stamp.uses3d = src.Uses3d;
+        stamp.sourceIdentityValid = src.SourceIdentity.Valid;
+        stamp.sourceScreenSwap = src.SourceIdentity.ScreenSwap;
+        stamp.productId = src.ProductId;
+        stamp.productEpoch = src.ProductEpoch;
+        stamp.sourceRenderProductEpoch =
+            src.SourceIdentity.RenderProductEpoch;
+        stamp.sourceSequence = src.SourceIdentity.Sequence;
+        stamp.captureCnt = src.CaptureCnt;
+        stamp.frameSequence = src.FrameSequence;
+        stamp.destinationOffsetPixels = src.DestinationOffsetPixels;
+        stamp.sourcePolygonCount = src.SourceIdentity.PolygonCount;
+        stamp.sourceCaptureCnt = src.SourceIdentity.CaptureCnt;
+        stamp.width = src.Width;
+        stamp.height = src.Height;
+        stamp.destinationBank = src.DestinationBank;
+        stamp.lease = node.product;
+        return stamp;
+    };
+    const auto slotContainsScheduledCapture = [&](u32 slot,
+                                                  const CaptureKeyLocal& key) {
+        if (slot >= 4u
+            || capHighresSlotState[slot]
+                == FaithfulCaptureSlotState::Empty
+            || !key.valid())
+        {
+            return false;
+        }
+        const auto& product = capHighresProducto[slot];
+        return product.valid && product.complete
+            && product.highresEligible && product.materialComplete
+            && product.causalMetadataComplete
+            && product.recipeComplete
+            && product.productEpoch == key.epoch
+            && product.productId == key.id;
+    };
+    const auto slotContainsCertifiedCapture = [&](u32 slot,
+                                                  const CaptureKeyLocal& key) {
+        return slot < 4u
+            && capHighresSlotState[slot]
+                == FaithfulCaptureSlotState::Certified
+            && slotContainsScheduledCapture(slot, key);
+    };
+
+    const auto snapshotVisibleToThisDispatch =
+        [&](const FrameResource& candidate) {
+            return candidate.renderer3dSnapshotState
+                    == Renderer3dSnapshotState::Published
+                || (&candidate == &resource
+                    && candidate.renderer3dSnapshotState
+                        == Renderer3dSnapshotState::PendingSubmit);
+        };
+    const auto captureSourceMatches = [&](const FrameResource& candidate,
+                                           u64 epoch, u64 sequence) {
+        return snapshotVisibleToThisDispatch(candidate)
+            && candidate.hasRenderer3dSnapshot
+            && candidate.renderer3dSnapshot != VK_NULL_HANDLE
+            && candidate.renderer3dSnapshotView != VK_NULL_HANDLE
+            && candidate.renderer3dSnapshotSourceIdentityValid
+            && candidate.renderer3dSnapshotSourceEpoch == epoch
+            && candidate.renderer3dSnapshotSourceSequence == sequence;
+    };
+    const auto captureSourceProjectionValid =
+        [](const FrameResource& candidate) {
+            return candidate.renderer3dSnapshotProjection.valid()
+                && candidate.snapshotWidth
+                    == candidate.renderer3dSnapshotProjection.destinationWidth
+                && candidate.snapshotHeight
+                    == candidate.renderer3dSnapshotProjection.destinationHeight;
+        };
+    const auto captureSourceAvailable =
+        [&](const FaithfulCaptureMaterializationNode& node) {
+            if (!node.requiresSourceA)
+                return true;
+            const Renderer3dSnapshotProjectionKey* projection = nullptr;
+            for (const auto& [candidateFrame, candidate] : resources)
+            {
+                (void)candidateFrame;
+                if (!captureSourceMatches(candidate,
+                        node.sourceARenderEpoch, node.sourceARenderSequence))
+                    continue;
+                if (!captureSourceProjectionValid(candidate)
+                    || (projection != nullptr
+                        && !(candidate.renderer3dSnapshotProjection
+                            == *projection)))
+                {
+                    return false;
+                }
+                projection = &candidate.renderer3dSnapshotProjection;
+            }
+            return projection != nullptr
+                && projection->destinationWidth >= 256u * escala
+                && (projection->destinationWidth % (256u * escala)) == 0u
+                && projection->destinationHeight * 4u
+                    == projection->destinationWidth * 3u;
+        };
+
+    const auto capturePlan = faithfulCapturePlans[faithfulRing];
+    std::array<bool, 4> captureSlotPinned {};
+    const FaithfulCaptureMaterializationNode* captureTargetNode = nullptr;
+    FaithfulCaptureProductStamp captureTargetStamp {};
+    CaptureKeyLocal captureTargetKey {};
+    u32 captureWriteSlot = 4u;
+    bool captureAlreadyResident = false;
+    bool captureTargetIsCurrent = false;
+    bool causalWorkingSetOverflow = capturePlan != nullptr
+        && capturePlan->overflow;
+    const bool captureResourcesReady = capturePlan != nullptr
+        && capturePlan->visibleExact && !capturePlan->overflow
+        && capHighresProp && escala > 1u
+        && ensureCapturaHighres(escala);
+    if (captureResourcesReady
+        && !faithfulCaptureLineageInvalidationPending)
+    {
+        std::vector<CaptureKeyLocal> protectedKeys {};
+        const auto appendProtected = [&](const CaptureKeyLocal& key) {
+            if (key.valid()
+                && std::find(protectedKeys.begin(), protectedKeys.end(), key)
+                    == protectedKeys.end())
+            {
+                protectedKeys.push_back(key);
+            }
+        };
+        const auto appendTerminalArray = [&](const auto& terminals,
+                                             u8 count) {
+            for (u8 index = 0u; index < count; index++)
+            {
+                appendProtected({terminals[index].epoch,
+                                 terminals[index].id});
+            }
+        };
+        appendTerminalArray(faithfulPublishedCaptureTerminals,
+                            faithfulPublishedCaptureTerminalCount);
+        appendTerminalArray(faithfulRequiredCaptureTerminals,
+                            faithfulRequiredCaptureTerminalCount);
+        for (const auto& key : capturePlan->requiredTerminals)
+            appendProtected(key);
+        for (const auto& key : capturePlan->visibleWorkingSet)
+            appendProtected(key);
+        if (capturePlan->currentExact)
+        {
+            for (const auto& key : capturePlan->currentWorkingSet)
+                appendProtected(key);
+        }
+
+        bool terminalSetResident = true;
+        const auto pinTerminalArray = [&](const auto& terminals, u8 count) {
+            for (u8 index = 0u; index < count; index++)
+            {
+                const CaptureKeyLocal key{
+                    terminals[index].epoch, terminals[index].id};
+                bool resident = false;
+                for (u32 slot = 0u; slot < 4u; slot++)
+                {
+                    if (slotContainsCertifiedCapture(slot, key))
+                    {
+                        captureSlotPinned[slot] = true;
+                        resident = true;
+                    }
+                }
+                terminalSetResident = terminalSetResident && resident;
+            }
+        };
+        pinTerminalArray(faithfulPublishedCaptureTerminals,
+                         faithfulPublishedCaptureTerminalCount);
+        pinTerminalArray(faithfulRequiredCaptureTerminals,
+                         faithfulRequiredCaptureTerminalCount);
+        for (const auto& key : capturePlan->requiredTerminals)
+        {
+            bool resident = false;
+            for (u32 slot = 0u; slot < 4u; slot++)
+            {
+                if (slotContainsCertifiedCapture(slot, key))
+                {
+                    captureSlotPinned[slot] = true;
+                    resident = true;
+                }
+            }
+            terminalSetResident = terminalSetResident && resident;
+        }
+        if (!terminalSetResident)
+        {
+
+            noteFaithfulCertifiedCaptureLossLocked();
+        }
+
+        if (protectedKeys.size() > 4u)
+            causalWorkingSetOverflow = true;
+        if (terminalSetResident && protectedKeys.size() <= 4u)
+        {
+
+            for (const auto& key : protectedKeys)
+            {
+                for (u32 slot = 0u; slot < 4u; slot++)
+                {
+                    if (slotContainsScheduledCapture(slot, key))
+                        captureSlotPinned[slot] = true;
+                }
+            }
+        }
+        for (u32 slot = 0u; slot < 4u; slot++)
+        {
+            if (capHighresSlotState[slot]
+                    == FaithfulCaptureSlotState::PendingSeal)
+            {
+                captureSlotPinned[slot] = true;
+            }
+        }
+
+        const auto firstMissingNode = [&](const auto& dependencyOrder) {
+            for (const size_t index : dependencyOrder)
+            {
+                if (index >= capturePlan->nodes.size())
+                    continue;
+                const auto& metadata =
+                    capturePlan->nodes[index].product->Metadata;
+                const CaptureKeyLocal key{
+                    metadata.ProductEpoch, metadata.ProductId};
+                bool resident = false;
+                for (u32 slot = 0u; slot < 4u; slot++)
+                    resident = resident
+                        || slotContainsScheduledCapture(slot, key);
+                if (!resident)
+                    return index;
+            }
+            return static_cast<size_t>(-1);
+        };
+
+        size_t targetIndex = static_cast<size_t>(-1);
+        if (terminalSetResident && protectedKeys.size() <= 4u)
+        {
+            const size_t visibleTargetIndex = firstMissingNode(
+                capturePlan->visibleDependencyOrder);
+            targetIndex = visibleTargetIndex;
+            if (targetIndex != static_cast<size_t>(-1)
+                && !captureSourceAvailable(capturePlan->nodes[targetIndex]))
+            {
+                targetIndex = static_cast<size_t>(-1);
+            }
+            if (targetIndex == static_cast<size_t>(-1)
+                && capturePlan->currentExact && capturePlan->current.valid())
+            {
+                targetIndex = firstMissingNode(
+                    capturePlan->currentDependencyOrder);
+            }
+            if (targetIndex == static_cast<size_t>(-1))
+                targetIndex = visibleTargetIndex;
+        }
+
+        if (targetIndex != static_cast<size_t>(-1)
+            && targetIndex < capturePlan->nodes.size())
+        {
+            captureTargetNode = &capturePlan->nodes[targetIndex];
+            captureTargetStamp = stampNode(*captureTargetNode);
+            captureTargetKey = {
+                captureTargetStamp.productEpoch,
+                captureTargetStamp.productId};
+            captureTargetIsCurrent = captureTargetKey
+                == CaptureKeyLocal{capProductoVivo.productEpoch,
+                                   capProductoVivo.productId};
+            for (const auto& parent : captureTargetNode->highresParents)
+            {
+                for (u32 slot = 0u; slot < 4u; slot++)
+                {
+                    if (slotContainsScheduledCapture(slot, parent))
+                        captureSlotPinned[slot] = true;
+                }
+            }
+            for (u32 slot = 0u; slot < 4u; slot++)
+            {
+                if (slotContainsScheduledCapture(slot, captureTargetKey))
+                {
+                    captureWriteSlot = slot;
+                    captureAlreadyResident = true;
+                    break;
+                }
+            }
+            if (!captureAlreadyResident)
+            {
+                for (u32 slot = 0u; slot < 4u; slot++)
+                {
+                    if (capHighresSlotState[slot]
+                            == FaithfulCaptureSlotState::Empty)
+                    {
+                        captureWriteSlot = slot;
+                        break;
+                    }
+                }
+                if (captureWriteSlot >= 4u)
+                {
+
+                    const auto neededByPlan = [&](const CaptureKeyLocal& key) {
+                        if (std::find(captureTargetNode->highresParents.begin(),
+                                captureTargetNode->highresParents.end(), key)
+                            != captureTargetNode->highresParents.end())
+                        {
+                            return true;
+                        }
+                        if (std::find(capturePlan->visibleWorkingSet.begin(),
+                                capturePlan->visibleWorkingSet.end(), key)
+                            != capturePlan->visibleWorkingSet.end())
+                        {
+                            return true;
+                        }
+                        return capturePlan->currentExact
+                            && std::find(capturePlan->currentWorkingSet.begin(),
+                                   capturePlan->currentWorkingSet.end(), key)
+                                != capturePlan->currentWorkingSet.end();
+                    };
+                    u32 candidates = 0u;
+                    u32 oldestSlot = 4u;
+                    u64 oldestId = std::numeric_limits<u64>::max();
+                    for (u32 slot = 0u; slot < 4u; slot++)
+                    {
+                        if (capHighresSlotState[slot]
+                                != FaithfulCaptureSlotState::Certified)
+                        {
+                            continue;
+                        }
+                        const auto& resident = capHighresProducto[slot];
+                        if (neededByPlan({resident.productEpoch,
+                                          resident.productId}))
+                        {
+                            continue;
+                        }
+                        candidates++;
+                        if (resident.productId < oldestId)
+                        {
+                            oldestSlot = slot;
+                            oldestId = resident.productId;
+                        }
+                    }
+                    if (oldestSlot < 4u
+                        && (candidates >= 2u || !captureSlotPinned[oldestSlot]))
+                    {
+                        captureWriteSlot = oldestSlot;
+                    }
+                }
+            }
+        }
+    }
+    if (std::getenv("MELON_SONDA_REGISTRY") != nullptr
+        || areRendererDebugBgObjLogsEnabled())
+    {
+
+        melonDS::Platform::Log(melonDS::Platform::LogLevel::Warn,
+            "[capture-slots] target=%llu write=%u resident=%u ready=%u "
+            "planExact=%u overflow=%u "
+            "s0=%u:%llu%s s1=%u:%llu%s s2=%u:%llu%s s3=%u:%llu%s",
+            static_cast<unsigned long long>(captureTargetKey.id),
+            captureWriteSlot, captureAlreadyResident ? 1u : 0u,
+            captureResourcesReady ? 1u : 0u,
+            (capturePlan != nullptr && capturePlan->visibleExact) ? 1u : 0u,
+            causalWorkingSetOverflow ? 1u : 0u,
+            static_cast<unsigned>(capHighresSlotState[0]),
+            static_cast<unsigned long long>(capHighresProducto[0].productId),
+            captureSlotPinned[0] ? "p" : "",
+            static_cast<unsigned>(capHighresSlotState[1]),
+            static_cast<unsigned long long>(capHighresProducto[1].productId),
+            captureSlotPinned[1] ? "p" : "",
+            static_cast<unsigned>(capHighresSlotState[2]),
+            static_cast<unsigned long long>(capHighresProducto[2].productId),
+            captureSlotPinned[2] ? "p" : "",
+            static_cast<unsigned>(capHighresSlotState[3]),
+            static_cast<unsigned long long>(capHighresProducto[3].productId),
+            captureSlotPinned[3] ? "p" : "");
+    }
+    const bool capHighresUsable = capHighresProp && capHighresValida
+        && capHighresEscala == escala && escala > 1u;
+
+    static const bool sinPase =
+        std::getenv("MELON_SIN_PASE_CAPTURA") != nullptr;
+
+    static const bool lineasDma =
+        std::getenv("MELON_SIN_LINEAS_DMA") == nullptr;
+    if (capFichaSalto)
+    {
+
+        capFrescaPar[0] = false;
+        capFrescaPar[1] = false;
+    }
+    const u32 dispA0 = capFichaDispA0;
+    const u32 cntPase = captureTargetStamp.captureCnt;
+    const u32 dispAPase = capVivaDispA0;
+    const u32 srcModeCap = (cntPase >> 29u) & 3u;
+
+    const bool fuenteA = srcModeCap == 0u
+        || (srcModeCap == 2u && (cntPase & 0x1Fu) == 16u
+            && ((cntPase >> 8u) & 0x1Fu) == 0u);
+
+    const bool mezclaVramB = srcModeCap >= 2u && !fuenteA
+        && (cntPase & (1u << 25u)) == 0u;
+    const u32 bancoCapDst = captureTargetStamp.destinationBank;
+    const u32 offsetCapDst = ((cntPase >> 18u) & 3u) << 14u;
+
+    if (!capFichaActiva && capHighresProp && escala > 1u && captureTargetNode != nullptr)
+        diagInvalidaciones |= 4u;
+    const bool fichaFiel = capHighresProp && escala > 1u
+        && captureTargetNode != nullptr
+        && captureTargetStamp.valid && captureTargetStamp.complete
+        && captureTargetStamp.materialComplete
+        && captureTargetStamp.causalMetadataComplete
+        && captureTargetStamp.recipeComplete
+        && captureTargetStamp.highresEligible
+        && captureTargetStamp.width == 256u
+        && captureTargetStamp.height == 192u
+        && captureTargetStamp.destinationBank < 4u
+        && captureTargetStamp.destinationOffsetPixels == offsetCapDst
+        && ((cntPase >> 20u) & 3u) == 3u
+        && captureWriteSlot < 4u && !captureAlreadyResident;
+    const bool paseSinRecursos = fichaFiel && !sinPase;
+
+    const bool recursosCaptura = paseSinRecursos
+        && capHighresEscala == escala
+        && capHighresImage[captureWriteSlot] != VK_NULL_HANDLE;
+    bool paseCaptura = paseSinRecursos && recursosCaptura;
+
+    VkImage paseFuenteImagen = VK_NULL_HANDLE;
+    VkImageView paseFuenteVista = VK_NULL_HANDLE;
+    VkBuffer paseFuenteNativeProjectionBuffer = VK_NULL_HANDLE;
+    FrameResource* paseFuenteResource = nullptr;
+    u32 paseFuenteAncho = 0u;
+    u32 paseFuenteAlto = 0u;
+    u32 paseFuenteCoincidencias = 0u;
+    Renderer3dSnapshotProjectionKey paseFuenteProjection{};
+    bool paseFuenteProjectionSet = false;
+    bool paseFuenteAmbigua = false;
+    const bool requiereFuenteA = captureTargetNode != nullptr
+        && captureTargetNode->requiresSourceA;
+    bool paseFuenteExacta = !requiereFuenteA;
+
+    static const bool tailComposeCompleto =
+        std::getenv("MELON_TAIL_COMPOSE_COMPLETO") != nullptr;
+    const bool rutaCorta = inputs != nullptr && inputs->soloMaterializar
+        && escala > 1u && !tailComposeCompleto;
+    bool paseFuenteMetadataCompleta = !requiereFuenteA;
+    bool paseFuenteEsRecursoActual = false;
+    const bool sourceSealDiagnosticEnabled =
+        std::getenv("MELON_SONDA_CAPID") != nullptr
+        || areRendererDebugBgObjLogsEnabled();
+    bool sourceSealDiagnosticAvailable = false;
+
+    const u32 bancoDisp2 = (dispA0 >> 18u) & 3u;
+    const bool modo2Ok = ((dispA0 >> 16u) & 3u) == 2u
+        && capHighresProp && escala > 1u && !sinPase
+        && capHighresBancoPar[bancoDisp2 & 1u] == bancoDisp2
+        && capHighresSlotState[bancoDisp2 & 1u]
+            != FaithfulCaptureSlotState::Empty
+        && capFrescaPar[bancoDisp2 & 1u]
+        && capHighresEscala == escala;
+
+    {
+        const u32 swapAhora = capFichaSwap ? 1u : 0u;
+        const bool cambio = capSwapPrevio != 0xFFu && swapAhora != capSwapPrevio;
+
+        capSwapVentana = ((capSwapVentana << 1) | (cambio ? 1u : 0u)) & 0xFFu;
+        u32 nCambiosVent = 0u;
+        for (u32 v = capSwapVentana; v != 0u; v >>= 1) nCambiosVent += v & 1u;
+        if (nCambiosVent >= 4u) capSwapCambioReciente = 8u;
+        else if (capSwapCambioReciente > 0u) capSwapCambioReciente--;
+        if (cambio) capSwapSuave = 8u;
+        else if (capSwapSuave > 0u) capSwapSuave--;
+
+        if (capSwapCambioReciente > 0u
+            && (!cambio || (cambio && !capFichaActiva)))
+        {
+            if (capSwapRetenidos < 255u) capSwapRetenidos++;
+        }
+        else
+            capSwapRetenidos = 0u;
+
+        if (cambio && capSwapCambioReciente == 0u)
+            melonDS::Platform::Log(melonDS::Platform::LogLevel::Warn,
+                "[swapev] swap %u->%u act=%d salto=%d vent=%02X cnt=%08X "
+                "dispA=%08X preA=%d preB=%d",
+                capSwapPrevio, swapAhora, capFichaActiva ? 1 : 0,
+                capFichaSalto ? 1 : 0, capSwapVentana,
+                capFichaCnt, capFichaDispA0,
+                capFichaPreA ? 1 : 0, capFichaPreB ? 1 : 0);
+        capSwapPrevio = swapAhora;
+    }
+    static const bool genPrevGlobal = std::getenv("MELON_GEN_PREV") != nullptr;
+    static const bool genVivaGlobal = std::getenv("MELON_GEN_ACTUAL") != nullptr;
+    const bool genSaltoActivo = !genVivaGlobal
+        && (genPrevGlobal || capSwapCambioReciente > 0u);
+
+    if (paseCaptura && captureTargetIsCurrent)
+    {
+        const u32 jSello = bancoCapDst & 1u;
+        if (capHighresPrevInicial) capSelloPrev2 = capSelloPrev;
+        if (capHighresSlotState[jSello]
+                != FaithfulCaptureSlotState::Empty)
+            capSelloPrev = capSelloPar[jSello];
+        capSelloPar[jSello] = capFichaSwap ? 1u : 0u;
+    }
+    static const bool sinVetoTop = std::getenv("MELON_SIN_VETO_TOP") != nullptr;
+    bool selloVeto = false;
+
+    if (!sinVetoTop && !genPrevGlobal && !genVivaGlobal
+        && capSwapCambioReciente > 0u && modo2Ok && capFichaSwap
+        && (capFichaPreA || capFichaPreB))
+        selloVeto = true;
+
+    if (!sinVetoTop && !genPrevGlobal && !genVivaGlobal
+        && capSwapCambioReciente > 0u && modo2Ok
+        && capFichaNp == 0u && capFichaNpPrev == 0u)
+        selloVeto = true;
+
+    const bool vetoV4dTop = !sinVetoTop && !genPrevGlobal && !genVivaGlobal
+        && capSwapSuave > 0u;
+
+    const bool vetoV4dBot = vetoV4dTop
+        && (capSwapCambioReciente == 0u || capSwapRetenidos >= 1u);
+
+    static const u32 capTinte = [] {
+        const char* v = std::getenv("MELON_CAPHR_TINTE");
+        return v != nullptr ? (u32)(std::strtoul(v, nullptr, 0) & 3u) : 0u;
+    }();
+
+    static const bool modo2Vivo = std::getenv("MELON_MODO2_VIVO") != nullptr;
+
+    const u32 bancoBitsCapHR = (modo2Ok ? bancoDisp2 : capHighresBanco) & 3u;
+    const bool vetoIdentidad = capVetoIdentidadPar[bancoBitsCapHR & 1u];
+    if (vetoIdentidad)
+        diagInvalidaciones |= 8u;
+    const bool capHighresUsableEf = capHighresUsable && !vetoIdentidad;
+    u32 bitsCapHR = (capHighresUsableEf
+        ? (0x800u | bancoBitsCapHR << 9u)
+        : 0u) | (capTinte << 14u)
+
+        | ((modo2Ok && !selloVeto) ? 0x1000000u : 0u)
+
+        | (vetoV4dTop ? 0x2000000u : 0u)
+        | (vetoV4dBot ? 0x80000000u : 0u)
+        | (modo2Vivo ? 0x40000000u : 0u)
+
+        | (lineasDma && capHighresPrevInicial && capFrescaPar[0] ? 0x4000000u : 0u)
+        | (lineasDma && capHighresPrevInicial && capFrescaPar[1] ? 0x8000000u : 0u)
+
+        | ((capHighresPrevInicial && genSaltoActivo && !capFichaActiva)
+               ? 0x10000000u : 0u)
+        | (capHighresPrev2Inicial ? 0x20000000u : 0u);
+
+    FrameResource* liveCausalSource = nullptr;
+    u64 liveCausalEpoch = 0u;
+    u64 liveCausalSequence = 0u;
+    u32 liveCausalMatches = 0u;
+    u32 liveCausalWidth = 0u;
+    u32 liveCausalHeight = 0u;
+    Renderer3dSnapshotProjectionKey liveCausalProjection{};
+    bool liveCausalProjectionSet = false;
+    bool liveCausalAmbiguous = false;
+    {
+
+        VkDescriptorImageInfo di{VK_NULL_HANDLE, resource.imageView, VK_IMAGE_LAYOUT_GENERAL};
+
+        VkDescriptorImageInfo di3e{VK_NULL_HANDLE,
+            (escala > 1u && !stash3dForzado)
+                ? inputs->sourceImageView
+                : faithfulOutView,
+            VK_IMAGE_LAYOUT_GENERAL};
+
+        VkDescriptorImageInfo diCap{VK_NULL_HANDLE,
+            capHighresView[0] != VK_NULL_HANDLE
+                ? capHighresView[0] : faithfulOutView,
+            VK_IMAGE_LAYOUT_GENERAL};
+        VkDescriptorImageInfo diCap1{VK_NULL_HANDLE,
+            capHighresView[1] != VK_NULL_HANDLE
+                ? capHighresView[1] : faithfulOutView,
+            VK_IMAGE_LAYOUT_GENERAL};
+
+        VkDescriptorImageInfo diMuestra{faithfulSampler,
+            f2Activo ? inputs->sourceImageView : faithfulOutView,
+            VK_IMAGE_LAYOUT_GENERAL};
+        VkDescriptorImageInfo diCapPrev{VK_NULL_HANDLE,
+            capHighresView[2] != VK_NULL_HANDLE
+                ? capHighresView[2] : faithfulOutView,
+            VK_IMAGE_LAYOUT_GENERAL};
+        VkDescriptorImageInfo diCapPrev2{VK_NULL_HANDLE,
+            capHighresView[3] != VK_NULL_HANDLE
+                ? capHighresView[3] : faithfulOutView,
+            VK_IMAGE_LAYOUT_GENERAL};
+        VkWriteDescriptorSet ws[7]{};
+        for (int i = 0; i < 7; i++)
+        {
+            ws[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            ws[i].dstSet = faithfulDescSet[faithfulRing];
+            ws[i].descriptorCount = 1;
+            ws[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        }
+        ws[0].dstBinding = 0; ws[0].pImageInfo = &di;
+        ws[1].dstBinding = 4; ws[1].pImageInfo = &di3e;
+        ws[2].dstBinding = 7; ws[2].pImageInfo = &diCap;
+        ws[3].dstBinding = 8; ws[3].pImageInfo = &diMuestra;
+        ws[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        ws[4].dstBinding = 9; ws[4].pImageInfo = &diCap1;
+        ws[5].dstBinding = 10; ws[5].pImageInfo = &diCapPrev;
+        ws[6].dstBinding = 11; ws[6].pImageInfo = &diCapPrev2;
+        vkUpdateDescriptorSets(device, 7, ws, 0, nullptr);
+    }
+
+    if (!beginFrameCommand(resource))
+        return rejectCompose("begin_frame_command");
+    const bool recordFaithfulPassTiming =
+        faithfulPassTimingSessionEnabled;
+    const auto writeFaithfulTimestamp = [&, this](
+            u32 query, VkPipelineStageFlagBits stage) {
+        if (!recordFaithfulPassTiming
+            || resource.timestampQueryPool == VK_NULL_HANDLE)
+            return;
+        vkCmdWriteTimestamp(
+            resource.commandBuffer, stage,
+            resource.timestampQueryPool, query);
+    };
+    writeFaithfulTimestamp(0u, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT);
+
+    if (snapshotDiferidoRenderer != nullptr)
+    {
+        resource.snapshotFromPreRun = false;
+        resource.snapshotFromInitializedTarget = false;
+        resource.snapshotFromGraphicsBackend = false;
+        if (snapshotDiferidoRenderer->IsColorTargetInitialized()
+            && recordRenderer3dSnapshotCopy(resource, *snapshotDiferidoRenderer,
+                                            snapshotDiferidoSwap, false))
+        {
+            resource.snapshotFromPreRun = true;
+            resource.snapshotFromInitializedTarget = true;
+            resource.snapshotFromGraphicsBackend =
+                snapshotDiferidoRenderer->UsesStructured2DMetadata();
+            resource.previousTopSourceFrame = nullptr;
+            resource.previousTopSourcePending = false;
+            resource.previousBottomSourceFrame = nullptr;
+            resource.previousBottomSourcePending = false;
+        }
+        else if (inputs != nullptr && inputs->necesita3d && escala > 1u)
+        {
+
+            snapshotDiferidoRenderer = nullptr;
+            rechazosFuente3D.fetch_add(1u, std::memory_order_relaxed);
+            return rejectCompose("snapshot_3d_no_disponible");
+        }
+        snapshotDiferidoRenderer = nullptr;
+    }
+
+    {
+        const VkBuffer fallbackBuffer =
+            faithfulNativeFallbackSource != nullptr
+                ? faithfulNativeFallbackSource
+                      ->renderer3dNativeProjectionBuffer
+                : faithful3dBuffer[faithfulRing];
+        VkDescriptorBufferInfo fallbackInfo{
+            fallbackBuffer, 0u, 256u * 192u * sizeof(u32)};
+        VkWriteDescriptorSet fallbackWrite{};
+        fallbackWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        fallbackWrite.dstSet = faithfulDescSet[faithfulRing];
+        fallbackWrite.dstBinding = 3u;
+        fallbackWrite.descriptorCount = 1u;
+        fallbackWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        fallbackWrite.pBufferInfo = &fallbackInfo;
+        vkUpdateDescriptorSets(device, 1u, &fallbackWrite, 0u, nullptr);
+
+        if (faithfulNativeFallbackSource != nullptr)
+        {
+            VkBufferMemoryBarrier fallbackReadable{};
+            fallbackReadable.sType =
+                VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+            fallbackReadable.srcAccessMask =
+                VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT;
+            fallbackReadable.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            fallbackReadable.srcQueueFamilyIndex =
+                fallbackReadable.dstQueueFamilyIndex =
+                    VK_QUEUE_FAMILY_IGNORED;
+            fallbackReadable.buffer = fallbackBuffer;
+            fallbackReadable.offset = 0u;
+            fallbackReadable.size = 256u * 192u * sizeof(u32);
+            vkCmdPipelineBarrier(
+                resource.commandBuffer,
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                0u, 0u, nullptr, 1u, &fallbackReadable,
+                0u, nullptr);
+        }
+    }
+
+    FaithfulCausalBoundLiveGpu* boundLive = nullptr;
+    bool causalHeaderCpuValid = false;
+    bool causalHeaderAllNativeCpu = false;
+    if (faithfulCausalMapped[faithfulRing] != nullptr)
+    {
+        u8* const causalBytes = static_cast<u8*>(
+            faithfulCausalMapped[faithfulRing]);
+        auto* const header = reinterpret_cast<FaithfulCausalHeaderGpu*>(
+            causalBytes);
+        boundLive = reinterpret_cast<FaithfulCausalBoundLiveGpu*>(
+            causalBytes + kFaithfulCausalBoundLiveOffset);
+        *boundLive = {};
+        const bool fullLineage =
+            (header->Valid & kFaithfulCausalHeaderFullLineageValid) != 0u;
+        const bool allNative =
+            (header->Valid & kFaithfulCausalHeaderVisibleAllNative) != 0u;
+        causalHeaderCpuValid = causalRouteHeaderCpuValid
+            && header == causalRouteHeaderCpu
+            && fullLineage != allNative
+            && (header->Valid & ~(kFaithfulCausalHeaderRoutesValid
+                | kFaithfulCausalHeaderFullLineageValid
+                | kFaithfulCausalHeaderVisibleAllNative)) == 0u
+            && (fullLineage
+                ? header->ProductCount >= 2u
+                    && header->ProductCount
+                        <= kFaithfulCausalProductCapacity
+                : header->ProductCount == 0u)
+            && (header->CaptureEpochLo | header->CaptureEpochHi) != 0u;
+        causalHeaderAllNativeCpu = causalHeaderCpuValid && allNative;
+        if (causalHeaderCpuValid)
+        {
+            const auto* const lines =
+                reinterpret_cast<const FaithfulCausalRouteLiveGpu*>(
+                    causalBytes + kFaithfulCausalRouteOffset);
+            bool hasKey = false;
+            for (u32 screen = 0u; screen < 2u; screen++)
+            {
+                for (u32 y = 0u; y < 192u; y++)
+                {
+                    const FaithfulCausalRouteLiveGpu& line =
+                        lines[screen * 192u + y];
+                    const u32 routeFlags = line.RouteFlags;
+                    const u32 liveFlags = line.LiveFlags;
+                    const bool exactDirectLine =
+                        (routeFlags & 0xFFu) == 0x03u
+                        && ((routeFlags >> 8u) & 0xFFu) == 0u
+                        && ((routeFlags >> 16u) & 0xFFu) == screen
+                        && (liveFlags & 0x0Fu) == 0x0Fu
+                        && (liveFlags & 0x10u) == 0u
+                        && ((liveFlags >> 8u) & 0xFFu) == 0u
+                        && ((liveFlags >> 16u) & 0xFFu) == screen;
+                    if (!exactDirectLine)
+                        continue;
+
+                    const u64 epoch = static_cast<u64>(line.ProductEpochLo)
+                        | (static_cast<u64>(line.ProductEpochHi) << 32u);
+                    const u64 sequence =
+                        static_cast<u64>(line.ProductSequenceLo)
+                        | (static_cast<u64>(line.ProductSequenceHi) << 32u);
+                    if (epoch == 0u || sequence == 0u)
+                    {
+                        liveCausalAmbiguous = true;
+                        continue;
+                    }
+                    if (!hasKey)
+                    {
+                        hasKey = true;
+                        liveCausalEpoch = epoch;
+                        liveCausalSequence = sequence;
+                    }
+                    else if (liveCausalEpoch != epoch
+                             || liveCausalSequence != sequence)
+                    {
+                        liveCausalAmbiguous = true;
+                    }
+                }
+            }
+            if (!hasKey)
+            {
+                liveCausalEpoch = 0u;
+                liveCausalSequence = 0u;
+            }
+        }
+    }
+
+    bool materialSealEmitido = false;
+    bool materialSealReadbackRecorded = false;
+    u32 materialSealSlot = 4u;
+    u32 materialSealParity = 0u;
+    u64 materialSealAttempt = 0u;
+    std::vector<CaptureKeyLocal> visibleCaptureKeys =
+        capturePlan != nullptr && capturePlan->visibleExact
+            ? capturePlan->visibleRoots
+            : std::vector<CaptureKeyLocal>{};
+    FaithfulCausalProductGpu* causalProducts = nullptr;
+    u32 causalProductCount = 0u;
+    if (causalHeaderCpuValid
+        && faithfulCausalMapped[faithfulRing] != nullptr)
+    {
+        u8* const causalBytes = static_cast<u8*>(
+            faithfulCausalMapped[faithfulRing]);
+        const auto* const header =
+            reinterpret_cast<const FaithfulCausalHeaderGpu*>(causalBytes);
+        if ((header->Valid & kFaithfulCausalHeaderFullLineageValid) != 0u)
+        {
+            causalProducts = reinterpret_cast<FaithfulCausalProductGpu*>(
+                causalBytes + kFaithfulCausalProductOffset);
+            causalProductCount = header->ProductCount;
+        }
+    }
+
+    if (paseCaptura
+        && (captureTargetNode == nullptr
+            || !uploadFaithfulCaptureRecipeLocked(
+                *captureTargetNode, captureWriteSlot)))
+    {
+
+        paseCaptura = false;
+    }
+
+    if (causalHeaderCpuValid && !liveCausalAmbiguous
+        && liveCausalEpoch != 0u && liveCausalSequence != 0u
+        && escala > 1u)
+    {
+        const auto matchesLive = [&](const FrameResource& candidate) {
+            return snapshotVisibleToThisDispatch(candidate)
+                && candidate.hasRenderer3dSnapshot
+                && candidate.renderer3dSnapshot != VK_NULL_HANDLE
+                && candidate.renderer3dSnapshotView != VK_NULL_HANDLE
+                && candidate.renderer3dSnapshotSourceIdentityValid
+                && candidate.renderer3dSnapshotSourceEpoch
+                    == liveCausalEpoch
+                && candidate.renderer3dSnapshotSourceSequence
+                    == liveCausalSequence
+                && candidate.snapshotFromGraphicsBackend;
+        };
+        const auto adoptLive = [&](FrameResource& candidate) {
+            liveCausalSource = &candidate;
+            liveCausalProjection = candidate.renderer3dSnapshotProjection;
+            liveCausalProjectionSet = true;
+            liveCausalWidth = liveCausalProjection.destinationWidth;
+            liveCausalHeight = liveCausalProjection.destinationHeight;
+        };
+        const auto considerLive = [&](FrameResource& candidate) {
+            if (!matchesLive(candidate))
+                return;
+            liveCausalMatches++;
+            if (!candidate.renderer3dSnapshotProjection.valid()
+                || candidate.snapshotWidth
+                    != candidate.renderer3dSnapshotProjection.destinationWidth
+                || candidate.snapshotHeight
+                    != candidate.renderer3dSnapshotProjection.destinationHeight)
+            {
+                liveCausalAmbiguous = true;
+                return;
+            }
+            if (liveCausalSource == nullptr)
+            {
+                adoptLive(candidate);
+                return;
+            }
+
+            if (!liveCausalProjectionSet
+                || !(candidate.renderer3dSnapshotProjection
+                    == liveCausalProjection))
+                liveCausalAmbiguous = true;
+        };
+        considerLive(resource);
+        for (auto& [candidateFrame, candidate] : resources)
+        {
+            (void)candidateFrame;
+            if (&candidate == &resource)
+                continue;
+            considerLive(candidate);
+        }
+        const bool liveProjectionUsable = liveCausalProjectionSet
+            && liveCausalWidth >= 256u * escala
+            && (liveCausalWidth % (256u * escala)) == 0u
+            && liveCausalHeight * 4u == liveCausalWidth * 3u
+            && liveCausalWidth <= 0xFFFFu
+            && liveCausalHeight <= 0xFFFFu;
+        if (liveCausalMatches == 0u || liveCausalAmbiguous
+            || !liveProjectionUsable)
+        {
+            liveCausalSource = nullptr;
+            liveCausalWidth = 0u;
+            liveCausalHeight = 0u;
+        }
+    }
+
+    if (boundLive != nullptr && liveCausalSource != nullptr)
+    {
+        boundLive->Flags = 1u;
+        boundLive->EpochLo = static_cast<u32>(liveCausalEpoch);
+        boundLive->EpochHi = static_cast<u32>(liveCausalEpoch >> 32u);
+        boundLive->SequenceLo = static_cast<u32>(liveCausalSequence);
+        boundLive->SequenceHi = static_cast<u32>(liveCausalSequence >> 32u);
+        boundLive->Dimensions = (liveCausalWidth & 0xFFFFu)
+            | ((liveCausalHeight & 0xFFFFu) << 16u);
+        std::atomic_thread_fence(std::memory_order_release);
+        boundLive->Valid = 1u;
+    }
+
+    VkDescriptorImageInfo liveCausalDescriptor {
+        faithfulSampler,
+        liveCausalSource != nullptr
+            ? liveCausalSource->renderer3dSnapshotView : faithfulOutView,
+        VK_IMAGE_LAYOUT_GENERAL,
+    };
+    VkWriteDescriptorSet liveCausalWrite{};
+    liveCausalWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    liveCausalWrite.dstSet = faithfulDescSet[faithfulRing];
+    liveCausalWrite.dstBinding = 14u;
+    liveCausalWrite.descriptorCount = 1u;
+    liveCausalWrite.descriptorType =
+        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    liveCausalWrite.pImageInfo = &liveCausalDescriptor;
+    vkUpdateDescriptorSets(device, 1u, &liveCausalWrite, 0u, nullptr);
+
+    if (liveCausalSource != nullptr)
+    {
+        VkImageMemoryBarrier liveLegible{};
+        liveLegible.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        liveLegible.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT
+                                  | VK_ACCESS_SHADER_READ_BIT;
+        liveLegible.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        liveLegible.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+        liveLegible.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+        liveLegible.srcQueueFamilyIndex =
+            liveLegible.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        liveLegible.image = liveCausalSource->renderer3dSnapshot;
+        liveLegible.subresourceRange = {
+            VK_IMAGE_ASPECT_COLOR_BIT, 0u, 1u, 0u, 1u};
+        vkCmdPipelineBarrier(resource.commandBuffer,
+            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            0u, 0u, nullptr, 0u, nullptr, 1u, &liveLegible);
+    }
+
+    static u32 liveCausalLogsRemaining = 240u;
+    if (liveCausalLogsRemaining > 0u
+        && (std::getenv("MELON_SONDA_CAPID") != nullptr
+            || areRendererDebugBgObjLogsEnabled()))
+    {
+        liveCausalLogsRemaining--;
+        melonDS::Platform::Log(melonDS::Platform::LogLevel::Warn,
+            "RendererDebug[FaithfulLiveBound]: frame=%u ring=%u "
+            "header=%u ambiguous=%u expected=%llu:%llu matches=%u "
+            "bound=%u size=%ux%u currentSnapshot=%llu:%llu remaining=%u",
+            frame != nullptr ? static_cast<unsigned>(frame->frameId) : 0u,
+            faithfulRing, causalHeaderCpuValid ? 1u : 0u,
+            liveCausalAmbiguous ? 1u : 0u,
+            static_cast<unsigned long long>(liveCausalEpoch),
+            static_cast<unsigned long long>(liveCausalSequence),
+            liveCausalMatches, liveCausalSource != nullptr ? 1u : 0u,
+            liveCausalWidth, liveCausalHeight,
+            static_cast<unsigned long long>(
+                resource.renderer3dSnapshotSourceEpoch),
+            static_cast<unsigned long long>(
+                resource.renderer3dSnapshotSourceSequence),
+            liveCausalLogsRemaining);
+    }
+
+    VkDescriptorBufferInfo sourceSealDummy{
+        faithful3dBuffer[faithfulRing], 0u,
+        256u * 192u * sizeof(u32)};
+    VkWriteDescriptorSet sourceSealDummyWrite{};
+    sourceSealDummyWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    sourceSealDummyWrite.dstSet = faithfulDescSet[faithfulRing];
+    sourceSealDummyWrite.dstBinding = 15u;
+    sourceSealDummyWrite.descriptorCount = 1u;
+    sourceSealDummyWrite.descriptorType =
+        VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    sourceSealDummyWrite.pBufferInfo = &sourceSealDummy;
+    vkUpdateDescriptorSets(
+        device, 1u, &sourceSealDummyWrite, 0u, nullptr);
+
+    if (paseCaptura && requiereFuenteA
+        && captureTargetStamp.sourceIdentityValid)
+    {
+        const auto coincideProducto = [&](const FrameResource& candidata) {
+            return captureSourceMatches(candidata,
+                captureTargetStamp.sourceRenderProductEpoch,
+                captureTargetStamp.sourceSequence);
+        };
+        const auto adoptarProducto = [&](FrameResource& candidata,
+                                         bool actual) {
+            paseFuenteImagen = candidata.renderer3dSnapshot;
+            paseFuenteVista = candidata.renderer3dSnapshotView;
+            paseFuenteNativeProjectionBuffer =
+                candidata.renderer3dNativeProjectionBuffer;
+            paseFuenteResource = &candidata;
+            paseFuenteProjection = candidata.renderer3dSnapshotProjection;
+            paseFuenteProjectionSet = true;
+            paseFuenteAncho = paseFuenteProjection.destinationWidth;
+            paseFuenteAlto = paseFuenteProjection.destinationHeight;
+            paseFuenteEsRecursoActual = actual;
+            paseFuenteMetadataCompleta =
+                candidata.renderer3dSnapshotSourcePolygonCount
+                    == captureTargetStamp.sourcePolygonCount
+                && candidata.renderer3dSnapshotSourceCaptureCnt
+                    == captureTargetStamp.sourceCaptureCnt
+                && candidata.renderer3dSnapshotSourceScreenSwap
+                    == captureTargetStamp.sourceScreenSwap;
+        };
+        if (coincideProducto(resource))
+        {
+            paseFuenteCoincidencias++;
+            if (captureSourceProjectionValid(resource))
+                adoptarProducto(resource, true);
+            else
+                paseFuenteAmbigua = true;
+        }
+        for (auto& [recursoFrame, candidata] : resources)
+        {
+            (void)recursoFrame;
+            if (&candidata == &resource || !coincideProducto(candidata))
+                continue;
+            paseFuenteCoincidencias++;
+            if (!captureSourceProjectionValid(candidata))
+            {
+                paseFuenteAmbigua = true;
+                continue;
+            }
+            if (!paseFuenteProjectionSet)
+            {
+                adoptarProducto(candidata, false);
+                continue;
+            }
+            if (!(candidata.renderer3dSnapshotProjection
+                    == paseFuenteProjection))
+            {
+                paseFuenteAmbigua = true;
+                continue;
+            }
+
+            const bool completa =
+                candidata.renderer3dSnapshotSourcePolygonCount
+                    == captureTargetStamp.sourcePolygonCount
+                && candidata.renderer3dSnapshotSourceCaptureCnt
+                    == captureTargetStamp.sourceCaptureCnt
+                && candidata.renderer3dSnapshotSourceScreenSwap
+                    == captureTargetStamp.sourceScreenSwap;
+            if (paseFuenteVista == VK_NULL_HANDLE
+                || (!paseFuenteMetadataCompleta && completa))
+            {
+                adoptarProducto(candidata, false);
+            }
+        }
+        const bool paseProjectionUsable = paseFuenteProjectionSet
+            && paseFuenteAncho >= 256u * escala
+            && (paseFuenteAncho % (256u * escala)) == 0u
+            && paseFuenteAlto * 4u == paseFuenteAncho * 3u;
+        paseFuenteExacta = paseFuenteVista != VK_NULL_HANDLE
+            && !paseFuenteAmbigua && paseProjectionUsable;
+        if (!paseFuenteExacta)
+        {
+            paseFuenteImagen = VK_NULL_HANDLE;
+            paseFuenteVista = VK_NULL_HANDLE;
+            paseFuenteNativeProjectionBuffer = VK_NULL_HANDLE;
+            paseFuenteResource = nullptr;
+            paseCaptura = false;
+        }
+    }
+    if (paseFuenteExacta && requiereFuenteA)
+    {
+
+        VkDescriptorImageInfo fuenteProducto{
+            faithfulSampler, paseFuenteVista, VK_IMAGE_LAYOUT_GENERAL};
+        VkDescriptorBufferInfo fuenteNativeProjection{};
+        sourceSealDiagnosticAvailable =
+            sourceSealDiagnosticEnabled
+            && paseFuenteProjection.hasExactNativeProjection()
+            && paseFuenteResource != nullptr
+            && paseFuenteResource->renderer3dNativeProjectionValid
+            && paseFuenteNativeProjectionBuffer != VK_NULL_HANDLE;
+        if (sourceSealDiagnosticAvailable)
+        {
+            fuenteNativeProjection = {
+                paseFuenteNativeProjectionBuffer, 0u,
+                256u * 192u * sizeof(u32)};
+        }
+        VkWriteDescriptorSet writeFuente[2]{};
+        writeFuente[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writeFuente[0].dstSet = faithfulDescSet[faithfulRing];
+        writeFuente[0].dstBinding = 8u;
+        writeFuente[0].descriptorCount = 1u;
+        writeFuente[0].descriptorType =
+            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        writeFuente[0].pImageInfo = &fuenteProducto;
+        writeFuente[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writeFuente[1].dstSet = faithfulDescSet[faithfulRing];
+        writeFuente[1].dstBinding = 15u;
+        writeFuente[1].descriptorCount = 1u;
+        writeFuente[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        writeFuente[1].pBufferInfo = &fuenteNativeProjection;
+        vkUpdateDescriptorSets(
+            device, sourceSealDiagnosticAvailable ? 2u : 1u,
+            writeFuente, 0u, nullptr);
+
+        VkImageMemoryBarrier fuenteLegible{};
+        fuenteLegible.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        fuenteLegible.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+                                    | VK_ACCESS_SHADER_WRITE_BIT
+                                    | VK_ACCESS_TRANSFER_WRITE_BIT;
+        fuenteLegible.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        fuenteLegible.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+        fuenteLegible.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+        fuenteLegible.srcQueueFamilyIndex =
+            fuenteLegible.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        fuenteLegible.image = paseFuenteImagen;
+        fuenteLegible.subresourceRange = {
+            VK_IMAGE_ASPECT_COLOR_BIT, 0u, 1u, 0u, 1u};
+        vkCmdPipelineBarrier(resource.commandBuffer,
+            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            0u, 0u, nullptr, 0u, nullptr, 1u, &fuenteLegible);
+
+        if (sourceSealDiagnosticAvailable)
+        {
+            VkBufferMemoryBarrier nativeProjectionLegible{};
+            nativeProjectionLegible.sType =
+                VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+            nativeProjectionLegible.srcAccessMask =
+                VK_ACCESS_SHADER_WRITE_BIT;
+            nativeProjectionLegible.dstAccessMask =
+                VK_ACCESS_SHADER_READ_BIT;
+            nativeProjectionLegible.srcQueueFamilyIndex =
+                nativeProjectionLegible.dstQueueFamilyIndex =
+                    VK_QUEUE_FAMILY_IGNORED;
+            nativeProjectionLegible.buffer =
+                paseFuenteNativeProjectionBuffer;
+            nativeProjectionLegible.offset = 0u;
+            nativeProjectionLegible.size = 256u * 192u * sizeof(u32);
+            vkCmdPipelineBarrier(resource.commandBuffer,
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                0u, 0u, nullptr, 1u, &nativeProjectionLegible,
+                0u, nullptr);
+        }
+    }
+
+    u32 causalResidentKeys = 0u;
+    bool causalAllOrNoneReady = false;
+    if (causalProducts != nullptr
+        && faithfulCausalMapped[faithfulRing] != nullptr)
+    {
+        auto* const causalHeader = reinterpret_cast<FaithfulCausalHeaderGpu*>(
+            faithfulCausalMapped[faithfulRing]);
+        causalHeader->Reserved0 = 0u;
+        causalHeader->Reserved1 = 0u;
+        causalHeader->Reserved2 = 0u;
+        for (u32 handle = 0u; handle < causalProductCount; handle++)
+            causalProducts[handle].Reserved0 = 0u;
+
+        std::array<u16, 4> rootHandles {};
+        std::array<u32, 4> rootSlots {4u, 4u, 4u, 4u};
+        bool exactRoots = capturePlan != nullptr
+            && capturePlan->visibleExact
+            && !causalWorkingSetOverflow
+            && visibleCaptureKeys.size() <= 4u;
+        for (size_t rootIndex = 0u;
+             exactRoots && rootIndex < visibleCaptureKeys.size(); rootIndex++)
+        {
+            const auto& root = visibleCaptureKeys[rootIndex];
+            u32 matchingHandle = causalProductCount;
+            u32 matchingHandleCount = 0u;
+            for (u32 handle = 2u; handle < causalProductCount; handle++)
+            {
+                const auto& product = causalProducts[handle];
+                const CaptureKeyLocal productKey{
+                    static_cast<u64>(product.EpochLo)
+                        | (static_cast<u64>(product.EpochHi) << 32u),
+                    static_cast<u64>(product.IdLo)
+                        | (static_cast<u64>(product.IdHi) << 32u),
+                };
+                if (sameCaptureKey(productKey, root))
+                {
+                    matchingHandleCount++;
+                    if (matchingHandle != causalProductCount)
+                    {
+                        exactRoots = false;
+                        break;
+                    }
+                    matchingHandle = handle;
+                }
+            }
+            if (!exactRoots || matchingHandle >= causalProductCount)
+            {
+                exactRoots = false;
+                break;
+            }
+
+            u32 slot = 4u;
+            for (u32 candidate = 0u; candidate < 4u; candidate++)
+            {
+                if (slotContainsScheduledCapture(candidate, root))
+                {
+                    slot = candidate;
+                    break;
+                }
+            }
+            if (slot >= 4u && paseCaptura
+                && captureWriteSlot < 4u
+                && sameCaptureKey(captureTargetKey, root))
+            {
+                slot = captureWriteSlot;
+            }
+            if (slot >= 4u)
+            {
+                exactRoots = false;
+                if (std::getenv("MELON_SONDA_CAPID") != nullptr)
+                {
+                    std::fprintf(stderr,
+                        "[capws-root] root=%zu key=%016llX:%016llX "
+                        "handles=%u handle=%u slot=none target=%u:%016llX:%016llX "
+                        "pass=%u states=%u,%u,%u,%u\n",
+                        rootIndex,
+                        static_cast<unsigned long long>(root.epoch),
+                        static_cast<unsigned long long>(root.id),
+                        matchingHandleCount, matchingHandle,
+                        captureWriteSlot,
+                        static_cast<unsigned long long>(captureTargetKey.epoch),
+                        static_cast<unsigned long long>(captureTargetKey.id),
+                        paseCaptura ? 1u : 0u,
+                        static_cast<unsigned>(capHighresSlotState[0]),
+                        static_cast<unsigned>(capHighresSlotState[1]),
+                        static_cast<unsigned>(capHighresSlotState[2]),
+                        static_cast<unsigned>(capHighresSlotState[3]));
+                }
+                break;
+            }
+            if (std::getenv("MELON_SONDA_CAPID") != nullptr)
+            {
+                std::fprintf(stderr,
+                    "[capws-root] root=%zu key=%016llX:%016llX "
+                    "handles=%u handle=%u slot=%u target=%u:%016llX:%016llX "
+                    "pass=%u states=%u,%u,%u,%u\n",
+                    rootIndex,
+                    static_cast<unsigned long long>(root.epoch),
+                    static_cast<unsigned long long>(root.id),
+                    matchingHandleCount, matchingHandle, slot,
+                    captureWriteSlot,
+                    static_cast<unsigned long long>(captureTargetKey.epoch),
+                    static_cast<unsigned long long>(captureTargetKey.id),
+                    paseCaptura ? 1u : 0u,
+                    static_cast<unsigned>(capHighresSlotState[0]),
+                    static_cast<unsigned>(capHighresSlotState[1]),
+                    static_cast<unsigned>(capHighresSlotState[2]),
+                    static_cast<unsigned>(capHighresSlotState[3]));
+            }
+            rootHandles[rootIndex] = static_cast<u16>(matchingHandle);
+            rootSlots[rootIndex] = slot;
+        }
+
+        if (exactRoots)
+        {
+            for (size_t rootIndex = 0u;
+                 rootIndex < visibleCaptureKeys.size(); rootIndex++)
+            {
+                causalProducts[rootHandles[rootIndex]].Reserved0 =
+                    rootSlots[rootIndex] + 1u;
+            }
+            causalHeader->Reserved1 = static_cast<u32>(rootHandles[0])
+                | (static_cast<u32>(rootHandles[1]) << 16u);
+            causalHeader->Reserved2 = static_cast<u32>(rootHandles[2])
+                | (static_cast<u32>(rootHandles[3]) << 16u);
+            causalHeader->Reserved0 = 0x80000000u
+                | static_cast<u32>(visibleCaptureKeys.size());
+            causalResidentKeys =
+                static_cast<u32>(visibleCaptureKeys.size());
+            causalAllOrNoneReady = true;
+        }
+        std::atomic_thread_fence(std::memory_order_release);
+    }
+
+    VkBufferMemoryBarrier causalHostVisible{};
+    causalHostVisible.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    causalHostVisible.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+    causalHostVisible.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    causalHostVisible.srcQueueFamilyIndex =
+        causalHostVisible.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    causalHostVisible.buffer = faithfulCausalBuffer[faithfulRing];
+    causalHostVisible.offset = 0u;
+    causalHostVisible.size = kFaithfulCausalBufferSize;
+    vkCmdPipelineBarrier(resource.commandBuffer,
+        VK_PIPELINE_STAGE_HOST_BIT,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        0u, 0u, nullptr, 1u, &causalHostVisible, 0u, nullptr);
+
+    VkBufferMemoryBarrier faithfulScratchReuse[2]{};
+    const VkBuffer faithfulScratchBuffers[2] = {
+        faithfulObjBuffer, faithfulB1Buffer,
+    };
+    for (u32 index = 0u; index < 2u; index++)
+    {
+        VkBufferMemoryBarrier& barrier = faithfulScratchReuse[index];
+        barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+        barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT
+                              | VK_ACCESS_SHADER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+        barrier.srcQueueFamilyIndex = barrier.dstQueueFamilyIndex =
+            VK_QUEUE_FAMILY_IGNORED;
+        barrier.buffer = faithfulScratchBuffers[index];
+        barrier.offset = 0;
+        barrier.size = VK_WHOLE_SIZE;
+    }
+    vkCmdPipelineBarrier(
+        resource.commandBuffer,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        0, 0, nullptr, 2, faithfulScratchReuse, 0, nullptr);
+
+    VkBufferMemoryBarrier faithfulSealReuse{};
+    faithfulSealReuse.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    faithfulSealReuse.srcAccessMask = VK_ACCESS_SHADER_READ_BIT
+                                    | VK_ACCESS_SHADER_WRITE_BIT
+                                    | VK_ACCESS_TRANSFER_READ_BIT
+                                    | VK_ACCESS_TRANSFER_WRITE_BIT;
+    faithfulSealReuse.dstAccessMask = VK_ACCESS_SHADER_READ_BIT
+                                    | VK_ACCESS_SHADER_WRITE_BIT
+                                    | VK_ACCESS_TRANSFER_READ_BIT
+                                    | VK_ACCESS_TRANSFER_WRITE_BIT;
+    faithfulSealReuse.srcQueueFamilyIndex =
+        faithfulSealReuse.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    faithfulSealReuse.buffer = faithfulCaptureSealBuffer;
+    faithfulSealReuse.offset = 0;
+    faithfulSealReuse.size = VK_WHOLE_SIZE;
+    vkCmdPipelineBarrier(
+        resource.commandBuffer,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+        0, 0, nullptr, 1, &faithfulSealReuse, 0, nullptr);
+
+    writeFaithfulTimestamp(1u, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+
+    if (faithfulCaptureSealNeedsClear)
+    {
+        vkCmdFillBuffer(resource.commandBuffer, faithfulCaptureSealBuffer,
+                        0, 16u * 4u * sizeof(u32), 0u);
+        VkBufferMemoryBarrier limpio{};
+        limpio.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+        limpio.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        limpio.dstAccessMask = VK_ACCESS_SHADER_READ_BIT
+                             | VK_ACCESS_SHADER_WRITE_BIT
+                             | VK_ACCESS_TRANSFER_READ_BIT
+                             | VK_ACCESS_TRANSFER_WRITE_BIT;
+        limpio.srcQueueFamilyIndex = limpio.dstQueueFamilyIndex =
+            VK_QUEUE_FAMILY_IGNORED;
+        limpio.buffer = faithfulCaptureSealBuffer;
+        limpio.offset = 0;
+        limpio.size = VK_WHOLE_SIZE;
+        vkCmdPipelineBarrier(resource.commandBuffer,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+            0, 0, nullptr, 1, &limpio, 0, nullptr);
+        faithfulCaptureSealNeedsClear = false;
+    }
+
+    std::array<bool, 4> captureLayoutRecorded {};
+    std::array<VkImageMemoryBarrier, 5> captureLayoutBarriers {};
+    u32 captureLayoutBarrierCount = 0u;
+    const auto recordInitialDescriptorLayout = [&](VkImage image) {
+        auto& barrier = captureLayoutBarriers[captureLayoutBarrierCount++];
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+        barrier.srcQueueFamilyIndex = barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = image;
+        barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    };
+    const bool faithfulOutLayoutRecorded = faithfulOutImage != VK_NULL_HANDLE
+        && !faithfulOutImageInitialized;
+    if (faithfulOutLayoutRecorded)
+        recordInitialDescriptorLayout(faithfulOutImage);
+    for (u32 slot = 0u; slot < 4u; slot++)
+    {
+        if (capHighresImage[slot] == VK_NULL_HANDLE
+            || capHighresLayoutInitialized[slot])
+            continue;
+        recordInitialDescriptorLayout(capHighresImage[slot]);
+        captureLayoutRecorded[slot] = true;
+    }
+    if (captureLayoutBarrierCount != 0u)
+        vkCmdPipelineBarrier(resource.commandBuffer,
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            0u, 0u, nullptr, 0u, nullptr,
+            captureLayoutBarrierCount, captureLayoutBarriers.data());
+
+    VkImageMemoryBarrier aGeneral{};
+    aGeneral.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    aGeneral.srcAccessMask = resource.hasContent ? (VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT) : 0;
+    aGeneral.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    aGeneral.oldLayout = resource.hasContent ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED;
+    aGeneral.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    aGeneral.srcQueueFamilyIndex = aGeneral.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    aGeneral.image = resource.image;
+    aGeneral.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+
+    if (!rutaCorta)
+        vkCmdPipelineBarrier(
+            resource.commandBuffer,
+            resource.hasContent ? VK_PIPELINE_STAGE_ALL_COMMANDS_BIT : VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            0, 0, nullptr, 0, nullptr, 1, &aGeneral);
+
+    vkCmdBindDescriptorSets(resource.commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+                            faithfulPipeLayout, 0, 1, &faithfulDescSet[faithfulRing], 0, nullptr);
+    VkBufferMemoryBarrier bObj{};
+    bObj.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    bObj.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    bObj.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    bObj.srcQueueFamilyIndex = bObj.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    bObj.buffer = faithfulObjBuffer;
+    bObj.offset = 0; bObj.size = VK_WHOLE_SIZE;
+    if (!rutaCorta)
+    {
+        vkCmdBindPipeline(resource.commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+                          faithfulObjScanlinePipeline);
+
+        const u32 empujeA[3] = {2u, 1u, 0u};
+        vkCmdPushConstants(resource.commandBuffer, faithfulPipeLayout,
+                           VK_SHADER_STAGE_COMPUTE_BIT, 0, 12, empujeA);
+        vkCmdDispatch(resource.commandBuffer, 1u, 384u, 1u);
+        vkCmdPipelineBarrier(resource.commandBuffer,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            0, 0, nullptr, 1, &bObj, 0, nullptr);
+    }
+    writeFaithfulTimestamp(2u, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+    if (escala > 1u && !rutaCorta)
+    {
+
+        const u32 empujeB1[3] = {
+            3u, 1u | bitsCapHR | nativeFallbackEncoding,
+            causalHeaderAllNativeCpu ? 1u : 0u};
+        vkCmdBindPipeline(resource.commandBuffer,
+                          VK_PIPELINE_BIND_POINT_COMPUTE,
+                          faithfulModePipeline[3]);
+        vkCmdPushConstants(resource.commandBuffer, faithfulPipeLayout,
+                           VK_SHADER_STAGE_COMPUTE_BIT, 0, 12, empujeB1);
+        vkCmdDispatch(resource.commandBuffer, 256u / 64u, 384u, 1u);
+        VkBufferMemoryBarrier bB1 = bObj;
+        bB1.buffer = faithfulB1Buffer;
+        vkCmdPipelineBarrier(resource.commandBuffer,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            0, 0, nullptr, 1, &bB1, 0, nullptr);
+    }
+    writeFaithfulTimestamp(3u, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+
+    static u32 capdCadencia = 0;
+    static const bool capdCada = std::getenv("MELON_LOG_TAIL") != nullptr;
+    if (trazaCapActiva() || capdCada || (capdCadencia++ % 120u) == 0u)
+        melonDS::Platform::Log(melonDS::Platform::LogLevel::Warn,
+            "[capd] frameId=%d inv=%u prop=%d val=%d escI=%u esc=%u usable=%d banco=%u act=%d "
+            "ini0=%d ini1=%d iniA=%08X iniB=%08X iniO=%08X pase=%d m2=%d "
+            "fr0=%d fr1=%d salto=%d dispA=%08X dispB=%08X preA=%d preB=%d "
+            "swap=%d cnt=%08X bits=%08X s0=%X s1=%X sP=%X sVeto=%d np=%u npP=%u",
+            diagFrameId.load(std::memory_order_relaxed), diagInvalidaciones,
+            capHighresProp ? 1 : 0, capHighresValida ? 1 : 0,
+            capHighresEscala, escala, capHighresUsableEf ? 1 : 0,
+            capHighresBanco, capFichaActiva ? 1 : 0,
+            capHighresSlotState[0] != FaithfulCaptureSlotState::Empty
+                ? 1 : 0,
+            capHighresSlotState[1] != FaithfulCaptureSlotState::Empty
+                ? 1 : 0,
+            capHighresIniABG, capHighresIniBBG, capHighresIniObj,
+            paseCaptura ? 1 : 0, modo2Ok ? 1 : 0,
+            capFrescaPar[0] ? 1 : 0, capFrescaPar[1] ? 1 : 0,
+            capFichaSalto ? 1 : 0,
+            capFichaDispA0, capFichaDispB0,
+            capFichaPreA ? 1 : 0, capFichaPreB ? 1 : 0,
+            capFichaSwap ? 1 : 0, capFichaCnt, bitsCapHR,
+            capSelloPar[0], capSelloPar[1], capSelloPrev,
+            selloVeto ? 1 : 0, capFichaNp, capFichaNpPrev);
+
+    if (f2Activo)
+    {
+        VkImageMemoryBarrier vivoLegible{};
+        vivoLegible.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        vivoLegible.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+                                  | VK_ACCESS_SHADER_WRITE_BIT
+                                  | VK_ACCESS_TRANSFER_WRITE_BIT;
+        vivoLegible.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        vivoLegible.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+        vivoLegible.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+        vivoLegible.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        vivoLegible.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        vivoLegible.image = inputs->sourceImage;
+        vivoLegible.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        vkCmdPipelineBarrier(resource.commandBuffer,
+                             VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                             VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                             0, 0, nullptr, 0, nullptr, 1, &vivoLegible);
+    }
+
+    constexpr VkDeviceSize kFaithfulSealStride = 4u * sizeof(u32);
+    const auto barreraSelloATransfer = [&]() {
+        VkBufferMemoryBarrier b{};
+        b.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+        b.srcAccessMask = VK_ACCESS_SHADER_READ_BIT
+                        | VK_ACCESS_SHADER_WRITE_BIT
+                        | VK_ACCESS_TRANSFER_READ_BIT
+                        | VK_ACCESS_TRANSFER_WRITE_BIT;
+        b.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT
+                        | VK_ACCESS_TRANSFER_WRITE_BIT;
+        b.srcQueueFamilyIndex = b.dstQueueFamilyIndex =
+            VK_QUEUE_FAMILY_IGNORED;
+        b.buffer = faithfulCaptureSealBuffer;
+        b.offset = 0;
+        b.size = VK_WHOLE_SIZE;
+        vkCmdPipelineBarrier(resource.commandBuffer,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            0, 0, nullptr, 1, &b, 0, nullptr);
+    };
+    const auto barreraSelloAShader = [&]() {
+        VkBufferMemoryBarrier b{};
+        b.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+        b.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT
+                        | VK_ACCESS_TRANSFER_WRITE_BIT;
+        b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT
+                        | VK_ACCESS_SHADER_WRITE_BIT
+                        | VK_ACCESS_TRANSFER_READ_BIT;
+        b.srcQueueFamilyIndex = b.dstQueueFamilyIndex =
+            VK_QUEUE_FAMILY_IGNORED;
+        b.buffer = faithfulCaptureSealBuffer;
+        b.offset = 0;
+        b.size = VK_WHOLE_SIZE;
+        vkCmdPipelineBarrier(resource.commandBuffer,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+            0, 0, nullptr, 1, &b, 0, nullptr);
+    };
+    const auto iniciarSello = [&](u32 slot, u64 productEpoch, u64 productId) {
+        const u32 registro[4] = {
+            static_cast<u32>(productId),
+            static_cast<u32>(productId >> 32u),
+            0u,
+            0u,
+        };
+        barreraSelloATransfer();
+        const VkDeviceSize base = static_cast<VkDeviceSize>(slot)
+                                * kFaithfulSealStride;
+
+        for (u32 palabra = 0u; palabra < 4u; palabra++)
+            vkCmdFillBuffer(resource.commandBuffer, faithfulCaptureSealBuffer,
+                            base + palabra * sizeof(u32), sizeof(u32),
+                            registro[palabra]);
+        vkCmdFillBuffer(resource.commandBuffer, faithfulCaptureSealBuffer,
+                        static_cast<VkDeviceSize>(4u + slot)
+                            * kFaithfulSealStride,
+                        kFaithfulSealStride, 0u);
+        vkCmdFillBuffer(resource.commandBuffer, faithfulCaptureSealBuffer,
+                        static_cast<VkDeviceSize>(8u + slot)
+                            * kFaithfulSealStride,
+                        sizeof(u32), 0xFFFFFFFFu);
+        vkCmdFillBuffer(resource.commandBuffer, faithfulCaptureSealBuffer,
+                        (static_cast<VkDeviceSize>(8u + slot)
+                            * kFaithfulSealStride) + sizeof(u32),
+                        3u * sizeof(u32), 0u);
+        const u32 captureKey[4] = {
+            static_cast<u32>(productEpoch),
+            static_cast<u32>(productEpoch >> 32u),
+            static_cast<u32>(productId),
+            static_cast<u32>(productId >> 32u),
+        };
+        const VkDeviceSize keyBase = static_cast<VkDeviceSize>(12u + slot)
+                                   * kFaithfulSealStride;
+        for (u32 palabra = 0u; palabra < 4u; palabra++)
+            vkCmdFillBuffer(resource.commandBuffer, faithfulCaptureSealBuffer,
+                            keyBase + palabra * sizeof(u32), sizeof(u32),
+                            captureKey[palabra]);
+        barreraSelloAShader();
+    };
+    const auto invalidarSello = [&](u32 slot) {
+        barreraSelloATransfer();
+        vkCmdFillBuffer(resource.commandBuffer, faithfulCaptureSealBuffer,
+                        static_cast<VkDeviceSize>(slot) * kFaithfulSealStride,
+                        kFaithfulSealStride, 0u);
+        vkCmdFillBuffer(resource.commandBuffer, faithfulCaptureSealBuffer,
+                        static_cast<VkDeviceSize>(4u + slot)
+                            * kFaithfulSealStride,
+                        kFaithfulSealStride, 0u);
+        vkCmdFillBuffer(resource.commandBuffer, faithfulCaptureSealBuffer,
+                        static_cast<VkDeviceSize>(8u + slot)
+                            * kFaithfulSealStride,
+                        kFaithfulSealStride, 0u);
+        vkCmdFillBuffer(resource.commandBuffer, faithfulCaptureSealBuffer,
+                        static_cast<VkDeviceSize>(12u + slot)
+                            * kFaithfulSealStride,
+                        kFaithfulSealStride, 0u);
+        barreraSelloAShader();
+    };
+    using CaptureRecipeEncoding = melonDS::GPU2D::SoftRenderer::
+        FaithfulCaptureRecipeEncoding;
+    const bool captureRecipeSourceAOnly = captureTargetNode != nullptr
+        && captureTargetNode->product != nullptr
+        && captureTargetNode->product->RecipeEncoding
+            == CaptureRecipeEncoding::SourceAOnly;
+    auto grabarPase = [&]() {
+    if (paseCaptura)
+    {
+        const u32 materialParity = bancoCapDst & 1u;
+        const u32 targetSlot = captureWriteSlot;
+        if (targetSlot >= 4u)
+            return;
+
+        u32 mezclaCap = 0u;
+        if (mezclaVramB)
+        {
+            u32 evaCap = cntPase & 0x1Fu;
+            u32 evbCap = (cntPase >> 8u) & 0x1Fu;
+            if (evaCap > 16u) evaCap = 16u;
+            if (evbCap > 16u) evbCap = 16u;
+            const u32 bancoB = (dispAPase >> 18u) & 3u;
+            const bool bFresco = capHighresBancoPar[bancoB & 1u] == bancoB
+                && capHighresSlotState[bancoB & 1u]
+                    != FaithfulCaptureSlotState::Empty
+                && capFrescaPar[bancoB & 1u];
+            mezclaCap = 1u | (evaCap << 1u) | (evbCap << 6u)
+                      | (bancoB << 11u) | (bFresco ? (1u << 13u) : 0u);
+        }
+        VkImageMemoryBarrier aPase = aGeneral;
+        aPase.image = capHighresImage[targetSlot];
+        aPase.srcAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT
+            | VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+        aPase.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+        aPase.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+        aPase.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+        vkCmdPipelineBarrier(resource.commandBuffer,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            0, 0, nullptr, 0, nullptr, 1, &aPase);
+
+        invalidarSello(targetSlot);
+        const u32 empujeCap[3] = {4u,
+            escala | (paseFuenteExacta && requiereFuenteA
+                    ? 0u : (stash3dForzado ? 0x100u : 0u))
+                | ((paseFuenteExacta && requiereFuenteA
+                        ? paseFuenteAncho / (256u * escala) : ratio3d) << 16u)
+                | ((((paseFuenteExacta && requiereFuenteA
+                           ? paseFuenteAncho / (256u * escala) : ratio3d) > 1u)
+                      && ssaaTecho()) ? 0x1000u : 0u)
+                | ((paseFuenteExacta && requiereFuenteA)
+                       ? 0x2000u : (f2Activo ? 0x2000u : 0u))
+                | ((targetSlot & 3u) << 25u) | nativeFallbackEncoding,
+            mezclaCap};
+        const VkPipeline captureMaterializationPipeline =
+            captureRecipeSourceAOnly
+                ? faithfulCaptureSourceAOnlyPipeline[0]
+                : faithfulModePipeline[4];
+        vkCmdBindPipeline(
+            resource.commandBuffer,
+            VK_PIPELINE_BIND_POINT_COMPUTE,
+            captureMaterializationPipeline);
+        vkCmdPushConstants(resource.commandBuffer, faithfulPipeLayout,
+                           VK_SHADER_STAGE_COMPUTE_BIT, 0, 12, empujeCap);
+        vkCmdDispatch(resource.commandBuffer,
+                      (256u * escala + 63u) / 64u,
+                      192u * escala, 1u);
+        VkImageMemoryBarrier aListo = aPase;
+        aListo.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+        aListo.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        aListo.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+        vkCmdPipelineBarrier(resource.commandBuffer,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            0, 0, nullptr, 0, nullptr, 1, &aListo);
+
+        iniciarSello(targetSlot, captureTargetStamp.productEpoch,
+                     captureTargetStamp.productId);
+        const u32 empujeSello[3] = {
+            5u, escala | ((targetSlot & 3u) << 25u)
+                    | ((materialParity & 1u) << 27u),
+            sourceSealDiagnosticAvailable ? 0x80000000u : 0u};
+        vkCmdBindPipeline(
+            resource.commandBuffer,
+            VK_PIPELINE_BIND_POINT_COMPUTE,
+            captureRecipeSourceAOnly
+                ? faithfulCaptureSourceAOnlyPipeline[1]
+                : faithfulModePipeline[5]);
+        vkCmdPushConstants(resource.commandBuffer, faithfulPipeLayout,
+                           VK_SHADER_STAGE_COMPUTE_BIT, 0, 12, empujeSello);
+        vkCmdDispatch(resource.commandBuffer, 256u / 64u, 192u, 1u);
+        VkBufferMemoryBarrier selloCertificado{};
+        selloCertificado.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+        selloCertificado.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+        selloCertificado.dstAccessMask = VK_ACCESS_SHADER_READ_BIT
+                                      | VK_ACCESS_TRANSFER_READ_BIT;
+        selloCertificado.srcQueueFamilyIndex =
+            selloCertificado.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        selloCertificado.buffer = faithfulCaptureSealBuffer;
+        selloCertificado.offset = 0u;
+        selloCertificado.size = VK_WHOLE_SIZE;
+        vkCmdPipelineBarrier(resource.commandBuffer,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
+                | VK_PIPELINE_STAGE_TRANSFER_BIT,
+            0u, 0u, nullptr, 1u, &selloCertificado, 0u, nullptr);
+        materialSealEmitido = true;
+        materialSealSlot = targetSlot;
+        materialSealParity = materialParity;
+        materialSealAttempt = faithfulSealNextAttempt++;
+        if (materialSealAttempt == 0u)
+            materialSealAttempt = faithfulSealNextAttempt++;
+
+        if (escala == 1u)
+        {
+            VkBufferMemoryBarrier objWar2 = bObj;
+            objWar2.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            objWar2.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+            vkCmdPipelineBarrier(resource.commandBuffer,
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                0, 0, nullptr, 1, &objWar2, 0, nullptr);
+            const u32 empujeAPrev[3] = {2u, 1u, 0u};
+            vkCmdBindPipeline(resource.commandBuffer,
+                              VK_PIPELINE_BIND_POINT_COMPUTE,
+                              faithfulObjScanlinePipeline);
+            vkCmdPushConstants(resource.commandBuffer, faithfulPipeLayout,
+                               VK_SHADER_STAGE_COMPUTE_BIT, 0, 12, empujeAPrev);
+            vkCmdDispatch(resource.commandBuffer, 1u, 384u, 1u);
+            vkCmdPipelineBarrier(resource.commandBuffer,
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                0, 0, nullptr, 1, &bObj, 0, nullptr);
+        }
+    }
+    };
+    const bool fuente3dExacta = paseFuenteExacta;
+    if (!fuente3dExacta)
+        paseCaptura = false;
+
+    if (captureTargetStamp.valid && paseSinRecursos && requiereFuenteA)
+    {
+        if (paseCaptura)
+        {
+            capHighresRejectKey = {};
+            capHighresRejectStreak = 0u;
+        }
+        else if (!paseFuenteExacta)
+        {
+            if (capHighresRejectKey.epoch == captureTargetStamp.productEpoch
+                && capHighresRejectKey.id == captureTargetStamp.productId)
+            {
+                if (capHighresRejectStreak
+                        != std::numeric_limits<u32>::max())
+                    capHighresRejectStreak++;
+            }
+            else
+            {
+                capHighresRejectKey = {captureTargetStamp.productEpoch,
+                                       captureTargetStamp.productId};
+                capHighresRejectStreak = 1u;
+            }
+        }
+    }
+
+    const bool trazaProducto = std::getenv("MELON_SONDA_CAPID") != nullptr
+        || areRendererDebugBgObjLogsEnabled();
+    if (trazaProducto && captureTargetStamp.valid)
+    {
+        u32 rechazo = 0u;
+        u32 legadoDisplay = 0u;
+        const auto exigir = [&rechazo](bool cumple, u32 bit) {
+            if (!cumple) rechazo |= 1u << bit;
+        };
+        exigir(capHighresProp && escala > 1u, 0u);
+        exigir(captureTargetStamp.valid, 1u);
+        exigir(captureTargetStamp.complete, 2u);
+        exigir(captureTargetStamp.highresEligible, 3u);
+        exigir(!requiereFuenteA
+            || captureTargetStamp.sourceIdentityValid, 4u);
+        exigir(captureTargetNode != nullptr, 5u);
+        exigir(capturePlan != nullptr
+            && capturePlan->visibleExact, 6u);
+        exigir(captureWriteSlot < 4u, 7u);
+        exigir(captureTargetStamp.width == 256u
+            && captureTargetStamp.height == 192u, 8u);
+        exigir(captureTargetStamp.destinationBank < 4u, 9u);
+        exigir(captureTargetStamp.destinationOffsetPixels == offsetCapDst, 10u);
+        exigir(((cntPase >> 20u) & 3u) == 3u, 11u);
+        exigir(!requiereFuenteA || paseFuenteExacta, 14u);
+        if (((dispAPase >> 16u) & 3u) != 2u)
+            legadoDisplay |= 1u << 15u;
+        if (((dispAPase >> 18u) & 3u) != bancoCapDst)
+            legadoDisplay |= 1u << 16u;
+        exigir(!paseSinRecursos || recursosCaptura, 18u);
+        exigir(fuente3dExacta, 19u);
+        melonDS::Platform::Log(melonDS::Platform::LogLevel::Warn,
+            "RendererDebug[FaithfulProduct]: frame=%u epoch=%llu product=%llu "
+            "capture=%08X dst=%u:%u reject=%08X legacyDisplay=%08X pass=%u "
+            "expected=%u:%llu/%u/%08X/%u acquired=%u:%llu/%u/%08X/%u "
+            "ring=%u full=%u current=%u size=%ux%u",
+            captureTargetStamp.frameSequence,
+            static_cast<unsigned long long>(captureTargetStamp.productEpoch),
+            static_cast<unsigned long long>(captureTargetStamp.productId),
+            captureTargetStamp.captureCnt,
+            static_cast<unsigned>(captureTargetStamp.destinationBank),
+            captureTargetStamp.destinationOffsetPixels,
+            rechazo, legadoDisplay, paseCaptura ? 1u : 0u,
+            captureTargetStamp.sourceIdentityValid ? 1u : 0u,
+            static_cast<unsigned long long>(captureTargetStamp.sourceSequence),
+            captureTargetStamp.sourcePolygonCount,
+            captureTargetStamp.sourceCaptureCnt,
+            captureTargetStamp.sourceScreenSwap ? 1u : 0u,
+            resource.renderer3dSnapshotSourceIdentityValid ? 1u : 0u,
+            static_cast<unsigned long long>(
+                resource.renderer3dSnapshotSourceSequence),
+            resource.renderer3dSnapshotSourcePolygonCount,
+            resource.renderer3dSnapshotSourceCaptureCnt,
+            resource.renderer3dSnapshotSourceScreenSwap ? 1u : 0u,
+            paseFuenteCoincidencias,
+            paseFuenteMetadataCompleta ? 1u : 0u,
+            paseFuenteEsRecursoActual ? 1u : 0u,
+            paseFuenteAncho,
+            paseFuenteAlto);
+    }
+    grabarPase();
+    writeFaithfulTimestamp(4u, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+    if (escala > 1u && !rutaCorta)
+    {
+
+        VkBufferMemoryBarrier compactPrepare[2]{};
+        const VkBuffer compactBuffers[2] = {
+            faithfulB1Buffer, faithfulObjBuffer,
+        };
+        for (u32 index = 0u; index < 2u; index++)
+        {
+            auto& barrier = compactPrepare[index];
+            barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+            barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT
+                                  | VK_ACCESS_SHADER_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT
+                                  | VK_ACCESS_SHADER_WRITE_BIT;
+            barrier.srcQueueFamilyIndex = barrier.dstQueueFamilyIndex =
+                VK_QUEUE_FAMILY_IGNORED;
+            barrier.buffer = compactBuffers[index];
+            barrier.offset = 0u;
+            barrier.size = VK_WHOLE_SIZE;
+        }
+        vkCmdPipelineBarrier(resource.commandBuffer,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            0u, 0u, nullptr, 2u, compactPrepare, 0u, nullptr);
+        const u32 liveCausalRatio = liveCausalSource != nullptr
+            && liveCausalWidth >= 256u * escala
+            && (liveCausalWidth % (256u * escala)) == 0u
+            ? liveCausalWidth / (256u * escala) : 0u;
+        const u32 empujeCompacto[3] = {
+            6u,
+            escala | (liveCausalRatio << 16u) | nativeFallbackEncoding,
+            causalHeaderAllNativeCpu ? 1u : 0u,
+        };
+        vkCmdBindPipeline(resource.commandBuffer,
+                          VK_PIPELINE_BIND_POINT_COMPUTE,
+                          faithfulModePipeline[6]);
+        vkCmdPushConstants(resource.commandBuffer, faithfulPipeLayout,
+                           VK_SHADER_STAGE_COMPUTE_BIT, 0, 12,
+                           empujeCompacto);
+        if (causalHeaderAllNativeCpu)
+            vkCmdDispatch(resource.commandBuffer, 384u / 64u, 1u, 1u);
+        else
+            vkCmdDispatch(resource.commandBuffer, 1u, 384u, 1u);
+        VkBufferMemoryBarrier compactReady[2] = {
+            compactPrepare[0], compactPrepare[1],
+        };
+        for (auto& barrier : compactReady)
+        {
+            barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        }
+        vkCmdPipelineBarrier(resource.commandBuffer,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            0u, 0u, nullptr, 2u, compactReady, 0u, nullptr);
+    }
+    writeFaithfulTimestamp(5u, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+    static const bool trazaCapId = std::getenv("MELON_SONDA_CAPID") != nullptr;
+    if (trazaCapId && (!visibleCaptureKeys.empty()
+        || captureTargetStamp.valid || capProductoVivo.valid))
+        std::fprintf(stderr,
+            "[capws] gen=%llu roots=%zu resident=%u all=%u "
+            "target=%016llX:%016llX parents=%zu write=%u "
+            "missing=%u cycle=%u overflow=%u ambiguous=%u slots="
+            "%016llX,%016llX,%016llX,%016llX\n",
+            static_cast<unsigned long long>(
+                capturePlan != nullptr ? capturePlan->generation : 0u),
+            visibleCaptureKeys.size(), causalResidentKeys,
+            causalAllOrNoneReady ? 1u : 0u,
+            static_cast<unsigned long long>(captureTargetKey.epoch),
+            static_cast<unsigned long long>(captureTargetKey.id),
+            captureTargetNode != nullptr
+                ? captureTargetNode->highresParents.size() : 0u,
+            captureWriteSlot < 4u ? captureWriteSlot : 0xFFFFFFFFu,
+            capturePlan != nullptr && capturePlan->missing ? 1u : 0u,
+            capturePlan != nullptr && capturePlan->cycle ? 1u : 0u,
+            causalWorkingSetOverflow ? 1u : 0u,
+            capturePlan != nullptr ? capturePlan->ambiguousPixels : 0u,
+            static_cast<unsigned long long>(capHighresProducto[0].productId),
+            static_cast<unsigned long long>(capHighresProducto[1].productId),
+            static_cast<unsigned long long>(capHighresProducto[2].productId),
+            static_cast<unsigned long long>(capHighresProducto[3].productId));
+    if (!rutaCorta)
+    {
+    const u32 empuje[3] = {1u,
+        escala | (stash3dForzado ? 0x100u : 0u) | (ratio3d << 16u)
+            | ((ratio3d > 1u && ssaaTecho()) ? 0x1000u : 0u)
+            | (f2Activo ? 0x2000u : 0u)
+            | bitsCapHR | nativeFallbackEncoding, 0u};
+    vkCmdPushConstants(resource.commandBuffer, faithfulPipeLayout,
+                       VK_SHADER_STAGE_COMPUTE_BIT, 0, 12, empuje);
+    const bool faithfulB2NativeCellInvocations = escala > 1u;
+    vkCmdBindPipeline(resource.commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+                      faithfulB2NativeCellInvocations
+                          ? faithfulFinalNativeCellPipeline
+                          : faithfulModePipeline[1]);
+
+    const u32 faithfulFinalSubtilesPerAxis =
+        (escala + faithfulFinalNativeSubtileSize - 1u)
+        / faithfulFinalNativeSubtileSize;
+    vkCmdDispatch(resource.commandBuffer,
+        faithfulB2NativeCellInvocations
+            ? (256u * faithfulFinalSubtilesPerAxis) / 64u
+            : (256u * escala + 63u) / 64u,
+        faithfulB2NativeCellInvocations ? 386u : 386u * escala,
+        faithfulB2NativeCellInvocations
+            ? faithfulFinalSubtilesPerAxis
+            : 1u);
+
+    VkImageMemoryBarrier aLegible = aGeneral;
+    aLegible.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    aLegible.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
+    aLegible.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+    aLegible.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    vkCmdPipelineBarrier(
+        resource.commandBuffer,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+        0, 0, nullptr, 0, nullptr, 1, &aLegible);
+    }
+    writeFaithfulTimestamp(6u, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+
+    if (materialSealEmitido
+        && faithfulSealReadbackBuffer[faithfulRing] != VK_NULL_HANDLE)
+    {
+        barreraSelloATransfer();
+        VkBufferCopy copiasSelloHost[4]{};
+        copiasSelloHost[0].srcOffset =
+            static_cast<VkDeviceSize>(materialSealSlot)
+                * kFaithfulSealStride;
+        copiasSelloHost[0].dstOffset = 0u;
+        copiasSelloHost[0].size = kFaithfulSealStride;
+        copiasSelloHost[1].srcOffset =
+            static_cast<VkDeviceSize>(4u + materialSealSlot)
+                * kFaithfulSealStride;
+        copiasSelloHost[1].dstOffset = kFaithfulSealStride;
+        copiasSelloHost[1].size = kFaithfulSealStride;
+        copiasSelloHost[2].srcOffset =
+            static_cast<VkDeviceSize>(8u + materialSealSlot)
+                * kFaithfulSealStride;
+        copiasSelloHost[2].dstOffset = 2u * kFaithfulSealStride;
+        copiasSelloHost[2].size = kFaithfulSealStride;
+        copiasSelloHost[3].srcOffset =
+            static_cast<VkDeviceSize>(12u + materialSealSlot)
+                * kFaithfulSealStride;
+        copiasSelloHost[3].dstOffset = 3u * kFaithfulSealStride;
+        copiasSelloHost[3].size = kFaithfulSealStride;
+        vkCmdCopyBuffer(resource.commandBuffer, faithfulCaptureSealBuffer,
+                        faithfulSealReadbackBuffer[faithfulRing], 4u,
+                        copiasSelloHost);
+        VkBufferMemoryBarrier selloHostLegible{};
+        selloHostLegible.sType =
+            VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+        selloHostLegible.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        selloHostLegible.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
+        selloHostLegible.srcQueueFamilyIndex =
+            selloHostLegible.dstQueueFamilyIndex =
+                VK_QUEUE_FAMILY_IGNORED;
+        selloHostLegible.buffer =
+            faithfulSealReadbackBuffer[faithfulRing];
+        selloHostLegible.offset = 0u;
+        selloHostLegible.size = 4u * kFaithfulSealStride;
+        vkCmdPipelineBarrier(resource.commandBuffer,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_HOST_BIT,
+            0u, 0u, nullptr, 1u, &selloHostLegible, 0u, nullptr);
+        materialSealReadbackRecorded = true;
+    }
+
+    if (recordFaithfulPassTiming
+        && resource.timestampQueryPool != VK_NULL_HANDLE)
+    {
+        vkCmdWriteTimestamp(
+            resource.commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+            resource.timestampQueryPool, 7u);
+        resource.faithfulTimestampBreakdownPending = true;
+    }
+    if (!submitFrameCommand(frame, resource, true))
+    {
+        resource.faithfulTimestampBreakdownPending = false;
+        faithfulSealReadbackPending[faithfulRing] = false;
+        faithfulSealReadbackSlot[faithfulRing] = 4u;
+        faithfulSealReadbackEpoch[faithfulRing] = 0u;
+        faithfulSealReadbackProduct[faithfulRing] = 0u;
+        faithfulSealReadbackAttempt[faithfulRing] = 0u;
+
+        noteFaithfulCertifiedCaptureLossLocked();
+        for (auto& producto : capHighresProducto) producto = {};
+        for (u32 slot = 0u; slot < 4u; slot++)
+        {
+            capHighresSlotState[slot] =
+                FaithfulCaptureSlotState::Empty;
+            capHighresSealAttempt[slot] = 0u;
+        }
+        capHighresPrevInicial = false;
+        capHighresPrev2Inicial = false;
+        capFrescaPar[0] = capFrescaPar[1] = false;
+        capHighresValida = false;
+        capHighresBanco = 0xFFFFFFFFu;
+        capHighresBancoPar[0] = capHighresBancoPar[1] = 0xFFFFFFFFu;
+        capHighresOfsPar[0] = capHighresOfsPar[1] = 0u;
+        capVetoIdentidadPar[0] = capVetoIdentidadPar[1] = false;
+        capSelloPar[0] = capSelloPar[1] = 0xFFu;
+        capSelloPrev = capSelloPrev2 = 0xFFu;
+        faithfulCaptureSealNeedsClear = true;
+        if (faithfulRegsMapped[faithfulRing] != nullptr)
+        {
+            u32* regsProducto =
+                static_cast<u32*>(faithfulRegsMapped[faithfulRing]);
+            for (u32 linea = 0u; linea < 2u * 192u; linea++)
+                regsProducto[linea * 32u + 31u] = 0u;
+        }
+        return rejectCompose("submit_frame_command");
+    }
+    if (!recordFaithfulPassTiming)
+        resource.timestampPending = false;
+
+    if (faithfulOutLayoutRecorded)
+        faithfulOutImageInitialized = true;
+    for (u32 slot = 0u; slot < 4u; slot++)
+        if (captureLayoutRecorded[slot])
+            capHighresLayoutInitialized[slot] = true;
+
+    if (materialSealEmitido && materialSealSlot < 4u)
+    {
+        if (materialSealReadbackRecorded && materialSealAttempt != 0u)
+        {
+            capHighresProducto[materialSealSlot] = captureTargetStamp;
+            capHighresSealAttempt[materialSealSlot] = materialSealAttempt;
+            capHighresSlotState[materialSealSlot] =
+                FaithfulCaptureSlotState::PendingSeal;
+            capHighresValida = true;
+            if (captureTargetIsCurrent)
+            {
+                capFrescaPar[materialSealParity] = true;
+                capVetoIdentidadPar[materialSealParity] = false;
+                capHighresBanco = bancoCapDst;
+                capHighresBancoPar[materialSealParity] = bancoCapDst;
+                capHighresOfsPar[materialSealParity] =
+                    ((cntPase >> 18u) & 3u) * 0x8000u;
+            }
+        }
+        else
+        {
+            capHighresProducto[materialSealSlot] = {};
+            capHighresSealAttempt[materialSealSlot] = 0u;
+            capHighresSlotState[materialSealSlot] =
+                FaithfulCaptureSlotState::Empty;
+        }
+        capHighresValida = false;
+        for (u32 slot = 0u; slot < 4u; slot++)
+        {
+            const auto& product = capHighresProducto[slot];
+            if (capHighresSlotState[slot]
+                    != FaithfulCaptureSlotState::Empty
+                && product.valid && product.complete
+                && product.highresEligible && product.materialComplete
+                && product.causalMetadataComplete
+                && product.recipeComplete)
+            {
+                capHighresValida = true;
+                break;
+            }
+        }
+    }
+
+    markFaithfulSubmittedLocked(faithfulRing, resource);
+
+    if (liveCausalSource != nullptr && !rutaCorta)
+        markFaithfulLiveSnapshotConsumerLocked(*liveCausalSource, resource);
+    if (paseFuenteResource != nullptr
+        && (rutaCorta || paseFuenteResource != liveCausalSource)
+        && materialSealEmitido)
+    {
+        markFaithfulLiveSnapshotConsumerLocked(*paseFuenteResource, resource);
+    }
+    if (faithfulNativeFallbackSource != nullptr && !rutaCorta
+        && faithfulNativeFallbackSource != liveCausalSource
+        && faithfulNativeFallbackSource != paseFuenteResource)
+    {
+        markFaithfulLiveSnapshotConsumerLocked(
+            *faithfulNativeFallbackSource, resource);
+    }
+    faithfulSealReadbackPending[faithfulRing] =
+        materialSealReadbackRecorded;
+    faithfulSealReadbackSlot[faithfulRing] =
+        faithfulSealReadbackPending[faithfulRing] ? materialSealSlot : 4u;
+    faithfulSealReadbackEpoch[faithfulRing] =
+        faithfulSealReadbackPending[faithfulRing]
+            ? captureTargetStamp.productEpoch : 0u;
+    faithfulSealReadbackProduct[faithfulRing] =
+        faithfulSealReadbackPending[faithfulRing]
+            ? captureTargetStamp.productId : 0u;
+    faithfulSealReadbackAttempt[faithfulRing] =
+        faithfulSealReadbackPending[faithfulRing]
+            ? materialSealAttempt : 0u;
+
+    if (rutaCorta)
+    {
+
+        if (frame != nullptr)
+            resource.faithfulComposedFrameId = frame->frameId;
+        if (trazaCapActiva() || areRendererDebugToolsEnabled())
+        {
+            static u32 rutaCortaTrazas = 0u;
+            if (trazaCapActiva() || (rutaCortaTrazas++ % 60u) == 0u)
+                melonDS::Platform::Log(melonDS::Platform::LogLevel::Warn,
+                    "VulkanCompose[RutaCorta]: frameId=%llu snapshot=%u pase=%u sello=%u",
+                    static_cast<unsigned long long>(frame != nullptr ? frame->frameId : 0u),
+                    resource.snapshotFromInitializedTarget ? 1u : 0u, paseCaptura ? 1u : 0u,
+                    materialSealEmitido ? 1u : 0u);
+        }
+        return true;
+    }
+    resource.hasContent = true;
+    if (frame != nullptr)
+    {
+        resource.faithfulComposedFrameId = frame->frameId;
+        constexpr u32 regsWords = 2u * (2u * 192u * 32u) + 16u;
+        constexpr u32 causalWords = kFaithfulCausalBufferSize / sizeof(u32);
+        FaithfulDiagnosticPayload::Header header{};
+        header[0] = FaithfulDiagnosticPayload::Magic;
+        header[1] = FaithfulDiagnosticPayload::Version;
+        header[2] = FaithfulDiagnosticPayload::HeaderWords;
+        header[3] = header[2] + regsWords + causalWords;
+        FaithfulDiagnosticPayload::write64(header, 4, frame->frameId);
+        FaithfulDiagnosticPayload::write64(header, 6, frame->publicationGeneration);
+        header[8] = resource.width;
+        header[9] = resource.height;
+        header[10] = header[2];
+        header[11] = regsWords;
+        header[12] = header[10] + regsWords;
+        header[13] = causalWords;
+        header[14] = kFaithfulCausalAbiVersion;
+        header[15] = resource.renderer3dSnapshotState == Renderer3dSnapshotState::Published;
+        FaithfulDiagnosticPayload::write64(header, 16, resource.renderer3dSnapshotFrameId);
+        FaithfulDiagnosticPayload::write64(header, 18, resource.renderer3dSnapshotPublicationGeneration);
+        FaithfulDiagnosticPayload::write64(header, 20, resource.renderer3dSnapshotSourceEpoch);
+        FaithfulDiagnosticPayload::write64(header, 22, resource.renderer3dSnapshotSourceSequence);
+        header[24] = resource.renderer3dSnapshotSourcePolygonCount;
+        header[25] = resource.renderer3dSnapshotSourceCaptureCnt;
+        header[26] = resource.renderer3dSnapshotSourceScreenSwap;
+        header[27] = resource.renderer3dSnapshotSourceIdentityValid;
+        header[28] = resource.snapshotWidth;
+        header[29] = resource.snapshotHeight;
+        header[30] = resource.renderer3dSnapshotScreenSwap;
+        header[31] = resource.renderer3dSnapshotZeroPolygons;
+        const auto& projection = resource.renderer3dSnapshotProjection;
+        header[32] = projection.sourceWidth;
+        header[33] = projection.sourceHeight;
+        header[34] = projection.destinationWidth;
+        header[35] = projection.destinationHeight;
+        header[36] = static_cast<u32>(projection.operation);
+        header[37] = static_cast<u32>(projection.nativeOperation);
+        header[38] = escala;
+        header[39] = projection.sourceWidth / 256u;
+        header[40] = faithfulRing;
+        header[41] = 2u * 192u * 32u;
+        header[42] = header[41];
+        header[43] = 16u;
+        header[44] = header[42] + header[43];
+        header[45] = header[41];
+        header[46] = kFaithfulCausalRouteLineCount;
+        header[47] = kFaithfulCausalVisiblePixelCount;
+        header[48] = 256u;
+        header[49] = 192u;
+        faithfulDiagnosticPayload.publish(faithfulRing, header);
+    }
+    markFramePreviousSourcesSubmitted(frame);
+    lastTopComposedFrame = frame;
+    lastBottomComposedFrame = frame;
+    return true;
+}
+
+std::vector<u32> VulkanOutput::captureFaithfulDiagnosticPayload(u64 expectedFrameId)
+{
+    std::scoped_lock lifetimeLock(faithfulLifetimeLock);
+    if (!faithfulDiagnosticPayload.matches(expectedFrameId))
+        return {};
+    const u32 slot = faithfulDiagnosticPayload.slot();
+    if (slot >= kFielRanuras)
+        return {};
+
+    return faithfulDiagnosticPayload.copy(expectedFrameId,
+        static_cast<const u32*>(faithfulRegsMapped[slot]),
+        2u * (2u * 192u * 32u) + 16u,
+        static_cast<const u32*>(faithfulCausalMapped[slot]),
+        kFaithfulCausalBufferSize / sizeof(u32));
+}
+
+bool VulkanOutput::composeFaithfulDebug(melonDS::GPU& gpu, u32* out)
+{
+    constexpr u32 kAncho = 256, kAlto = 384;
+    constexpr VkDeviceSize kRegsBytes = (2u * (2u * 192u * 32u) + 16u) * 4u;
+    constexpr VkDeviceSize kSalidaBytes = kAncho * kAlto * 4u;
+    if (device == VK_NULL_HANDLE || out == nullptr) return false;
+    std::scoped_lock lifetimeLock(faithfulLifetimeLock);
+    if (!ensureFaithfulAtlas()) return false;
+    if (!faithfulAtlasDeviceVisible[faithfulRing]) return false;
+
+    auto* sr = dynamic_cast<melonDS::GPU2D::SoftRenderer*>(&gpu.GetRenderer2D());
+    if (sr == nullptr) return false;
+
+    auto crearBufer = [&](VkBuffer& b, VkDeviceMemory& m, void** mapa,
+                          VkDeviceSize tam, VkBufferUsageFlags uso) -> bool {
+        VkBufferCreateInfo bi{};
+        bi.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bi.size = tam; bi.usage = uso; bi.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        if (vkCreateBuffer(device, &bi, nullptr, &b) != VK_SUCCESS) return false;
+        VkMemoryRequirements req{}; vkGetBufferMemoryRequirements(device, b, &req);
+        VkMemoryAllocateInfo ai{};
+        ai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        ai.allocationSize = req.size;
+        ai.memoryTypeIndex = findMemoryType(req.memoryTypeBits,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        if (ai.memoryTypeIndex == UINT32_MAX
+            || vkAllocateMemory(device, &ai, nullptr, &m) != VK_SUCCESS
+            || vkBindBufferMemory(device, b, m, 0) != VK_SUCCESS) return false;
+        if (mapa != nullptr && vkMapMemory(device, m, 0, tam, 0, mapa) != VK_SUCCESS) return false;
+        return true;
+    };
+
+    if (!ensureFaithfulPipeline())
+        return false;
+    std::scoped_lock commandLock(commandPoolLock);
+    if (!waitFaithfulUseLocked(faithfulSlotUse[faithfulRing])
+        || !waitFaithfulUseLocked(faithfulTemporalUse))
+        return false;
+    faithfulDiagnosticPayload.invalidateSlot(faithfulRing);
+
+    if (faithful3dMapped[faithfulRing] != nullptr)
+    {
+        std::memset(faithful3dMapped[faithfulRing], 0, 256u * 192u * 4u);
+        if (faithful3dStash.size() == 256u * 192u)
+            std::memcpy(faithful3dMapped[faithfulRing], faithful3dStash.data(),
+                        faithful3dStash.size() * 4u);
+    }
+    {
+
+        VkDescriptorImageInfo di{VK_NULL_HANDLE, faithfulOutView, VK_IMAGE_LAYOUT_GENERAL};
+        VkWriteDescriptorSet ws{};
+        ws.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        ws.dstSet = faithfulDescSet[faithfulRing];
+        ws.dstBinding = 0;
+        ws.descriptorCount = 1;
+        ws.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        ws.pImageInfo = &di;
+        vkUpdateDescriptorSets(device, 1, &ws, 0, nullptr);
+    }
+
+    u8* regs = static_cast<u8*>(faithfulRegsMapped[faithfulRing]);
+    std::memcpy(regs, sr->GetFaithfulLineRegs(0), 192u * 32u * 4u);
+    std::memcpy(regs + 192u * 32u * 4u, sr->GetFaithfulLineRegs(1), 192u * 32u * 4u);
+    std::memcpy(regs + 2u * 192u * 32u * 4u, sr->GetFaithfulFrameMeta(), 16u * 4u);
+
+    std::memcpy(regs + (2u * 192u * 32u + 16u) * 4u,
+                sr->GetFaithfulLineRegs(0), 192u * 32u * 4u);
+    std::memcpy(regs + (2u * 192u * 32u + 16u + 192u * 32u) * 4u,
+                sr->GetFaithfulLineRegs(1), 192u * 32u * 4u);
+
+    VkCommandBufferAllocateInfo cba{};
+    cba.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    cba.commandPool = commandPool;
+    cba.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    cba.commandBufferCount = 1;
+    VkCommandBuffer cb = VK_NULL_HANDLE;
+    if (vkAllocateCommandBuffers(device, &cba, &cb) != VK_SUCCESS) return false;
+    VkCommandBufferBeginInfo cbi{};
+    cbi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    cbi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    vkBeginCommandBuffer(cb, &cbi);
+
+    VkBufferMemoryBarrier objReuse{};
+    objReuse.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    objReuse.srcAccessMask = VK_ACCESS_SHADER_READ_BIT
+                           | VK_ACCESS_SHADER_WRITE_BIT;
+    objReuse.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    objReuse.srcQueueFamilyIndex = objReuse.dstQueueFamilyIndex =
+        VK_QUEUE_FAMILY_IGNORED;
+    objReuse.buffer = faithfulObjBuffer;
+    objReuse.offset = 0;
+    objReuse.size = VK_WHOLE_SIZE;
+    vkCmdPipelineBarrier(
+        cb,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        0, 0, nullptr, 1, &objReuse, 0, nullptr);
+
+    VkImageMemoryBarrier ba{};
+    ba.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    ba.oldLayout = faithfulOutImageInitialized ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED;
+    ba.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    ba.srcQueueFamilyIndex = ba.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    ba.image = faithfulOutImage;
+    ba.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    ba.srcAccessMask = faithfulOutImageInitialized
+        ? (VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT)
+        : 0u;
+    ba.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    vkCmdPipelineBarrier(cb,
+                         faithfulOutImageInitialized
+                             ? VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
+                             : VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &ba);
+    vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE,
+                      faithfulObjScanlinePipeline);
+    vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE, faithfulPipeLayout,
+                            0, 1, &faithfulDescSet[faithfulRing], 0, nullptr);
+
+    const u32 empujeEspA[3] = {2u, 1u, 0u};
+    vkCmdPushConstants(cb, faithfulPipeLayout, VK_SHADER_STAGE_COMPUTE_BIT,
+                       0, 12, empujeEspA);
+    vkCmdDispatch(cb, 1u, 384u, 1u);
+    VkBufferMemoryBarrier bObjE{};
+    bObjE.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    bObjE.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    bObjE.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    bObjE.srcQueueFamilyIndex = bObjE.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    bObjE.buffer = faithfulObjBuffer;
+    bObjE.offset = 0; bObjE.size = VK_WHOLE_SIZE;
+    vkCmdPipelineBarrier(cb,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        0, 0, nullptr, 1, &bObjE, 0, nullptr);
+    vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, faithfulPipeline);
+    const u32 empujeEspejo[3] = {0u, 1u, 0u};
+    vkCmdPushConstants(cb, faithfulPipeLayout, VK_SHADER_STAGE_COMPUTE_BIT,
+                       0, 12, empujeEspejo);
+    vkCmdDispatch(cb, kAncho / 64u, kAlto, 1u);
+
+    ba.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+    ba.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    ba.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    ba.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                         VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &ba);
+    VkBufferImageCopy region{};
+    region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+    region.imageExtent = {kAncho, kAlto, 1u};
+    vkCmdCopyImageToBuffer(cb, faithfulOutImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                           faithfulReadBuffer, 1, &region);
+    ba.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    ba.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    ba.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    ba.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+    vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                         0, 0, nullptr, 0, nullptr, 1, &ba);
+    vkEndCommandBuffer(cb);
+
+    VkFenceCreateInfo fci{};
+    fci.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    VkFence fence = VK_NULL_HANDLE;
+    if (vkCreateFence(device, &fci, nullptr, &fence) != VK_SUCCESS)
+    {
+        vkFreeCommandBuffers(device, commandPool, 1, &cb);
+        return false;
+    }
+    VkSubmitInfo si{};
+    si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    si.commandBufferCount = 1; si.pCommandBuffers = &cb;
+    bool ok = false;
+    {
+        std::lock_guard<std::mutex> qlock(melonDS::VulkanContext::Get().GetQueueLock());
+        ok = vkQueueSubmit(queue, 1, &si, fence) == VK_SUCCESS;
+    }
+    if (ok)
+    {
+        faithfulOutImageInitialized = true;
+        ok = vkWaitForFences(device, 1, &fence, VK_TRUE, 5000000000ull) == VK_SUCCESS;
+    }
+    vkDestroyFence(device, fence, nullptr);
+    vkFreeCommandBuffers(device, commandPool, 1, &cb);
+    if (!ok) return false;
+
+    std::memcpy(out, faithfulReadMapped, kSalidaBytes);
     return true;
 }
 
@@ -1627,1277 +7181,6 @@ void VulkanOutput::destroyTimestampQueryPool(VkQueryPool& queryPool)
     }
 }
 
-bool VulkanOutput::createCompositorResources()
-{
-    VkDescriptorSetLayoutBinding outputBinding{};
-    outputBinding.binding = 0;
-    outputBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    outputBinding.descriptorCount = 1;
-    outputBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-    VkDescriptorSetLayoutBinding input3dBinding{};
-    input3dBinding.binding = 1;
-    input3dBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    input3dBinding.descriptorCount = 1;
-    input3dBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-    VkDescriptorSetLayoutBinding topPackedBinding{};
-    topPackedBinding.binding = 2;
-    topPackedBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    topPackedBinding.descriptorCount = 1;
-    topPackedBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-    VkDescriptorSetLayoutBinding bottomPackedBinding{};
-    bottomPackedBinding.binding = 3;
-    bottomPackedBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    bottomPackedBinding.descriptorCount = 1;
-    bottomPackedBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-    VkDescriptorSetLayoutBinding previousTopInput3dBinding{};
-    previousTopInput3dBinding.binding = 4;
-    previousTopInput3dBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    previousTopInput3dBinding.descriptorCount = 1;
-    previousTopInput3dBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-    VkDescriptorSetLayoutBinding capture3dBinding{};
-    capture3dBinding.binding = 5;
-    capture3dBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    capture3dBinding.descriptorCount = 1;
-    capture3dBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-    VkDescriptorSetLayoutBinding previousBottomInput3dBinding{};
-    previousBottomInput3dBinding.binding = 6;
-    previousBottomInput3dBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    previousBottomInput3dBinding.descriptorCount = 1;
-    previousBottomInput3dBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-    std::array<VkDescriptorSetLayoutBinding, 7> compositorBindings = {
-        outputBinding,
-        input3dBinding,
-        topPackedBinding,
-        bottomPackedBinding,
-        previousTopInput3dBinding,
-        capture3dBinding,
-        previousBottomInput3dBinding,
-    };
-
-    VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo{};
-    descriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    descriptorSetLayoutCreateInfo.bindingCount = static_cast<u32>(compositorBindings.size());
-    descriptorSetLayoutCreateInfo.pBindings = compositorBindings.data();
-
-    if (vkCreateDescriptorSetLayout(device, &descriptorSetLayoutCreateInfo, nullptr, &compositorDescriptorSetLayout) != VK_SUCCESS)
-    {
-        melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "VulkanOutput: failed to create compositor descriptor set layout");
-        return false;
-    }
-
-    std::array<VkDescriptorPoolSize, 2> descriptorPoolSizes{};
-    descriptorPoolSizes[0].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    descriptorPoolSizes[0].descriptorCount = static_cast<u32>(FRAME_QUEUE_SIZE * 4);
-    descriptorPoolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    descriptorPoolSizes[1].descriptorCount = static_cast<u32>(FRAME_QUEUE_SIZE * 3);
-
-    VkDescriptorPoolCreateInfo descriptorPoolCreateInfo{};
-    descriptorPoolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    descriptorPoolCreateInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-    descriptorPoolCreateInfo.maxSets = static_cast<u32>(FRAME_QUEUE_SIZE);
-    descriptorPoolCreateInfo.poolSizeCount = static_cast<u32>(descriptorPoolSizes.size());
-    descriptorPoolCreateInfo.pPoolSizes = descriptorPoolSizes.data();
-
-    if (vkCreateDescriptorPool(device, &descriptorPoolCreateInfo, nullptr, &compositorDescriptorPool) != VK_SUCCESS)
-    {
-        melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "VulkanOutput: failed to create compositor descriptor pool");
-        return false;
-    }
-
-    VkPushConstantRange pushConstantRange{};
-    pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-    pushConstantRange.offset = 0;
-    pushConstantRange.size = sizeof(CompositorPushConstants);
-
-    VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{};
-    pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutCreateInfo.setLayoutCount = 1;
-    pipelineLayoutCreateInfo.pSetLayouts = &compositorDescriptorSetLayout;
-    pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
-    pipelineLayoutCreateInfo.pPushConstantRanges = &pushConstantRange;
-
-    if (vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &compositorPipelineLayout) != VK_SUCCESS)
-    {
-        melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "VulkanOutput: failed to create compositor pipeline layout");
-        return false;
-    }
-
-    const auto createPipeline = [&](
-        const unsigned char* shaderBytes,
-        unsigned int shaderByteCount,
-        const char* profileName,
-        VkPipeline& pipeline) -> bool {
-        if (shaderBytes == nullptr || shaderByteCount == 0)
-        {
-            melonDS::Platform::Log(
-                melonDS::Platform::LogLevel::Error,
-                "VulkanOutput: %s compositor SPIR-V blob is empty",
-                profileName);
-            return false;
-        }
-
-        std::vector<u32> shaderWords((shaderByteCount + sizeof(u32) - 1u) / sizeof(u32));
-        std::memcpy(shaderWords.data(), shaderBytes, shaderByteCount);
-
-        VkShaderModuleCreateInfo shaderModuleCreateInfo{};
-        shaderModuleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-        shaderModuleCreateInfo.codeSize = shaderByteCount;
-        shaderModuleCreateInfo.pCode = shaderWords.data();
-
-        VkShaderModule shaderModule = VK_NULL_HANDLE;
-        if (vkCreateShaderModule(device, &shaderModuleCreateInfo, nullptr, &shaderModule) != VK_SUCCESS)
-        {
-            melonDS::Platform::Log(
-                melonDS::Platform::LogLevel::Error,
-                "VulkanOutput: failed to create %s compositor shader module",
-                profileName);
-            return false;
-        }
-
-        VkPipelineShaderStageCreateInfo shaderStageCreateInfo{};
-        shaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        shaderStageCreateInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-        shaderStageCreateInfo.module = shaderModule;
-        shaderStageCreateInfo.pName = "main";
-
-        VkComputePipelineCreateInfo computePipelineCreateInfo{};
-        computePipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-        computePipelineCreateInfo.stage = shaderStageCreateInfo;
-        computePipelineCreateInfo.layout = compositorPipelineLayout;
-
-        const VkResult pipelineResult = vkCreateComputePipelines(
-            device,
-            melonDS::VulkanContext::Get().GetPipelineCache(),
-            1,
-            &computePipelineCreateInfo,
-            nullptr,
-            &pipeline);
-
-        vkDestroyShaderModule(device, shaderModule, nullptr);
-
-        if (pipelineResult != VK_SUCCESS)
-        {
-            melonDS::Platform::Log(
-                melonDS::Platform::LogLevel::Error,
-                "VulkanOutput: failed to create %s compositor pipeline (%d)",
-                profileName,
-                static_cast<int>(pipelineResult));
-            return false;
-        }
-        return true;
-    };
-
-    const bool fastPathProfile = melonDS::UsesVulkanFastPath(pipelineProfile);
-    if (fastPathProfile)
-    {
-        return createPipeline(
-            melonDS_android_vulkan_compositor_comp_spv,
-            melonDS_android_vulkan_compositor_comp_spv_len,
-            "FastPath",
-            compositorPipeline);
-    }
-
-    return createPipeline(
-        melonDS_android_vulkan_compositor_compatibility_comp_spv,
-        melonDS_android_vulkan_compositor_compatibility_comp_spv_len,
-        "Compatibility",
-        compositorPipeline);
-}
-
-void VulkanOutput::destroyCompositorResources()
-{
-    if (compositorPipeline != VK_NULL_HANDLE)
-    {
-        vkDestroyPipeline(device, compositorPipeline, nullptr);
-        compositorPipeline = VK_NULL_HANDLE;
-    }
-
-    if (compositorPipelineLayout != VK_NULL_HANDLE)
-    {
-        vkDestroyPipelineLayout(device, compositorPipelineLayout, nullptr);
-        compositorPipelineLayout = VK_NULL_HANDLE;
-    }
-
-    if (compositorDescriptorPool != VK_NULL_HANDLE)
-    {
-        vkDestroyDescriptorPool(device, compositorDescriptorPool, nullptr);
-        compositorDescriptorPool = VK_NULL_HANDLE;
-    }
-
-    if (compositorDescriptorSetLayout != VK_NULL_HANDLE)
-    {
-        vkDestroyDescriptorSetLayout(device, compositorDescriptorSetLayout, nullptr);
-        compositorDescriptorSetLayout = VK_NULL_HANDLE;
-    }
-}
-
-bool VulkanOutput::createAccumulateResources()
-{
-    VkDescriptorSetLayoutBinding sourceBinding{};
-    sourceBinding.binding = 0;
-    sourceBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    sourceBinding.descriptorCount = 1;
-    sourceBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-    VkDescriptorSetLayoutBinding destBinding{};
-    destBinding.binding = 1;
-    destBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    destBinding.descriptorCount = 1;
-    destBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-    VkDescriptorSetLayoutBinding topPackedBinding{};
-    topPackedBinding.binding = 2;
-    topPackedBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    topPackedBinding.descriptorCount = 1;
-    topPackedBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-    VkDescriptorSetLayoutBinding bottomPackedBinding{};
-    bottomPackedBinding.binding = 3;
-    bottomPackedBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    bottomPackedBinding.descriptorCount = 1;
-    bottomPackedBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-    std::array<VkDescriptorSetLayoutBinding, 4> bindings = {
-        sourceBinding,
-        destBinding,
-        topPackedBinding,
-        bottomPackedBinding,
-    };
-
-    VkDescriptorSetLayoutCreateInfo layoutCreateInfo{};
-    layoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutCreateInfo.bindingCount = static_cast<u32>(bindings.size());
-    layoutCreateInfo.pBindings = bindings.data();
-
-    if (vkCreateDescriptorSetLayout(device, &layoutCreateInfo, nullptr, &accumulateDescriptorSetLayout) != VK_SUCCESS)
-    {
-        melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "VulkanOutput: failed to create accumulate descriptor set layout");
-        return false;
-    }
-
-    std::array<VkDescriptorPoolSize, 2> poolSizes{};
-    poolSizes[0].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    poolSizes[0].descriptorCount = 4;
-    poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    poolSizes[1].descriptorCount = 4;
-
-    VkDescriptorPoolCreateInfo poolCreateInfo{};
-    poolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    poolCreateInfo.flags = 0;
-    poolCreateInfo.maxSets = 2;
-    poolCreateInfo.poolSizeCount = static_cast<u32>(poolSizes.size());
-    poolCreateInfo.pPoolSizes = poolSizes.data();
-
-    if (vkCreateDescriptorPool(device, &poolCreateInfo, nullptr, &accumulateDescriptorPool) != VK_SUCCESS)
-    {
-        melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "VulkanOutput: failed to create accumulate descriptor pool");
-        return false;
-    }
-
-    std::array<VkDescriptorSetLayout, 2> setLayouts = {
-        accumulateDescriptorSetLayout,
-        accumulateDescriptorSetLayout,
-    };
-
-    VkDescriptorSetAllocateInfo allocateInfo{};
-    allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocateInfo.descriptorPool = accumulateDescriptorPool;
-    allocateInfo.descriptorSetCount = 2;
-    allocateInfo.pSetLayouts = setLayouts.data();
-
-    std::array<VkDescriptorSet, 2> sets = { VK_NULL_HANDLE, VK_NULL_HANDLE };
-    if (vkAllocateDescriptorSets(device, &allocateInfo, sets.data()) != VK_SUCCESS)
-    {
-        melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "VulkanOutput: failed to allocate accumulate descriptor sets");
-        return false;
-    }
-    accumulateTopDescriptorSet = sets[0];
-    accumulateBottomDescriptorSet = sets[1];
-
-    VkPushConstantRange pushConstantRange{};
-    pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-    pushConstantRange.offset = 0;
-    pushConstantRange.size = melonDS::UsesVulkanFastPath(pipelineProfile)
-        ? sizeof(AccumulatePushConstants)
-        : sizeof(CompatibilityAccumulatePushConstants);
-
-    VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{};
-    pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutCreateInfo.setLayoutCount = 1;
-    pipelineLayoutCreateInfo.pSetLayouts = &accumulateDescriptorSetLayout;
-    pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
-    pipelineLayoutCreateInfo.pPushConstantRanges = &pushConstantRange;
-
-    if (vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &accumulatePipelineLayout) != VK_SUCCESS)
-    {
-        melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "VulkanOutput: failed to create accumulate pipeline layout");
-        return false;
-    }
-
-    auto createAccumulatePipeline = [&](const unsigned char* shaderBytes, unsigned int shaderLength, VkPipeline& pipeline, const char* label) {
-        if (shaderLength == 0)
-        {
-            melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "VulkanOutput: %s SPIR-V blob is empty", label);
-            return false;
-        }
-
-        std::vector<u32> shaderWords((shaderLength + sizeof(u32) - 1u) / sizeof(u32));
-        std::memcpy(shaderWords.data(), shaderBytes, shaderLength);
-
-        VkShaderModuleCreateInfo shaderModuleCreateInfo{};
-        shaderModuleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-        shaderModuleCreateInfo.codeSize = shaderLength;
-        shaderModuleCreateInfo.pCode = shaderWords.data();
-
-        VkShaderModule shaderModule = VK_NULL_HANDLE;
-        if (vkCreateShaderModule(device, &shaderModuleCreateInfo, nullptr, &shaderModule) != VK_SUCCESS)
-        {
-            melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "VulkanOutput: failed to create %s shader module", label);
-            return false;
-        }
-
-        VkPipelineShaderStageCreateInfo shaderStageCreateInfo{};
-        shaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        shaderStageCreateInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-        shaderStageCreateInfo.module = shaderModule;
-        shaderStageCreateInfo.pName = "main";
-
-        VkComputePipelineCreateInfo computePipelineCreateInfo{};
-        computePipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-        computePipelineCreateInfo.stage = shaderStageCreateInfo;
-        computePipelineCreateInfo.layout = accumulatePipelineLayout;
-
-        const VkResult result = vkCreateComputePipelines(
-            device,
-            melonDS::VulkanContext::Get().GetPipelineCache(),
-            1,
-            &computePipelineCreateInfo,
-            nullptr,
-            &pipeline
-        );
-
-        vkDestroyShaderModule(device, shaderModule, nullptr);
-
-        if (result != VK_SUCCESS)
-        {
-            melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "VulkanOutput: failed to create %s pipeline (%d)", label, static_cast<int>(result));
-            return false;
-        }
-
-        return true;
-    };
-
-    if (!melonDS::UsesVulkanFastPath(pipelineProfile))
-    {
-        return createAccumulatePipeline(
-            melonDS_android_vulkan_accumulate_3d_compatibility_comp_spv,
-            melonDS_android_vulkan_accumulate_3d_compatibility_comp_spv_len,
-            accumulateCompatibilityPipeline,
-            "accumulate compatibility");
-    }
-
-    if (!createAccumulatePipeline(
-        melonDS_android_vulkan_accumulate_3d_comp_spv,
-        melonDS_android_vulkan_accumulate_3d_comp_spv_len,
-        accumulatePipeline,
-        "accumulate"))
-    {
-        return false;
-    }
-
-    return createAccumulatePipeline(
-        melonDS_android_vulkan_accumulate_3d_scale8_comp_spv,
-        melonDS_android_vulkan_accumulate_3d_scale8_comp_spv_len,
-        accumulateScale8Pipeline,
-        "accumulate scale8");
-}
-
-void VulkanOutput::destroyAccumulatedHighresImage(VkImage& image, VkImageView& view, VkDeviceMemory& memory, bool& valid, bool& layoutReady)
-{
-    if (view != VK_NULL_HANDLE)
-    {
-        vkDestroyImageView(device, view, nullptr);
-        view = VK_NULL_HANDLE;
-    }
-    if (image != VK_NULL_HANDLE)
-    {
-        vkDestroyImage(device, image, nullptr);
-        image = VK_NULL_HANDLE;
-    }
-    if (memory != VK_NULL_HANDLE)
-    {
-        vkFreeMemory(device, memory, nullptr);
-        memory = VK_NULL_HANDLE;
-    }
-    valid = false;
-    layoutReady = false;
-}
-
-void VulkanOutput::destroyAccumulateResources()
-{
-    destroyAccumulatedHighresImage(
-        accumulatedTopHighresImage,
-        accumulatedTopHighresView,
-        accumulatedTopHighresMemory,
-        accumulatedTopHighresValid,
-        accumulatedTopHighresLayoutReady);
-    destroyAccumulatedHighresImage(
-        accumulatedBottomHighresImage,
-        accumulatedBottomHighresView,
-        accumulatedBottomHighresMemory,
-        accumulatedBottomHighresValid,
-        accumulatedBottomHighresLayoutReady);
-    accumulatedHighresWidth = 0;
-    accumulatedHighresHeight = 0;
-    cachedAccumulateTopSourceView = VK_NULL_HANDLE;
-    cachedAccumulateBottomSourceView = VK_NULL_HANDLE;
-    accumulateTopDescriptorReady = false;
-    accumulateBottomDescriptorReady = false;
-    accumulateTopDescriptorSet = VK_NULL_HANDLE;
-    accumulateBottomDescriptorSet = VK_NULL_HANDLE;
-
-    if (accumulatePipeline != VK_NULL_HANDLE)
-    {
-        vkDestroyPipeline(device, accumulatePipeline, nullptr);
-        accumulatePipeline = VK_NULL_HANDLE;
-    }
-    if (accumulateCompatibilityPipeline != VK_NULL_HANDLE)
-    {
-        vkDestroyPipeline(device, accumulateCompatibilityPipeline, nullptr);
-        accumulateCompatibilityPipeline = VK_NULL_HANDLE;
-    }
-    if (accumulateScale8Pipeline != VK_NULL_HANDLE)
-    {
-        vkDestroyPipeline(device, accumulateScale8Pipeline, nullptr);
-        accumulateScale8Pipeline = VK_NULL_HANDLE;
-    }
-    if (accumulatePipelineLayout != VK_NULL_HANDLE)
-    {
-        vkDestroyPipelineLayout(device, accumulatePipelineLayout, nullptr);
-        accumulatePipelineLayout = VK_NULL_HANDLE;
-    }
-    if (accumulateDescriptorPool != VK_NULL_HANDLE)
-    {
-        vkDestroyDescriptorPool(device, accumulateDescriptorPool, nullptr);
-        accumulateDescriptorPool = VK_NULL_HANDLE;
-    }
-    if (accumulateDescriptorSetLayout != VK_NULL_HANDLE)
-    {
-        vkDestroyDescriptorSetLayout(device, accumulateDescriptorSetLayout, nullptr);
-        accumulateDescriptorSetLayout = VK_NULL_HANDLE;
-    }
-}
-
-bool VulkanOutput::ensureAccumulatedHighresImages(u32 width, u32 height)
-{
-    if (width == 0 || height == 0)
-        return false;
-
-    if (accumulatedTopHighresImage != VK_NULL_HANDLE
-        && accumulatedBottomHighresImage != VK_NULL_HANDLE
-        && accumulatedHighresWidth == width
-        && accumulatedHighresHeight == height)
-        return true;
-
-    destroyAccumulatedHighresImage(
-        accumulatedTopHighresImage,
-        accumulatedTopHighresView,
-        accumulatedTopHighresMemory,
-        accumulatedTopHighresValid,
-        accumulatedTopHighresLayoutReady);
-    destroyAccumulatedHighresImage(
-        accumulatedBottomHighresImage,
-        accumulatedBottomHighresView,
-        accumulatedBottomHighresMemory,
-        accumulatedBottomHighresValid,
-        accumulatedBottomHighresLayoutReady);
-    cachedAccumulateTopSourceView = VK_NULL_HANDLE;
-    cachedAccumulateBottomSourceView = VK_NULL_HANDLE;
-    accumulateTopDescriptorReady = false;
-    accumulateBottomDescriptorReady = false;
-
-    auto createOne = [&](VkImage& image, VkImageView& view, VkDeviceMemory& memory) -> bool {
-        VkImageCreateInfo imageCreateInfo{};
-        imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-        imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
-        imageCreateInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
-        imageCreateInfo.extent = { width, height, 1 };
-        imageCreateInfo.mipLevels = 1;
-        imageCreateInfo.arrayLayers = 1;
-        imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-        imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-        imageCreateInfo.usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-        imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-        if (vkCreateImage(device, &imageCreateInfo, nullptr, &image) != VK_SUCCESS)
-            return false;
-
-        VkMemoryRequirements memoryRequirements{};
-        vkGetImageMemoryRequirements(device, image, &memoryRequirements);
-
-        VkMemoryAllocateInfo memoryAllocateInfo{};
-        memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        memoryAllocateInfo.allocationSize = memoryRequirements.size;
-        memoryAllocateInfo.memoryTypeIndex = findMemoryType(memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-        if (memoryAllocateInfo.memoryTypeIndex == UINT32_MAX
-            || vkAllocateMemory(device, &memoryAllocateInfo, nullptr, &memory) != VK_SUCCESS)
-        {
-            vkDestroyImage(device, image, nullptr);
-            image = VK_NULL_HANDLE;
-            return false;
-        }
-
-        if (vkBindImageMemory(device, image, memory, 0) != VK_SUCCESS)
-        {
-            vkFreeMemory(device, memory, nullptr);
-            memory = VK_NULL_HANDLE;
-            vkDestroyImage(device, image, nullptr);
-            image = VK_NULL_HANDLE;
-            return false;
-        }
-
-        VkImageViewCreateInfo viewCreateInfo{};
-        viewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        viewCreateInfo.image = image;
-        viewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewCreateInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
-        viewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        viewCreateInfo.subresourceRange.levelCount = 1;
-        viewCreateInfo.subresourceRange.layerCount = 1;
-
-        if (vkCreateImageView(device, &viewCreateInfo, nullptr, &view) != VK_SUCCESS)
-        {
-            vkFreeMemory(device, memory, nullptr);
-            memory = VK_NULL_HANDLE;
-            vkDestroyImage(device, image, nullptr);
-            image = VK_NULL_HANDLE;
-            return false;
-        }
-        return true;
-    };
-
-    if (!createOne(accumulatedTopHighresImage, accumulatedTopHighresView, accumulatedTopHighresMemory))
-        return false;
-    if (!createOne(accumulatedBottomHighresImage, accumulatedBottomHighresView, accumulatedBottomHighresMemory))
-    {
-        destroyAccumulatedHighresImage(
-            accumulatedTopHighresImage,
-            accumulatedTopHighresView,
-            accumulatedTopHighresMemory,
-            accumulatedTopHighresValid,
-            accumulatedTopHighresLayoutReady);
-        return false;
-    }
-
-    accumulatedHighresWidth = width;
-    accumulatedHighresHeight = height;
-    return true;
-}
-
-bool VulkanOutput::recordAccumulateMerge(
-    FrameResource& resource,
-    bool topLcd,
-    bool replaceExisting,
-    bool allowCrossLcdSource)
-{
-    if (accumulatePipeline == VK_NULL_HANDLE)
-        return false;
-    if (resource.commandBuffer == VK_NULL_HANDLE)
-        return false;
-    const VkImage sourceImage = resource.hasRetainedRenderer3dSource
-        ? resource.retainedRenderer3dSourceImage
-        : resource.renderer3dSnapshot;
-    const VkImageView sourceImageView = resource.hasRetainedRenderer3dSource
-        ? resource.retainedRenderer3dSourceImageView
-        : resource.renderer3dSnapshotView;
-    const u32 sourceWidth = resource.hasRetainedRenderer3dSource
-        ? resource.retainedRenderer3dSourceWidth
-        : resource.snapshotWidth;
-    const u32 sourceHeight = resource.hasRetainedRenderer3dSource
-        ? resource.retainedRenderer3dSourceHeight
-        : resource.snapshotHeight;
-    if (sourceImage == VK_NULL_HANDLE || sourceImageView == VK_NULL_HANDLE || sourceWidth == 0 || sourceHeight == 0)
-        return false;
-    const bool sourceScreenSwap = resource.hasRetainedRenderer3dSource
-        ? resource.retainedRenderer3dSourceScreenSwap
-        : resource.renderer3dSnapshotScreenSwap;
-    if (sourceScreenSwap != topLcd && !allowCrossLcdSource)
-        return true;
-    if (!resource.hasRetainedRenderer3dSource && resource.renderer3dSnapshotZeroPolygons)
-        return true;
-    {
-        constexpr u64 kMinMergeIntervalFrames = 3u;
-        const u64 lastMerge = topLcd
-            ? accumulatedTopHighresLastMergeFrameId
-            : accumulatedBottomHighresLastMergeFrameId;
-        if (!replaceExisting
-            && lastPreparedFrameId > lastMerge
-            && lastPreparedFrameId - lastMerge < kMinMergeIntervalFrames)
-        {
-            return true;
-        }
-    }
-    if (resource.topPackedBuffer == VK_NULL_HANDLE
-        || resource.bottomPackedBuffer == VK_NULL_HANDLE
-        || resource.packedBufferSize == 0)
-        return false;
-
-    if (!ensureAccumulatedHighresImages(sourceWidth, sourceHeight))
-        return false;
-
-    VkImage destImage = topLcd ? accumulatedTopHighresImage : accumulatedBottomHighresImage;
-    VkImageView destView = topLcd ? accumulatedTopHighresView : accumulatedBottomHighresView;
-    bool& destValid = topLcd ? accumulatedTopHighresValid : accumulatedBottomHighresValid;
-    bool& destLayoutReady = topLcd ? accumulatedTopHighresLayoutReady : accumulatedBottomHighresLayoutReady;
-    VkDescriptorSet descriptorSet = topLcd ? accumulateTopDescriptorSet : accumulateBottomDescriptorSet;
-    bool& descriptorReady = topLcd ? accumulateTopDescriptorReady : accumulateBottomDescriptorReady;
-    VkImageView& cachedSourceView = topLcd ? cachedAccumulateTopSourceView : cachedAccumulateBottomSourceView;
-
-    const SoftPackedScreenStats& screenStats = topLcd ? resource.topScreenStats : resource.bottomScreenStats;
-    const bool pureFullRegular3dCapture = screenUsesPureFullRegular3dCapture(screenStats);
-    const bool fastHighresOnly = topLcd ? resource.fastHighresOnlyTop : resource.fastHighresOnlyBottom;
-    constexpr u32 kScreenPixelCount = static_cast<u32>(kScreenWidth * kScreenHeight);
-    const auto screenHasNoTemporalCapture = [](const SoftPackedScreenStats& stats) {
-        return stats.CaptureBackedComp4Pixels == 0u
-            && stats.CaptureBackedComp4Lines == 0u
-            && stats.RegularCaptureUses3dLines == 0u
-            && stats.VramCaptureUses3dLines == 0u
-            && stats.ForceLive3dCompMode7Lines == 0u;
-    };
-    const bool topFullStructured =
-        resource.topScreenStats.StructuredSlotPixels == kScreenPixelCount;
-    const bool bottomFullStructured =
-        resource.bottomScreenStats.StructuredSlotPixels == kScreenPixelCount;
-    const bool singleStructuredDisplayPair =
-        resource.topScreenStats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-        && resource.bottomScreenStats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-        && (topFullStructured != bottomFullStructured)
-        && ((topFullStructured
-                && resource.bottomScreenStats.Structured2DOnlyPixels == kScreenPixelCount)
-            || (bottomFullStructured
-                && resource.topScreenStats.Structured2DOnlyPixels == kScreenPixelCount));
-    const bool captureMaskEmpty = std::none_of(
-        resource.captureLineUses3dMask.begin(),
-        resource.captureLineUses3dMask.end(),
-        [](u8 value) { return value != 0u; });
-    const bool clearSparseSingleStructuredNoCapture =
-        resource.snapshotFromGraphicsBackend
-        && resource.hasSoftPackedDebugData
-        && !replaceExisting
-        && !allowCrossLcdSource
-        && singleStructuredDisplayPair
-        && topLcd == topFullStructured
-        && screenHasNoTemporalCapture(resource.topScreenStats)
-        && screenHasNoTemporalCapture(resource.bottomScreenStats)
-        && captureMaskEmpty
-        && !resource.captureBackedClass4Only
-        && !resource.sourceAFullHighresOnlyTop
-        && !resource.sourceAFullHighresOnlyBottom
-        && !resource.hasPreparedCapture3dSource
-        && !resource.preparedCapture3dRgbaValid
-        && !resource.capture3dSourceScreenSwapHintValid
-        && !resource.alternatingLive3dPingPong
-        && !resource.sharedCaptureReplayPairStable;
-    const bool resolvedBottomPackedPair =
-        screenProvidesResolvedMixedComp4Comp7(resource.topScreenStats)
-        && screenProvidesResolvedMixedRegularComp4Comp7(resource.bottomScreenStats);
-    const bool clearSparseResolvedBottomPackedPair =
-        resource.snapshotFromGraphicsBackend
-        && resource.hasSoftPackedDebugData
-        && !topLcd
-        && !resource.screenSwap
-        && resource.screenSwapToggledFromPrevious
-        && !replaceExisting
-        && !allowCrossLcdSource
-        && !resource.captureBackedClass4Only
-        && !resource.sourceAFullHighresOnlyTop
-        && !resource.sourceAFullHighresOnlyBottom
-        && !resource.preparedCapture3dRgbaValid
-        && resolvedBottomPackedPair;
-    const bool clearSparseResolvedTopPackedHandoff =
-        resource.snapshotFromGraphicsBackend
-        && resource.hasSoftPackedDebugData
-        && topLcd
-        && resource.screenSwap
-        && resource.screenSwapToggledFromPrevious
-        && resource.topResolvedPackedCarryAcrossSwap
-        && !replaceExisting
-        && !allowCrossLcdSource
-        && !resource.captureBackedClass4Only
-        && !resource.sourceAFullHighresOnlyTop
-        && !resource.sourceAFullHighresOnlyBottom
-        && !resource.preparedCapture3dRgbaValid;
-    const bool canCopyPureHighres =
-        fastHighresOnly
-        || (screenStats.Plane0VisiblePixels == 0u
-            && screenStats.Plane1VisiblePixels == 0u
-            && screenStats.StructuredAboveVisiblePixels == 0u
-            && screenStats.Structured2DOnlyPixels == 0u
-            && screenStats.Structured2DOnlyVisiblePixels == 0u
-            && screenStats.ProtectedBlackPixels == 0u
-            && screenStats.CaptureBackedComp4Lines == 0u
-            && (screenStats.RegularCaptureUses3dLines == 0u || pureFullRegular3dCapture)
-            && screenStats.VramCaptureUses3dLines == 0u
-            && screenStats.ForceLive3dCompMode7Lines == 0u);
-    if (canCopyPureHighres)
-    {
-        if (replaceExisting)
-            destValid = false;
-
-        VkImageMemoryBarrier sourceToTransfer{};
-        sourceToTransfer.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        sourceToTransfer.srcAccessMask =
-            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-            VK_ACCESS_SHADER_READ_BIT |
-            VK_ACCESS_SHADER_WRITE_BIT |
-            VK_ACCESS_TRANSFER_WRITE_BIT;
-        sourceToTransfer.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-        sourceToTransfer.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-        sourceToTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        sourceToTransfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        sourceToTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        sourceToTransfer.image = sourceImage;
-        sourceToTransfer.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        sourceToTransfer.subresourceRange.levelCount = 1;
-        sourceToTransfer.subresourceRange.layerCount = 1;
-
-        VkImageMemoryBarrier destToTransfer{};
-        destToTransfer.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        destToTransfer.srcAccessMask = destLayoutReady
-            ? (VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT)
-            : 0u;
-        destToTransfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        destToTransfer.oldLayout = destLayoutReady ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED;
-        destToTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        destToTransfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        destToTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        destToTransfer.image = destImage;
-        destToTransfer.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        destToTransfer.subresourceRange.levelCount = 1;
-        destToTransfer.subresourceRange.layerCount = 1;
-
-        std::array<VkImageMemoryBarrier, 2> toTransferBarriers = {sourceToTransfer, destToTransfer};
-        vkCmdPipelineBarrier(
-            resource.commandBuffer,
-            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            0,
-            0, nullptr,
-            0, nullptr,
-            static_cast<u32>(toTransferBarriers.size()),
-            toTransferBarriers.data());
-
-        VkImageCopy copyRegion{};
-        copyRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        copyRegion.srcSubresource.layerCount = 1;
-        copyRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        copyRegion.dstSubresource.layerCount = 1;
-        copyRegion.extent = {sourceWidth, sourceHeight, 1};
-        vkCmdCopyImage(
-            resource.commandBuffer,
-            sourceImage,
-            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            destImage,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            1,
-            &copyRegion);
-
-        sourceToTransfer.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-        sourceToTransfer.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        sourceToTransfer.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        sourceToTransfer.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-        destToTransfer.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        destToTransfer.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        destToTransfer.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        destToTransfer.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-        std::array<VkImageMemoryBarrier, 2> fromTransferBarriers = {sourceToTransfer, destToTransfer};
-        vkCmdPipelineBarrier(
-            resource.commandBuffer,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            0,
-            0, nullptr,
-            0, nullptr,
-            static_cast<u32>(fromTransferBarriers.size()),
-            fromTransferBarriers.data());
-
-        destValid = true;
-        (topLcd ? accumulatedTopHighresLastMergeFrameId : accumulatedBottomHighresLastMergeFrameId) = lastPreparedFrameId;
-        (topLcd ? accumulatedTopHighresLastMergePrepareSerial : accumulatedBottomHighresLastMergePrepareSerial) = accumulatedHighresPrepareSerial;
-        destLayoutReady = true;
-        return true;
-    }
-
-    if (!descriptorReady || cachedSourceView != sourceImageView)
-    {
-        VkDescriptorImageInfo sourceImageInfo{};
-        sourceImageInfo.imageView = sourceImageView;
-        sourceImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-        VkDescriptorImageInfo destImageInfo{};
-        destImageInfo.imageView = destView;
-        destImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-        VkDescriptorBufferInfo topPackedBufferInfo{};
-        topPackedBufferInfo.buffer = resource.topPackedBuffer;
-        topPackedBufferInfo.offset = 0;
-        topPackedBufferInfo.range = resource.packedBufferSize;
-
-        VkDescriptorBufferInfo bottomPackedBufferInfo{};
-        bottomPackedBufferInfo.buffer = resource.bottomPackedBuffer;
-        bottomPackedBufferInfo.offset = 0;
-        bottomPackedBufferInfo.range = resource.packedBufferSize;
-
-        std::array<VkWriteDescriptorSet, 4> writes{};
-        writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        writes[0].dstSet = descriptorSet;
-        writes[0].dstBinding = 0;
-        writes[0].descriptorCount = 1;
-        writes[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        writes[0].pImageInfo = &sourceImageInfo;
-        writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        writes[1].dstSet = descriptorSet;
-        writes[1].dstBinding = 1;
-        writes[1].descriptorCount = 1;
-        writes[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        writes[1].pImageInfo = &destImageInfo;
-        writes[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        writes[2].dstSet = descriptorSet;
-        writes[2].dstBinding = 2;
-        writes[2].descriptorCount = 1;
-        writes[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        writes[2].pBufferInfo = &topPackedBufferInfo;
-        writes[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        writes[3].dstSet = descriptorSet;
-        writes[3].dstBinding = 3;
-        writes[3].descriptorCount = 1;
-        writes[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        writes[3].pBufferInfo = &bottomPackedBufferInfo;
-
-        vkUpdateDescriptorSets(device, static_cast<u32>(writes.size()), writes.data(), 0, nullptr);
-        cachedSourceView = sourceImageView;
-        descriptorReady = true;
-    }
-
-    if (replaceExisting
-        || clearSparseSingleStructuredNoCapture
-        || clearSparseResolvedBottomPackedPair
-        || clearSparseResolvedTopPackedHandoff)
-    {
-        destValid = false;
-    }
-    const bool clearAccumulator = !destValid;
-
-    VkImageMemoryBarrier destToWriteBarrier{};
-    destToWriteBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    destToWriteBarrier.srcAccessMask = destLayoutReady
-        ? (VK_ACCESS_SHADER_READ_BIT
-            | VK_ACCESS_SHADER_WRITE_BIT
-            | VK_ACCESS_TRANSFER_WRITE_BIT)
-        : 0;
-    destToWriteBarrier.dstAccessMask = clearAccumulator
-        ? VK_ACCESS_TRANSFER_WRITE_BIT
-        : (VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
-    destToWriteBarrier.oldLayout = destLayoutReady ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED;
-    destToWriteBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-    destToWriteBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    destToWriteBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    destToWriteBarrier.image = destImage;
-    destToWriteBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    destToWriteBarrier.subresourceRange.levelCount = 1;
-    destToWriteBarrier.subresourceRange.layerCount = 1;
-
-    vkCmdPipelineBarrier(
-        resource.commandBuffer,
-        destLayoutReady
-            ? (VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
-                | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
-                | VK_PIPELINE_STAGE_TRANSFER_BIT)
-            : VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-        clearAccumulator ? VK_PIPELINE_STAGE_TRANSFER_BIT : VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        0,
-        0, nullptr,
-        0, nullptr,
-        1, &destToWriteBarrier
-    );
-    destLayoutReady = true;
-
-    if (clearAccumulator)
-    {
-        VkClearColorValue clearColor{};
-        VkImageSubresourceRange clearRange{};
-        clearRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        clearRange.levelCount = 1;
-        clearRange.layerCount = 1;
-        vkCmdClearColorImage(
-            resource.commandBuffer,
-            destImage,
-            VK_IMAGE_LAYOUT_GENERAL,
-            &clearColor,
-            1,
-            &clearRange);
-
-        VkImageMemoryBarrier clearToComputeBarrier{};
-        clearToComputeBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        clearToComputeBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        clearToComputeBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-        clearToComputeBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-        clearToComputeBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-        clearToComputeBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        clearToComputeBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        clearToComputeBarrier.image = destImage;
-        clearToComputeBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        clearToComputeBarrier.subresourceRange.levelCount = 1;
-        clearToComputeBarrier.subresourceRange.layerCount = 1;
-
-        vkCmdPipelineBarrier(
-            resource.commandBuffer,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            0,
-            0, nullptr,
-            0, nullptr,
-            1, &clearToComputeBarrier
-        );
-    }
-
-    AccumulatePushConstants pushConstants{};
-    pushConstants.scale = sourceWidth >= SoftPackedFrameSnapshot::kScreenWidth
-        ? std::max<u32>(sourceWidth / static_cast<u32>(SoftPackedFrameSnapshot::kScreenWidth), 1u)
-        : 1u;
-    pushConstants.packedStride = kAcceleratedStride;
-    pushConstants.topLcd = topLcd ? 1u : 0u;
-    pushConstants.authoritativeProtectedBlack =
-        topLcd && resource.topPartialRegularCaptureProtectedBlackAuthoritative
-            ? 1u
-            : 0u;
-
-    const bool useBlockAccumulator =
-        pushConstants.scale >= 4u
-        && pushConstants.scale <= 8u
-        && sourceWidth == static_cast<u32>(SoftPackedFrameSnapshot::kScreenWidth) * pushConstants.scale
-        && sourceHeight == static_cast<u32>(SoftPackedFrameSnapshot::kScreenHeight) * pushConstants.scale
-        && accumulatedHighresWidth == sourceWidth
-        && accumulatedHighresHeight == sourceHeight
-        && accumulateScale8Pipeline != VK_NULL_HANDLE;
-    VkPipeline selectedAccumulatePipeline = useBlockAccumulator ? accumulateScale8Pipeline : accumulatePipeline;
-
-    vkCmdBindPipeline(resource.commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, selectedAccumulatePipeline);
-    vkCmdBindDescriptorSets(
-        resource.commandBuffer,
-        VK_PIPELINE_BIND_POINT_COMPUTE,
-        accumulatePipelineLayout,
-        0,
-        1, &descriptorSet,
-        0, nullptr
-    );
-    vkCmdPushConstants(
-        resource.commandBuffer,
-        accumulatePipelineLayout,
-        VK_SHADER_STAGE_COMPUTE_BIT,
-        0,
-        sizeof(pushConstants),
-        &pushConstants);
-    const u32 groupX = useBlockAccumulator
-        ? static_cast<u32>(SoftPackedFrameSnapshot::kScreenWidth)
-        : (accumulatedHighresWidth + 7u) / 8u;
-    const u32 groupY = useBlockAccumulator
-        ? static_cast<u32>(SoftPackedFrameSnapshot::kScreenHeight)
-        : (accumulatedHighresHeight + 7u) / 8u;
-    vkCmdDispatch(resource.commandBuffer, groupX, groupY, 1);
-
-    VkImageMemoryBarrier destReadBarrier{};
-    destReadBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    destReadBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-    destReadBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    destReadBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-    destReadBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-    destReadBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    destReadBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    destReadBarrier.image = destImage;
-    destReadBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    destReadBarrier.subresourceRange.levelCount = 1;
-    destReadBarrier.subresourceRange.layerCount = 1;
-
-    vkCmdPipelineBarrier(
-        resource.commandBuffer,
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        0,
-        0, nullptr,
-        0, nullptr,
-        1, &destReadBarrier
-    );
-
-    destValid = true;
-    (topLcd ? accumulatedTopHighresLastMergeFrameId : accumulatedBottomHighresLastMergeFrameId) = lastPreparedFrameId;
-    (topLcd ? accumulatedTopHighresLastMergePrepareSerial : accumulatedBottomHighresLastMergePrepareSerial) = accumulatedHighresPrepareSerial;
-    return true;
-}
-
-bool VulkanOutput::recordAccumulateMergeCompatibility(
-    FrameResource& resource,
-    bool topLcd,
-    bool replaceExisting)
-{
-    if (accumulateCompatibilityPipeline == VK_NULL_HANDLE)
-        return false;
-    if (resource.commandBuffer == VK_NULL_HANDLE)
-        return false;
-    if (!resource.hasRenderer3dSnapshot
-        || resource.renderer3dSnapshotView == VK_NULL_HANDLE
-        || resource.snapshotWidth == 0
-        || resource.snapshotHeight == 0)
-    {
-        return false;
-    }
-    if (resource.topPackedBuffer == VK_NULL_HANDLE
-        || resource.bottomPackedBuffer == VK_NULL_HANDLE
-        || resource.packedBufferSize == 0)
-    {
-        return false;
-    }
-
-    if (!ensureAccumulatedHighresImages(
-            resource.snapshotWidth,
-            resource.snapshotHeight))
-    {
-        return false;
-    }
-
-    VkImage destImage =
-        topLcd ? accumulatedTopHighresImage : accumulatedBottomHighresImage;
-    VkDescriptorSet descriptorSet =
-        topLcd ? accumulateTopDescriptorSet : accumulateBottomDescriptorSet;
-    bool& destValid =
-        topLcd ? accumulatedTopHighresValid : accumulatedBottomHighresValid;
-    bool& destLayoutReady =
-        topLcd
-            ? accumulatedTopHighresLayoutReady
-            : accumulatedBottomHighresLayoutReady;
-    bool& descriptorReady =
-        topLcd ? accumulateTopDescriptorReady : accumulateBottomDescriptorReady;
-    VkImageView& cachedSourceView =
-        topLcd
-            ? cachedAccumulateTopSourceView
-            : cachedAccumulateBottomSourceView;
-
-    if (!descriptorReady
-        || cachedSourceView != resource.renderer3dSnapshotView)
-    {
-        VkDescriptorImageInfo sourceImageInfo{};
-        sourceImageInfo.imageView = resource.renderer3dSnapshotView;
-        sourceImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-        VkDescriptorImageInfo destImageInfo{};
-        destImageInfo.imageView =
-            topLcd
-                ? accumulatedTopHighresView
-                : accumulatedBottomHighresView;
-        destImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-        VkDescriptorBufferInfo topPackedBufferInfo{};
-        topPackedBufferInfo.buffer = resource.topPackedBuffer;
-        topPackedBufferInfo.offset = 0;
-        topPackedBufferInfo.range = resource.packedBufferSize;
-
-        VkDescriptorBufferInfo bottomPackedBufferInfo{};
-        bottomPackedBufferInfo.buffer = resource.bottomPackedBuffer;
-        bottomPackedBufferInfo.offset = 0;
-        bottomPackedBufferInfo.range = resource.packedBufferSize;
-
-        std::array<VkWriteDescriptorSet, 4> writes{};
-        writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        writes[0].dstSet = descriptorSet;
-        writes[0].dstBinding = 0;
-        writes[0].descriptorCount = 1;
-        writes[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        writes[0].pImageInfo = &sourceImageInfo;
-
-        writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        writes[1].dstSet = descriptorSet;
-        writes[1].dstBinding = 1;
-        writes[1].descriptorCount = 1;
-        writes[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        writes[1].pImageInfo = &destImageInfo;
-
-        writes[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        writes[2].dstSet = descriptorSet;
-        writes[2].dstBinding = 2;
-        writes[2].descriptorCount = 1;
-        writes[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        writes[2].pBufferInfo = &topPackedBufferInfo;
-
-        writes[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        writes[3].dstSet = descriptorSet;
-        writes[3].dstBinding = 3;
-        writes[3].descriptorCount = 1;
-        writes[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        writes[3].pBufferInfo = &bottomPackedBufferInfo;
-
-        vkUpdateDescriptorSets(
-            device,
-            static_cast<u32>(writes.size()),
-            writes.data(),
-            0,
-            nullptr);
-        cachedSourceView = resource.renderer3dSnapshotView;
-        descriptorReady = true;
-    }
-
-    VkImageMemoryBarrier destToWriteBarrier{};
-    destToWriteBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    destToWriteBarrier.srcAccessMask =
-        destLayoutReady ? VK_ACCESS_SHADER_READ_BIT : 0;
-    destToWriteBarrier.dstAccessMask =
-        VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-    destToWriteBarrier.oldLayout =
-        destLayoutReady ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED;
-    destToWriteBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-    destToWriteBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    destToWriteBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    destToWriteBarrier.image = destImage;
-    destToWriteBarrier.subresourceRange.aspectMask =
-        VK_IMAGE_ASPECT_COLOR_BIT;
-    destToWriteBarrier.subresourceRange.baseMipLevel = 0;
-    destToWriteBarrier.subresourceRange.levelCount = 1;
-    destToWriteBarrier.subresourceRange.baseArrayLayer = 0;
-    destToWriteBarrier.subresourceRange.layerCount = 1;
-    vkCmdPipelineBarrier(
-        resource.commandBuffer,
-        destLayoutReady
-            ? (VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
-                | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
-            : VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        0,
-        0,
-        nullptr,
-        0,
-        nullptr,
-        1,
-        &destToWriteBarrier);
-    destLayoutReady = true;
-
-    if (replaceExisting)
-        destValid = false;
-
-    if (!destValid)
-    {
-        VkClearColorValue clearColor{};
-        VkImageSubresourceRange clearRange{};
-        clearRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        clearRange.baseMipLevel = 0;
-        clearRange.levelCount = 1;
-        clearRange.baseArrayLayer = 0;
-        clearRange.layerCount = 1;
-        vkCmdClearColorImage(
-            resource.commandBuffer,
-            destImage,
-            VK_IMAGE_LAYOUT_GENERAL,
-            &clearColor,
-            1,
-            &clearRange);
-
-        VkImageMemoryBarrier clearToComputeBarrier{};
-        clearToComputeBarrier.sType =
-            VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        clearToComputeBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        clearToComputeBarrier.dstAccessMask =
-            VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-        clearToComputeBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-        clearToComputeBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-        clearToComputeBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        clearToComputeBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        clearToComputeBarrier.image = destImage;
-        clearToComputeBarrier.subresourceRange = clearRange;
-        vkCmdPipelineBarrier(
-            resource.commandBuffer,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            0,
-            0,
-            nullptr,
-            0,
-            nullptr,
-            1,
-            &clearToComputeBarrier);
-    }
-
-    vkCmdBindPipeline(
-        resource.commandBuffer,
-        VK_PIPELINE_BIND_POINT_COMPUTE,
-        accumulateCompatibilityPipeline);
-    vkCmdBindDescriptorSets(
-        resource.commandBuffer,
-        VK_PIPELINE_BIND_POINT_COMPUTE,
-        accumulatePipelineLayout,
-        0,
-        1,
-        &descriptorSet,
-        0,
-        nullptr);
-    CompatibilityAccumulatePushConstants pushConstants{};
-    pushConstants.scale =
-        resource.snapshotWidth >= SoftPackedFrameSnapshot::kScreenWidth
-            ? std::max<u32>(
-                resource.snapshotWidth
-                    / static_cast<u32>(
-                        SoftPackedFrameSnapshot::kScreenWidth),
-                1u)
-            : 1u;
-    pushConstants.packedStride = kAcceleratedStride;
-    pushConstants.topLcd = topLcd ? 1u : 0u;
-    vkCmdPushConstants(
-        resource.commandBuffer,
-        accumulatePipelineLayout,
-        VK_SHADER_STAGE_COMPUTE_BIT,
-        0,
-        sizeof(pushConstants),
-        &pushConstants);
-    const u32 groupX = (accumulatedHighresWidth + 7u) / 8u;
-    const u32 groupY = (accumulatedHighresHeight + 7u) / 8u;
-    vkCmdDispatch(resource.commandBuffer, groupX, groupY, 1);
-
-    VkImageMemoryBarrier destReadBarrier{};
-    destReadBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    destReadBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-    destReadBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    destReadBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-    destReadBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-    destReadBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    destReadBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    destReadBarrier.image = destImage;
-    destReadBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    destReadBarrier.subresourceRange.baseMipLevel = 0;
-    destReadBarrier.subresourceRange.levelCount = 1;
-    destReadBarrier.subresourceRange.baseArrayLayer = 0;
-    destReadBarrier.subresourceRange.layerCount = 1;
-    vkCmdPipelineBarrier(
-        resource.commandBuffer,
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        0,
-        0,
-        nullptr,
-        0,
-        nullptr,
-        1,
-        &destReadBarrier);
-
-    destValid = true;
-    return true;
-}
-
 u32 VulkanOutput::findMemoryType(u32 typeBits, VkMemoryPropertyFlags properties) const
 {
     return melonDS::VulkanContext::Get().FindMemoryType(typeBits, properties);
@@ -2905,7 +7188,6 @@ u32 VulkanOutput::findMemoryType(u32 typeBits, VkMemoryPropertyFlags properties)
 
 bool VulkanOutput::createFrameResource(Frame* frame, u32 width, u32 height)
 {
-    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     std::scoped_lock commandLock(commandPoolLock);
 
     VkImageCreateInfo imageCreateInfo{};
@@ -3070,119 +7352,6 @@ bool VulkanOutput::createFrameResource(Frame* frame, u32 width, u32 height)
         return false;
     }
 
-    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo{};
-    descriptorSetAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    descriptorSetAllocateInfo.descriptorPool = compositorDescriptorPool;
-    descriptorSetAllocateInfo.descriptorSetCount = 1;
-    descriptorSetAllocateInfo.pSetLayouts = &compositorDescriptorSetLayout;
-
-    VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
-    if (vkAllocateDescriptorSets(device, &descriptorSetAllocateInfo, &descriptorSet) != VK_SUCCESS)
-    {
-        vkDestroyFence(device, submitFence, nullptr);
-        vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
-        vkFreeMemory(device, stagingMemory, nullptr);
-        vkDestroyBuffer(device, stagingBuffer, nullptr);
-        vkDestroyImageView(device, imageView, nullptr);
-        vkFreeMemory(device, imageMemory, nullptr);
-        vkDestroyImage(device, image, nullptr);
-        return false;
-    }
-
-    auto createMappedStorageBuffer = [&](VkBuffer& buffer, VkDeviceMemory& memory, void*& mappedMemory, VkDeviceSize size, const char* label) -> bool {
-        VkBufferCreateInfo bufferCreateInfo{};
-        bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-        bufferCreateInfo.size = size;
-        bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-        bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-        if (vkCreateBuffer(device, &bufferCreateInfo, nullptr, &buffer) != VK_SUCCESS)
-        {
-            melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "VulkanOutput: failed to create %s packed buffer", label);
-            return false;
-        }
-
-        VkMemoryRequirements memoryRequirements{};
-        vkGetBufferMemoryRequirements(device, buffer, &memoryRequirements);
-
-        VkMemoryAllocateInfo memoryAllocateInfo{};
-        memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        memoryAllocateInfo.allocationSize = memoryRequirements.size;
-        memoryAllocateInfo.memoryTypeIndex = findMemoryType(
-            memoryRequirements.memoryTypeBits,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-        );
-
-        if (memoryAllocateInfo.memoryTypeIndex == UINT32_MAX
-            || vkAllocateMemory(device, &memoryAllocateInfo, nullptr, &memory) != VK_SUCCESS
-            || vkBindBufferMemory(device, buffer, memory, 0) != VK_SUCCESS
-            || vkMapMemory(device, memory, 0, size, 0, &mappedMemory) != VK_SUCCESS)
-        {
-            melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "VulkanOutput: failed to allocate %s storage buffer memory", label);
-            if (mappedMemory != nullptr)
-            {
-                vkUnmapMemory(device, memory);
-                mappedMemory = nullptr;
-            }
-            if (memory != VK_NULL_HANDLE)
-            {
-                vkFreeMemory(device, memory, nullptr);
-                memory = VK_NULL_HANDLE;
-            }
-            if (buffer != VK_NULL_HANDLE)
-            {
-                vkDestroyBuffer(device, buffer, nullptr);
-                buffer = VK_NULL_HANDLE;
-            }
-            return false;
-        }
-
-        return true;
-    };
-
-    VkBuffer topPackedBuffer = VK_NULL_HANDLE;
-    VkDeviceMemory topPackedMemory = VK_NULL_HANDLE;
-    void* topPackedMapped = nullptr;
-    VkBuffer bottomPackedBuffer = VK_NULL_HANDLE;
-    VkDeviceMemory bottomPackedMemory = VK_NULL_HANDLE;
-    void* bottomPackedMapped = nullptr;
-    VkBuffer capture3dBuffer = VK_NULL_HANDLE;
-    VkDeviceMemory capture3dMemory = VK_NULL_HANDLE;
-    void* capture3dMapped = nullptr;
-
-    if (!createMappedStorageBuffer(topPackedBuffer, topPackedMemory, topPackedMapped, kPackedBufferSize, "top")
-        || !createMappedStorageBuffer(bottomPackedBuffer, bottomPackedMemory, bottomPackedMapped, kPackedBufferSize, "bottom")
-        || !createMappedStorageBuffer(capture3dBuffer, capture3dMemory, capture3dMapped, kCapture3dBufferSize, "capture3d"))
-    {
-        if (capture3dMapped != nullptr)
-            vkUnmapMemory(device, capture3dMemory);
-        if (capture3dMemory != VK_NULL_HANDLE)
-            vkFreeMemory(device, capture3dMemory, nullptr);
-        if (capture3dBuffer != VK_NULL_HANDLE)
-            vkDestroyBuffer(device, capture3dBuffer, nullptr);
-        if (bottomPackedMapped != nullptr)
-            vkUnmapMemory(device, bottomPackedMemory);
-        if (bottomPackedMemory != VK_NULL_HANDLE)
-            vkFreeMemory(device, bottomPackedMemory, nullptr);
-        if (bottomPackedBuffer != VK_NULL_HANDLE)
-            vkDestroyBuffer(device, bottomPackedBuffer, nullptr);
-        if (topPackedMapped != nullptr)
-            vkUnmapMemory(device, topPackedMemory);
-        if (topPackedMemory != VK_NULL_HANDLE)
-            vkFreeMemory(device, topPackedMemory, nullptr);
-        if (topPackedBuffer != VK_NULL_HANDLE)
-            vkDestroyBuffer(device, topPackedBuffer, nullptr);
-        vkFreeDescriptorSets(device, compositorDescriptorPool, 1, &descriptorSet);
-        vkDestroyFence(device, submitFence, nullptr);
-        vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
-        vkFreeMemory(device, stagingMemory, nullptr);
-        vkDestroyBuffer(device, stagingBuffer, nullptr);
-        vkDestroyImageView(device, imageView, nullptr);
-        vkFreeMemory(device, imageMemory, nullptr);
-        vkDestroyImage(device, image, nullptr);
-        return false;
-    }
-
     auto resource = std::make_unique<FrameResource>();
     resource->image = image;
     resource->imageView = imageView;
@@ -3192,17 +7361,6 @@ bool VulkanOutput::createFrameResource(Frame* frame, u32 width, u32 height)
     resource->stagingSize = stagingBufferSize;
     resource->commandBuffer = commandBuffer;
     resource->submitFence = submitFence;
-    resource->descriptorSet = descriptorSet;
-    resource->topPackedBuffer = topPackedBuffer;
-    resource->topPackedMemory = topPackedMemory;
-    resource->topPackedMapped = topPackedMapped;
-    resource->bottomPackedBuffer = bottomPackedBuffer;
-    resource->bottomPackedMemory = bottomPackedMemory;
-    resource->bottomPackedMapped = bottomPackedMapped;
-    resource->capture3dBuffer = capture3dBuffer;
-    resource->capture3dMemory = capture3dMemory;
-    resource->capture3dMapped = capture3dMapped;
-    resource->packedBufferSize = kPackedBufferSize;
     resource->renderer3dSnapshot = VK_NULL_HANDLE;
     resource->renderer3dSnapshotView = VK_NULL_HANDLE;
     resource->renderer3dSnapshotMemory = VK_NULL_HANDLE;
@@ -3243,10 +7401,13 @@ bool VulkanOutput::createFrameResource(Frame* frame, u32 width, u32 height)
     resource->width = width;
     resource->height = height;
     resource->hasContent = false;
-    resource->hasPreparedInputs = false;
     resource->hasRenderer3dSnapshot = false;
+    resource->renderer3dSnapshotLayoutInitialized = false;
+    resource->renderer3dSnapshotState = Renderer3dSnapshotState::Empty;
+    resource->renderer3dSnapshotProjection = {};
     resource->renderer3dSnapshotScreenSwap = false;
     resource->renderer3dSnapshotSourceIdentityValid = false;
+    resource->renderer3dSnapshotSourceEpoch = 0;
     resource->renderer3dSnapshotSourceSequence = 0;
     resource->renderer3dSnapshotSourcePolygonCount = 0;
     resource->renderer3dSnapshotSourceCaptureCnt = 0;
@@ -3271,16 +7432,6 @@ bool VulkanOutput::createFrameResource(Frame* frame, u32 width, u32 height)
         melonDS::Platform::Log(
             melonDS::Platform::LogLevel::Error,
             "VulkanOutput: frame resource unexpectedly already existed during creation");
-        vkUnmapMemory(device, capture3dMemory);
-        vkFreeMemory(device, capture3dMemory, nullptr);
-        vkDestroyBuffer(device, capture3dBuffer, nullptr);
-        vkUnmapMemory(device, bottomPackedMemory);
-        vkFreeMemory(device, bottomPackedMemory, nullptr);
-        vkDestroyBuffer(device, bottomPackedBuffer, nullptr);
-        vkUnmapMemory(device, topPackedMemory);
-        vkFreeMemory(device, topPackedMemory, nullptr);
-        vkDestroyBuffer(device, topPackedBuffer, nullptr);
-        vkFreeDescriptorSets(device, compositorDescriptorPool, 1, &descriptorSet);
         vkDestroyFence(device, submitFence, nullptr);
         vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
         vkFreeMemory(device, stagingMemory, nullptr);
@@ -3300,23 +7451,37 @@ bool VulkanOutput::createFrameResource(Frame* frame, u32 width, u32 height)
 
 void VulkanOutput::destroyFrameResource(Frame* frame)
 {
-    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
-    std::lock_guard<std::mutex> tempLock(temporalReferenceLock);
+    std::scoped_lock lifetimeLock(faithfulLifetimeLock);
     std::scoped_lock commandLock(commandPoolLock);
+
+    if (frame != nullptr && faithfulDiagnosticPayload.matches(frame->frameId))
+        faithfulDiagnosticPayload.invalidate();
 
     auto iterator = resources.find(frame);
     if (iterator == resources.end())
         return;
 
     FrameResource& resource = iterator->second;
-    const VkImageView destroyedSnapshotView = resource.renderer3dSnapshotView;
-    const VkImageView destroyedRetainedView = resource.retainedRenderer3dSourceImageView;
 
     if (resource.submitFence != VK_NULL_HANDLE)
         vkWaitForFences(device, 1, &resource.submitFence, VK_TRUE, UINT64_MAX);
 
-    if (resource.descriptorSet != VK_NULL_HANDLE && compositorDescriptorPool != VK_NULL_HANDLE)
-        vkFreeDescriptorSets(device, compositorDescriptorPool, 1, &resource.descriptorSet);
+    clearFaithfulUsesForCompletedResourceLocked(resource);
+    if (!waitFaithfulLiveSnapshotUseLocked(resource))
+    {
+
+        const VkResult idleResult = vkDeviceWaitIdle(device);
+        if (idleResult != VK_SUCCESS)
+        {
+            melonDS::Platform::Log(
+                melonDS::Platform::LogLevel::Error,
+                "VulkanOutput: live snapshot teardown wait failed (%d)",
+                static_cast<int>(idleResult));
+        }
+        resource.faithfulLiveConsumerTimelineValue = 0u;
+        resource.faithfulLiveConsumerFenceOwner = nullptr;
+        resource.faithfulLiveConsumerSubmissionValue = 0u;
+    }
 
     destroyTimestampQueryPool(resource.timestampQueryPool);
 
@@ -3325,36 +7490,6 @@ void VulkanOutput::destroyFrameResource(Frame* frame)
 
     if (resource.commandBuffer != VK_NULL_HANDLE && commandPool != VK_NULL_HANDLE)
         vkFreeCommandBuffers(device, commandPool, 1, &resource.commandBuffer);
-
-    if (resource.topPackedMapped != nullptr)
-    {
-        vkUnmapMemory(device, resource.topPackedMemory);
-        resource.topPackedMapped = nullptr;
-    }
-    if (resource.topPackedBuffer != VK_NULL_HANDLE)
-        vkDestroyBuffer(device, resource.topPackedBuffer, nullptr);
-    if (resource.topPackedMemory != VK_NULL_HANDLE)
-        vkFreeMemory(device, resource.topPackedMemory, nullptr);
-
-    if (resource.bottomPackedMapped != nullptr)
-    {
-        vkUnmapMemory(device, resource.bottomPackedMemory);
-        resource.bottomPackedMapped = nullptr;
-    }
-    if (resource.bottomPackedBuffer != VK_NULL_HANDLE)
-        vkDestroyBuffer(device, resource.bottomPackedBuffer, nullptr);
-    if (resource.bottomPackedMemory != VK_NULL_HANDLE)
-        vkFreeMemory(device, resource.bottomPackedMemory, nullptr);
-
-    if (resource.capture3dMapped != nullptr)
-    {
-        vkUnmapMemory(device, resource.capture3dMemory);
-        resource.capture3dMapped = nullptr;
-    }
-    if (resource.capture3dBuffer != VK_NULL_HANDLE)
-        vkDestroyBuffer(device, resource.capture3dBuffer, nullptr);
-    if (resource.capture3dMemory != VK_NULL_HANDLE)
-        vkFreeMemory(device, resource.capture3dMemory, nullptr);
 
     releaseRetainedRenderer3dSource(resource);
     destroyRenderer3dSnapshot(resource);
@@ -3390,43 +7525,10 @@ void VulkanOutput::destroyFrameResource(Frame* frame)
         lastBottomComposedFrame = nullptr;
 
     resources.erase(iterator);
-
-    for (auto& [otherFrame, other] : resources)
-    {
-        (void)otherFrame;
-        const bool topViewMatches =
-            (destroyedSnapshotView != VK_NULL_HANDLE && other.previousTopRendererSourceImageView == destroyedSnapshotView)
-            || (destroyedRetainedView != VK_NULL_HANDLE && other.previousTopRendererSourceImageView == destroyedRetainedView);
-        if (other.previousTopSourceFrame == frame || topViewMatches)
-        {
-            other.previousTopRendererSourceImage = VK_NULL_HANDLE;
-            other.previousTopRendererSourceImageView = VK_NULL_HANDLE;
-            other.previousTopRendererSourceValid = false;
-            other.previousTopSourceFrame = nullptr;
-            other.previousTopSourcePending = false;
-        }
-        const bool bottomViewMatches =
-            (destroyedSnapshotView != VK_NULL_HANDLE && other.previousBottomRendererSourceImageView == destroyedSnapshotView)
-            || (destroyedRetainedView != VK_NULL_HANDLE && other.previousBottomRendererSourceImageView == destroyedRetainedView);
-        if (other.previousBottomSourceFrame == frame || bottomViewMatches)
-        {
-            other.previousBottomRendererSourceImage = VK_NULL_HANDLE;
-            other.previousBottomRendererSourceImageView = VK_NULL_HANDLE;
-            other.previousBottomRendererSourceValid = false;
-            other.previousBottomSourceFrame = nullptr;
-            other.previousBottomSourcePending = false;
-            other.class4Full2dOnlyBottomFrameOwnedHistory = false;
-        }
-        if (other.previousTopComposedFrame == frame)
-            other.previousTopComposedFrame = nullptr;
-        if (other.previousBottomComposedFrame == frame)
-            other.previousBottomComposedFrame = nullptr;
-    }
 }
 
 void VulkanOutput::destroyFrameResources()
 {
-    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     while (!resources.empty())
     {
         auto iterator = resources.begin();
@@ -3439,7 +7541,6 @@ bool VulkanOutput::ensureFrameResources(Frame* frame, u32 width, u32 height)
     if (!initialized || frame == nullptr || width == 0 || height == 0)
         return false;
 
-    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     auto iterator = resources.find(frame);
     if (iterator != resources.end())
     {
@@ -3457,8 +7558,154 @@ bool VulkanOutput::ensureFrameResources(Frame* frame, u32 width, u32 height)
     return createFrameResource(frame, width, height);
 }
 
+bool VulkanOutput::waitFaithfulUseLocked(FaithfulUse& use)
+{
+    if (use.timelineValue == 0u)
+        return true;
+
+    if (useTimelineSemaphores && timelineSemaphore != VK_NULL_HANDLE
+        && waitSemaphores != nullptr)
+    {
+        u64 completedValue = 0u;
+        if (getSemaphoreCounterValue != nullptr
+            && getSemaphoreCounterValue(
+                   device, timelineSemaphore, &completedValue) == VK_SUCCESS
+            && completedValue >= use.timelineValue)
+        {
+            use = {};
+            return true;
+        }
+
+        VkSemaphoreWaitInfo waitInfo{};
+        waitInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO;
+        waitInfo.semaphoreCount = 1;
+        waitInfo.pSemaphores = &timelineSemaphore;
+        waitInfo.pValues = &use.timelineValue;
+        const VkResult waitResult = waitSemaphores(
+            device, &waitInfo, UINT64_MAX);
+        if (waitResult != VK_SUCCESS)
+        {
+            melonDS::Platform::Log(
+                melonDS::Platform::LogLevel::Error,
+                "VulkanOutput: faithful timeline wait failed (%d, value=%llu)",
+                static_cast<int>(waitResult),
+                static_cast<unsigned long long>(use.timelineValue));
+            return false;
+        }
+    }
+    else
+    {
+
+        if (use.fenceOwner == nullptr
+            || use.fenceOwner->submitFence == VK_NULL_HANDLE
+            || use.fenceOwner->submissionValue != use.ownerSubmissionValue)
+        {
+            melonDS::Platform::Log(
+                melonDS::Platform::LogLevel::Error,
+                "VulkanOutput: stale faithful fence association "
+                "(expected=%llu, actual=%llu)",
+                static_cast<unsigned long long>(use.ownerSubmissionValue),
+                static_cast<unsigned long long>(
+                    use.fenceOwner != nullptr
+                        ? use.fenceOwner->submissionValue : 0u));
+            return false;
+        }
+
+        const VkResult waitResult = vkWaitForFences(
+            device, 1, &use.fenceOwner->submitFence, VK_TRUE, UINT64_MAX);
+        if (waitResult != VK_SUCCESS)
+        {
+            melonDS::Platform::Log(
+                melonDS::Platform::LogLevel::Error,
+                "VulkanOutput: faithful fence wait failed (%d, value=%llu)",
+                static_cast<int>(waitResult),
+                static_cast<unsigned long long>(use.ownerSubmissionValue));
+            return false;
+        }
+    }
+
+    use = {};
+    return true;
+}
+
+bool VulkanOutput::waitFaithfulLiveSnapshotUseLocked(FrameResource& source)
+{
+    FaithfulUse use {
+        source.faithfulLiveConsumerTimelineValue,
+        source.faithfulLiveConsumerFenceOwner,
+        source.faithfulLiveConsumerSubmissionValue,
+    };
+    if (!waitFaithfulUseLocked(use))
+        return false;
+
+    source.faithfulLiveConsumerTimelineValue = 0u;
+    source.faithfulLiveConsumerFenceOwner = nullptr;
+    source.faithfulLiveConsumerSubmissionValue = 0u;
+    return true;
+}
+
+void VulkanOutput::markFaithfulLiveSnapshotConsumerLocked(
+    FrameResource& source, FrameResource& consumer)
+{
+    if (consumer.submissionValue == 0u)
+        return;
+
+    if (source.faithfulLiveConsumerTimelineValue
+            >= consumer.submissionValue)
+    {
+        return;
+    }
+
+    source.faithfulLiveConsumerTimelineValue = consumer.submissionValue;
+    source.faithfulLiveConsumerFenceOwner = &consumer;
+    source.faithfulLiveConsumerSubmissionValue = consumer.submissionValue;
+}
+
+void VulkanOutput::clearFaithfulUsesForCompletedResourceLocked(
+    FrameResource& resource)
+{
+    const auto clearIfOwned = [&](FaithfulUse& use) {
+        if (use.fenceOwner == &resource
+            && use.ownerSubmissionValue == resource.submissionValue)
+            use = {};
+    };
+    for (FaithfulUse& use : faithfulSlotUse)
+        clearIfOwned(use);
+    clearIfOwned(faithfulTemporalUse);
+
+    for (auto& [sourceFrame, source] : resources)
+    {
+        (void)sourceFrame;
+        if (source.faithfulLiveConsumerFenceOwner == &resource
+            && source.faithfulLiveConsumerSubmissionValue
+                == resource.submissionValue)
+        {
+            source.faithfulLiveConsumerTimelineValue = 0u;
+            source.faithfulLiveConsumerFenceOwner = nullptr;
+            source.faithfulLiveConsumerSubmissionValue = 0u;
+        }
+    }
+}
+
+void VulkanOutput::markFaithfulSubmittedLocked(u32 slot,
+                                               FrameResource& resource)
+{
+    if (slot >= kFielRanuras || resource.submissionValue == 0u)
+        return;
+    const FaithfulUse use {
+        resource.submissionValue,
+        &resource,
+        resource.submissionValue,
+    };
+    faithfulSlotUse[slot] = use;
+
+    faithfulTemporalUse = use;
+}
+
 bool VulkanOutput::beginFrameCommand(FrameResource& resource, u64 waitTimeoutNs)
 {
+    if (resource.cbAbierto)
+        return true;
     const VkResult waitResult = vkWaitForFences(device, 1, &resource.submitFence, VK_TRUE, waitTimeoutNs);
     if (waitResult != VK_SUCCESS)
     {
@@ -3473,8 +7720,15 @@ bool VulkanOutput::beginFrameCommand(FrameResource& resource, u64 waitTimeoutNs)
 
     consumeFrameGpuTiming(resource);
 
+    clearFaithfulUsesForCompletedResourceLocked(resource);
+
     if (resource.timestampQueryPool != VK_NULL_HANDLE && resetQueryPool != nullptr)
-        resetQueryPool(device, resource.timestampQueryPool, 0, 2);
+    {
+        resetQueryPool(
+            device, resource.timestampQueryPool, 0,
+            faithfulPassTimingSessionEnabled ? 8u : 2u);
+    }
+    resource.faithfulTimestampBreakdownPending = false;
 
     if (vkResetFences(device, 1, &resource.submitFence) != VK_SUCCESS)
         return false;
@@ -3485,13 +7739,28 @@ bool VulkanOutput::beginFrameCommand(FrameResource& resource, u64 waitTimeoutNs)
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    return vkBeginCommandBuffer(resource.commandBuffer, &beginInfo) == VK_SUCCESS;
+    if (vkBeginCommandBuffer(resource.commandBuffer, &beginInfo) != VK_SUCCESS)
+        return false;
+    resource.cbAbierto = true;
+    return true;
 }
 
 bool VulkanOutput::submitFrameCommand(Frame* frame, FrameResource& resource, bool signalTimeline)
 {
+    const auto rejectPendingSnapshot = [&]() {
+        if (resource.renderer3dSnapshotState
+            == Renderer3dSnapshotState::PendingSubmit)
+        {
+
+            clearRenderer3dSnapshotPublication(resource, true);
+        }
+    };
+    resource.cbAbierto = false;
     if (vkEndCommandBuffer(resource.commandBuffer) != VK_SUCCESS)
+    {
+        rejectPendingSnapshot();
         return false;
+    }
 
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -3519,7 +7788,22 @@ bool VulkanOutput::submitFrameCommand(Frame* frame, FrameResource& resource, boo
     {
         std::scoped_lock queueLock(melonDS::VulkanContext::Get().GetQueueLock());
         if (vkQueueSubmit(queue, 1, &submitInfo, resource.submitFence) != VK_SUCCESS)
+        {
+            rejectPendingSnapshot();
             return false;
+        }
+    }
+
+    if (resource.renderer3dSnapshotState
+        == Renderer3dSnapshotState::PendingSubmit)
+    {
+
+        resource.renderer3dSnapshotState =
+            Renderer3dSnapshotState::Published;
+        resource.renderer3dSnapshotFrameId = frame != nullptr ? frame->frameId : 0u;
+        resource.renderer3dSnapshotPublicationGeneration =
+            frame != nullptr ? frame->publicationGeneration : 0u;
+        resource.renderer3dSnapshotLayoutInitialized = true;
     }
 
     if (frame != nullptr)
@@ -3538,5128 +7822,9 @@ bool VulkanOutput::submitFrameCommand(Frame* frame, FrameResource& resource, boo
     return true;
 }
 
-bool VulkanOutput::updateCompositorPackedBuffersCompatibility(
-    Frame* frame,
-    FrameResource& resource,
-    const SoftPackedFrameSnapshot& softPackedSnapshot)
+bool VulkanOutput::captureRenderer3dSnapshot(Frame* frame, const melonDS::VulkanRenderer3D& renderer3D, bool snapshotScreenSwap, bool deferSubmit)
 {
-    if (!softPackedSnapshot.valid)
-        return false;
-
-    if (resource.topPackedMapped == nullptr
-        || resource.bottomPackedMapped == nullptr
-        || resource.packedBufferSize == 0)
-    {
-        return false;
-    }
-
-    auto* topPacked = static_cast<melonDS::u32*>(resource.topPackedMapped);
-    auto* bottomPacked = static_cast<melonDS::u32*>(resource.bottomPackedMapped);
-    if (topPacked == nullptr || bottomPacked == nullptr)
-        return false;
-
-    if (VulkanRuntime::GetDebugView() != VulkanRuntime::DebugView::None)
-    {
-        for (size_t y = 0; y < SoftPackedFrameSnapshot::kLineCount; y++)
-        {
-            const size_t packedRowBase = y * static_cast<size_t>(kAcceleratedStride);
-            const size_t snapshotRowBase = y * SoftPackedFrameSnapshot::kScreenWidth;
-            std::memcpy(
-                topPacked + packedRowBase,
-                softPackedSnapshot.packedTopPlane0.data() + snapshotRowBase,
-                SoftPackedFrameSnapshot::kScreenWidth * sizeof(melonDS::u32));
-            std::memcpy(
-                topPacked + packedRowBase + SoftPackedFrameSnapshot::kScreenWidth,
-                softPackedSnapshot.packedTopPlane1.data() + snapshotRowBase,
-                SoftPackedFrameSnapshot::kScreenWidth * sizeof(melonDS::u32));
-            std::memcpy(
-                topPacked + packedRowBase + (SoftPackedFrameSnapshot::kScreenWidth * 2u),
-                softPackedSnapshot.packedTopControl.data() + snapshotRowBase,
-                SoftPackedFrameSnapshot::kScreenWidth * sizeof(melonDS::u32));
-            topPacked[packedRowBase + (SoftPackedFrameSnapshot::kScreenWidth * 3u)] =
-                softPackedSnapshot.packedTopLineMeta[y];
-
-            std::memcpy(
-                bottomPacked + packedRowBase,
-                softPackedSnapshot.packedBottomPlane0.data() + snapshotRowBase,
-                SoftPackedFrameSnapshot::kScreenWidth * sizeof(melonDS::u32));
-            std::memcpy(
-                bottomPacked + packedRowBase + SoftPackedFrameSnapshot::kScreenWidth,
-                softPackedSnapshot.packedBottomPlane1.data() + snapshotRowBase,
-                SoftPackedFrameSnapshot::kScreenWidth * sizeof(melonDS::u32));
-            std::memcpy(
-                bottomPacked + packedRowBase + (SoftPackedFrameSnapshot::kScreenWidth * 2u),
-                softPackedSnapshot.packedBottomControl.data() + snapshotRowBase,
-                SoftPackedFrameSnapshot::kScreenWidth * sizeof(melonDS::u32));
-            bottomPacked[packedRowBase + (SoftPackedFrameSnapshot::kScreenWidth * 3u)] =
-                softPackedSnapshot.packedBottomLineMeta[y];
-        }
-        resource.fastHighresOnlyTop = false;
-        resource.fastHighresOnlyBottom = false;
-        resource.fastHighresOverlay2DTop = false;
-        resource.fastHighresOverlay2DBottom = false;
-        resource.topPackedCarryFromPrevious = false;
-        resource.bottomPackedCarryFromPrevious = false;
-        resource.topPackedPlane0Zeroed = false;
-        resource.topPackedPlane1Zeroed = false;
-        resource.topPackedControlZeroed = false;
-        resource.bottomPackedPlane0Zeroed = false;
-        resource.bottomPackedPlane1Zeroed = false;
-        resource.bottomPackedControlZeroed = false;
-        resource.softPackedFrameId = softPackedSnapshot.frameId;
-        resource.frontBufferLatched = softPackedSnapshot.frontBufferLatched;
-        resource.captureCntLatched = softPackedSnapshot.captureCntLatched;
-        resource.dispCntALatched = softPackedSnapshot.dispCntALatched;
-        resource.dispCntBLatched = softPackedSnapshot.dispCntBLatched;
-        resource.captureLinesLatched = softPackedSnapshot.captureLinesLatched;
-        resource.captureAgeLatched = softPackedSnapshot.captureAgeLatched;
-        resource.hasSoftPackedDebugData = true;
-        resource.topScreenStats = softPackedSnapshot.topScreenStats;
-        resource.bottomScreenStats = softPackedSnapshot.bottomScreenStats;
-        resource.capture3dSourceDsFrame = softPackedSnapshot.capture3dSourceDsFrame;
-        resource.captureLineUses3dMask = softPackedSnapshot.captureLineUses3dMask;
-        resource.captureFallbackLines.fill(0);
-        return true;
-    }
-
-    const bool topStructuredAboveDominant =
-        screenUsesFullRegularComp7WithDominantAbove(
-            softPackedSnapshot.topScreenStats);
-    const bool bottomStructuredAboveDominant =
-        screenUsesFullRegularComp7WithDominantAbove(
-            softPackedSnapshot.bottomScreenStats);
-    for (size_t y = 0; y < SoftPackedFrameSnapshot::kLineCount; y++)
-    {
-        const size_t packedRowBase =
-            y * static_cast<size_t>(kAcceleratedStride);
-        const size_t snapshotRowBase =
-            y * SoftPackedFrameSnapshot::kScreenWidth;
-        std::memcpy(
-            topPacked + packedRowBase,
-            softPackedSnapshot.packedTopPlane0.data() + snapshotRowBase,
-            SoftPackedFrameSnapshot::kScreenWidth * sizeof(melonDS::u32));
-        std::memcpy(
-            topPacked
-                + packedRowBase
-                + SoftPackedFrameSnapshot::kScreenWidth,
-            softPackedSnapshot.packedTopPlane1.data() + snapshotRowBase,
-            SoftPackedFrameSnapshot::kScreenWidth * sizeof(melonDS::u32));
-        std::memcpy(
-            topPacked
-                + packedRowBase
-                + (SoftPackedFrameSnapshot::kScreenWidth * 2u),
-            softPackedSnapshot.packedTopControl.data() + snapshotRowBase,
-            SoftPackedFrameSnapshot::kScreenWidth * sizeof(melonDS::u32));
-        topPacked[
-            packedRowBase + (SoftPackedFrameSnapshot::kScreenWidth * 3u)] =
-            softPackedSnapshot.packedTopLineMeta[y]
-            | (topStructuredAboveDominant
-                ? kMetaFlagStructuredAboveDominant
-                : 0u);
-
-        std::memcpy(
-            bottomPacked + packedRowBase,
-            softPackedSnapshot.packedBottomPlane0.data() + snapshotRowBase,
-            SoftPackedFrameSnapshot::kScreenWidth * sizeof(melonDS::u32));
-        std::memcpy(
-            bottomPacked
-                + packedRowBase
-                + SoftPackedFrameSnapshot::kScreenWidth,
-            softPackedSnapshot.packedBottomPlane1.data() + snapshotRowBase,
-            SoftPackedFrameSnapshot::kScreenWidth * sizeof(melonDS::u32));
-        std::memcpy(
-            bottomPacked
-                + packedRowBase
-                + (SoftPackedFrameSnapshot::kScreenWidth * 2u),
-            softPackedSnapshot.packedBottomControl.data() + snapshotRowBase,
-            SoftPackedFrameSnapshot::kScreenWidth * sizeof(melonDS::u32));
-        bottomPacked[
-            packedRowBase + (SoftPackedFrameSnapshot::kScreenWidth * 3u)] =
-            softPackedSnapshot.packedBottomLineMeta[y]
-            | (bottomStructuredAboveDominant
-                ? kMetaFlagStructuredAboveDominant
-                : 0u);
-    }
-
-    const bool topStructuredHandoffNoCurrent3d =
-        !softPackedSnapshot.hasCapture3dSource
-        && screenUsesStructuredHandoffWithoutCurrent3dCompatibility(
-            softPackedSnapshot.topScreenStats,
-            softPackedSnapshot.bottomScreenStats);
-    const bool bottomStructuredHandoffNoCurrent3d =
-        !softPackedSnapshot.hasCapture3dSource
-        && screenUsesStructuredHandoffWithoutCurrent3dCompatibility(
-            softPackedSnapshot.bottomScreenStats,
-            softPackedSnapshot.topScreenStats);
-    const bool topPackedCarryState =
-        (screenUsesPlainStructuredComp7HandoffSlotCompatibility(
-                softPackedSnapshot.topScreenStats)
-            || screenUsesPlainStructured3dSlot(
-                softPackedSnapshot.topScreenStats))
-        && bottomStructuredHandoffNoCurrent3d;
-    const bool bottomPackedCarryState =
-        (screenUsesPlainStructuredComp7HandoffSlotCompatibility(
-                softPackedSnapshot.bottomScreenStats)
-            || screenUsesPlainStructured3dSlot(
-                softPackedSnapshot.bottomScreenStats))
-        && topStructuredHandoffNoCurrent3d;
-    const bool topPackedCarryFromPrevious =
-        lastValidTopPackedAvailable && topPackedCarryState;
-    const bool bottomPackedCarryFromPrevious =
-        lastValidBottomPackedAvailable && bottomPackedCarryState;
-    if (topPackedCarryFromPrevious)
-    {
-        std::memcpy(
-            topPacked,
-            lastValidTopPacked.data(),
-            lastValidTopPacked.size() * sizeof(u32));
-    }
-    if (bottomPackedCarryFromPrevious)
-    {
-        std::memcpy(
-            bottomPacked,
-            lastValidBottomPacked.data(),
-            lastValidBottomPacked.size() * sizeof(u32));
-    }
-    resource.topPackedCarryFromPrevious = topPackedCarryFromPrevious;
-    resource.bottomPackedCarryFromPrevious = bottomPackedCarryFromPrevious;
-
-    const auto screenHasReusablePacked2d =
-        [](const SoftPackedScreenStats& stats) {
-            return stats.RegularCaptureUses3dLines == 0u
-                && stats.VramCaptureUses3dLines == 0u
-                && stats.ForceLive3dCompMode7Lines == 0u
-                && (stats.Plane0VisiblePixels
-                        > static_cast<u32>(kScreenWidth)
-                    || stats.Plane1VisiblePixels
-                        > static_cast<u32>(kScreenWidth)
-                    || stats.StructuredAboveVisiblePixels
-                        > static_cast<u32>(kScreenWidth)
-                    || stats.Structured2DOnlyVisiblePixels
-                        > static_cast<u32>(kScreenWidth));
-        };
-    if (topPackedCarryFromPrevious
-        || screenHasReusablePacked2d(
-            softPackedSnapshot.topScreenStats))
-    {
-        std::memcpy(
-            lastValidTopPacked.data(),
-            topPacked,
-            lastValidTopPacked.size() * sizeof(u32));
-        lastValidTopPackedAvailable = true;
-    }
-    if (bottomPackedCarryFromPrevious
-        || screenHasReusablePacked2d(
-            softPackedSnapshot.bottomScreenStats))
-    {
-        std::memcpy(
-            lastValidBottomPacked.data(),
-            bottomPacked,
-            lastValidBottomPacked.size() * sizeof(u32));
-        lastValidBottomPackedAvailable = true;
-    }
-    lastPackedScreenSwap = softPackedSnapshot.screenSwapLatched;
-    lastPackedScreenSwapValid = true;
-    if ((topPackedCarryFromPrevious || bottomPackedCarryFromPrevious)
-        && areRendererDebugBgObjLogsEnabled()
-        && structuredComp7HandoffDebugLogsRemaining > 0)
-    {
-        melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Warn,
-            "VulkanLive3D[PackedCarry]: frameId=%u screenSwap=%u topCarry=%u bottomCarry=%u topNoCurrent=%u bottomNoCurrent=%u topStruct=%u topAbove=%u bottomStruct=%u bottomAbove=%u remaining=%u",
-            frame != nullptr ? static_cast<unsigned>(frame->frameId) : 0u,
-            softPackedSnapshot.screenSwapLatched ? 1u : 0u,
-            topPackedCarryFromPrevious ? 1u : 0u,
-            bottomPackedCarryFromPrevious ? 1u : 0u,
-            topStructuredHandoffNoCurrent3d ? 1u : 0u,
-            bottomStructuredHandoffNoCurrent3d ? 1u : 0u,
-            softPackedSnapshot.topScreenStats.StructuredSlotPixels,
-            softPackedSnapshot.topScreenStats.StructuredAboveVisiblePixels,
-            softPackedSnapshot.bottomScreenStats.StructuredSlotPixels,
-            softPackedSnapshot.bottomScreenStats.StructuredAboveVisiblePixels,
-            structuredComp7HandoffDebugLogsRemaining);
-        structuredComp7HandoffDebugLogsRemaining--;
-    }
-
-    resource.softPackedFrameId = softPackedSnapshot.frameId;
-    resource.frontBufferLatched = softPackedSnapshot.frontBufferLatched;
-    resource.captureBackedClass4Only =
-        softPackedSnapshot.captureBackedClass4Only;
-    resource.hasSoftPackedDebugData = true;
-    resource.topScreenStats = softPackedSnapshot.topScreenStats;
-    resource.bottomScreenStats = softPackedSnapshot.bottomScreenStats;
-    resource.capture3dSourceDsFrame =
-        softPackedSnapshot.capture3dSourceDsFrame;
-    resource.captureLineUses3dMask =
-        softPackedSnapshot.captureLineUses3dMask;
-    resource.captureFallbackLines.fill(0);
-    resource.comp4TopPlaceholder =
-        softPackedSnapshot.comp4TopPlaceholder;
-    resource.comp4BottomPlaceholder =
-        softPackedSnapshot.comp4BottomPlaceholder;
-
-    if (areRendererDebugBgObjLogsEnabled() && packedDebugLogsRemaining > 0)
-    {
-        const size_t topPlane1Index = 256u;
-        const size_t topControlIndex = 512u;
-        const size_t topCenterIndex =
-            static_cast<size_t>(96)
-                * static_cast<size_t>(kAcceleratedStride)
-            + 128u;
-        const size_t topCenterPlane1Index = topCenterIndex + 256u;
-        const size_t topCenterControlIndex = topCenterIndex + 512u;
-        const size_t bottomPlane1Index = 256u;
-        const size_t bottomControlIndex = 512u;
-        const size_t bottomCenterIndex =
-            static_cast<size_t>(96)
-                * static_cast<size_t>(kAcceleratedStride)
-            + 128u;
-        const size_t bottomCenterPlane1Index =
-            bottomCenterIndex + 256u;
-        const size_t bottomCenterControlIndex =
-            bottomCenterIndex + 512u;
-        const size_t metaIndex = 256u * 3u;
-        melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Warn,
-            "VulkanPacked[Frame]: frameId=%u front=%d screenSwap=%u top0=%08X top1=%08X topCtl=%08X topCenter0=%08X topCenter1=%08X topCenterCtl=%08X topMeta=%08X bottom0=%08X bottom1=%08X bottomCtl=%08X bottomCenter0=%08X bottomCenter1=%08X bottomCenterCtl=%08X bottomMeta=%08X remaining=%u",
-            frame != nullptr ? static_cast<unsigned>(frame->frameId) : 0u,
-            softPackedSnapshot.frontBufferLatched,
-            softPackedSnapshot.screenSwapLatched ? 1u : 0u,
-            topPacked[0],
-            topPacked[topPlane1Index],
-            topPacked[topControlIndex],
-            topPacked[topCenterIndex],
-            topPacked[topCenterPlane1Index],
-            topPacked[topCenterControlIndex],
-            topPacked[metaIndex],
-            bottomPacked[0],
-            bottomPacked[bottomPlane1Index],
-            bottomPacked[bottomControlIndex],
-            bottomPacked[bottomCenterIndex],
-            bottomPacked[bottomCenterPlane1Index],
-            bottomPacked[bottomCenterControlIndex],
-            bottomPacked[metaIndex],
-            packedDebugLogsRemaining);
-        packedDebugLogsRemaining--;
-    }
-
-    return true;
-}
-
-bool VulkanOutput::updateCompositorPackedBuffers(
-    Frame* frame,
-    FrameResource& resource,
-    const SoftPackedFrameSnapshot& softPackedSnapshot,
-    melonDS::VulkanPipelineProfile pipelineProfile)
-{
-    if (!melonDS::UsesVulkanFastPath(pipelineProfile))
-    {
-        return updateCompositorPackedBuffersCompatibility(
-            frame,
-            resource,
-            softPackedSnapshot);
-    }
-
-    return updateCompositorPackedBuffersFastPath(
-        frame,
-        resource,
-        softPackedSnapshot);
-}
-
-bool VulkanOutput::updateCompositorPackedBuffersFastPath(
-    Frame* frame,
-    FrameResource& resource,
-    const SoftPackedFrameSnapshot& softPackedSnapshot)
-{
-    resource.bottomExactRegularCapturePreservesCurrentBlackMetadata = false;
-    resource.topPartialForceLiveSuppressesLateFinalBlackHistoryMetadata = false;
-    resource.topPartialRegularCaptureProtectedBlackAuthoritative = false;
-    if (!softPackedSnapshot.valid)
-        return false;
-
-    if (VulkanRuntime::GetDebugView() != VulkanRuntime::DebugView::None)
-    {
-        return updateCompositorPackedBuffersCompatibility(frame, resource, softPackedSnapshot);
-    }
-
-    if (resource.topPackedMapped == nullptr || resource.bottomPackedMapped == nullptr || resource.packedBufferSize == 0)
-        return false;
-
-    auto* topPacked = static_cast<melonDS::u32*>(resource.topPackedMapped);
-    auto* bottomPacked = static_cast<melonDS::u32*>(resource.bottomPackedMapped);
-    if (topPacked == nullptr || bottomPacked == nullptr)
-        return false;
-
-    const FrameResource* previousResource = nullptr;
-    if (lastPreparedFrame != nullptr && lastPreparedFrame != frame)
-    {
-        const auto previousIt = resources.find(lastPreparedFrame);
-        if (previousIt != resources.end())
-            previousResource = &previousIt->second;
-    }
-
-    const auto previousPackedForScreen = [&](bool topLcd) -> const melonDS::u32* {
-        if (previousResource == nullptr
-            || !previousResource->hasPreparedInputs
-            || previousResource->packedBufferSize != resource.packedBufferSize)
-        {
-            return nullptr;
-        }
-        return static_cast<const melonDS::u32*>(
-            topLcd ? previousResource->topPackedMapped : previousResource->bottomPackedMapped);
-    };
-
-    const bool topStructuredAboveDominant =
-        screenUsesFullRegularComp7WithDominantAbove(softPackedSnapshot.topScreenStats);
-    const bool bottomStructuredAboveDominant =
-        screenUsesFullRegularComp7WithDominantAbove(softPackedSnapshot.bottomScreenStats);
-    const auto screenCanUseFastHighresOnly = [](const SoftPackedScreenStats& stats, bool neutralLineMeta) {
-        return neutralLineMeta
-            && stats.StructuredSlotPixels >= static_cast<u32>(SoftPackedFrameSnapshot::kPixelCount)
-            && stats.Plane0VisiblePixels == 0u
-            && stats.Plane1VisiblePixels == 0u
-            && stats.StructuredAbovePixels == 0u
-            && stats.StructuredAboveVisiblePixels == 0u
-            && stats.Structured2DOnlyVisiblePixels == 0u
-            && stats.ProtectedBlackPixels == 0u
-            && stats.RegularCaptureUses3dLines == 0u
-            && stats.VramCaptureUses3dLines == 0u
-            && stats.ForceLive3dCompMode7Lines == 0u
-            && stats.CaptureBackedComp4Lines == 0u;
-    };
-    const bool topNeutralLineMeta = screenHasNeutralLineMeta(softPackedSnapshot.packedTopLineMeta);
-    const bool bottomNeutralLineMeta = screenHasNeutralLineMeta(softPackedSnapshot.packedBottomLineMeta);
-    const auto screenUsesSourceAHighresSlot =
-        [&](const SoftPackedScreenStats& stats, bool neutralLineMeta) {
-            return screenUsesSourceAFullHighresSlot(stats)
-                || screenCanUseFastHighresOnly(stats, neutralLineMeta);
-        };
-    const auto screenCanContinueSourceAHighresSlot =
-        [&](const SoftPackedScreenStats& stats, bool neutralLineMeta) {
-            return screenCanContinueSourceAFullHighresSlot(stats)
-                || screenCanUseFastHighresOnly(stats, neutralLineMeta);
-        };
-    const bool topCurrentFullStructured2dOnly =
-        screenCanUseHighresHistoryForStructured2dOnly(softPackedSnapshot.topScreenStats);
-    const bool bottomCurrentFullStructured2dOnly =
-        screenCanUseHighresHistoryForStructured2dOnly(softPackedSnapshot.bottomScreenStats);
-    const bool topCaptureMixedWithResolved2D =
-        softPackedSnapshot.hasCapture3dSource && bottomCurrentFullStructured2dOnly;
-    const bool bottomCaptureMixedWithResolved2D =
-        softPackedSnapshot.hasCapture3dSource && topCurrentFullStructured2dOnly;
-    const bool sourceAFullCaptureLines =
-        softPackedSnapshot.hasCapture3dSource
-        && std::all_of(
-            softPackedSnapshot.captureLineUses3dMask.begin(),
-            softPackedSnapshot.captureLineUses3dMask.end(),
-            [](u8 value) { return value != 0u; });
-    const bool topSourceAFullHighresStructural =
-        sourceAFullCaptureLines
-        &&
-        screenUsesSourceAHighresSlot(softPackedSnapshot.topScreenStats, topNeutralLineMeta)
-        && (screenUsesSourceAComp4Hold(softPackedSnapshot.bottomScreenStats)
-            || screenUsesSourceAReplay2DOnly(softPackedSnapshot.bottomScreenStats)
-            || screenUsesSourceAHighresSlot(softPackedSnapshot.bottomScreenStats, bottomNeutralLineMeta));
-    const bool bottomSourceAFullHighresStructural =
-        sourceAFullCaptureLines
-        &&
-        screenUsesSourceAHighresSlot(softPackedSnapshot.bottomScreenStats, bottomNeutralLineMeta)
-        && (screenUsesSourceAComp4Hold(softPackedSnapshot.topScreenStats)
-            || screenUsesSourceAReplay2DOnly(softPackedSnapshot.topScreenStats)
-            || screenUsesSourceAHighresSlot(softPackedSnapshot.topScreenStats, topNeutralLineMeta));
-    const bool topSourceAFullHighresCanContinue =
-        screenCanContinueSourceAHighresSlot(softPackedSnapshot.topScreenStats, topNeutralLineMeta)
-        && (screenCanContinueSourceAComp4Hold(softPackedSnapshot.bottomScreenStats)
-            || screenCanContinueSourceAReplay2DOnly(softPackedSnapshot.bottomScreenStats));
-    const bool bottomSourceAFullHighresCanContinue =
-        screenCanContinueSourceAHighresSlot(softPackedSnapshot.bottomScreenStats, bottomNeutralLineMeta)
-        && (screenCanContinueSourceAComp4Hold(softPackedSnapshot.topScreenStats)
-            || screenCanContinueSourceAReplay2DOnly(softPackedSnapshot.topScreenStats));
-    const bool topSourceAFullHighresObserved =
-        softPackedSnapshot.sourceAFullHighresOnlyTop || topSourceAFullHighresStructural;
-    const bool bottomSourceAFullHighresObserved =
-        softPackedSnapshot.sourceAFullHighresOnlyBottom || bottomSourceAFullHighresStructural;
-    const bool topSourceAFullHighresCarried =
-        !topSourceAFullHighresObserved
-        && topSourceAFullHighresCanContinue
-        && sourceAFullHighresTopCarryFrames > 0u;
-    const bool bottomSourceAFullHighresCarried =
-        !bottomSourceAFullHighresObserved
-        && bottomSourceAFullHighresCanContinue
-        && sourceAFullHighresBottomCarryFrames > 0u;
-    if (topSourceAFullHighresObserved)
-        sourceAFullHighresTopCarryFrames = kSourceAFullHighresCarryFrames;
-    else if (topSourceAFullHighresCanContinue && sourceAFullHighresTopCarryFrames > 0u)
-        sourceAFullHighresTopCarryFrames--;
-    else
-        sourceAFullHighresTopCarryFrames = 0u;
-    if (bottomSourceAFullHighresObserved)
-        sourceAFullHighresBottomCarryFrames = kSourceAFullHighresCarryFrames;
-    else if (bottomSourceAFullHighresCanContinue && sourceAFullHighresBottomCarryFrames > 0u)
-        sourceAFullHighresBottomCarryFrames--;
-    else
-        sourceAFullHighresBottomCarryFrames = 0u;
-    const bool topSourceAFullHighresActive =
-        topSourceAFullHighresObserved || topSourceAFullHighresCarried;
-    const bool bottomSourceAFullHighresActive =
-        bottomSourceAFullHighresObserved || bottomSourceAFullHighresCarried;
-    resource.fastHighresOnlyTop = (topSourceAFullHighresActive
-        || screenCanUseFastHighresOnly(
-            softPackedSnapshot.topScreenStats,
-            topNeutralLineMeta))
-        && (!topCaptureMixedWithResolved2D || topSourceAFullHighresActive);
-    resource.fastHighresOnlyBottom = (bottomSourceAFullHighresActive
-        || screenCanUseFastHighresOnly(
-            softPackedSnapshot.bottomScreenStats,
-            bottomNeutralLineMeta))
-        && (!bottomCaptureMixedWithResolved2D || bottomSourceAFullHighresActive);
-    const FastHighresOverlay2DRegion topOverlayRegion =
-        screenFastHighresOverlay2DRegion(softPackedSnapshot.topScreenStats, topNeutralLineMeta, true);
-    const FastHighresOverlay2DRegion bottomOverlayRegion =
-        screenFastHighresOverlay2DRegion(softPackedSnapshot.bottomScreenStats, bottomNeutralLineMeta, false);
-    resource.fastHighresOverlay2DTop =
-        !resource.fastHighresOnlyTop
-        && !topSourceAFullHighresActive
-        && topOverlayRegion.valid
-        && softPackedSnapshot.topScreenStats.VramCaptureUses3dLines == 0u
-        && softPackedSnapshot.topScreenStats.ForceLive3dCompMode7Lines == 0u
-        && softPackedSnapshot.topScreenStats.CaptureBackedComp4Lines == 0u;
-    resource.fastHighresOverlay2DBottom =
-        !resource.fastHighresOnlyBottom
-        && !bottomSourceAFullHighresActive
-        && bottomOverlayRegion.valid
-        && softPackedSnapshot.bottomScreenStats.VramCaptureUses3dLines == 0u
-        && softPackedSnapshot.bottomScreenStats.ForceLive3dCompMode7Lines == 0u
-        && softPackedSnapshot.bottomScreenStats.CaptureBackedComp4Lines == 0u;
-    resource.topOverlay2DMinX = topOverlayRegion.minX;
-    resource.topOverlay2DMinY = topOverlayRegion.minY;
-    resource.topOverlay2DMaxX = topOverlayRegion.maxX;
-    resource.topOverlay2DMaxY = topOverlayRegion.maxY;
-    resource.bottomOverlay2DMinX = bottomOverlayRegion.minX;
-    resource.bottomOverlay2DMinY = bottomOverlayRegion.minY;
-    resource.bottomOverlay2DMaxX = bottomOverlayRegion.maxX;
-    resource.bottomOverlay2DMaxY = bottomOverlayRegion.maxY;
-
-    const bool topPlane0Empty = packedPlane0IsEmpty(softPackedSnapshot.topScreenStats);
-    const bool topPlane1Empty = packedPlane1IsEmpty(softPackedSnapshot.topScreenStats);
-    const bool topControlEmpty = packedControlIsEmpty(softPackedSnapshot.topScreenStats)
-        && countLineMetaFlag(softPackedSnapshot.packedTopLineMeta, kMetaFlagRegularCaptureUses3d) == 0u
-        && countLineMetaFlag(softPackedSnapshot.packedTopLineMeta, kMetaFlagVramCaptureUses3d) == 0u
-        && countLineMetaFlag(softPackedSnapshot.packedTopLineMeta, kMetaFlagForceLive3dCompMode7) == 0u;
-    const bool bottomPlane0Empty = packedPlane0IsEmpty(softPackedSnapshot.bottomScreenStats);
-    const bool bottomPlane1Empty = packedPlane1IsEmpty(softPackedSnapshot.bottomScreenStats);
-    const bool bottomControlEmpty = packedControlIsEmpty(softPackedSnapshot.bottomScreenStats)
-        && countLineMetaFlag(softPackedSnapshot.packedBottomLineMeta, kMetaFlagRegularCaptureUses3d) == 0u
-        && countLineMetaFlag(softPackedSnapshot.packedBottomLineMeta, kMetaFlagVramCaptureUses3d) == 0u
-        && countLineMetaFlag(softPackedSnapshot.packedBottomLineMeta, kMetaFlagForceLive3dCompMode7) == 0u;
-
-    const auto updatePackedPlane = [](
-        u32* packed,
-        const u32* source,
-        size_t planeOffset,
-        bool sourceEmpty,
-        bool& planeZeroed) {
-        for (size_t y = 0; y < SoftPackedFrameSnapshot::kLineCount; y++)
-        {
-            const size_t srcRowBase = y * static_cast<size_t>(kScreenWidth);
-            const size_t dstRowBase = y * static_cast<size_t>(kAcceleratedStride) + planeOffset;
-            if (sourceEmpty)
-            {
-                if (!planeZeroed)
-                {
-                    std::memset(
-                        packed + dstRowBase,
-                        0,
-                        static_cast<size_t>(kScreenWidth) * sizeof(u32));
-                }
-            }
-            else
-            {
-                std::memcpy(
-                    packed + dstRowBase,
-                    source + srcRowBase,
-                    static_cast<size_t>(kScreenWidth) * sizeof(u32));
-            }
-        }
-        planeZeroed = sourceEmpty;
-    };
-
-    if (!resource.fastHighresOnlyTop)
-    {
-        updatePackedPlane(
-            topPacked,
-            softPackedSnapshot.packedTopPlane0.data(),
-            0,
-            topPlane0Empty,
-            resource.topPackedPlane0Zeroed);
-        updatePackedPlane(
-            topPacked,
-            softPackedSnapshot.packedTopPlane1.data(),
-            static_cast<size_t>(kScreenWidth),
-            topPlane1Empty,
-            resource.topPackedPlane1Zeroed);
-        updatePackedPlane(
-            topPacked,
-            softPackedSnapshot.packedTopControl.data(),
-            static_cast<size_t>(kScreenWidth * 2),
-            topControlEmpty,
-            resource.topPackedControlZeroed);
-    }
-    if (!resource.fastHighresOnlyBottom)
-    {
-        updatePackedPlane(
-            bottomPacked,
-            softPackedSnapshot.packedBottomPlane0.data(),
-            0,
-            bottomPlane0Empty,
-            resource.bottomPackedPlane0Zeroed);
-        updatePackedPlane(
-            bottomPacked,
-            softPackedSnapshot.packedBottomPlane1.data(),
-            static_cast<size_t>(kScreenWidth),
-            bottomPlane1Empty,
-            resource.bottomPackedPlane1Zeroed);
-        updatePackedPlane(
-            bottomPacked,
-            softPackedSnapshot.packedBottomControl.data(),
-            static_cast<size_t>(kScreenWidth * 2),
-            bottomControlEmpty,
-            resource.bottomPackedControlZeroed);
-    }
-
-    for (size_t y = 0; y < SoftPackedFrameSnapshot::kLineCount; y++)
-    {
-        const size_t dstRowBase = y * static_cast<size_t>(kAcceleratedStride);
-        const u32 rawTopLineMeta = softPackedSnapshot.packedTopLineMeta[y];
-        const u32 rawBottomLineMeta = softPackedSnapshot.packedBottomLineMeta[y];
-        topPacked[dstRowBase + static_cast<size_t>(kScreenWidth * 3)] =
-            (rawTopLineMeta & ~kMetaFlagExactRegularCaptureUses3dTransport)
-            | ((rawTopLineMeta & kMetaFlagStructuredAboveDominant) != 0u
-                ? kMetaFlagExactRegularCaptureUses3dTransport
-                : 0u)
-            | (topStructuredAboveDominant ? kMetaFlagStructuredAboveDominant : 0u);
-        bottomPacked[dstRowBase + static_cast<size_t>(kScreenWidth * 3)] =
-            (rawBottomLineMeta & ~kMetaFlagExactRegularCaptureUses3dTransport)
-            | ((rawBottomLineMeta & kMetaFlagStructuredAboveDominant) != 0u
-                ? kMetaFlagExactRegularCaptureUses3dTransport
-                : 0u)
-            | (bottomStructuredAboveDominant ? kMetaFlagStructuredAboveDominant : 0u);
-    }
-
-    const bool topStructuredHandoffNoCurrent3d =
-        !softPackedSnapshot.hasCapture3dSource
-        && screenUsesStructuredHandoffWithoutCurrent3dFastPath(
-            softPackedSnapshot.topScreenStats,
-            softPackedSnapshot.bottomScreenStats);
-    const bool bottomStructuredHandoffNoCurrent3d =
-        !softPackedSnapshot.hasCapture3dSource
-        && screenUsesStructuredHandoffWithoutCurrent3dFastPath(
-            softPackedSnapshot.bottomScreenStats,
-            softPackedSnapshot.topScreenStats);
-    const bool topPackedCarryState =
-        (screenUsesPlainStructuredComp7HandoffSlotFastPath(softPackedSnapshot.topScreenStats)
-            || screenUsesPlainStructured3dSlot(softPackedSnapshot.topScreenStats))
-        && bottomStructuredHandoffNoCurrent3d;
-    const bool bottomPackedCarryState =
-        (screenUsesPlainStructuredComp7HandoffSlotFastPath(softPackedSnapshot.bottomScreenStats)
-            || screenUsesPlainStructured3dSlot(softPackedSnapshot.bottomScreenStats))
-        && topStructuredHandoffNoCurrent3d;
-    const melonDS::u32* previousTopPacked = previousPackedForScreen(true);
-    const melonDS::u32* previousBottomPacked = previousPackedForScreen(false);
-    const auto screenUsesProtectedEmptyComp7Handoff = [](const SoftPackedScreenStats& stats) {
-        constexpr u32 screenPixels = kScreenWidth * kScreenHeight;
-        constexpr u32 sparsePixels = screenPixels / 8u;
-        constexpr u32 nearlyFullPixels = (screenPixels * 7u) / 8u;
-        return stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-            && stats.CompModeCounts[7] == screenPixels
-            && stats.CaptureBackedComp4Pixels == 0u
-            && stats.CaptureBackedComp4Lines == 0u
-            && stats.RegularCaptureUses3dLines == 0u
-            && stats.VramCaptureUses3dLines == 0u
-            && stats.ForceLive3dCompMode7Lines == 0u
-            && stats.StructuredSlotPixels > nearlyFullPixels
-            && stats.Structured2DOnlyPixels > 0u
-            && stats.Structured2DOnlyPixels <= sparsePixels
-            && stats.StructuredSlotPixels == screenPixels - stats.Structured2DOnlyPixels
-            && stats.StructuredAbovePixels == 0u
-            && stats.StructuredAboveVisiblePixels == 0u
-            && stats.StructuredAboveBlackPixels == 0u
-            && stats.Structured2DOnlyVisiblePixels == 0u
-            && stats.Plane0VisiblePixels == 0u
-            && stats.Plane1VisiblePixels == 0u
-            && stats.ProtectedBlackPixels == stats.Structured2DOnlyPixels
-            && stats.ProtectedBlackTargetsTopPixels > 0u
-            && stats.ProtectedBlackTargetsBottomPixels > 0u
-            && stats.ProtectedBlackTargetsTopPixels
-                + stats.ProtectedBlackTargetsBottomPixels == stats.ProtectedBlackPixels;
-    };
-    const auto screenUsesResolvedFullComp4Slot = [](const SoftPackedScreenStats& stats) {
-        constexpr u32 screenPixels = kScreenWidth * kScreenHeight;
-        constexpr u32 nearlyFullPixels = (screenPixels * 7u) / 8u;
-        return stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-            && stats.CompModeCounts[4] == screenPixels
-            && stats.CaptureBackedComp4Pixels == 0u
-            && stats.CaptureBackedComp4Lines == 0u
-            && stats.RegularCaptureUses3dLines == 0u
-            && stats.VramCaptureUses3dLines == 0u
-            && stats.ForceLive3dCompMode7Lines == 0u
-            && stats.StructuredSlotPixels == screenPixels
-            && stats.StructuredAbovePixels == 0u
-            && stats.StructuredAboveVisiblePixels == 0u
-            && stats.StructuredAboveBlackPixels == 0u
-            && stats.Structured2DOnlyPixels == 0u
-            && stats.Structured2DOnlyVisiblePixels == 0u
-            && stats.Plane0VisiblePixels > nearlyFullPixels
-            && stats.Plane1VisiblePixels == 0u
-            && stats.ProtectedBlackPixels == 0u;
-    };
-    const auto screenUsesResolvedBottomOwnedMixedComp4Comp7Slot = [](const SoftPackedScreenStats& stats) {
-        constexpr u32 screenPixels = kScreenWidth * kScreenHeight;
-        constexpr u32 sparsePixels = screenPixels / 8u;
-        constexpr u32 nearlyFullPixels = (screenPixels * 7u) / 8u;
-        return stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-            && stats.CompModeCounts[4] > nearlyFullPixels
-            && stats.CompModeCounts[7] > 0u
-            && stats.CompModeCounts[7] <= sparsePixels
-            && stats.CompModeCounts[4] + stats.CompModeCounts[7] == screenPixels
-            && stats.CaptureBackedComp4Pixels == 0u
-            && stats.CaptureBackedComp4Lines == 0u
-            && stats.RegularCaptureUses3dLines == 0u
-            && stats.VramCaptureUses3dLines == 0u
-            && stats.ForceLive3dCompMode7Lines == 0u
-            && stats.StructuredSlotPixels == screenPixels
-            && stats.StructuredAbovePixels == stats.CompModeCounts[7]
-            && stats.StructuredAboveVisiblePixels + stats.StructuredAboveBlackPixels
-                == stats.StructuredAbovePixels
-            && stats.Structured2DOnlyPixels == 0u
-            && stats.Structured2DOnlyVisiblePixels == 0u
-            && stats.Plane0UsefulPixels == stats.CompModeCounts[4]
-            && stats.Plane0VisiblePixels > nearlyFullPixels
-            && stats.Plane0OpaqueBlackPixels > 0u
-            && stats.Plane0VisiblePixels + stats.Plane0OpaqueBlackPixels
-                == stats.CompModeCounts[4]
-            && stats.Plane1VisiblePixels == stats.StructuredAboveVisiblePixels
-            && stats.ProtectedBlackPixels > 0u
-            && stats.ProtectedBlackPixels == stats.StructuredAboveBlackPixels
-            && stats.ProtectedBlackTargetsTopPixels == 0u
-            && stats.ProtectedBlackTargetsBottomPixels == stats.ProtectedBlackPixels;
-    };
-    const auto packedLineMetaMatches = [](const melonDS::u32* packed, const auto& lineMeta) {
-        for (size_t y = 0; y < SoftPackedFrameSnapshot::kLineCount; y++)
-        {
-            const size_t rowBase = y * static_cast<size_t>(kAcceleratedStride);
-            if ((packed[rowBase + static_cast<size_t>(kScreenWidth * 3)]
-                    & ~kMetaFlagExactTopDisplayedCaptureSource)
-                != (lineMeta[y] & ~kMetaFlagExactTopDisplayedCaptureSource))
-                return false;
-        }
-        return true;
-    };
-    const bool topResolvedPackedCarryAcrossSwap =
-        previousResource != nullptr
-        && previousTopPacked != nullptr
-        && previousResource->hasSoftPackedDebugData
-        && !previousResource->screenSwap
-        && softPackedSnapshot.screenSwapLatched
-        && !softPackedSnapshot.captureBackedClass4Only
-        && topNeutralLineMeta
-        && packedLineMetaMatches(previousTopPacked, softPackedSnapshot.packedTopLineMeta)
-        && screenUsesProtectedEmptyComp7Handoff(softPackedSnapshot.topScreenStats)
-        && (screenUsesResolvedFullComp4Slot(softPackedSnapshot.bottomScreenStats)
-            || screenUsesResolvedBottomOwnedMixedComp4Comp7Slot(
-                softPackedSnapshot.bottomScreenStats))
-        && screenProvidesResolvedMixedComp4Comp7(previousResource->topScreenStats)
-        && screenProvidesResolvedMixedRegularComp4Comp7(previousResource->bottomScreenStats);
-    const bool topPackedCarryFromPrevious =
-        topResolvedPackedCarryAcrossSwap
-        || ((previousTopPacked != nullptr || lastValidTopPackedAvailable)
-            && topPackedCarryState);
-    const bool bottomPackedCarryFromPrevious =
-        (previousBottomPacked != nullptr || lastValidBottomPackedAvailable)
-        && bottomPackedCarryState;
-    if (topPackedCarryFromPrevious)
-    {
-        std::memcpy(
-            topPacked,
-            previousTopPacked != nullptr ? previousTopPacked : lastValidTopPacked.data(),
-            static_cast<size_t>(resource.packedBufferSize));
-        resource.topPackedPlane0Zeroed = false;
-        resource.topPackedPlane1Zeroed = false;
-        resource.topPackedControlZeroed = false;
-    }
-    if (bottomPackedCarryFromPrevious)
-    {
-        std::memcpy(
-            bottomPacked,
-            previousBottomPacked != nullptr ? previousBottomPacked : lastValidBottomPacked.data(),
-            static_cast<size_t>(resource.packedBufferSize));
-        resource.bottomPackedPlane0Zeroed = false;
-        resource.bottomPackedPlane1Zeroed = false;
-        resource.bottomPackedControlZeroed = false;
-    }
-    resource.topResolvedPackedCarryAcrossSwap = topResolvedPackedCarryAcrossSwap;
-    resource.topPackedCarryFromPrevious = topPackedCarryFromPrevious;
-    resource.bottomPackedCarryFromPrevious = bottomPackedCarryFromPrevious;
-
-    const auto screenHasReusablePacked2d = [](const SoftPackedScreenStats& stats) {
-        return stats.RegularCaptureUses3dLines == 0u
-            && stats.VramCaptureUses3dLines == 0u
-            && stats.ForceLive3dCompMode7Lines == 0u
-            && (stats.Plane0VisiblePixels > static_cast<u32>(kScreenWidth)
-                || stats.Plane1VisiblePixels > static_cast<u32>(kScreenWidth)
-                || stats.StructuredAboveVisiblePixels > static_cast<u32>(kScreenWidth)
-                || stats.Structured2DOnlyVisiblePixels > static_cast<u32>(kScreenWidth));
-    };
-    if (topPackedCarryFromPrevious || screenHasReusablePacked2d(softPackedSnapshot.topScreenStats))
-    {
-        if (previousResource == nullptr || topPackedCarryFromPrevious)
-        {
-            std::memcpy(
-                lastValidTopPacked.data(),
-                topPacked,
-                static_cast<size_t>(resource.packedBufferSize));
-            lastValidTopPackedAvailable = true;
-        }
-        else
-        {
-            lastValidTopPackedAvailable = false;
-        }
-    }
-    else
-    {
-        lastValidTopPackedAvailable = false;
-    }
-    if (bottomPackedCarryFromPrevious || screenHasReusablePacked2d(softPackedSnapshot.bottomScreenStats))
-    {
-        if (previousResource == nullptr || bottomPackedCarryFromPrevious)
-        {
-            std::memcpy(
-                lastValidBottomPacked.data(),
-                bottomPacked,
-                static_cast<size_t>(resource.packedBufferSize));
-            lastValidBottomPackedAvailable = true;
-        }
-        else
-        {
-            lastValidBottomPackedAvailable = false;
-        }
-    }
-    else
-    {
-        lastValidBottomPackedAvailable = false;
-    }
-    lastPackedScreenSwap = softPackedSnapshot.screenSwapLatched;
-    lastPackedScreenSwapValid = true;
-    if ((topPackedCarryFromPrevious || bottomPackedCarryFromPrevious)
-        && areRendererDebugBgObjLogsEnabled()
-        && structuredComp7HandoffDebugLogsRemaining > 0)
-    {
-        melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Warn,
-            "VulkanLive3D[PackedCarry]: frameId=%u screenSwap=%u topCarry=%u bottomCarry=%u topNoCurrent=%u bottomNoCurrent=%u topStruct=%u topAbove=%u bottomStruct=%u bottomAbove=%u remaining=%u",
-            frame != nullptr ? static_cast<unsigned>(frame->frameId) : 0u,
-            softPackedSnapshot.screenSwapLatched ? 1u : 0u,
-            topPackedCarryFromPrevious ? 1u : 0u,
-            bottomPackedCarryFromPrevious ? 1u : 0u,
-            topStructuredHandoffNoCurrent3d ? 1u : 0u,
-            bottomStructuredHandoffNoCurrent3d ? 1u : 0u,
-            softPackedSnapshot.topScreenStats.StructuredSlotPixels,
-            softPackedSnapshot.topScreenStats.StructuredAboveVisiblePixels,
-            softPackedSnapshot.bottomScreenStats.StructuredSlotPixels,
-            softPackedSnapshot.bottomScreenStats.StructuredAboveVisiblePixels,
-            structuredComp7HandoffDebugLogsRemaining);
-        structuredComp7HandoffDebugLogsRemaining--;
-    }
-
-    resource.softPackedFrameId = softPackedSnapshot.frameId;
-    resource.frontBufferLatched = softPackedSnapshot.frontBufferLatched;
-    resource.captureCntLatched = softPackedSnapshot.captureCntLatched;
-    resource.dispCntALatched = softPackedSnapshot.dispCntALatched;
-    resource.dispCntBLatched = softPackedSnapshot.dispCntBLatched;
-    resource.captureLinesLatched = softPackedSnapshot.captureLinesLatched;
-    resource.captureAgeLatched = softPackedSnapshot.captureAgeLatched;
-    resource.captureBackedClass4Only = softPackedSnapshot.captureBackedClass4Only;
-    resource.bottomFullClass0SourceAOnlyMode2DirectOverlay =
-        softPackedSnapshot.bottomFullClass0SourceAOnlyMode2DirectOverlay;
-    resource.sourceAFullHighresOnlyTop = topSourceAFullHighresActive;
-    resource.sourceAFullHighresOnlyBottom = bottomSourceAFullHighresActive;
-    resource.hasSoftPackedDebugData = true;
-    resource.topScreenStats = softPackedSnapshot.topScreenStats;
-    resource.bottomScreenStats = softPackedSnapshot.bottomScreenStats;
-    {
-        constexpr u32 fullScreenPixelCount =
-            static_cast<u32>(SoftPackedFrameSnapshot::kPixelCount);
-        const auto& topStats = softPackedSnapshot.topScreenStats;
-        const auto& bottomStats = softPackedSnapshot.bottomScreenStats;
-        const u32 topComp0 = topStats.CompModeCounts[0];
-        const u32 topComp7 = topStats.CompModeCounts[7];
-        const bool topComp7Resolved2d = topComp7 == 0u
-            ? (topStats.Structured2DOnlyVisiblePixels == 0u
-                && topStats.ProtectedBlackPixels == 0u)
-            : (topStats.ProtectedBlackPixels > 0u
-                && topStats.Plane0VisiblePixels == topStats.Structured2DOnlyVisiblePixels
-                && topStats.Structured2DOnlyVisiblePixels + topStats.ProtectedBlackPixels
-                    == topStats.Structured2DOnlyPixels);
-        const bool topMateMatches =
-            topStats.DisplayModeCounts[0] == 0u
-            && topStats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-            && topStats.DisplayModeCounts[2] == 0u
-            && topStats.DisplayModeCounts[3] == 0u
-            && topComp0 + topComp7 == fullScreenPixelCount
-            && std::all_of(
-                topStats.CompModeCounts.begin() + 1,
-                topStats.CompModeCounts.begin() + 7,
-                [](u32 count) { return count == 0u; })
-            && topStats.StructuredSlotPixels == topComp0
-            && topStats.Structured2DOnlyPixels == topComp7
-            && topStats.StructuredAbovePixels == 0u
-            && topStats.StructuredAboveVisiblePixels == 0u
-            && topStats.StructuredAboveBlackPixels == 0u
-            && topStats.CaptureBackedComp4Pixels == 0u
-            && topStats.CaptureBackedComp4Lines == 0u
-            && topStats.VramCaptureUses3dLines == 0u
-            && topStats.ForceLive3dCompMode7Lines == 0u
-            && topStats.Plane0VisiblePixels > 0u
-            && packedPlane1IsEmpty(topStats)
-            && topStats.ProtectedBlackTargetsBottomPixels == 0u
-            && topStats.ProtectedBlackTargetsTopPixels == topStats.ProtectedBlackPixels
-            && topComp7Resolved2d;
-        const u32 expectedBottomRegularLines =
-            softPackedSnapshot.screenSwapLatched ? 0u : static_cast<u32>(kScreenHeight);
-        const bool bottomMatches =
-            bottomStats.DisplayModeCounts[0] == 0u
-            && bottomStats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-            && bottomStats.DisplayModeCounts[2] == 0u
-            && bottomStats.DisplayModeCounts[3] == 0u
-            && bottomStats.CompModeCounts[0] == fullScreenPixelCount
-            && std::all_of(
-                bottomStats.CompModeCounts.begin() + 1,
-                bottomStats.CompModeCounts.end(),
-                [](u32 count) { return count == 0u; })
-            && bottomStats.StructuredSlotPixels == fullScreenPixelCount
-            && bottomStats.Structured2DOnlyPixels == 0u
-            && bottomStats.Structured2DOnlyVisiblePixels == 0u
-            && bottomStats.StructuredAbovePixels == 0u
-            && bottomStats.StructuredAboveVisiblePixels == 0u
-            && bottomStats.StructuredAboveBlackPixels == 0u
-            && bottomStats.CaptureBackedComp4Pixels == 0u
-            && bottomStats.CaptureBackedComp4Lines == 0u
-            && bottomStats.RegularCaptureUses3dLines == expectedBottomRegularLines
-            && bottomStats.VramCaptureUses3dLines == 0u
-            && bottomStats.ForceLive3dCompMode7Lines == 0u
-            && bottomStats.Plane0UsefulPixels == fullScreenPixelCount
-            && bottomStats.Plane0VisiblePixels == 0u
-            && bottomStats.Plane0OpaqueBlackPixels == fullScreenPixelCount
-            && packedPlane1IsEmpty(bottomStats)
-            && bottomStats.ProtectedBlackPixels == 0u
-            && bottomStats.ProtectedBlackTargetsTopPixels == 0u
-            && bottomStats.ProtectedBlackTargetsBottomPixels == 0u;
-        const u32 expectedBottomLineMeta =
-            softPackedSnapshot.screenSwapLatched ? 0x00010000u : 0x00290000u;
-        const bool bottomLineMetaMatches = std::all_of(
-            softPackedSnapshot.packedBottomLineMeta.begin(),
-            softPackedSnapshot.packedBottomLineMeta.end(),
-            [&](u32 meta) { return meta == expectedBottomLineMeta; });
-        const bool bottomExactRegularCaptureStructuralMatch =
-            topMateMatches
-            && bottomMatches
-            && bottomLineMetaMatches
-            && (topStats.RegularCaptureUses3dLines > 0u
-                || bottomStats.RegularCaptureUses3dLines > 0u);
-        resource.bottomExactRegularCapturePreservesCurrentBlackMetadata =
-            bottomExactRegularCaptureStructuralMatch
-            && !resource.topPackedCarryFromPrevious
-            && !resource.bottomPackedCarryFromPrevious;
-    }
-    resource.topScreenStats.RegularCaptureUses3dLines = std::max(
-        resource.topScreenStats.RegularCaptureUses3dLines,
-        countLineMetaFlag(softPackedSnapshot.packedTopLineMeta, kMetaFlagRegularCaptureUses3d));
-    resource.topScreenStats.VramCaptureUses3dLines = std::max(
-        resource.topScreenStats.VramCaptureUses3dLines,
-        countLineMetaFlag(softPackedSnapshot.packedTopLineMeta, kMetaFlagVramCaptureUses3d));
-    resource.topScreenStats.ForceLive3dCompMode7Lines = std::max(
-        resource.topScreenStats.ForceLive3dCompMode7Lines,
-        countLineMetaFlag(softPackedSnapshot.packedTopLineMeta, kMetaFlagForceLive3dCompMode7));
-    resource.bottomScreenStats.RegularCaptureUses3dLines = std::max(
-        resource.bottomScreenStats.RegularCaptureUses3dLines,
-        countLineMetaFlag(softPackedSnapshot.packedBottomLineMeta, kMetaFlagRegularCaptureUses3d));
-    resource.bottomScreenStats.VramCaptureUses3dLines = std::max(
-        resource.bottomScreenStats.VramCaptureUses3dLines,
-        countLineMetaFlag(softPackedSnapshot.packedBottomLineMeta, kMetaFlagVramCaptureUses3d));
-    resource.bottomScreenStats.ForceLive3dCompMode7Lines = std::max(
-        resource.bottomScreenStats.ForceLive3dCompMode7Lines,
-        countLineMetaFlag(softPackedSnapshot.packedBottomLineMeta, kMetaFlagForceLive3dCompMode7));
-    {
-        const u32 directTopForceLiveLines = countLineMetaFlag(
-            softPackedSnapshot.packedTopLineMeta,
-            kMetaFlagForceLive3dCompMode7);
-        resource.topPartialForceLiveSuppressesLateFinalBlackHistoryMetadata =
-            softPackedSnapshot.screenSwapLatched
-            && softPackedSnapshot.captureCntLatched == 0x80320000u
-            && softPackedSnapshot.dispCntALatched == 0x001A115Bu
-            && softPackedSnapshot.dispCntBLatched == 0x00111035u
-            && softPackedSnapshot.captureLinesLatched == kScreenHeight
-            && softPackedSnapshot.captureAgeLatched == 0u
-            && resource.topScreenStats.DisplayModeCounts[1]
-                == static_cast<u32>(kScreenHeight)
-            && resource.topScreenStats.RegularCaptureUses3dLines
-                == static_cast<u32>(kScreenHeight)
-            && resource.topScreenStats.VramCaptureUses3dLines == 0u
-            && resource.bottomScreenStats.RegularCaptureUses3dLines == 0u
-            && directTopForceLiveLines > 0u
-            && directTopForceLiveLines < static_cast<u32>(kScreenHeight);
-    }
-    {
-        constexpr u32 fullScreenPixelCount =
-            static_cast<u32>(SoftPackedFrameSnapshot::kPixelCount);
-        const auto& topStats = resource.topScreenStats;
-        const auto& bottomStats = resource.bottomScreenStats;
-        const u32 topComp0 = topStats.CompModeCounts[0];
-        const u32 topComp7 = topStats.CompModeCounts[7];
-        const bool topMatches =
-            topStats.DisplayModeCounts[0] == 0u
-            && topStats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-            && topStats.DisplayModeCounts[2] == 0u
-            && topStats.DisplayModeCounts[3] == 0u
-            && topComp0 > 0u
-            && topComp7 > 0u
-            && topComp0 + topComp7 == fullScreenPixelCount
-            && std::all_of(
-                topStats.CompModeCounts.begin() + 1,
-                topStats.CompModeCounts.begin() + 7,
-                [](u32 count) { return count == 0u; })
-            && topStats.StructuredSlotPixels == topComp0
-            && topStats.Structured2DOnlyPixels == topComp7
-            && topStats.Structured2DOnlyVisiblePixels > 0u
-            && topStats.Plane0VisiblePixels == topStats.Structured2DOnlyVisiblePixels
-            && topStats.Structured2DOnlyVisiblePixels + topStats.ProtectedBlackPixels
-                == topStats.Structured2DOnlyPixels
-            && topStats.ProtectedBlackPixels > 0u
-            && topStats.ProtectedBlackTargetsTopPixels == topStats.ProtectedBlackPixels
-            && topStats.ProtectedBlackTargetsBottomPixels == 0u
-            && topStats.StructuredAbovePixels == 0u
-            && topStats.StructuredAboveVisiblePixels == 0u
-            && topStats.StructuredAboveBlackPixels == 0u
-            && topStats.CaptureBackedComp4Pixels == 0u
-            && topStats.CaptureBackedComp4Lines == 0u
-            && topStats.RegularCaptureUses3dLines > 0u
-            && topStats.RegularCaptureUses3dLines < static_cast<u32>(kScreenHeight)
-            && topStats.VramCaptureUses3dLines == 0u
-            && topStats.ForceLive3dCompMode7Lines == 0u
-            && packedPlane1IsEmpty(topStats);
-        const u32 expectedBottomRegularLines =
-            softPackedSnapshot.screenSwapLatched ? 0u : static_cast<u32>(kScreenHeight);
-        const bool bottomMatches =
-            bottomStats.DisplayModeCounts[0] == 0u
-            && bottomStats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-            && bottomStats.DisplayModeCounts[2] == 0u
-            && bottomStats.DisplayModeCounts[3] == 0u
-            && bottomStats.CompModeCounts[0] == fullScreenPixelCount
-            && std::all_of(
-                bottomStats.CompModeCounts.begin() + 1,
-                bottomStats.CompModeCounts.end(),
-                [](u32 count) { return count == 0u; })
-            && bottomStats.StructuredSlotPixels == fullScreenPixelCount
-            && bottomStats.Structured2DOnlyPixels == 0u
-            && bottomStats.Structured2DOnlyVisiblePixels == 0u
-            && bottomStats.StructuredAbovePixels == 0u
-            && bottomStats.StructuredAboveVisiblePixels == 0u
-            && bottomStats.StructuredAboveBlackPixels == 0u
-            && bottomStats.CaptureBackedComp4Pixels == 0u
-            && bottomStats.CaptureBackedComp4Lines == 0u
-            && bottomStats.RegularCaptureUses3dLines == expectedBottomRegularLines
-            && bottomStats.VramCaptureUses3dLines == 0u
-            && bottomStats.ForceLive3dCompMode7Lines == 0u
-            && packedPlane1IsEmpty(bottomStats)
-            && bottomStats.ProtectedBlackPixels == 0u
-            && bottomStats.ProtectedBlackTargetsTopPixels == 0u
-            && bottomStats.ProtectedBlackTargetsBottomPixels == 0u;
-        const u32 expectedBottomLineMeta =
-            softPackedSnapshot.screenSwapLatched ? 0x00010000u : 0x00290000u;
-        const bool bottomLineMetaMatches = std::all_of(
-            softPackedSnapshot.packedBottomLineMeta.begin(),
-            softPackedSnapshot.packedBottomLineMeta.end(),
-            [&](u32 meta) { return meta == expectedBottomLineMeta; });
-        resource.topPartialRegularCaptureProtectedBlackAuthoritative =
-            !softPackedSnapshot.captureBackedClass4Only
-            && !resource.sourceAFullHighresOnlyTop
-            && !resource.sourceAFullHighresOnlyBottom
-            && topMatches
-            && bottomMatches
-            && bottomLineMetaMatches;
-    }
-    resource.capture3dSourceDsFrame = softPackedSnapshot.capture3dSourceDsFrame;
-    resource.captureLineUses3dMask = softPackedSnapshot.captureLineUses3dMask;
-    resource.captureFallbackLines.fill(0);
-    resource.comp4TopPlaceholder = softPackedSnapshot.comp4TopPlaceholder;
-    resource.comp4BottomPlaceholder = softPackedSnapshot.comp4BottomPlaceholder;
-
-    for (size_t y = 0; y < SoftPackedFrameSnapshot::kLineCount; y++)
-    {
-        const size_t metaIndex =
-            y * static_cast<size_t>(kAcceleratedStride)
-            + static_cast<size_t>(kScreenWidth * 3);
-        topPacked[metaIndex] &= ~kMetaFlagExactTopDisplayedCaptureSource;
-        bottomPacked[metaIndex] &= ~kMetaFlagExactTopDisplayedCaptureSource;
-        if (softPackedSnapshot.topDisplayedCaptureSource.valid
-            && softPackedSnapshot.topDisplayedCaptureSource.exactLineMask[y] != 0u)
-        {
-            topPacked[metaIndex] |= kMetaFlagExactTopDisplayedCaptureSource;
-        }
-    }
-
-    if (areRendererDebugBgObjLogsEnabled() && packedDebugLogsRemaining > 0)
-    {
-        const size_t topPlane1Index = static_cast<size_t>(kScreenWidth);
-        const size_t topControlIndex = static_cast<size_t>(kScreenWidth * 2);
-        const size_t topCenterIndex = static_cast<size_t>(96) * static_cast<size_t>(kAcceleratedStride) + 128u;
-        const size_t topCenterPlane1Index = topCenterIndex + static_cast<size_t>(kScreenWidth);
-        const size_t topCenterControlIndex = topCenterIndex + static_cast<size_t>(kScreenWidth * 2);
-        const size_t bottomPlane1Index = static_cast<size_t>(kScreenWidth);
-        const size_t bottomControlIndex = static_cast<size_t>(kScreenWidth * 2);
-        const size_t bottomCenterIndex = static_cast<size_t>(96) * static_cast<size_t>(kAcceleratedStride) + 128u;
-        const size_t bottomCenterPlane1Index = bottomCenterIndex + static_cast<size_t>(kScreenWidth);
-        const size_t bottomCenterControlIndex = bottomCenterIndex + static_cast<size_t>(kScreenWidth * 2);
-        const size_t metaIndex = static_cast<size_t>(kScreenWidth * 3);
-        melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Warn,
-            "VulkanPacked[Frame]: frameId=%u front=%d screenSwap=%u top0=%08X top1=%08X topCtl=%08X topCenter0=%08X topCenter1=%08X topCenterCtl=%08X topMeta=%08X bottom0=%08X bottom1=%08X bottomCtl=%08X bottomCenter0=%08X bottomCenter1=%08X bottomCenterCtl=%08X bottomMeta=%08X remaining=%u",
-            frame != nullptr ? static_cast<unsigned>(frame->frameId) : 0u,
-            softPackedSnapshot.frontBufferLatched,
-            softPackedSnapshot.screenSwapLatched ? 1u : 0u,
-            topPacked[0],
-            topPacked[topPlane1Index],
-            topPacked[topControlIndex],
-            topPacked[topCenterIndex],
-            topPacked[topCenterPlane1Index],
-            topPacked[topCenterControlIndex],
-            topPacked[metaIndex],
-            bottomPacked[0],
-            bottomPacked[bottomPlane1Index],
-            bottomPacked[bottomControlIndex],
-            bottomPacked[bottomCenterIndex],
-            bottomPacked[bottomCenterPlane1Index],
-            bottomPacked[bottomCenterControlIndex],
-            bottomPacked[metaIndex],
-            packedDebugLogsRemaining
-        );
-        packedDebugLogsRemaining--;
-    }
-
-    return true;
-}
-
-void VulkanOutput::recordTemporalStats(
-    const SoftPackedFrameSnapshot& softPackedSnapshot,
-    const FrameResource& resource,
-    bool topNeedsAccumulatedHighres,
-    bool bottomNeedsAccumulatedHighres,
-    bool topAccumulatorAvailable,
-    bool bottomAccumulatorAvailable,
-    bool packedScreenSwap,
-    bool liveSourceScreenSwap,
-    bool hasRenderer3dSnapshot,
-    bool renderer3dSnapshotScreenSwap)
-{
-    constexpr u32 currentCaptureLineThreshold = kScreenHeight / 2u;
-    const bool topStructuredSlot =
-        softPackedSnapshot.topScreenStats.StructuredSlotPixels > static_cast<u32>(kScreenWidth);
-    const bool bottomStructuredSlot =
-        softPackedSnapshot.bottomScreenStats.StructuredSlotPixels > static_cast<u32>(kScreenWidth);
-    const bool topRegularCapture =
-        softPackedSnapshot.topScreenStats.RegularCaptureUses3dLines > currentCaptureLineThreshold;
-    const bool bottomRegularCapture =
-        softPackedSnapshot.bottomScreenStats.RegularCaptureUses3dLines > currentCaptureLineThreshold;
-    const bool topVramCapture =
-        softPackedSnapshot.topScreenStats.VramCaptureUses3dLines > currentCaptureLineThreshold;
-    const bool bottomVramCapture =
-        softPackedSnapshot.bottomScreenStats.VramCaptureUses3dLines > currentCaptureLineThreshold;
-    const bool topForceLiveCompMode7 =
-        softPackedSnapshot.topScreenStats.ForceLive3dCompMode7Lines > currentCaptureLineThreshold;
-    const bool bottomForceLiveCompMode7 =
-        softPackedSnapshot.bottomScreenStats.ForceLive3dCompMode7Lines > currentCaptureLineThreshold;
-    const bool topCaptureBackedComp4 =
-        softPackedSnapshot.topScreenStats.CaptureBackedComp4Lines > currentCaptureLineThreshold;
-    const bool bottomCaptureBackedComp4 =
-        softPackedSnapshot.bottomScreenStats.CaptureBackedComp4Lines > currentCaptureLineThreshold;
-
-    std::lock_guard<std::mutex> lock(temporalStatsLock);
-    temporalStats.FramesPrepared++;
-    if (softPackedSnapshot.hasCapture3dSource)
-        temporalStats.FramesWithCapture3dSource++;
-    if (topNeedsAccumulatedHighres)
-        temporalStats.TopNeedsHighres++;
-    if (bottomNeedsAccumulatedHighres)
-        temporalStats.BottomNeedsHighres++;
-    if (resource.previousTopRendererSourceValid)
-        temporalStats.TopPreviousSourceValid++;
-    if (resource.previousBottomRendererSourceValid)
-        temporalStats.BottomPreviousSourceValid++;
-    if (topNeedsAccumulatedHighres && !resource.previousTopRendererSourceValid)
-        temporalStats.TopMissingHighresSource++;
-    if (bottomNeedsAccumulatedHighres && !resource.previousBottomRendererSourceValid)
-        temporalStats.BottomMissingHighresSource++;
-    if (topStructuredSlot)
-        temporalStats.TopStructuredSlot++;
-    if (bottomStructuredSlot)
-        temporalStats.BottomStructuredSlot++;
-    if (topStructuredSlot && !topAccumulatorAvailable)
-        temporalStats.TopStructuredMissingAccumulator++;
-    if (bottomStructuredSlot && !bottomAccumulatorAvailable)
-        temporalStats.BottomStructuredMissingAccumulator++;
-    if (topAccumulatorAvailable)
-        temporalStats.TopAccumulatorAvailable++;
-    if (bottomAccumulatorAvailable)
-        temporalStats.BottomAccumulatorAvailable++;
-    if (topRegularCapture)
-        temporalStats.TopRegularCapture++;
-    if (bottomRegularCapture)
-        temporalStats.BottomRegularCapture++;
-    if (topVramCapture)
-        temporalStats.TopVramCapture++;
-    if (bottomVramCapture)
-        temporalStats.BottomVramCapture++;
-    if (topForceLiveCompMode7)
-        temporalStats.TopForceLiveCompMode7++;
-    if (bottomForceLiveCompMode7)
-        temporalStats.BottomForceLiveCompMode7++;
-    if (topCaptureBackedComp4)
-        temporalStats.TopCaptureBackedComp4++;
-    if (bottomCaptureBackedComp4)
-        temporalStats.BottomCaptureBackedComp4++;
-    if (packedScreenSwap)
-        temporalStats.PackedTopOwner++;
-    else
-        temporalStats.PackedBottomOwner++;
-    if (liveSourceScreenSwap)
-        temporalStats.LiveTopOwner++;
-    else
-        temporalStats.LiveBottomOwner++;
-    if (packedScreenSwap != liveSourceScreenSwap)
-        temporalStats.LiveOwnerOverride++;
-    if (hasRenderer3dSnapshot)
-    {
-        temporalStats.SnapshotFrames++;
-        if (renderer3dSnapshotScreenSwap)
-            temporalStats.SnapshotTopOwner++;
-        else
-            temporalStats.SnapshotBottomOwner++;
-        if (renderer3dSnapshotScreenSwap != liveSourceScreenSwap)
-            temporalStats.SnapshotOwnerDiffersFromLive++;
-    }
-    temporalStats.TopPlane0UsefulPixels += softPackedSnapshot.topScreenStats.Plane0UsefulPixels;
-    temporalStats.TopPlane0VisiblePixels += softPackedSnapshot.topScreenStats.Plane0VisiblePixels;
-    temporalStats.TopPlane0OpaqueBlackPixels += softPackedSnapshot.topScreenStats.Plane0OpaqueBlackPixels;
-    temporalStats.TopPlane1UsefulPixels += softPackedSnapshot.topScreenStats.Plane1UsefulPixels;
-    temporalStats.TopPlane1VisiblePixels += softPackedSnapshot.topScreenStats.Plane1VisiblePixels;
-    temporalStats.TopPlane1OpaqueBlackPixels += softPackedSnapshot.topScreenStats.Plane1OpaqueBlackPixels;
-    temporalStats.TopStructuredAboveVisiblePixels += softPackedSnapshot.topScreenStats.StructuredAboveVisiblePixels;
-    temporalStats.TopStructuredAboveBlackPixels += softPackedSnapshot.topScreenStats.StructuredAboveBlackPixels;
-    temporalStats.TopStructured2DOnlyVisiblePixels += softPackedSnapshot.topScreenStats.Structured2DOnlyVisiblePixels;
-    temporalStats.TopProtectedBlackPixels += softPackedSnapshot.topScreenStats.ProtectedBlackPixels;
-    temporalStats.BottomPlane0UsefulPixels += softPackedSnapshot.bottomScreenStats.Plane0UsefulPixels;
-    temporalStats.BottomPlane0VisiblePixels += softPackedSnapshot.bottomScreenStats.Plane0VisiblePixels;
-    temporalStats.BottomPlane0OpaqueBlackPixels += softPackedSnapshot.bottomScreenStats.Plane0OpaqueBlackPixels;
-    temporalStats.BottomPlane1UsefulPixels += softPackedSnapshot.bottomScreenStats.Plane1UsefulPixels;
-    temporalStats.BottomPlane1VisiblePixels += softPackedSnapshot.bottomScreenStats.Plane1VisiblePixels;
-    temporalStats.BottomPlane1OpaqueBlackPixels += softPackedSnapshot.bottomScreenStats.Plane1OpaqueBlackPixels;
-    temporalStats.BottomStructuredAboveVisiblePixels += softPackedSnapshot.bottomScreenStats.StructuredAboveVisiblePixels;
-    temporalStats.BottomStructuredAboveBlackPixels += softPackedSnapshot.bottomScreenStats.StructuredAboveBlackPixels;
-    temporalStats.BottomStructured2DOnlyVisiblePixels += softPackedSnapshot.bottomScreenStats.Structured2DOnlyVisiblePixels;
-    temporalStats.BottomProtectedBlackPixels += softPackedSnapshot.bottomScreenStats.ProtectedBlackPixels;
-}
-
-#include "VulkanOutputCompatibilityPrepare.inc"
-
-bool VulkanOutput::prepareFrameForPresentation(
-    Frame* frame,
-    const melonDS::GPU& gpu,
-    int frontBuffer,
-    bool frameScreenSwap,
-    SoftPackedFrameSnapshot& softPackedSnapshot,
-    melonDS::VulkanRenderer3D& renderer3D,
-    melonDS::VulkanPipelineProfile pipelineProfile)
-{
-    if (!melonDS::UsesVulkanFastPath(pipelineProfile))
-    {
-        return prepareFrameForPresentationCompatibility(
-            frame,
-            gpu,
-            frontBuffer,
-            frameScreenSwap,
-            softPackedSnapshot,
-            renderer3D);
-    }
-
-    (void)gpu;
-    (void)frontBuffer;
-    lastPrepareBlockedByMissingHighresHistory = false;
-    lastPrepareBlockedByMissingRegularCapture3dSource = false;
-    const u64 prepareStartNs = PerfNowNs();
-    const auto failPrepare = [&](const char* reason) -> bool {
-        melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Warn,
-            "VulkanOutput[PrepareFail]: reason=%s initialized=%u frame=%u hasColor=%u colorInit=%u size=%ux%u softValid=%u front=%d",
-            reason != nullptr ? reason : "unknown",
-            initialized ? 1u : 0u,
-            frame != nullptr ? static_cast<unsigned>(frame->frameId) : 0u,
-            renderer3D.HasColorTarget() ? 1u : 0u,
-            renderer3D.IsColorTargetInitialized() ? 1u : 0u,
-            renderer3D.GetColorTargetWidth(),
-            renderer3D.GetColorTargetHeight(),
-            softPackedSnapshot.valid ? 1u : 0u,
-            softPackedSnapshot.frontBufferLatched
-        );
-        return false;
-    };
-
-    if (!initialized || frame == nullptr || !renderer3D.HasColorTarget())
-        return failPrepare("missing-state");
-    if (!renderer3D.IsColorTargetInitialized())
-        return failPrepare("uninitialized-color-target");
-    if (!softPackedSnapshot.valid
-        || softPackedSnapshot.frontBufferLatched < 0
-        || softPackedSnapshot.frontBufferLatched > 1)
-    {
-        return failPrepare("invalid-soft-packed");
-    }
-
-    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
-    auto iterator = resources.find(frame);
-    if (iterator == resources.end())
-        return failPrepare("missing-frame-resource");
-
-    FrameResource& resource = iterator->second;
-    resource.pinnedCrossReplayBottomForFrame = false;
-    resource.suppressPreviousTop3dOnZeroLineReentry = false;
-    resource.hasExactObjRenderer3dSnapshot = false;
-    resource.exactObjRenderer3dSnapshotIdentity = {};
-    resource.hasExactTopDisplayedCaptureRenderer3dSnapshot = false;
-    resource.exactTopDisplayedCaptureRenderer3dSnapshotIdentity = {};
-
-    resource.screenSwap = softPackedSnapshot.valid ? softPackedSnapshot.screenSwapLatched : frameScreenSwap;
-    resource.capture3dSourceScreenSwapHintValid = renderer3D.IsCurrentCaptureScreenSwapHintValid();
-    resource.capture3dSourceScreenSwapHint = renderer3D.GetCurrentCaptureScreenSwapHint();
-
-    const bool topStructured2dOnlyCaptureReplay =
-        screenUsesStructured2dOnlyCaptureReplay(
-            softPackedSnapshot.topScreenStats,
-            softPackedSnapshot.bottomScreenStats,
-            softPackedSnapshot.hasCapture3dSource);
-    const bool bottomStructured2dOnlyCaptureReplay =
-        screenUsesStructured2dOnlyCaptureReplay(
-            softPackedSnapshot.bottomScreenStats,
-            softPackedSnapshot.topScreenStats,
-            softPackedSnapshot.hasCapture3dSource);
-    const bool topVramToBottomStructuredComp7Replay =
-        screenUsesVramCaptureToStructuredComp7Replay(
-            softPackedSnapshot.topScreenStats,
-            softPackedSnapshot.bottomScreenStats);
-    const bool bottomVramToTopStructuredComp7Replay =
-        screenUsesVramCaptureToStructuredComp7Replay(
-            softPackedSnapshot.bottomScreenStats,
-            softPackedSnapshot.topScreenStats);
-    if (topStructured2dOnlyCaptureReplay)
-    {
-        softPackedSnapshot.topScreenStats.ForceLive3dCompMode7Lines =
-            markStructured2dOnlyCaptureReplayLines(softPackedSnapshot.packedTopLineMeta);
-    }
-    if (bottomStructured2dOnlyCaptureReplay)
-    {
-        softPackedSnapshot.bottomScreenStats.ForceLive3dCompMode7Lines =
-            markStructured2dOnlyCaptureReplayLines(softPackedSnapshot.packedBottomLineMeta);
-    }
-    if (topVramToBottomStructuredComp7Replay)
-    {
-        softPackedSnapshot.bottomScreenStats.ForceLive3dCompMode7Lines =
-            markStructured2dOnlyCaptureReplayLines(softPackedSnapshot.packedBottomLineMeta);
-    }
-    if (bottomVramToTopStructuredComp7Replay)
-    {
-        softPackedSnapshot.topScreenStats.ForceLive3dCompMode7Lines =
-            markStructured2dOnlyCaptureReplayLines(softPackedSnapshot.packedTopLineMeta);
-    }
-
-    const u64 packedUploadStartNs = PerfNowNs();
-    if (!updateCompositorPackedBuffers(
-            frame,
-            resource,
-            softPackedSnapshot,
-            pipelineProfile))
-        return failPrepare("packed-upload");
-    const u64 packedUploadNs = PerfNowNs() - packedUploadStartNs;
-    packedUploadCpuWindow.Add(packedUploadNs);
-    preparePackedCpuWindow.Add(packedUploadNs);
-    const bool currentBackendIsGraphics =
-        renderer3D.GetActiveBackendMode() == melonDS::VulkanRenderer3D::BackendMode::GraphicsHardware;
-    const FrameResource* previousResource = nullptr;
-    if (lastPreparedFrame != nullptr && lastPreparedFrame != frame)
-    {
-        const auto previousIt = resources.find(lastPreparedFrame);
-        if (previousIt != resources.end())
-            previousResource = &previousIt->second;
-    }
-
-    const bool snapshotNeedsCapture3dSource =
-        softPackedSnapshotNeedsCapture3dSourceFastPath(softPackedSnapshot);
-    const bool lineMetaNeedsCapture3dSource =
-        (countLineMetaFlag(softPackedSnapshot.packedTopLineMeta, kMetaFlagRegularCaptureUses3d) > 0u
-            || countLineMetaFlag(softPackedSnapshot.packedTopLineMeta, kMetaFlagVramCaptureUses3d) > 0u
-            || countLineMetaFlag(softPackedSnapshot.packedTopLineMeta, kMetaFlagForceLive3dCompMode7) > 0u
-            || countLineMetaFlag(softPackedSnapshot.packedBottomLineMeta, kMetaFlagRegularCaptureUses3d) > 0u
-            || countLineMetaFlag(softPackedSnapshot.packedBottomLineMeta, kMetaFlagVramCaptureUses3d) > 0u
-            || countLineMetaFlag(softPackedSnapshot.packedBottomLineMeta, kMetaFlagForceLive3dCompMode7) > 0u);
-    const bool currentFrameNeedsCapture3dSource = softPackedSnapshot.valid
-        ? (snapshotNeedsCapture3dSource || lineMetaNeedsCapture3dSource)
-        : (packedBufferNeedsCapture3dSource(static_cast<const melonDS::u32*>(resource.topPackedMapped))
-            || packedBufferNeedsCapture3dSource(static_cast<const melonDS::u32*>(resource.bottomPackedMapped))
-            || snapshotNeedsCapture3dSource
-            || lineMetaNeedsCapture3dSource);
-    const bool currentFrameCanUsePureHighresSources =
-        currentBackendIsGraphics
-        && !screenHasVisible2dOverlay(softPackedSnapshot.topScreenStats)
-        && !screenHasVisible2dOverlay(softPackedSnapshot.bottomScreenStats)
-        && softPackedSnapshot.topScreenStats.CaptureBackedComp4Lines == 0u
-        && softPackedSnapshot.bottomScreenStats.CaptureBackedComp4Lines == 0u
-        && softPackedSnapshot.topScreenStats.RegularCaptureUses3dLines == 0u
-        && softPackedSnapshot.bottomScreenStats.RegularCaptureUses3dLines == 0u
-        && softPackedSnapshot.topScreenStats.VramCaptureUses3dLines == 0u
-        && softPackedSnapshot.bottomScreenStats.VramCaptureUses3dLines == 0u
-        && softPackedSnapshot.topScreenStats.ForceLive3dCompMode7Lines == 0u
-        && softPackedSnapshot.bottomScreenStats.ForceLive3dCompMode7Lines == 0u;
-    const bool needsPreparedCapture3dSource =
-        currentFrameNeedsCapture3dSource
-        && !currentFrameCanUsePureHighresSources;
-    const u64 capturePrepStartNs = PerfNowNs();
-    if (!updatePreparedCapture3dSourceFastPath(
-            resource,
-            softPackedSnapshot,
-            previousResource,
-            currentBackendIsGraphics,
-            needsPreparedCapture3dSource,
-            renderer3D))
-    {
-        return failPrepare("capture3d-source");
-    }
-    prepareCaptureCpuWindow.Add(PerfNowNs() - capturePrepStartNs);
-
-    const u64 stateStartNs = PerfNowNs();
-    if (previousResource != nullptr)
-    {
-        const bool shouldCarryPreviousCapture3d =
-            previousResource->hasPreparedCapture3dSource
-            && previousResource->capture3dMapped != nullptr
-            && !currentBackendIsGraphics;
-        if (shouldCarryPreviousCapture3d)
-        {
-            const auto* previousCapture3d = static_cast<const u32*>(previousResource->capture3dMapped);
-            auto* currentCapture3d = static_cast<u32*>(resource.capture3dMapped);
-            if (!resource.hasPreparedCapture3dSource)
-            {
-                if (currentCapture3d != nullptr)
-                    std::memcpy(currentCapture3d, previousCapture3d, static_cast<size_t>(kCapture3dBufferSize));
-                resource.preparedCapture3dSource = previousResource->preparedCapture3dSource;
-                resource.hasPreparedCapture3dSource = true;
-                resource.preparedCapture3dRgbaValid = currentCapture3d == nullptr && previousResource->preparedCapture3dRgbaValid;
-                if (currentBackendIsGraphics && areRendererDebugBgObjLogsEnabled() && packedDebugLogsRemaining > 0)
-                {
-                    melonDS::Platform::Log(
-                        melonDS::Platform::LogLevel::Warn,
-                        "VulkanCapture3D[Carry]: reusedPrevious=1 currentNeedsCapture=%u remaining=%u",
-                        currentFrameNeedsCapture3dSource ? 1u : 0u,
-                        packedDebugLogsRemaining
-                    );
-                    packedDebugLogsRemaining--;
-                }
-            }
-        }
-    }
-
-    if (currentBackendIsGraphics
-        && needsPreparedCapture3dSource
-        && !resource.hasPreparedCapture3dSource
-        && areRendererDebugBgObjLogsEnabled()
-        && packedDebugLogsRemaining > 0)
-    {
-        melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Warn,
-            "VulkanCapture3D[Prepared]: graphicsMissingCurrent=1 front=%d remaining=%u",
-            frontBuffer,
-            packedDebugLogsRemaining
-        );
-        packedDebugLogsRemaining--;
-    }
-
-    bool hasStablePreviousPreparedFrame = false;
-    if (lastPreparedFrame != nullptr
-        && lastPreparedFrame != frame)
-    {
-        const auto previousIt = resources.find(lastPreparedFrame);
-        if (previousIt != resources.end())
-        {
-            const FrameResource& previousResource = previousIt->second;
-            hasStablePreviousPreparedFrame = previousResource.hasPreparedInputs
-                && previousResource.hasRenderer3dSnapshot
-                && previousResource.renderer3dSnapshot != VK_NULL_HANDLE
-                && previousResource.renderer3dSnapshotView != VK_NULL_HANDLE;
-        }
-    }
-
-    constexpr u32 currentCaptureLineThreshold = kScreenHeight / 2u;
-    const u32 topRegularCaptureLines = std::max(
-        softPackedSnapshot.topScreenStats.RegularCaptureUses3dLines,
-        countLineMetaFlag(softPackedSnapshot.packedTopLineMeta, kMetaFlagRegularCaptureUses3d));
-    const u32 topVramCaptureLines = std::max(
-        softPackedSnapshot.topScreenStats.VramCaptureUses3dLines,
-        countLineMetaFlag(softPackedSnapshot.packedTopLineMeta, kMetaFlagVramCaptureUses3d));
-    const u32 bottomRegularCaptureLines = std::max(
-        softPackedSnapshot.bottomScreenStats.RegularCaptureUses3dLines,
-        countLineMetaFlag(softPackedSnapshot.packedBottomLineMeta, kMetaFlagRegularCaptureUses3d));
-    const u32 bottomVramCaptureLines = std::max(
-        softPackedSnapshot.bottomScreenStats.VramCaptureUses3dLines,
-        countLineMetaFlag(softPackedSnapshot.packedBottomLineMeta, kMetaFlagVramCaptureUses3d));
-    const bool topUsesRegularCapture3d =
-        topRegularCaptureLines > currentCaptureLineThreshold;
-    const bool topUsesVramCapture3d =
-        topVramCaptureLines > currentCaptureLineThreshold;
-    const bool bottomUsesRegularCapture3d =
-        bottomRegularCaptureLines > currentCaptureLineThreshold;
-    const bool bottomUsesVramCapture3d =
-        bottomVramCaptureLines > currentCaptureLineThreshold;
-    const bool topUsesCurrentCapture3d = topUsesRegularCapture3d || topUsesVramCapture3d;
-    const bool bottomUsesCurrentCapture3d = bottomUsesRegularCapture3d || bottomUsesVramCapture3d;
-    constexpr u32 dominantStructuredSlotThreshold = (kScreenWidth * kScreenHeight) / 2u;
-    const bool topUsesStructured3d =
-        softPackedSnapshot.topScreenStats.StructuredSlotPixels > dominantStructuredSlotThreshold;
-    const bool bottomUsesStructured3d =
-        softPackedSnapshot.bottomScreenStats.StructuredSlotPixels > dominantStructuredSlotThreshold;
-    const bool backendRenderScreenSwap = currentBackendIsGraphics
-        ? renderer3D.GetCurrentRenderScreenSwap()
-        : resource.screenSwap;
-    const bool class4VramStructuredPair =
-        currentBackendIsGraphics
-        && softPackedSnapshot.captureBackedClass4Only
-        && !topUsesRegularCapture3d
-        && !bottomUsesRegularCapture3d
-        && (topUsesVramCapture3d != bottomUsesVramCapture3d)
-        && (topUsesStructured3d != bottomUsesStructured3d);
-    const bool topStructuredAboveInClass4Pair =
-        class4VramStructuredPair
-        && topUsesStructured3d
-        && softPackedSnapshot.topScreenStats.StructuredAbovePixels > 0u;
-    const bool bottomStructuredAboveInClass4Pair =
-        class4VramStructuredPair
-        && bottomUsesStructured3d
-        && softPackedSnapshot.bottomScreenStats.StructuredAbovePixels > 0u;
-    const bool class4NoAboveVramStructuredPairBase =
-        class4VramStructuredPair
-        && !topStructuredAboveInClass4Pair
-        && !bottomStructuredAboveInClass4Pair
-        && ((topUsesStructured3d && bottomUsesVramCapture3d)
-            || (topUsesVramCapture3d && bottomUsesStructured3d));
-    const bool class4PreservePackedTopVram =
-        class4VramStructuredPair
-        && topUsesVramCapture3d
-        && bottomStructuredAboveInClass4Pair;
-    const bool class4PreservePackedBottomVram =
-        class4VramStructuredPair
-        && bottomUsesVramCapture3d
-        && topStructuredAboveInClass4Pair;
-    constexpr u32 fullScreenPixelCount =
-        static_cast<u32>(SoftPackedFrameSnapshot::kPixelCount);
-    const bool class4Full2dOnlyBottomPackedAuthoritative =
-        currentBackendIsGraphics
-        && softPackedSnapshot.captureBackedClass4Only
-        && !softPackedSnapshot.screenSwapLatched
-        && softPackedSnapshot.captureCntLatched == 0x80330010u
-        && (softPackedSnapshot.dispCntALatched & 0x000F0000u) == 0x000E0000u
-        && (softPackedSnapshot.dispCntBLatched & 0x00030000u) == 0x00010000u
-        && softPackedSnapshot.captureLinesLatched == static_cast<u32>(kScreenHeight)
-        && softPackedSnapshot.hasCapture3dSource
-        && renderer3D.IsCurrentCaptureScreenSwapHintValid()
-        && !renderer3D.GetCurrentCaptureScreenSwapHint()
-        && renderer3D.IsLastValidExactCaptureAvailable()
-        && !renderer3D.GetLastValidExactCaptureScreenSwap()
-        && softPackedSnapshot.topScreenStats.DisplayModeCounts[1]
-            == static_cast<u32>(kScreenHeight)
-        && softPackedSnapshot.topScreenStats.CompModeCounts[7]
-            == fullScreenPixelCount
-        && softPackedSnapshot.topScreenStats.Structured2DOnlyPixels
-            == fullScreenPixelCount
-        && softPackedSnapshot.topScreenStats.StructuredSlotPixels == 0u
-        && softPackedSnapshot.topScreenStats.StructuredAbovePixels == 0u
-        && softPackedSnapshot.bottomScreenStats.DisplayModeCounts[2]
-            == static_cast<u32>(kScreenHeight)
-        && bottomVramCaptureLines == static_cast<u32>(kScreenHeight)
-        && softPackedSnapshot.bottomScreenStats.StructuredSlotPixels == 0u
-        && softPackedSnapshot.bottomScreenStats.StructuredAbovePixels == 0u
-        && std::all_of(
-            softPackedSnapshot.packedBottomLineMeta.begin(),
-            softPackedSnapshot.packedBottomLineMeta.end(),
-            [](u32 meta) { return meta == 0x00420000u; });
-    const bool topVramPackedHasVisibleContent =
-        softPackedSnapshot.topScreenStats.Plane0VisiblePixels > 0u
-        || softPackedSnapshot.topScreenStats.Plane1VisiblePixels > 0u
-        || softPackedSnapshot.topScreenStats.StructuredAboveVisiblePixels > 0u
-        || softPackedSnapshot.topScreenStats.Structured2DOnlyVisiblePixels > 0u;
-    const bool bottomVramPackedHasVisibleContent =
-        softPackedSnapshot.bottomScreenStats.Plane0VisiblePixels > 0u
-        || softPackedSnapshot.bottomScreenStats.Plane1VisiblePixels > 0u
-        || softPackedSnapshot.bottomScreenStats.StructuredAboveVisiblePixels > 0u
-        || softPackedSnapshot.bottomScreenStats.Structured2DOnlyVisiblePixels > 0u;
-    constexpr u32 class4SmallStructuredAboveVisibleThreshold = kScreenWidth * 8u;
-    const bool class4SmallBottomAboveNoAboveMarker =
-        class4VramStructuredPair
-        && topUsesVramCapture3d
-        && bottomUsesStructured3d
-        && !topStructuredAboveInClass4Pair
-        && bottomStructuredAboveInClass4Pair
-        && topVramPackedHasVisibleContent
-        && softPackedSnapshot.bottomScreenStats.StructuredAboveVisiblePixels > 0u
-        && softPackedSnapshot.bottomScreenStats.StructuredAboveVisiblePixels <= class4SmallStructuredAboveVisibleThreshold;
-    const bool class4ZeroAboveTopVramStructuredMarker =
-        class4VramStructuredPair
-        && topUsesVramCapture3d
-        && bottomUsesStructured3d
-        && !topStructuredAboveInClass4Pair
-        && !bottomStructuredAboveInClass4Pair
-        && topVramPackedHasVisibleContent;
-    const bool class4LargeBottomAboveMarker =
-        class4VramStructuredPair
-        && topUsesVramCapture3d
-        && bottomUsesStructured3d
-        && softPackedSnapshot.bottomScreenStats.StructuredAboveVisiblePixels > class4SmallStructuredAboveVisibleThreshold;
-    if (class4LargeBottomAboveMarker)
-        class4NoAboveVramStructuredActive = false;
-    if (class4SmallBottomAboveNoAboveMarker || class4ZeroAboveTopVramStructuredMarker)
-        class4NoAboveVramStructuredActive = true;
-    const bool class4NoAboveVramStructuredActiveForFrame = class4NoAboveVramStructuredActive;
-    const bool class4NoAboveVramStructuredPair =
-        class4NoAboveVramStructuredPairBase
-        && class4NoAboveVramStructuredActiveForFrame;
-    const auto computeBottomStructuredAboveHash = [&softPackedSnapshot]() {
-        u64 hash = 1469598103934665603ull;
-        u32 pixels = 0;
-        for (size_t index = 0; index < SoftPackedFrameSnapshot::kPixelCount; index++)
-        {
-            const u32 control = softPackedSnapshot.packedBottomControl[index];
-            const u32 controlAlpha = control >> 24u;
-            const bool structuredAbove =
-                (controlAlpha & 0x40u) != 0u
-                && (controlAlpha & 0x80u) != 0u
-                && softPackedSnapshot.packedBottomPlane1[index] != 0u;
-            if (!structuredAbove)
-                continue;
-
-            hash ^= static_cast<u64>(index);
-            hash *= 1099511628211ull;
-            hash ^= static_cast<u64>(softPackedSnapshot.packedBottomPlane1[index]);
-            hash *= 1099511628211ull;
-            hash ^= static_cast<u64>(control);
-            hash *= 1099511628211ull;
-            pixels++;
-        }
-        return std::pair<u64, u32>{hash, pixels};
-    };
-    bool bottomStructuredAboveChanged = false;
-    bool bottomStructuredAboveHashSampled = false;
-    const bool class4BottomDominantAsymmetricBaseSample =
-        class4VramStructuredPair
-        && topUsesVramCapture3d
-        && bottomUsesStructured3d
-        && !topStructuredAboveInClass4Pair
-        && topVramPackedHasVisibleContent;
-    const bool class4BottomDominantAsymmetricSample =
-        class4BottomDominantAsymmetricBaseSample
-        && bottomStructuredAboveInClass4Pair;
-    if (class4BottomDominantAsymmetricSample)
-    {
-        const auto [bottomAboveHash, bottomAbovePixels] = computeBottomStructuredAboveHash();
-        bottomStructuredAboveHashSampled = bottomAbovePixels > 0u;
-        if (bottomStructuredAboveHashSampled)
-        {
-            bottomStructuredAboveChanged =
-                class4BottomAboveHashValid
-                && bottomAboveHash != class4BottomAboveHash;
-            if (class4BottomAboveHashValid && bottomAboveHash == class4BottomAboveHash)
-            {
-                if (class4BottomAboveStableFrames < 1024u)
-                    class4BottomAboveStableFrames++;
-            }
-            else
-            {
-                class4BottomAboveStableFrames = 0;
-            }
-            class4BottomAboveHash = bottomAboveHash;
-            class4BottomAboveHashValid = true;
-            class4BottomAboveMotionActive =
-                bottomStructuredAboveChanged
-                || (class4BottomAboveMotionActive
-                    && class4BottomAboveStableFrames < kClass4StructuredAboveStableSamplesFor30Fps);
-        }
-        else
-        {
-            class4BottomAboveMotionActive = false;
-        }
-    }
-    else if (class4BottomDominantAsymmetricBaseSample)
-    {
-        class4BottomAboveHashValid = false;
-        class4BottomAboveHash = 0;
-        class4BottomAboveStableFrames = 0;
-        class4BottomAboveMotionActive = false;
-    }
-    const bool bottomStructuredAboveTransitionActive =
-        class4BottomAboveMotionActive;
-    const bool class4BottomDominantAsymmetricMarker =
-        class4BottomDominantAsymmetricSample
-        && bottomStructuredAboveTransitionActive;
-    const bool class4BottomDominantAsymmetricCarry =
-        class4VramStructuredPair
-        && bottomUsesVramCapture3d
-        && topUsesStructured3d
-        && class4BottomAboveMotionActive;
-    const bool class4AsymmetricBottomDominantPair =
-        class4BottomDominantAsymmetricMarker
-        || class4BottomDominantAsymmetricCarry;
-    const bool class4NoAbovePreservePackedTopVram =
-        class4NoAboveVramStructuredPair
-        && topUsesVramCapture3d
-        && topVramPackedHasVisibleContent;
-    const bool class4NoAbovePreservePackedBottomVram =
-        class4NoAboveVramStructuredPair
-        && bottomUsesVramCapture3d
-        && bottomVramPackedHasVisibleContent;
-    const bool class4PreservePackedTopVramFinal =
-        (class4PreservePackedTopVram
-            && (!class4BottomDominantAsymmetricBaseSample
-                || bottomStructuredAboveTransitionActive
-                || !accumulatedTopHighresValid))
-        || class4NoAbovePreservePackedTopVram;
-    const bool class4PreservePackedBottomVramFinal =
-        class4PreservePackedBottomVram
-        || class4NoAbovePreservePackedBottomVram;
-    resource.class4PreservePackedVramValid =
-        class4PreservePackedTopVramFinal || class4PreservePackedBottomVramFinal;
-    resource.class4Full2dOnlyBottomPackedAuthoritative =
-        class4Full2dOnlyBottomPackedAuthoritative;
-    resource.class4PreservePackedVramScreenSwap = class4PreservePackedTopVramFinal;
-    resource.class4NoAboveVramStructuredPair = class4NoAboveVramStructuredPair;
-    const bool topUsesFullRegularComp7 =
-        screenUsesFullRegularComp7(softPackedSnapshot.topScreenStats);
-    const bool bottomUsesFullRegularComp7 =
-        screenUsesFullRegularComp7(softPackedSnapshot.bottomScreenStats);
-    const bool topUsesPlainStructuredComp7Slot =
-        screenUsesPlainStructuredComp7HandoffSlotFastPath(softPackedSnapshot.topScreenStats);
-    const bool bottomUsesPlainStructuredComp7Slot =
-        screenUsesPlainStructuredComp7HandoffSlotFastPath(softPackedSnapshot.bottomScreenStats);
-    const bool topUsesPlainStructured3dSlot =
-        screenUsesPlainStructured3dSlot(softPackedSnapshot.topScreenStats);
-    const bool bottomUsesPlainStructured3dSlot =
-        screenUsesPlainStructured3dSlot(softPackedSnapshot.bottomScreenStats);
-    const bool topUsesFullStructured2dOnlyDisplay =
-        screenUsesFullStructured2dOnlyDisplay(softPackedSnapshot.topScreenStats);
-    const bool bottomUsesFullStructured2dOnlyDisplay =
-        screenUsesFullStructured2dOnlyDisplay(softPackedSnapshot.bottomScreenStats);
-    resource.screenSwapToggledFromPrevious =
-        previousResource != nullptr
-        && previousResource->screenSwap != resource.screenSwap;
-    const bool asymmetricFullRegularComp7 =
-        topUsesFullRegularComp7 != bottomUsesFullRegularComp7;
-    const bool preservePackedOwnerForPlainRegularComp7Pair =
-        currentBackendIsGraphics
-        && topUsesFullRegularComp7
-        && !bottomUsesFullRegularComp7
-        && screenUsesPlainFullComp4(softPackedSnapshot.bottomScreenStats)
-        && !screenHasVisibleStructured2d(softPackedSnapshot.topScreenStats)
-        && !screenHasVisibleStructured2d(softPackedSnapshot.bottomScreenStats);
-    const bool preservePackedOwnerForAlternatingPlainStructuredComp7 =
-        currentBackendIsGraphics
-        && resource.screenSwapToggledFromPrevious
-        && (topUsesPlainStructuredComp7Slot || bottomUsesPlainStructuredComp7Slot)
-        && topUsesCurrentCapture3d != bottomUsesCurrentCapture3d;
-    const bool topVramBottomPureStructuredComp7Pair =
-        currentBackendIsGraphics
-        && class4VramStructuredPair
-        && topUsesVramCapture3d
-        && !bottomUsesVramCapture3d
-        && bottomUsesPlainStructuredComp7Slot
-        && screenUsesFullVramCaptureOnly(softPackedSnapshot.topScreenStats)
-        && !resource.screenSwap;
-    const bool preservePackedOwnerForTopVramBottomPlainStructuredComp7 =
-        currentBackendIsGraphics
-        && class4VramStructuredPair
-        && topUsesVramCapture3d
-        && !bottomUsesVramCapture3d
-        && bottomUsesPlainStructuredComp7Slot
-        && softPackedSnapshot.topScreenStats.DisplayModeCounts[2] == kScreenHeight
-        && softPackedSnapshot.bottomScreenStats.DisplayModeCounts[1] == kScreenHeight
-        && softPackedSnapshot.topScreenStats.StructuredSlotPixels == 0u
-        && softPackedSnapshot.bottomScreenStats.StructuredAbovePixels == 0u
-        && !resource.screenSwap
-        && !topVramBottomPureStructuredComp7Pair;
-    const bool topStructuredSlotUsesPreviousWhileBottom2dOnly =
-        currentBackendIsGraphics
-        && !softPackedSnapshot.hasCapture3dSource
-        && resource.screenSwapToggledFromPrevious
-        && topUsesPlainStructured3dSlot
-        && bottomUsesFullStructured2dOnlyDisplay
-        && accumulatedTopHighresValid;
-    const bool bottomStructuredSlotUsesPreviousWhileTop2dOnly =
-        currentBackendIsGraphics
-        && !softPackedSnapshot.hasCapture3dSource
-        && resource.screenSwapToggledFromPrevious
-        && bottomUsesPlainStructured3dSlot
-        && topUsesFullStructured2dOnlyDisplay
-        && accumulatedBottomHighresValid;
-    const bool topStructuredHandoffOverlay =
-        screenHasStructuredHandoffOverlay(softPackedSnapshot.topScreenStats);
-    const bool bottomStructuredHandoffOverlay =
-        screenHasStructuredHandoffOverlay(softPackedSnapshot.bottomScreenStats);
-    const bool topStructuredHandoffNoCurrent3d =
-        currentBackendIsGraphics
-        && !softPackedSnapshot.hasCapture3dSource
-        && screenUsesStructuredHandoffWithoutCurrent3dFastPath(
-            softPackedSnapshot.topScreenStats,
-            softPackedSnapshot.bottomScreenStats);
-    const bool bottomStructuredHandoffNoCurrent3d =
-        currentBackendIsGraphics
-        && !softPackedSnapshot.hasCapture3dSource
-        && screenUsesStructuredHandoffWithoutCurrent3dFastPath(
-            softPackedSnapshot.bottomScreenStats,
-            softPackedSnapshot.topScreenStats);
-    resource.topStructuredHandoffNoCurrent3d = topStructuredHandoffNoCurrent3d;
-    resource.bottomStructuredHandoffNoCurrent3d = bottomStructuredHandoffNoCurrent3d;
-    bool topStructuredHandoffSuppress3d = false;
-    bool bottomStructuredHandoffSuppress3d = false;
-    const bool topStructuredHandoffOverlayHasNoCurrent3dSource =
-        currentBackendIsGraphics
-        && topStructuredHandoffNoCurrent3d
-        && topStructuredHandoffOverlay
-        && (screenUsesPlainStructuredComp7HandoffSlotFastPath(softPackedSnapshot.bottomScreenStats)
-            || screenUsesFullStructured2dOnlyDisplay(softPackedSnapshot.bottomScreenStats)
-            || screenUsesPlainStructured3dSlot(softPackedSnapshot.bottomScreenStats))
-        && softPackedSnapshot.topScreenStats.RegularCaptureUses3dLines == 0u
-        && softPackedSnapshot.topScreenStats.VramCaptureUses3dLines == 0u
-        && softPackedSnapshot.topScreenStats.ForceLive3dCompMode7Lines == 0u;
-    const bool bottomStructuredHandoffOverlayHasNoCurrent3dSource =
-        currentBackendIsGraphics
-        && bottomStructuredHandoffNoCurrent3d
-        && bottomStructuredHandoffOverlay
-        && (screenUsesPlainStructuredComp7HandoffSlotFastPath(softPackedSnapshot.topScreenStats)
-            || screenUsesFullStructured2dOnlyDisplay(softPackedSnapshot.topScreenStats)
-            || screenUsesPlainStructured3dSlot(softPackedSnapshot.topScreenStats))
-        && softPackedSnapshot.bottomScreenStats.RegularCaptureUses3dLines == 0u
-        && softPackedSnapshot.bottomScreenStats.VramCaptureUses3dLines == 0u
-        && softPackedSnapshot.bottomScreenStats.ForceLive3dCompMode7Lines == 0u;
-    bool liveSourceScreenSwap = resource.screenSwap;
-    if (topStructuredSlotUsesPreviousWhileBottom2dOnly)
-    {
-        liveSourceScreenSwap = false;
-    }
-    else if (bottomStructuredSlotUsesPreviousWhileTop2dOnly)
-    {
-        liveSourceScreenSwap = true;
-    }
-    else if (preservePackedOwnerForTopVramBottomPlainStructuredComp7)
-    {
-        liveSourceScreenSwap = resource.screenSwap;
-    }
-    else if (class4VramStructuredPair)
-    {
-        liveSourceScreenSwap = topUsesVramCapture3d;
-    }
-    else if (preservePackedOwnerForAlternatingPlainStructuredComp7)
-    {
-        liveSourceScreenSwap = resource.screenSwap;
-    }
-    else if (asymmetricFullRegularComp7
-        && !preservePackedOwnerForPlainRegularComp7Pair)
-    {
-        liveSourceScreenSwap = !topUsesFullRegularComp7;
-    }
-    else if (topUsesCurrentCapture3d != bottomUsesCurrentCapture3d
-        && !preservePackedOwnerForPlainRegularComp7Pair)
-    {
-        liveSourceScreenSwap =
-            (topUsesVramCapture3d != bottomUsesVramCapture3d)
-                ? topUsesVramCapture3d
-                : !topUsesRegularCapture3d;
-    }
-    else if (topUsesVramCapture3d
-        && !topUsesRegularCapture3d
-        && bottomUsesRegularCapture3d)
-    {
-        liveSourceScreenSwap = false;
-    }
-    else if (bottomUsesVramCapture3d
-        && !bottomUsesRegularCapture3d
-        && topUsesRegularCapture3d)
-    {
-        liveSourceScreenSwap = true;
-    }
-    {
-        static int metaTimelineEnabled = -1;
-        static u32 metaTimelineCheck = 0u;
-        if (metaTimelineEnabled < 0 || (metaTimelineCheck++ & 127u) == 0u)
-        {
-            char propVal[PROP_VALUE_MAX] = {0};
-            __system_property_get("debug.melonds.metadata_timeline", propVal);
-            metaTimelineEnabled = (propVal[0] == '1') ? 1 : 0;
-        }
-        if (metaTimelineEnabled == 1)
-        {
-            __android_log_print(ANDROID_LOG_INFO, "MetaTL",
-                "[own] swap=%d live=%d topVram=%d botVram=%d topCur=%d botCur=%d topReg=%d botReg=%d",
-                resource.screenSwap ? 1 : 0,
-                liveSourceScreenSwap ? 1 : 0,
-                topUsesVramCapture3d ? 1 : 0,
-                bottomUsesVramCapture3d ? 1 : 0,
-                topUsesCurrentCapture3d ? 1 : 0,
-                bottomUsesCurrentCapture3d ? 1 : 0,
-                topUsesRegularCapture3d ? 1 : 0,
-                bottomUsesRegularCapture3d ? 1 : 0);
-        }
-    }
-    const bool topPlainStructuredComp7UsesOppositeLive3d =
-        currentBackendIsGraphics
-        && topUsesPlainStructuredComp7Slot
-        && !topUsesCurrentCapture3d
-        && bottomUsesCurrentCapture3d
-        && !liveSourceScreenSwap;
-    const bool bottomPlainStructuredComp7UsesOppositeLive3d =
-        currentBackendIsGraphics
-        && bottomUsesPlainStructuredComp7Slot
-        && !bottomUsesCurrentCapture3d
-        && topUsesCurrentCapture3d
-        && liveSourceScreenSwap;
-    const bool topPlainStructuredComp7PureAlternatingVramPair =
-        topPlainStructuredComp7UsesOppositeLive3d
-        && preservePackedOwnerForAlternatingPlainStructuredComp7
-        && screenUsesFullVramCaptureOnly(softPackedSnapshot.bottomScreenStats);
-    const bool bottomPlainStructuredComp7PureAlternatingVramPair =
-        bottomPlainStructuredComp7UsesOppositeLive3d
-        && preservePackedOwnerForAlternatingPlainStructuredComp7
-        && screenUsesFullVramCaptureOnly(softPackedSnapshot.topScreenStats);
-    const bool topPlainStructuredComp7PureAlternatingVramCadenceCarry =
-        topPlainStructuredComp7PureAlternatingVramPair
-        && class4BottomDominantAsymmetricCarry
-        && bottomStructuredAboveTransitionActive
-        && bottomUsesVramCapture3d
-        && topUsesStructured3d
-        && topUsesPlainStructuredComp7Slot;
-    resource.topPureAlternatingVramCapture = bottomPlainStructuredComp7PureAlternatingVramPair;
-    resource.bottomPureAlternatingVramCapture = topPlainStructuredComp7PureAlternatingVramPair;
-    const bool topUsesScreenWideCaptureBackedComp4 =
-        softPackedSnapshot.topScreenStats.CaptureBackedComp4Lines > currentCaptureLineThreshold;
-    const bool bottomUsesScreenWideCaptureBackedComp4 =
-        softPackedSnapshot.bottomScreenStats.CaptureBackedComp4Lines > currentCaptureLineThreshold;
-    const bool frameHasExplicitCurrent3dSource =
-        softPackedSnapshot.hasCapture3dSource
-        || softPackedSnapshot.topScreenStats.RegularCaptureUses3dLines > 0u
-        || softPackedSnapshot.topScreenStats.VramCaptureUses3dLines > 0u
-        || softPackedSnapshot.topScreenStats.ForceLive3dCompMode7Lines > 0u
-        || softPackedSnapshot.topScreenStats.StructuredSlotPixels > static_cast<u32>(kScreenWidth)
-        || softPackedSnapshot.bottomScreenStats.RegularCaptureUses3dLines > 0u
-        || softPackedSnapshot.bottomScreenStats.VramCaptureUses3dLines > 0u
-        || softPackedSnapshot.bottomScreenStats.ForceLive3dCompMode7Lines > 0u
-        || softPackedSnapshot.bottomScreenStats.StructuredSlotPixels > static_cast<u32>(kScreenWidth);
-    const bool needsDsTimedCaptureBackedComp4Source =
-        currentBackendIsGraphics
-        && !frameHasExplicitCurrent3dSource
-        && (topUsesScreenWideCaptureBackedComp4 || bottomUsesScreenWideCaptureBackedComp4);
-    if (needsDsTimedCaptureBackedComp4Source
-        && topUsesScreenWideCaptureBackedComp4 != bottomUsesScreenWideCaptureBackedComp4)
-    {
-        liveSourceScreenSwap = topUsesScreenWideCaptureBackedComp4;
-    }
-    u32 class4AsymmetricCadencePhaseForFrame = class4AsymmetricCadencePhase & 3u;
-    bool class4AsymmetricCadenceAllowsTop = true;
-    bool class4AsymmetricCadenceSuppressesTop = false;
-    const bool class4AsymmetricCadenceWasActive = class4AsymmetricCadenceActive;
-    if (class4VramStructuredPair
-        && areRendererDebugBgObjLogsEnabled()
-        && class4PairDebugLogsRemaining == 0)
-    {
-        class4PairDebugLogsRemaining = 600;
-    }
-    if (preservePackedOwnerForPlainRegularComp7Pair)
-    {
-        if (!regularComp7PackedOwnerDebugActive)
-        {
-            regularComp7PackedOwnerDebugActive = true;
-            regularComp7PackedOwnerDebugLogsRemaining = areRendererDebugBgObjLogsEnabled() ? 12u : 0u;
-        }
-    }
-    else
-    {
-        regularComp7PackedOwnerDebugActive = false;
-    }
-    if (class4AsymmetricBottomDominantPair)
-    {
-        if (!class4AsymmetricCadenceActive)
-        {
-            class4AsymmetricCadenceActive = true;
-            class4AsymmetricCadencePhase = 0;
-        }
-        class4AsymmetricCadencePhaseForFrame = class4AsymmetricCadencePhase & 3u;
-        class4AsymmetricCadenceAllowsTop =
-            !topUsesVramCapture3d || ((class4AsymmetricCadencePhaseForFrame & 1u) == 0u);
-        if (topUsesVramCapture3d && !class4AsymmetricCadenceAllowsTop)
-        {
-            liveSourceScreenSwap = false;
-            class4AsymmetricCadenceSuppressesTop = true;
-        }
-        if (topUsesVramCapture3d)
-            class4AsymmetricCadencePhase = (class4AsymmetricCadencePhaseForFrame + 1u) & 1u;
-    }
-    else
-    {
-        if (class4AsymmetricCadenceWasActive
-            && areRendererDebugBgObjLogsEnabled()
-            && packedDebugLogsRemaining > 0)
-        {
-            melonDS::Platform::Log(
-                melonDS::Platform::LogLevel::Warn,
-                "VulkanLive3D[Class4CadenceExit]: frameId=%u class4Pair=%u packedSwap=%u liveSwap=%u backendSwap=%u topReg=%u topVram=%u topStruct=%u topAbove=%u bottomReg=%u bottomVram=%u bottomStruct=%u bottomAbove=%u remaining=%u",
-                frame != nullptr ? static_cast<unsigned>(frame->frameId) : 0u,
-                class4VramStructuredPair ? 1u : 0u,
-                resource.screenSwap ? 1u : 0u,
-                liveSourceScreenSwap ? 1u : 0u,
-                backendRenderScreenSwap ? 1u : 0u,
-                softPackedSnapshot.topScreenStats.RegularCaptureUses3dLines,
-                softPackedSnapshot.topScreenStats.VramCaptureUses3dLines,
-                softPackedSnapshot.topScreenStats.StructuredSlotPixels,
-                softPackedSnapshot.topScreenStats.StructuredAbovePixels,
-                softPackedSnapshot.bottomScreenStats.RegularCaptureUses3dLines,
-                softPackedSnapshot.bottomScreenStats.VramCaptureUses3dLines,
-                softPackedSnapshot.bottomScreenStats.StructuredSlotPixels,
-                softPackedSnapshot.bottomScreenStats.StructuredAbovePixels,
-                packedDebugLogsRemaining
-            );
-            packedDebugLogsRemaining--;
-        }
-        class4AsymmetricCadenceActive = false;
-        class4AsymmetricCadencePhase = 0;
-    }
-    resource.class4AsymmetricCadenceActive =
-        class4AsymmetricCadenceActive;
-    resource.class4AsymmetricCadenceSuppressesTop =
-        class4AsymmetricCadenceSuppressesTop;
-
-    resource.topStructuredHandoffSuppress3d = topStructuredHandoffSuppress3d;
-    resource.bottomStructuredHandoffSuppress3d = bottomStructuredHandoffSuppress3d;
-
-    if (liveSourceScreenSwap != resource.screenSwap
-        && areRendererDebugBgObjLogsEnabled()
-        && packedDebugLogsRemaining > 0)
-    {
-        melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Warn,
-            "VulkanLive3D[OwnerOverride]: frameId=%u packedScreenSwap=%u liveSourceScreenSwap=%u backendRenderScreenSwap=%u class4Only=%u preserveValid=%u preserveTop=%u topCurrentCapture=%u bottomCurrentCapture=%u topReg=%u topVram=%u topStruct=%u bottomReg=%u bottomVram=%u bottomStruct=%u remaining=%u",
-            frame != nullptr ? static_cast<unsigned>(frame->frameId) : 0u,
-            resource.screenSwap ? 1u : 0u,
-            liveSourceScreenSwap ? 1u : 0u,
-            backendRenderScreenSwap ? 1u : 0u,
-            softPackedSnapshot.captureBackedClass4Only ? 1u : 0u,
-            resource.class4PreservePackedVramValid ? 1u : 0u,
-            resource.class4PreservePackedVramScreenSwap ? 1u : 0u,
-            topUsesCurrentCapture3d ? 1u : 0u,
-            bottomUsesCurrentCapture3d ? 1u : 0u,
-            topUsesRegularCapture3d ? 1u : 0u,
-            topUsesVramCapture3d ? 1u : 0u,
-            topUsesStructured3d ? 1u : 0u,
-            bottomUsesRegularCapture3d ? 1u : 0u,
-            bottomUsesVramCapture3d ? 1u : 0u,
-            bottomUsesStructured3d ? 1u : 0u,
-            packedDebugLogsRemaining
-        );
-        packedDebugLogsRemaining--;
-    }
-    else if (preservePackedOwnerForPlainRegularComp7Pair
-        && areRendererDebugBgObjLogsEnabled()
-        && regularComp7PackedOwnerDebugLogsRemaining > 0)
-    {
-        melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Warn,
-            "VulkanLive3D[RegularComp7PackedOwner]: frameId=%u packedScreenSwap=%u liveSourceScreenSwap=%u topReg=%u topComp7=%u topAboveVisible=%u top2DOnly=%u bottomComp4=%u bottomStruct=%u bottomAboveVisible=%u bottom2DOnly=%u remaining=%u",
-            frame != nullptr ? static_cast<unsigned>(frame->frameId) : 0u,
-            resource.screenSwap ? 1u : 0u,
-            liveSourceScreenSwap ? 1u : 0u,
-            softPackedSnapshot.topScreenStats.RegularCaptureUses3dLines,
-            softPackedSnapshot.topScreenStats.CompModeCounts[7],
-            softPackedSnapshot.topScreenStats.StructuredAboveVisiblePixels,
-            softPackedSnapshot.topScreenStats.Structured2DOnlyPixels,
-            softPackedSnapshot.bottomScreenStats.CompModeCounts[4],
-            softPackedSnapshot.bottomScreenStats.StructuredSlotPixels,
-            softPackedSnapshot.bottomScreenStats.StructuredAboveVisiblePixels,
-            softPackedSnapshot.bottomScreenStats.Structured2DOnlyPixels,
-            regularComp7PackedOwnerDebugLogsRemaining
-        );
-        regularComp7PackedOwnerDebugLogsRemaining--;
-    }
-
-    const bool canReusePreRunSnapshot = hasStablePreviousPreparedFrame
-        && resource.hasRenderer3dSnapshot
-        && frame->renderTimelineValue != 0
-        && resource.snapshotFromPreRun
-        && resource.snapshotFromInitializedTarget
-        && resource.snapshotFromGraphicsBackend == currentBackendIsGraphics
-        && resource.snapshotWidth == renderer3D.GetColorTargetWidth()
-        && resource.snapshotHeight == renderer3D.GetColorTargetHeight()
-        && (!currentBackendIsGraphics || needsDsTimedCaptureBackedComp4Source);
-
-    const auto screenCanUseAccumulatedHighres = [&](const SoftPackedScreenStats& stats) {
-        const bool hasExplicitHighresSource =
-            softPackedSnapshot.hasCapture3dSource
-            || stats.RegularCaptureUses3dLines > 0u
-            || stats.VramCaptureUses3dLines > 0u
-            || stats.ForceLive3dCompMode7Lines > 0u
-            || stats.StructuredSlotPixels > static_cast<u32>(kScreenWidth);
-        return stats.RegularCaptureUses3dLines > (kScreenHeight / 2u)
-            || stats.VramCaptureUses3dLines > (kScreenHeight / 2u)
-            || stats.ForceLive3dCompMode7Lines > (kScreenHeight / 2u)
-            || stats.StructuredSlotPixels > static_cast<u32>(kScreenWidth)
-            || (stats.CaptureBackedComp4Lines > (kScreenHeight / 2u) && hasExplicitHighresSource);
-    };
-    lastPreparedFrameId = frame != nullptr ? frame->frameId : lastPreparedFrameId + 1u;
-    accumulatedHighresPrepareSerial++;
-    constexpr u64 kAccumulatedHighresMaxAgeFrames = 90u;
-    if (accumulatedTopHighresValid
-        && accumulatedHighresPrepareSerial > accumulatedTopHighresLastMergePrepareSerial
-        && accumulatedHighresPrepareSerial - accumulatedTopHighresLastMergePrepareSerial > kAccumulatedHighresMaxAgeFrames)
-    {
-        accumulatedTopHighresValid = false;
-    }
-    if (accumulatedBottomHighresValid
-        && accumulatedHighresPrepareSerial > accumulatedBottomHighresLastMergePrepareSerial
-        && accumulatedHighresPrepareSerial - accumulatedBottomHighresLastMergePrepareSerial > kAccumulatedHighresMaxAgeFrames)
-    {
-        accumulatedBottomHighresValid = false;
-    }
-    const bool topCanUseAccumulatedHighres =
-        screenCanUseAccumulatedHighres(softPackedSnapshot.topScreenStats);
-    const bool bottomCanUseAccumulatedHighres =
-        screenCanUseAccumulatedHighres(softPackedSnapshot.bottomScreenStats);
-    const bool topHasReusableStructured3dSlot =
-        softPackedSnapshot.topScreenStats.StructuredSlotPixels > static_cast<u32>(kScreenWidth)
-        && accumulatedTopHighresValid;
-    const bool bottomHasReusableStructured3dSlot =
-        softPackedSnapshot.bottomScreenStats.StructuredSlotPixels > static_cast<u32>(kScreenWidth)
-        && accumulatedBottomHighresValid;
-    bool replaceAccumulatedHighres = false;
-    if (canReusePreRunSnapshot)
-    {
-        if (needsDsTimedCaptureBackedComp4Source
-            && topUsesScreenWideCaptureBackedComp4 != bottomUsesScreenWideCaptureBackedComp4)
-        {
-            resource.renderer3dSnapshotScreenSwap = liveSourceScreenSwap;
-        }
-        resource.hasPreparedInputs = true;
-        resource.hasContent = false;
-    }
-    else
-    {
-        const bool live3dOwnerWasSameLcdLastFrame = liveSourceScreenSwap
-            ? framesSinceTopLive3D == 0u
-            : framesSinceBottomLive3D == 0u;
-        constexpr u32 fullTemporalOverlayPixelThreshold =
-            (kScreenWidth * kScreenHeight * 7u) / 8u;
-        const auto screenUsesFullTemporalCaptureOverlay =
-            [&](const SoftPackedScreenStats& stats) {
-                return stats.DisplayModeCounts[1] == kScreenHeight
-                    && stats.CompModeCounts[7] >= fullTemporalOverlayPixelThreshold
-                    && stats.StructuredSlotPixels >= fullTemporalOverlayPixelThreshold
-                    && stats.StructuredAbovePixels >= fullTemporalOverlayPixelThreshold
-                    && stats.Structured2DOnlyPixels == 0u;
-            };
-        const bool liveOwnerFeedsOppositeFullTemporalOverlay =
-            liveSourceScreenSwap
-                ? (softPackedSnapshot.topScreenStats.RegularCaptureUses3dLines
-                        > (kScreenHeight / 2u)
-                    && screenUsesFullTemporalCaptureOverlay(
-                        softPackedSnapshot.bottomScreenStats))
-                : (softPackedSnapshot.bottomScreenStats.RegularCaptureUses3dLines
-                        > (kScreenHeight / 2u)
-                    && screenUsesFullTemporalCaptureOverlay(
-                        softPackedSnapshot.topScreenStats));
-        const bool liveOwnerUsesScreenWideRegularCapture =
-            !resource.alternatingLive3dPingPong
-            && !liveOwnerFeedsOppositeFullTemporalOverlay
-            && (liveSourceScreenSwap
-                ? softPackedSnapshot.topScreenStats.RegularCaptureUses3dLines > (kScreenHeight / 2u)
-                : softPackedSnapshot.bottomScreenStats.RegularCaptureUses3dLines > (kScreenHeight / 2u));
-        const bool structuredHandoffLiveOwnerNeedsReplace =
-            !softPackedSnapshot.hasCapture3dSource
-            && ((topStructuredHandoffNoCurrent3d && liveSourceScreenSwap)
-                || (bottomStructuredHandoffNoCurrent3d && !liveSourceScreenSwap));
-        const bool replaceForClass4Pair =
-            class4VramStructuredPair
-            && live3dOwnerWasSameLcdLastFrame
-            && !topPlainStructuredComp7PureAlternatingVramPair
-            && !bottomPlainStructuredComp7PureAlternatingVramPair;
-        const bool replaceForAsymmetricRegular =
-            asymmetricFullRegularComp7
-            && !resource.alternatingLive3dPingPong
-            && !liveOwnerFeedsOppositeFullTemporalOverlay;
-        replaceAccumulatedHighres = currentBackendIsGraphics
-            && (replaceForClass4Pair
-                || replaceForAsymmetricRegular
-                || liveOwnerUsesScreenWideRegularCapture
-                || structuredHandoffLiveOwnerNeedsReplace);
-        const bool canUseRetainedLiveSource =
-            currentBackendIsGraphics
-            && !needsDsTimedCaptureBackedComp4Source
-            && !screenHasVisible2dOverlay(softPackedSnapshot.topScreenStats)
-            && !screenHasVisible2dOverlay(softPackedSnapshot.bottomScreenStats)
-            && softPackedSnapshot.topScreenStats.CaptureBackedComp4Lines == 0u
-            && softPackedSnapshot.bottomScreenStats.CaptureBackedComp4Lines == 0u
-            && softPackedSnapshot.topScreenStats.RegularCaptureUses3dLines == 0u
-            && softPackedSnapshot.bottomScreenStats.RegularCaptureUses3dLines == 0u
-            && softPackedSnapshot.topScreenStats.VramCaptureUses3dLines == 0u
-            && softPackedSnapshot.bottomScreenStats.VramCaptureUses3dLines == 0u
-            && softPackedSnapshot.topScreenStats.ForceLive3dCompMode7Lines == 0u
-            && softPackedSnapshot.bottomScreenStats.ForceLive3dCompMode7Lines == 0u;
-        prepareStateCpuWindow.Add(PerfNowNs() - stateStartNs);
-        const u64 directStartNs = PerfNowNs();
-        const bool rendererRepeatedCadenceSource = renderer3D.WasCurrentFrameCadenceRepeated();
-        bool directPresentationSourceScreenSwap =
-            rendererRepeatedCadenceSource
-                ? backendRenderScreenSwap
-                : liveSourceScreenSwap;
-        if (rendererRepeatedCadenceSource
-            && backendRenderScreenSwap != liveSourceScreenSwap
-            && !renderer3D.IsParitySubmitFresh(backendRenderScreenSwap, 2u))
-        {
-            directPresentationSourceScreenSwap = liveSourceScreenSwap;
-        }
-        else if (rendererRepeatedCadenceSource
-            && backendRenderScreenSwap != liveSourceScreenSwap
-            && softPackedSnapshot.topScreenStats.RegularCaptureUses3dLines == 0u
-            && softPackedSnapshot.bottomScreenStats.RegularCaptureUses3dLines == 0u
-            && softPackedSnapshot.topScreenStats.VramCaptureUses3dLines == 0u
-            && softPackedSnapshot.bottomScreenStats.VramCaptureUses3dLines == 0u
-            && ((softPackedSnapshot.topScreenStats.StructuredSlotPixels > 0u)
-                != (softPackedSnapshot.bottomScreenStats.StructuredSlotPixels > 0u)))
-        {
-            directPresentationSourceScreenSwap = liveSourceScreenSwap;
-        }
-        const bool recycledSnapshotParityIsTop = resource.hasRenderer3dSnapshot
-            ? resource.renderer3dSnapshotScreenSwap
-            : (resource.hasRetainedRenderer3dSource
-                ? resource.retainedRenderer3dSourceScreenSwap
-                : liveSourceScreenSwap);
-        const bool currentTopFullCaptureRequestTuple =
-            currentBackendIsGraphics
-            && softPackedSnapshot.screenSwapLatched
-            && softPackedSnapshot.captureCntLatched == 0x80320000u
-            && ((softPackedSnapshot.dispCntALatched >> 16u) & 0x3u) == 2u
-            && ((softPackedSnapshot.dispCntBLatched >> 16u) & 0x3u) == 1u
-            && softPackedSnapshot.captureLinesLatched == kScreenHeight
-            && softPackedSnapshot.captureAgeLatched == 0u
-            && directPresentationSourceScreenSwap
-            && topCanUseAccumulatedHighres
-            && !bottomCanUseAccumulatedHighres
-            && softPackedSnapshot.topScreenStats.RegularCaptureUses3dLines == kScreenHeight
-            && softPackedSnapshot.bottomScreenStats.RegularCaptureUses3dLines == 0u;
-        const bool accumulateRequestParityIsTop = currentTopFullCaptureRequestTuple
-            ? directPresentationSourceScreenSwap
-            : recycledSnapshotParityIsTop;
-        const bool accumulateCurrentTopHighres =
-            ((accumulateRequestParityIsTop && topCanUseAccumulatedHighres)
-                || bottomVramToTopStructuredComp7Replay)
-            && !topStructuredHandoffNoCurrent3d
-            && !topStructuredHandoffSuppress3d;
-        const bool accumulateCurrentBottomHighres =
-            ((!accumulateRequestParityIsTop && bottomCanUseAccumulatedHighres)
-                || topVramToBottomStructuredComp7Replay)
-            && !bottomStructuredHandoffNoCurrent3d
-            && !bottomStructuredHandoffSuppress3d;
-        const bool alternatingCaptureViewHardwareTuple =
-            topVramToBottomStructuredComp7Replay
-            && accumulateCurrentTopHighres
-            && accumulateCurrentBottomHighres
-            && softPackedSnapshot.screenSwapLatched
-            && directPresentationSourceScreenSwap
-            && resource.capture3dSourceScreenSwapHintValid
-            && resource.capture3dSourceScreenSwapHint
-            && softPackedSnapshot.captureCntLatched == 0x80330000u
-            && ((softPackedSnapshot.dispCntALatched >> 16u) & 0x3u) == 1u
-            && ((softPackedSnapshot.dispCntBLatched >> 16u) & 0x3u) == 1u
-            && softPackedSnapshot.captureLinesLatched == kScreenHeight
-            && softPackedSnapshot.captureAgeLatched == 0u;
-        bool usePublishedOppositeAsLiveSource = false;
-        if (alternatingCaptureViewHardwareTuple)
-        {
-            melonDS::VulkanRenderer3D::SubmittedRenderIdentity pinnedIdentity{};
-            melonDS::VulkanRenderer3D::SubmittedRenderIdentity publishedIdentity{};
-            const bool hasPinnedIdentity =
-                renderer3D.GetPinnedCaptureRenderIdentity(pinnedIdentity);
-            const bool hasPublishedIdentity =
-                renderer3D.GetPublishedRenderIdentity(publishedIdentity);
-            usePublishedOppositeAsLiveSource =
-                hasPinnedIdentity
-                && hasPublishedIdentity
-                && pinnedIdentity.Valid
-                && publishedIdentity.Valid
-                && pinnedIdentity.CaptureCnt == 0x80320000u
-                && publishedIdentity.CaptureCnt == 0x80330000u
-                && pinnedIdentity.ScreenSwap
-                && !publishedIdentity.ScreenSwap
-                && pinnedIdentity.PolygonCount > 0u
-                && publishedIdentity.PolygonCount > 0u
-                && publishedIdentity.Sequence == pinnedIdentity.Sequence + 1u;
-        }
-        const SoftPackedObjCaptureSourceIdentity& exactBottomObjSource =
-            softPackedSnapshot.bottomObjCaptureSource;
-        const bool exactBottomObjSourceHardwareTuple =
-            currentBackendIsGraphics
-            && !topVramToBottomStructuredComp7Replay
-            && !accumulateCurrentTopHighres
-            && accumulateCurrentBottomHighres
-            && softPackedSnapshot.screenSwapLatched
-            && !directPresentationSourceScreenSwap
-            && resource.capture3dSourceScreenSwapHintValid
-            && resource.capture3dSourceScreenSwapHint
-            && softPackedSnapshot.captureCntLatched == 0x80330000u
-            && ((softPackedSnapshot.dispCntALatched >> 16u) & 0x3u) == 1u
-            && ((softPackedSnapshot.dispCntBLatched >> 16u) & 0x3u) == 1u
-            && softPackedSnapshot.captureLinesLatched == kScreenHeight
-            && softPackedSnapshot.captureAgeLatched == 0u
-            && softPackedSnapshot.topScreenStats.DisplayModeCounts[2] == kScreenHeight
-            && softPackedSnapshot.topScreenStats.VramCaptureUses3dLines == kScreenHeight
-            && softPackedSnapshot.topScreenStats.RegularCaptureUses3dLines == 0u
-            && softPackedSnapshot.bottomScreenStats.DisplayModeCounts[1] == kScreenHeight
-            && softPackedSnapshot.bottomScreenStats.RegularCaptureUses3dLines == kScreenHeight
-            && softPackedSnapshot.bottomScreenStats.VramCaptureUses3dLines == 0u
-            && softPackedSnapshot.bottomScreenStats.CompModeCounts[3]
-                == static_cast<u32>(kScreenWidth * kScreenHeight)
-            && softPackedSnapshot.bottomScreenStats.StructuredSlotPixels == 0u
-            && softPackedSnapshot.bottomScreenStats.StructuredAbovePixels == 0u
-            && softPackedSnapshot.bottomScreenStats.Structured2DOnlyPixels == 0u
-            && softPackedSnapshot.bottomScreenStats.HasOffsets
-            && softPackedSnapshot.bottomScreenStats.MinXOffset == 0
-            && softPackedSnapshot.bottomScreenStats.MaxXOffset == 0
-            && exactBottomObjSource.valid
-            && exactBottomObjSource.polygonCount > 0u
-            && exactBottomObjSource.captureCnt == softPackedSnapshot.captureCntLatched
-            && !exactBottomObjSource.screenSwap
-            && exactBottomObjSource.uniformLines == static_cast<u32>(kScreenHeight)
-            && exactBottomObjSource.consumedPixels
-                == static_cast<u32>(kScreenWidth * kScreenHeight)
-            && exactBottomObjSource.directXYPixels
-                == exactBottomObjSource.consumedPixels
-            && exactBottomObjSource.conflictLines == 0u;
-        melonDS::VulkanRenderer3D::SubmittedRenderIdentity exactPublishedIdentity{};
-        bool exactPublishedIdentityValid = false;
-        bool exactBottomObjSourceTracksPublishedCadence = false;
-        if (exactBottomObjSourceHardwareTuple)
-        {
-            exactPublishedIdentityValid =
-                renderer3D.GetPublishedRenderIdentity(exactPublishedIdentity)
-                && exactPublishedIdentity.Valid;
-            exactBottomObjSourceTracksPublishedCadence =
-                exactPublishedIdentityValid
-                && exactPublishedIdentity.Sequence == exactBottomObjSource.sequence + 2u
-                && exactPublishedIdentity.PolygonCount > 0u;
-        }
-        const SoftPackedObjCaptureSourceIdentity* exactBottomObjSourceForCopy =
-            exactBottomObjSourceTracksPublishedCadence
-                ? &exactBottomObjSource
-                : nullptr;
-        const SoftPackedDisplayedCaptureSourceIdentity& exactTopDisplayedCaptureSource =
-            softPackedSnapshot.topDisplayedCaptureSource;
-        const u32 exactTopDisplayedMaskLines = static_cast<u32>(std::count_if(
-            exactTopDisplayedCaptureSource.exactLineMask.begin(),
-            exactTopDisplayedCaptureSource.exactLineMask.end(),
-            [](u8 value) { return value == 1u; }));
-        const bool exactTopDisplayedMaskIsBinary = std::all_of(
-            exactTopDisplayedCaptureSource.exactLineMask.begin(),
-            exactTopDisplayedCaptureSource.exactLineMask.end(),
-            [](u8 value) { return value <= 1u; });
-        const bool exactTopDisplayedCaptureHardwareTuple =
-            currentBackendIsGraphics
-            && softPackedSnapshot.screenSwapLatched
-            && softPackedSnapshot.captureCntLatched == 0x80330000u
-            && ((softPackedSnapshot.dispCntALatched >> 16u) & 0x3u) == 1u
-            && ((softPackedSnapshot.dispCntBLatched >> 16u) & 0x3u) == 1u
-            && softPackedSnapshot.captureLinesLatched == kScreenHeight
-            && softPackedSnapshot.captureAgeLatched == 0u
-            && softPackedSnapshot.topScreenStats.DisplayModeCounts[2] == kScreenHeight
-            && softPackedSnapshot.topScreenStats.VramCaptureUses3dLines == kScreenHeight
-            && softPackedSnapshot.topScreenStats.RegularCaptureUses3dLines == 0u
-            && softPackedSnapshot.bottomScreenStats.DisplayModeCounts[1] == kScreenHeight
-            && softPackedSnapshot.bottomScreenStats.RegularCaptureUses3dLines == kScreenHeight
-            && softPackedSnapshot.bottomScreenStats.VramCaptureUses3dLines == 0u
-            && exactTopDisplayedCaptureSource.valid
-            && exactTopDisplayedCaptureSource.polygonCount > 0u
-            && exactTopDisplayedCaptureSource.captureCnt == 0x80320000u
-            && exactTopDisplayedCaptureSource.screenSwap
-            && exactTopDisplayedCaptureSource.vramBank < 4u
-            && exactTopDisplayedCaptureSource.exactLineCount > 0u
-            && exactTopDisplayedCaptureSource.exactLineCount == exactTopDisplayedMaskLines
-            && exactTopDisplayedMaskIsBinary;
-        const SoftPackedDisplayedCaptureSourceIdentity* exactTopDisplayedCaptureSourceForCopy =
-            exactTopDisplayedCaptureHardwareTuple
-                ? &exactTopDisplayedCaptureSource
-                : nullptr;
-        const SoftPackedDisplayedCaptureSourceIdentity& exactBottomDisplayedCaptureSource =
-            softPackedSnapshot.bottomDisplayedCaptureSource;
-        const bool exactBottomDisplayedCaptureHardwareTuple =
-            currentBackendIsGraphics
-            && class4VramStructuredPair
-            && softPackedSnapshot.captureBackedClass4Only
-            && softPackedSnapshot.hasCapture3dSource
-            && !softPackedSnapshot.screenSwapLatched
-            && softPackedSnapshot.captureCntLatched == 0x80330010u
-            && (softPackedSnapshot.dispCntALatched & 0x000F0000u)
-                == 0x000E0000u
-            && (softPackedSnapshot.dispCntBLatched & 0x00030000u)
-                == 0x00010000u
-            && softPackedSnapshot.captureLinesLatched == kScreenHeight
-            && softPackedSnapshot.captureAgeLatched == 0u
-            && softPackedSnapshot.topScreenStats.DisplayModeCounts[1]
-                == kScreenHeight
-            && softPackedSnapshot.topScreenStats.CompModeCounts[7]
-                == static_cast<u32>(kScreenWidth * kScreenHeight)
-            && softPackedSnapshot.topScreenStats.StructuredSlotPixels
-                == static_cast<u32>(kScreenWidth * kScreenHeight)
-            && softPackedSnapshot.topScreenStats.StructuredAbovePixels
-                == static_cast<u32>(kScreenWidth * kScreenHeight)
-            && softPackedSnapshot.topScreenStats.Structured2DOnlyPixels == 0u
-            && softPackedSnapshot.topScreenStats.RegularCaptureUses3dLines == 0u
-            && softPackedSnapshot.topScreenStats.VramCaptureUses3dLines == 0u
-            && softPackedSnapshot.bottomScreenStats.DisplayModeCounts[2]
-                == kScreenHeight
-            && softPackedSnapshot.bottomScreenStats.RegularCaptureUses3dLines == 0u
-            && softPackedSnapshot.bottomScreenStats.VramCaptureUses3dLines
-                == kScreenHeight
-            && softPackedSnapshot.bottomScreenStats.StructuredSlotPixels == 0u
-            && softPackedSnapshot.bottomScreenStats.StructuredAbovePixels == 0u
-            && softPackedSnapshot.bottomScreenStats.Structured2DOnlyPixels == 0u
-            && exactBottomDisplayedCaptureSource.valid
-            && exactBottomDisplayedCaptureSource.polygonCount > 0u
-            && exactBottomDisplayedCaptureSource.captureCnt == 0x80330010u
-            && exactBottomDisplayedCaptureSource.screenSwap
-            && exactBottomDisplayedCaptureSource.vramBank == 3u
-            && exactBottomDisplayedCaptureSource.exactLineCount
-                == kScreenHeight
-            && exactBottomDisplayedCaptureSource.exactFastLineCount
-                    + exactBottomDisplayedCaptureSource.exactGeneralLineCount
-                    + exactBottomDisplayedCaptureSource.exactUnknownLineCount
-                == kScreenHeight
-            && exactBottomDisplayedCaptureSource.exactUnknownLineCount == 0u;
-        const SoftPackedDisplayedCaptureSourceIdentity* exactDisplayedCaptureSourceForCopy =
-            exactTopDisplayedCaptureSourceForCopy != nullptr
-                ? exactTopDisplayedCaptureSourceForCopy
-                : (exactBottomDisplayedCaptureHardwareTuple
-                    ? &exactBottomDisplayedCaptureSource
-                    : nullptr);
-        const SoftPackedSameBankMode2DisplayedSourceIdentity&
-            sameBankMode2DisplayedSource =
-                softPackedSnapshot.sameBankMode2DisplayedSource;
-        const u32 sameBankMode2WriteBank =
-            (softPackedSnapshot.captureCntLatched >> 16u) & 0x3u;
-        const u32 sameBankMode2DisplayBank =
-            (softPackedSnapshot.dispCntALatched >> 18u) & 0x3u;
-        const bool sameBankMode2DisplayedSourceHardwareTuple =
-            currentBackendIsGraphics
-            && !softPackedSnapshot.captureBackedClass4Only
-            && ((softPackedSnapshot.dispCntALatched >> 16u) & 0x3u)
-                == 2u
-            && ((softPackedSnapshot.captureCntLatched >> 29u) & 0x3u)
-                == 2u
-            && ((softPackedSnapshot.captureCntLatched >> 20u) & 0x3u)
-                == 3u
-            && (softPackedSnapshot.captureCntLatched & (1u << 25u))
-                == 0u
-            && sameBankMode2WriteBank == sameBankMode2DisplayBank
-            && (softPackedSnapshot.captureCntLatched & 0x1Fu) != 0u
-            && ((softPackedSnapshot.captureCntLatched >> 8u) & 0x1Fu)
-                != 0u
-            && softPackedSnapshot.captureLinesLatched == kScreenHeight
-            && softPackedSnapshot.bottomScreenStats.DisplayModeCounts[2]
-                == kScreenHeight
-            && softPackedSnapshot.bottomScreenStats.VramCaptureUses3dLines
-                == kScreenHeight
-            && sameBankMode2DisplayedSource.valid
-            && sameBankMode2DisplayedSource.source.valid
-            && sameBankMode2DisplayedSource.vramBank
-                == sameBankMode2DisplayBank
-            && sameBankMode2DisplayedSource.source.screenSwap
-                == directPresentationSourceScreenSwap;
-        const SoftPackedSameBankMode2DisplayedSourceIdentity*
-            sameBankMode2DisplayedSourceForCopy =
-                sameBankMode2DisplayedSourceHardwareTuple
-                    ? &sameBankMode2DisplayedSource
-                    : nullptr;
-        if (areRendererDebugBgObjLogsEnabled() && structuredComp7HandoffDebugLogsRemaining > 0)
-        {
-            melonDS::Platform::Log(
-                melonDS::Platform::LogLevel::Warn,
-                "VulkanAccum[State]: frameId=%u current=%ux%u accum=%ux%u topValid=%u bottomValid=%u topLayout=%u bottomLayout=%u topCan=%u bottomCan=%u topAccum=%u bottomAccum=%u replace=%u liveTop=%u snapshot=%u snapshotTop=%u flips=%u lastOwnerValid=%u lastOwnerTop=%u alt=%u",
-                frame != nullptr ? static_cast<unsigned>(frame->frameId) : 0u,
-                renderer3D.GetColorTargetWidth(),
-                renderer3D.GetColorTargetHeight(),
-                accumulatedHighresWidth,
-                accumulatedHighresHeight,
-                accumulatedTopHighresValid ? 1u : 0u,
-                accumulatedBottomHighresValid ? 1u : 0u,
-                accumulatedTopHighresLayoutReady ? 1u : 0u,
-                accumulatedBottomHighresLayoutReady ? 1u : 0u,
-                topCanUseAccumulatedHighres ? 1u : 0u,
-                bottomCanUseAccumulatedHighres ? 1u : 0u,
-                accumulateCurrentTopHighres ? 1u : 0u,
-                accumulateCurrentBottomHighres ? 1u : 0u,
-                replaceAccumulatedHighres ? 1u : 0u,
-                liveSourceScreenSwap ? 1u : 0u,
-                resource.hasRenderer3dSnapshot ? 1u : 0u,
-                resource.renderer3dSnapshotScreenSwap ? 1u : 0u,
-                consecutiveLive3dOwnerFlips,
-                lastLive3dOwnerValid ? 1u : 0u,
-                lastLive3dOwnerWasTop ? 1u : 0u,
-                resource.alternatingLive3dPingPong ? 1u : 0u
-            );
-        }
-        if (!recordDirectPresentationPrep(
-                frame,
-                resource,
-                renderer3D,
-                directPresentationSourceScreenSwap,
-                canUseRetainedLiveSource,
-                accumulateCurrentTopHighres,
-                accumulateCurrentBottomHighres,
-                replaceAccumulatedHighres,
-                bottomVramToTopStructuredComp7Replay
-                    ? 1
-                    : (topVramToBottomStructuredComp7Replay ? 0 : -1),
-                usePublishedOppositeAsLiveSource,
-                exactBottomObjSourceForCopy,
-                exactDisplayedCaptureSourceForCopy,
-                sameBankMode2DisplayedSourceForCopy))
-        {
-            return failPrepare("direct-prep");
-        }
-        prepareDirectCpuWindow.Add(PerfNowNs() - directStartNs);
-
-        resource.hasPreparedInputs = true;
-        resource.hasContent = false;
-    }
-    if (canReusePreRunSnapshot)
-        prepareStateCpuWindow.Add(PerfNowNs() - stateStartNs);
-
-    const u64 finalizeStartNs = PerfNowNs();
-    VkImage currentSourceImage = VK_NULL_HANDLE;
-    VkImageView currentSourceImageView = VK_NULL_HANDLE;
-    u32 currentSourceWidth = 0;
-    u32 currentSourceHeight = 0;
-    if (resource.hasRenderer3dSnapshot
-        && resource.renderer3dSnapshot != VK_NULL_HANDLE
-        && resource.renderer3dSnapshotView != VK_NULL_HANDLE)
-    {
-        currentSourceImage = resource.renderer3dSnapshot;
-        currentSourceImageView = resource.renderer3dSnapshotView;
-        currentSourceWidth = resource.snapshotWidth;
-        currentSourceHeight = resource.snapshotHeight;
-    }
-    else if (resource.hasRetainedRenderer3dSource
-        && resource.retainedRenderer3dSourceImage != VK_NULL_HANDLE
-        && resource.retainedRenderer3dSourceImageView != VK_NULL_HANDLE)
-    {
-        currentSourceImage = resource.retainedRenderer3dSourceImage;
-        currentSourceImageView = resource.retainedRenderer3dSourceImageView;
-        currentSourceWidth = resource.retainedRenderer3dSourceWidth;
-        currentSourceHeight = resource.retainedRenderer3dSourceHeight;
-    }
-    else
-    {
-        currentSourceImage = renderer3D.GetColorTargetImage();
-        currentSourceImageView = renderer3D.GetColorTargetImageView();
-        currentSourceWidth = renderer3D.GetColorTargetWidth();
-        currentSourceHeight = renderer3D.GetColorTargetHeight();
-    }
-
-    const bool live3dOwnerIsTop = resource.hasRenderer3dSnapshot
-        ? resource.renderer3dSnapshotScreenSwap
-        : (resource.hasRetainedRenderer3dSource
-            ? resource.retainedRenderer3dSourceScreenSwap
-            : liveSourceScreenSwap);
-    if ((resource.hasRenderer3dSnapshot
-            && resource.renderer3dSnapshot != VK_NULL_HANDLE
-            && resource.renderer3dSnapshotView != VK_NULL_HANDLE)
-        || (resource.hasRetainedRenderer3dSource
-            && resource.retainedRenderer3dSourceImage != VK_NULL_HANDLE
-            && resource.retainedRenderer3dSourceImageView != VK_NULL_HANDLE))
-    {
-        if (live3dOwnerIsTop)
-        {
-            framesSinceTopLive3D = 0;
-            if (framesSinceBottomLive3D < 1024)
-                framesSinceBottomLive3D++;
-        }
-        else
-        {
-            framesSinceBottomLive3D = 0;
-            if (framesSinceTopLive3D < 1024)
-                framesSinceTopLive3D++;
-        }
-    }
-    else
-    {
-        if (framesSinceTopLive3D < 1024)
-            framesSinceTopLive3D++;
-        if (framesSinceBottomLive3D < 1024)
-            framesSinceBottomLive3D++;
-    }
-    if (lastLive3dOwnerValid && lastLive3dOwnerWasTop != live3dOwnerIsTop)
-    {
-        if (consecutiveLive3dOwnerFlips < 1024)
-            consecutiveLive3dOwnerFlips++;
-    }
-    else if (lastLive3dOwnerValid)
-    {
-        consecutiveLive3dOwnerFlips = 0;
-    }
-    lastLive3dOwnerValid = true;
-    lastLive3dOwnerWasTop = live3dOwnerIsTop;
-    resource.alternatingLive3dPingPong = consecutiveLive3dOwnerFlips >= 2u;
-    const bool currentFrameReplaysVramCaptureOnOppositeLcd =
-        topVramToBottomStructuredComp7Replay
-        || bottomVramToTopStructuredComp7Replay;
-    if (resource.alternatingLive3dPingPong
-        && !alternatingPingPongWasActive
-        && !currentFrameReplaysVramCaptureOnOppositeLcd)
-    {
-        const bool currentDragonEntryCaptureTuple =
-            currentBackendIsGraphics
-            && softPackedSnapshot.valid
-            && resource.screenSwap
-            && softPackedSnapshot.captureCntLatched == 0x80330000u
-            && ((softPackedSnapshot.dispCntALatched >> 16u) & 0x3u) == 1u
-            && ((softPackedSnapshot.dispCntBLatched >> 16u) & 0x3u) == 1u
-            && softPackedSnapshot.captureLinesLatched == kScreenHeight
-            && softPackedSnapshot.captureAgeLatched == 0u
-            && softPackedSnapshot.topScreenStats.DisplayModeCounts[2] == kScreenHeight
-            && softPackedSnapshot.topScreenStats.VramCaptureUses3dLines == kScreenHeight
-            && softPackedSnapshot.topScreenStats.RegularCaptureUses3dLines == 0u
-            && softPackedSnapshot.bottomScreenStats.DisplayModeCounts[1] == kScreenHeight
-            && softPackedSnapshot.bottomScreenStats.RegularCaptureUses3dLines == kScreenHeight
-            && softPackedSnapshot.bottomScreenStats.VramCaptureUses3dLines == 0u;
-        const bool topMergedThisPrepare =
-            currentDragonEntryCaptureTuple
-            && accumulatedTopHighresLastMergeFrameId == lastPreparedFrameId
-            && accumulatedTopHighresLastMergePrepareSerial == accumulatedHighresPrepareSerial;
-        const bool bottomMergedThisPrepare =
-            currentDragonEntryCaptureTuple
-            && accumulatedBottomHighresLastMergeFrameId == lastPreparedFrameId
-            && accumulatedBottomHighresLastMergePrepareSerial == accumulatedHighresPrepareSerial;
-        constexpr u32 fullScreenPixels =
-            static_cast<u32>(kScreenWidth * kScreenHeight);
-        const bool previousZeroLineTop2dProducer =
-            previousResource != nullptr
-            && previousResource->hasSoftPackedDebugData
-            && previousResource->snapshotFromGraphicsBackend
-            && previousResource->hasRenderer3dSnapshot
-            && previousResource->renderer3dSnapshotScreenSwap
-            && previousResource->screenSwap
-            && previousResource->captureCntLatched == 0x80330010u
-            && previousResource->dispCntALatched == 0x00010308u
-            && previousResource->dispCntBLatched == 0x00010425u
-            && previousResource->captureLinesLatched == 0u
-            && previousResource->topScreenStats.DisplayModeCounts[1]
-                == static_cast<u32>(kScreenHeight)
-            && previousResource->topScreenStats.CompModeCounts[7]
-                == fullScreenPixels
-            && previousResource->topScreenStats.StructuredSlotPixels == 0u
-            && previousResource->topScreenStats.StructuredAbovePixels == 0u
-            && previousResource->topScreenStats.Structured2DOnlyPixels
-                == fullScreenPixels
-            && previousResource->topScreenStats.RegularCaptureUses3dLines == 0u
-            && previousResource->topScreenStats.VramCaptureUses3dLines == 0u
-            && previousResource->topScreenStats.ForceLive3dCompMode7Lines == 0u
-            && previousResource->topScreenStats.ProtectedBlackPixels == 0u
-            && previousResource->bottomScreenStats.DisplayModeCounts[1]
-                == static_cast<u32>(kScreenHeight)
-            && previousResource->bottomScreenStats.CompModeCounts[2]
-                == fullScreenPixels
-            && previousResource->bottomScreenStats.StructuredSlotPixels
-                == fullScreenPixels
-            && previousResource->bottomScreenStats.StructuredAbovePixels == 0u
-            && previousResource->bottomScreenStats.Structured2DOnlyPixels == 0u
-            && previousResource->bottomScreenStats.RegularCaptureUses3dLines == 0u
-            && previousResource->bottomScreenStats.VramCaptureUses3dLines == 0u
-            && previousResource->bottomScreenStats.ForceLive3dCompMode7Lines == 0u
-            && previousResource->bottomScreenStats.ProtectedBlackPixels == 0u;
-        const bool currentFullBottomRegularConsumer =
-            currentBackendIsGraphics
-            && resource.hasRenderer3dSnapshot
-            && !resource.renderer3dSnapshotScreenSwap
-            && !resource.renderer3dSnapshotZeroPolygons
-            && !resource.screenSwap
-            && !liveSourceScreenSwap
-            && softPackedSnapshot.captureCntLatched == 0x80320010u
-            && softPackedSnapshot.dispCntALatched == 0x00010308u
-            && softPackedSnapshot.dispCntBLatched == 0x00011025u
-            && softPackedSnapshot.captureLinesLatched
-                == static_cast<u32>(kScreenHeight)
-            && !live3dOwnerIsTop
-            && topCanUseAccumulatedHighres
-            && bottomCanUseAccumulatedHighres
-            && !topUsesCurrentCapture3d
-            && !topUsesRegularCapture3d
-            && bottomUsesCurrentCapture3d
-            && bottomUsesRegularCapture3d
-            && softPackedSnapshot.topScreenStats.DisplayModeCounts[1]
-                == static_cast<u32>(kScreenHeight)
-            && softPackedSnapshot.topScreenStats.CompModeCounts[2]
-                == fullScreenPixels
-            && softPackedSnapshot.topScreenStats.StructuredSlotPixels
-                == fullScreenPixels
-            && softPackedSnapshot.topScreenStats.StructuredAbovePixels == 0u
-            && softPackedSnapshot.topScreenStats.Structured2DOnlyPixels == 0u
-            && softPackedSnapshot.topScreenStats.RegularCaptureUses3dLines == 0u
-            && softPackedSnapshot.topScreenStats.VramCaptureUses3dLines == 0u
-            && softPackedSnapshot.topScreenStats.ForceLive3dCompMode7Lines == 0u
-            && softPackedSnapshot.topScreenStats.ProtectedBlackPixels == 0u
-            && softPackedSnapshot.bottomScreenStats.DisplayModeCounts[1]
-                == static_cast<u32>(kScreenHeight)
-            && softPackedSnapshot.bottomScreenStats.CompModeCounts[7]
-                == fullScreenPixels
-            && softPackedSnapshot.bottomScreenStats.StructuredSlotPixels
-                == fullScreenPixels
-            && softPackedSnapshot.bottomScreenStats.StructuredAbovePixels
-                == fullScreenPixels
-            && softPackedSnapshot.bottomScreenStats.Structured2DOnlyPixels == 0u
-            && softPackedSnapshot.bottomScreenStats.RegularCaptureUses3dLines
-                == static_cast<u32>(kScreenHeight)
-            && softPackedSnapshot.bottomScreenStats.VramCaptureUses3dLines == 0u
-            && softPackedSnapshot.bottomScreenStats.ForceLive3dCompMode7Lines == 0u
-            && softPackedSnapshot.bottomScreenStats.ProtectedBlackPixels == 0u;
-        const bool preserveTopAcrossZeroLineCaptureEntry =
-            accumulatedTopHighresValid
-            && accumulatedTopHighresLayoutReady
-            && previousZeroLineTop2dProducer
-            && currentFullBottomRegularConsumer;
-        resource.suppressPreviousTop3dOnZeroLineReentry =
-            preserveTopAcrossZeroLineCaptureEntry;
-        if (!topMergedThisPrepare && !preserveTopAcrossZeroLineCaptureEntry)
-            accumulatedTopHighresValid = false;
-        if (!bottomMergedThisPrepare)
-            accumulatedBottomHighresValid = false;
-    }
-    alternatingPingPongWasActive = resource.alternatingLive3dPingPong;
-    {
-        constexpr u32 sharedReplayDominantPixels = (kScreenWidth * kScreenHeight) / 2u;
-        const auto isFull2dOnlyReplay = [&](const SoftPackedScreenStats& stats) {
-            return stats.Structured2DOnlyPixels > sharedReplayDominantPixels
-                && stats.ProtectedBlackPixels <= sharedReplayDominantPixels
-                && stats.RegularCaptureUses3dLines == 0u
-                && stats.VramCaptureUses3dLines == 0u;
-        };
-        const auto isComp4PlaceholderHold = [&](const SoftPackedScreenStats& stats) {
-            return stats.CompModeCounts[4] > sharedReplayDominantPixels
-                && stats.StructuredSlotPixels > sharedReplayDominantPixels
-                && stats.RegularCaptureUses3dLines == 0u
-                && stats.VramCaptureUses3dLines == 0u;
-        };
-        const bool topOrientation =
-            isFull2dOnlyReplay(softPackedSnapshot.topScreenStats)
-            && isComp4PlaceholderHold(softPackedSnapshot.bottomScreenStats);
-        const bool bottomOrientation =
-            isFull2dOnlyReplay(softPackedSnapshot.bottomScreenStats)
-            && isComp4PlaceholderHold(softPackedSnapshot.topScreenStats);
-        const bool hintFlipped =
-            resource.capture3dSourceScreenSwapHintValid
-            && sharedReplayPairLastHintValid
-            && resource.capture3dSourceScreenSwapHint != sharedReplayPairLastHint;
-        sharedReplayPairLastHintValid = resource.capture3dSourceScreenSwapHintValid;
-        sharedReplayPairLastHint = resource.capture3dSourceScreenSwapHint;
-        if ((topOrientation || bottomOrientation)
-            && !resource.alternatingLive3dPingPong
-            && !hintFlipped)
-        {
-            if (sharedReplayPairStreak > 0 && sharedReplayPairTopIs2dOnly != topOrientation)
-                sharedReplayPairStreak = 0;
-            if (sharedReplayPairStreak < 1024)
-                sharedReplayPairStreak++;
-            sharedReplayPairTopIs2dOnly = topOrientation;
-        }
-        else
-        {
-            sharedReplayPairStreak = 0;
-        }
-        resource.sharedCaptureReplayPairStable = sharedReplayPairStreak >= 8u;
-    }
-    if (areRendererDebugBgObjLogsEnabled())
-    {
-        static u32 pingPongStateLogsRemaining = 600u;
-        if (pingPongStateLogsRemaining > 0)
-        {
-            melonDS::Platform::Log(
-                melonDS::Platform::LogLevel::Warn,
-                "VulkanLive3D[PingPong]: frameId=%llu active=%u ownerTop=%u flips=%u sinceTop=%u sinceBottom=%u snap=%u",
-                static_cast<unsigned long long>(softPackedSnapshot.frameId),
-                resource.alternatingLive3dPingPong ? 1u : 0u,
-                live3dOwnerIsTop ? 1u : 0u,
-                consecutiveLive3dOwnerFlips,
-                framesSinceTopLive3D,
-                framesSinceBottomLive3D,
-                resource.hasRenderer3dSnapshot ? 1u : 0u
-            );
-            pingPongStateLogsRemaining--;
-        }
-    }
-    const bool topPlainStructuredComp7PureAlternatingVramNoAboveCarry =
-        topPlainStructuredComp7PureAlternatingVramPair
-        && class4NoAboveVramStructuredPair
-        && bottomUsesVramCapture3d
-        && !topUsesVramCapture3d
-        && topUsesStructured3d
-        && topUsesPlainStructuredComp7Slot
-        && !live3dOwnerIsTop;
-    const bool topNeedsAccumulatedHighres =
-        topCanUseAccumulatedHighres
-        && (!topStructuredHandoffNoCurrent3d || live3dOwnerIsTop)
-        && (live3dOwnerIsTop
-            || framesSinceTopLive3D <= 1u
-            || topUsesFullRegularComp7
-            || topHasReusableStructured3dSlot
-            || topStructuredSlotUsesPreviousWhileBottom2dOnly
-            || topPlainStructuredComp7PureAlternatingVramCadenceCarry
-            || (topPlainStructuredComp7UsesOppositeLive3d
-                && !topPlainStructuredComp7PureAlternatingVramPair)
-            || (class4VramStructuredPair
-                && !live3dOwnerIsTop
-                && !topPlainStructuredComp7PureAlternatingVramPair));
-    const bool bottomNeedsAccumulatedHighres =
-        bottomCanUseAccumulatedHighres
-        && (!bottomStructuredHandoffNoCurrent3d || !live3dOwnerIsTop)
-        && (!live3dOwnerIsTop
-            || framesSinceBottomLive3D <= 1u
-            || bottomUsesFullRegularComp7
-            || bottomHasReusableStructured3dSlot
-            || bottomStructuredSlotUsesPreviousWhileTop2dOnly
-            || (bottomPlainStructuredComp7UsesOppositeLive3d
-                && !bottomPlainStructuredComp7PureAlternatingVramPair)
-            || (class4VramStructuredPair
-                && live3dOwnerIsTop
-                && !bottomPlainStructuredComp7PureAlternatingVramPair));
-    resource.previousTopRendererSourceImage = currentSourceImage;
-    resource.previousTopRendererSourceImageView = currentSourceImageView;
-    resource.previousTopRendererSourceValid = false;
-    resource.previousTopSourceFrame = nullptr;
-    resource.previousTopSourcePending = false;
-    resource.previousBottomRendererSourceImage = currentSourceImage;
-    resource.previousBottomRendererSourceImageView = currentSourceImageView;
-    resource.previousBottomRendererSourceValid = false;
-    resource.previousBottomSourceFrame = nullptr;
-    resource.previousBottomSourcePending = false;
-    resource.class4Full2dOnlyBottomFrameOwnedHistory = false;
-    resource.class4BottomStructuredAboveCurrentOwnedHistory = false;
-    resource.class4BottomStructuredCurrentOwnedSource = false;
-    resource.replayTopComposedFromPrevious = false;
-    resource.replayBottomComposedFromPrevious = false;
-    resource.replayTopComposedFromLatest = false;
-    resource.previousTopComposedFrame = nullptr;
-    resource.previousBottomComposedFrame = nullptr;
-    const auto sourceIsAuthenticatedClass4BottomHistory =
-        [&](const FrameResource& sourceResource, const Frame* sourceFrame) {
-        constexpr u32 screenPixels =
-            static_cast<u32>(kScreenWidth * kScreenHeight);
-        const auto onlyCompMode7 = [&](const SoftPackedScreenStats& stats) {
-            if (stats.CompModeCounts[7] != screenPixels)
-                return false;
-            for (size_t index = 0; index < stats.CompModeCounts.size(); index++)
-            {
-                if (index != 7u && stats.CompModeCounts[index] != 0u)
-                    return false;
-            }
-            return true;
-        };
-        const auto noCompModes = [](const SoftPackedScreenStats& stats) {
-            return std::all_of(
-                stats.CompModeCounts.begin(),
-                stats.CompModeCounts.end(),
-                [](u32 count) { return count == 0u; });
-        };
-        const SoftPackedScreenStats& top = sourceResource.topScreenStats;
-        const SoftPackedScreenStats& bottom = sourceResource.bottomScreenStats;
-        return sourceFrame != nullptr
-            && sourceResource.hasPreparedInputs
-            && sourceResource.hasSoftPackedDebugData
-            && sourceResource.snapshotFromGraphicsBackend
-            && sourceResource.captureBackedClass4Only
-            && sourceResource.hasPreparedCapture3dSource
-            && sourceResource.softPackedFrameId == sourceFrame->frameId
-            && sourceResource.screenSwap
-            && sourceResource.captureCntLatched == 0x00330010u
-            && sourceResource.dispCntALatched == 0x000E115Du
-            && sourceResource.dispCntBLatched == 0x00010555u
-            && sourceResource.captureLinesLatched
-                == static_cast<u32>(kScreenHeight)
-            && sourceResource.capture3dSourceScreenSwapHintValid
-            && sourceResource.capture3dSourceScreenSwapHint
-            && sourceResource.class4PreservePackedVramValid
-            && sourceResource.class4PreservePackedVramScreenSwap
-            && !sourceResource.class4NoAboveVramStructuredPair
-            && sourceResource.renderer3dSnapshotSourceIdentityValid
-            && sourceResource.renderer3dSnapshotSourceSequence > 0u
-            && sourceResource.renderer3dSnapshotSourcePolygonCount > 0u
-            && sourceResource.renderer3dSnapshotSourceCaptureCnt
-                == 0x80330010u
-            && sourceResource.renderer3dSnapshotSourceScreenSwap
-            && top.DisplayModeCounts[0] == 0u
-            && top.DisplayModeCounts[1] == 0u
-            && top.DisplayModeCounts[2]
-                == static_cast<u32>(kScreenHeight)
-            && top.DisplayModeCounts[3] == 0u
-            && noCompModes(top)
-            && top.RegularCaptureUses3dLines == 0u
-            && top.VramCaptureUses3dLines
-                == static_cast<u32>(kScreenHeight)
-            && top.ForceLive3dCompMode7Lines == 0u
-            && top.StructuredSlotPixels == 0u
-            && top.StructuredAbovePixels == 0u
-            && top.Structured2DOnlyPixels == 0u
-            && top.ProtectedBlackPixels == 0u
-            && bottom.DisplayModeCounts[0] == 0u
-            && bottom.DisplayModeCounts[1]
-                == static_cast<u32>(kScreenHeight)
-            && bottom.DisplayModeCounts[2] == 0u
-            && bottom.DisplayModeCounts[3] == 0u
-            && onlyCompMode7(bottom)
-            && bottom.RegularCaptureUses3dLines == 0u
-            && bottom.VramCaptureUses3dLines == 0u
-            && bottom.ForceLive3dCompMode7Lines
-                == static_cast<u32>(kScreenHeight)
-            && bottom.StructuredSlotPixels == screenPixels
-            && bottom.StructuredAbovePixels > 0u
-            && bottom.StructuredAboveVisiblePixels
-                == bottom.StructuredAbovePixels
-            && bottom.StructuredAboveBlackPixels == 0u
-            && bottom.Structured2DOnlyPixels == 0u
-            && bottom.Structured2DOnlyVisiblePixels == 0u
-            && bottom.ProtectedBlackPixels == 0u;
-    };
-    auto latchPreviousLcdSource = [&](Frame* sourceFrame, bool topLcd) {
-        if (sourceFrame == nullptr || sourceFrame == frame)
-            return;
-
-        const auto previousIt = resources.find(sourceFrame);
-        if (previousIt == resources.end())
-            return;
-
-        const FrameResource& previousResource = previousIt->second;
-        const bool previousSnapshotCompatible = previousResource.hasRenderer3dSnapshot
-            && previousResource.renderer3dSnapshot != VK_NULL_HANDLE
-            && previousResource.renderer3dSnapshotView != VK_NULL_HANDLE
-            && previousResource.snapshotWidth == currentSourceWidth
-            && previousResource.snapshotHeight == currentSourceHeight;
-        const bool previousRetainedSourceCompatible = previousResource.hasRetainedRenderer3dSource
-            && previousResource.retainedRenderer3dSourceImage != VK_NULL_HANDLE
-            && previousResource.retainedRenderer3dSourceImageView != VK_NULL_HANDLE
-            && previousResource.retainedRenderer3dSourceWidth == currentSourceWidth
-            && previousResource.retainedRenderer3dSourceHeight == currentSourceHeight;
-        if (!previousSnapshotCompatible && !previousRetainedSourceCompatible)
-            return;
-
-        VkImage previousSourceImage = previousSnapshotCompatible
-            ? previousResource.renderer3dSnapshot
-            : previousResource.retainedRenderer3dSourceImage;
-        VkImageView previousSourceImageView = previousSnapshotCompatible
-            ? previousResource.renderer3dSnapshotView
-            : previousResource.retainedRenderer3dSourceImageView;
-
-        if (topLcd)
-        {
-            resource.previousTopRendererSourceImage = previousSourceImage;
-            resource.previousTopRendererSourceImageView = previousSourceImageView;
-            resource.previousTopRendererSourceValid = true;
-            resource.previousTopSourceFrame = sourceFrame;
-            resource.previousTopSourcePending = true;
-        }
-        else
-        {
-            resource.previousBottomRendererSourceImage = previousSourceImage;
-            resource.previousBottomRendererSourceImageView = previousSourceImageView;
-            resource.previousBottomRendererSourceValid = true;
-            resource.previousBottomSourceFrame = sourceFrame;
-            resource.previousBottomSourcePending = true;
-            resource.class4Full2dOnlyBottomFrameOwnedHistory =
-                resource.class4Full2dOnlyBottomPackedAuthoritative
-                && resource.captureCntLatched == 0x80330010u
-                && resource.captureLinesLatched
-                    == static_cast<u32>(kScreenHeight)
-                && resource.dispCntALatched == 0x000E135Du
-                && resource.dispCntBLatched == 0x00010555u
-                && previousSnapshotCompatible
-                && sourceIsAuthenticatedClass4BottomHistory(
-                    previousResource,
-                    sourceFrame);
-        }
-    };
-
-    if (topNeedsAccumulatedHighres)
-        latchPreviousLcdSource(lastTopRendererSourceFrame, true);
-    if (bottomNeedsAccumulatedHighres)
-        latchPreviousLcdSource(lastBottomRendererSourceFrame, false);
-
-    constexpr u32 class4ScreenPixels =
-        static_cast<u32>(kScreenWidth * kScreenHeight);
-    const auto class4OnlyCompMode7 =
-        [&](const SoftPackedScreenStats& stats) {
-        if (stats.CompModeCounts[7] != class4ScreenPixels)
-            return false;
-        for (size_t index = 0; index < stats.CompModeCounts.size(); index++)
-        {
-            if (index != 7u && stats.CompModeCounts[index] != 0u)
-                return false;
-        }
-        return true;
-    };
-    const auto class4NoCompModes =
-        [](const SoftPackedScreenStats& stats) {
-        return std::all_of(
-            stats.CompModeCounts.begin(),
-            stats.CompModeCounts.end(),
-            [](u32 count) { return count == 0u; });
-    };
-    const auto isClass4Full2dOnlyBottomProducer =
-        [&](const FrameResource& source, const Frame* sourceFrame) {
-        const SoftPackedScreenStats& top = source.topScreenStats;
-        const SoftPackedScreenStats& bottom = source.bottomScreenStats;
-        return sourceFrame != nullptr
-            && source.hasPreparedInputs
-            && source.hasSoftPackedDebugData
-            && source.snapshotFromGraphicsBackend
-            && source.captureBackedClass4Only
-            && source.hasPreparedCapture3dSource
-            && source.softPackedFrameId == sourceFrame->frameId
-            && !source.screenSwap
-            && source.captureCntLatched == 0x80330010u
-            && source.dispCntALatched == 0x000E135Du
-            && source.dispCntBLatched == 0x00010555u
-            && source.captureLinesLatched
-                == static_cast<u32>(kScreenHeight)
-            && source.capture3dSourceScreenSwapHintValid
-            && !source.capture3dSourceScreenSwapHint
-            && !source.class4PreservePackedVramValid
-            && !source.class4PreservePackedVramScreenSwap
-            && !source.class4NoAboveVramStructuredPair
-            && source.hasRenderer3dSnapshot
-            && source.renderer3dSnapshot != VK_NULL_HANDLE
-            && source.renderer3dSnapshotView != VK_NULL_HANDLE
-            && source.snapshotWidth == currentSourceWidth
-            && source.snapshotHeight == currentSourceHeight
-            && !source.renderer3dSnapshotScreenSwap
-            && source.renderer3dSnapshotSourceIdentityValid
-            && source.renderer3dSnapshotSourceSequence > 0u
-            && source.renderer3dSnapshotSourcePolygonCount > 0u
-            && source.renderer3dSnapshotSourceCaptureCnt
-                == 0x80330010u
-            && !source.renderer3dSnapshotSourceScreenSwap
-            && top.DisplayModeCounts[0] == 0u
-            && top.DisplayModeCounts[1]
-                == static_cast<u32>(kScreenHeight)
-            && top.DisplayModeCounts[2] == 0u
-            && top.DisplayModeCounts[3] == 0u
-            && class4OnlyCompMode7(top)
-            && top.RegularCaptureUses3dLines == 0u
-            && top.VramCaptureUses3dLines == 0u
-            && top.ForceLive3dCompMode7Lines == 0u
-            && top.StructuredSlotPixels == 0u
-            && top.StructuredAbovePixels == 0u
-            && top.StructuredAboveVisiblePixels == 0u
-            && top.StructuredAboveBlackPixels == 0u
-            && top.Structured2DOnlyPixels == class4ScreenPixels
-            && top.Structured2DOnlyVisiblePixels == class4ScreenPixels
-            && top.ProtectedBlackPixels == 0u
-            && bottom.DisplayModeCounts[0] == 0u
-            && bottom.DisplayModeCounts[1] == 0u
-            && bottom.DisplayModeCounts[2]
-                == static_cast<u32>(kScreenHeight)
-            && bottom.DisplayModeCounts[3] == 0u
-            && class4NoCompModes(bottom)
-            && bottom.RegularCaptureUses3dLines == 0u
-            && bottom.VramCaptureUses3dLines
-                == static_cast<u32>(kScreenHeight)
-            && bottom.ForceLive3dCompMode7Lines == 0u
-            && bottom.StructuredSlotPixels == 0u
-            && bottom.StructuredAbovePixels == 0u
-            && bottom.StructuredAboveVisiblePixels == 0u
-            && bottom.StructuredAboveBlackPixels == 0u
-            && bottom.Structured2DOnlyPixels == 0u
-            && bottom.Structured2DOnlyVisiblePixels == 0u
-            && bottom.ProtectedBlackPixels == 0u;
-    };
-    const auto isClass4StructuredBottomProducer =
-        [&](const FrameResource& source, const Frame* sourceFrame) {
-        const SoftPackedScreenStats& top = source.topScreenStats;
-        const SoftPackedScreenStats& bottom = source.bottomScreenStats;
-        return sourceFrame != nullptr
-            && source.hasPreparedInputs
-            && source.hasSoftPackedDebugData
-            && source.snapshotFromGraphicsBackend
-            && source.captureBackedClass4Only
-            && source.hasPreparedCapture3dSource
-            && source.softPackedFrameId == sourceFrame->frameId
-            && !source.screenSwap
-            && source.captureCntLatched == 0x80330010u
-            && source.dispCntALatched == 0x000E135Du
-            && source.dispCntBLatched == 0x00010555u
-            && source.captureLinesLatched
-                == static_cast<u32>(kScreenHeight)
-            && source.capture3dSourceScreenSwapHintValid
-            && !source.capture3dSourceScreenSwapHint
-            && !source.class4NoAboveVramStructuredPair
-            && source.hasRenderer3dSnapshot
-            && source.renderer3dSnapshot != VK_NULL_HANDLE
-            && source.renderer3dSnapshotView != VK_NULL_HANDLE
-            && source.snapshotWidth == currentSourceWidth
-            && source.snapshotHeight == currentSourceHeight
-            && !source.renderer3dSnapshotScreenSwap
-            && source.renderer3dSnapshotSourceIdentityValid
-            && source.renderer3dSnapshotSourceSequence > 0u
-            && source.renderer3dSnapshotSourcePolygonCount > 0u
-            && source.renderer3dSnapshotSourceCaptureCnt
-                == 0x80330010u
-            && !source.renderer3dSnapshotSourceScreenSwap
-            && top.DisplayModeCounts[0] == 0u
-            && top.DisplayModeCounts[1]
-                == static_cast<u32>(kScreenHeight)
-            && top.DisplayModeCounts[2] == 0u
-            && top.DisplayModeCounts[3] == 0u
-            && class4OnlyCompMode7(top)
-            && top.RegularCaptureUses3dLines == 0u
-            && top.VramCaptureUses3dLines == 0u
-            && top.ForceLive3dCompMode7Lines
-                == static_cast<u32>(kScreenHeight)
-            && top.StructuredSlotPixels == class4ScreenPixels
-            && top.StructuredAbovePixels == class4ScreenPixels
-            && top.StructuredAboveVisiblePixels == class4ScreenPixels
-            && top.StructuredAboveBlackPixels == 0u
-            && top.Structured2DOnlyPixels == 0u
-            && top.Structured2DOnlyVisiblePixels == 0u
-            && top.ProtectedBlackPixels == 0u
-            && bottom.DisplayModeCounts[0] == 0u
-            && bottom.DisplayModeCounts[1] == 0u
-            && bottom.DisplayModeCounts[2]
-                == static_cast<u32>(kScreenHeight)
-            && bottom.DisplayModeCounts[3] == 0u
-            && class4NoCompModes(bottom)
-            && bottom.RegularCaptureUses3dLines == 0u
-            && bottom.VramCaptureUses3dLines
-                == static_cast<u32>(kScreenHeight)
-            && bottom.ForceLive3dCompMode7Lines == 0u
-            && bottom.StructuredSlotPixels == 0u
-            && bottom.StructuredAbovePixels == 0u
-            && bottom.StructuredAboveVisiblePixels == 0u
-            && bottom.StructuredAboveBlackPixels == 0u
-            && bottom.Structured2DOnlyPixels == 0u
-            && bottom.Structured2DOnlyVisiblePixels == 0u
-            && bottom.ProtectedBlackPixels == 0u;
-    };
-    const SoftPackedScreenStats& currentTop = resource.topScreenStats;
-    const SoftPackedScreenStats& currentBottom = resource.bottomScreenStats;
-    const bool class4BottomStructuredAboveCurrentOwnedConsumer =
-        currentBackendIsGraphics
-        && class4VramStructuredPair
-        && resource.hasPreparedInputs
-        && resource.hasSoftPackedDebugData
-        && resource.snapshotFromGraphicsBackend
-        && resource.captureBackedClass4Only
-        && resource.hasPreparedCapture3dSource
-        && resource.softPackedFrameId == frame->frameId
-        && resource.screenSwap
-        && resource.captureCntLatched == 0x80330010u
-        && resource.dispCntALatched == 0x000E115Du
-        && resource.dispCntBLatched == 0x00010555u
-        && resource.captureLinesLatched
-            == static_cast<u32>(kScreenHeight)
-        && softPackedSnapshot.captureAgeLatched == 0u
-        && resource.capture3dSourceScreenSwapHintValid
-        && resource.capture3dSourceScreenSwapHint
-        && !resource.class4NoAboveVramStructuredPair
-        && resource.hasRenderer3dSnapshot
-        && resource.renderer3dSnapshot != VK_NULL_HANDLE
-        && resource.renderer3dSnapshotView != VK_NULL_HANDLE
-        && resource.snapshotWidth == currentSourceWidth
-        && resource.snapshotHeight == currentSourceHeight
-        && resource.renderer3dSnapshotScreenSwap
-        && resource.renderer3dSnapshotSourceIdentityValid
-        && resource.renderer3dSnapshotSourceSequence > 0u
-        && resource.renderer3dSnapshotSourcePolygonCount > 0u
-        && resource.renderer3dSnapshotSourceCaptureCnt
-            == 0x80330010u
-        && resource.renderer3dSnapshotSourceScreenSwap
-        && currentTop.DisplayModeCounts[0] == 0u
-        && currentTop.DisplayModeCounts[1] == 0u
-        && currentTop.DisplayModeCounts[2]
-            == static_cast<u32>(kScreenHeight)
-        && currentTop.DisplayModeCounts[3] == 0u
-        && class4NoCompModes(currentTop)
-        && currentTop.RegularCaptureUses3dLines == 0u
-        && currentTop.VramCaptureUses3dLines
-            == static_cast<u32>(kScreenHeight)
-        && currentTop.ForceLive3dCompMode7Lines == 0u
-        && currentTop.StructuredSlotPixels == 0u
-        && currentTop.StructuredAbovePixels == 0u
-        && currentTop.Structured2DOnlyPixels == 0u
-        && currentTop.ProtectedBlackPixels == 0u
-        && currentBottom.DisplayModeCounts[0] == 0u
-        && currentBottom.DisplayModeCounts[1]
-            == static_cast<u32>(kScreenHeight)
-        && currentBottom.DisplayModeCounts[2] == 0u
-        && currentBottom.DisplayModeCounts[3] == 0u
-        && class4OnlyCompMode7(currentBottom)
-        && currentBottom.RegularCaptureUses3dLines == 0u
-        && currentBottom.VramCaptureUses3dLines == 0u
-        && currentBottom.ForceLive3dCompMode7Lines
-            == static_cast<u32>(kScreenHeight)
-        && currentBottom.StructuredSlotPixels == class4ScreenPixels
-        && currentBottom.StructuredAbovePixels > 0u
-        && currentBottom.StructuredAboveVisiblePixels
-            == currentBottom.StructuredAbovePixels
-        && currentBottom.StructuredAboveBlackPixels == 0u
-        && currentBottom.Structured2DOnlyPixels == 0u
-        && currentBottom.Structured2DOnlyVisiblePixels == 0u
-        && currentBottom.ProtectedBlackPixels == 0u;
-    const bool class4BottomA003StructuredCurrentOwnedConsumer =
-        currentBackendIsGraphics
-        && class4VramStructuredPair
-        && sourceIsAuthenticatedClass4BottomHistory(resource, frame)
-        && softPackedSnapshot.captureAgeLatched == 0u
-        && resource.hasRenderer3dSnapshot
-        && resource.renderer3dSnapshot != VK_NULL_HANDLE
-        && resource.renderer3dSnapshotView != VK_NULL_HANDLE
-        && resource.snapshotWidth == currentSourceWidth
-        && resource.snapshotHeight == currentSourceHeight
-        && !resource.renderer3dSnapshotScreenSwap;
-    Frame* class4BottomProducerFrame = resource.previousBottomSourceFrame;
-    const auto class4BottomProducerIt =
-        class4BottomProducerFrame != nullptr
-            ? resources.find(class4BottomProducerFrame)
-            : resources.end();
-    const bool class4BottomFull2dOnlyProducerAuthenticated =
-        class4BottomProducerIt != resources.end()
-        && class4BottomProducerFrame == lastPreparedFrame
-        && isClass4Full2dOnlyBottomProducer(
-            class4BottomProducerIt->second,
-            class4BottomProducerFrame);
-    if (class4BottomStructuredAboveCurrentOwnedConsumer
-        && class4BottomFull2dOnlyProducerAuthenticated)
-    {
-        resource.previousBottomRendererSourceImage =
-            resource.renderer3dSnapshot;
-        resource.previousBottomRendererSourceImageView =
-            resource.renderer3dSnapshotView;
-        resource.previousBottomRendererSourceValid = true;
-        resource.previousBottomSourceFrame = nullptr;
-        resource.previousBottomSourcePending = false;
-        resource.class4BottomStructuredAboveCurrentOwnedHistory = true;
-    }
-    Frame* class4BottomStructuredProducerFrame = lastPreparedFrame;
-    const auto class4BottomStructuredProducerIt =
-        class4BottomStructuredProducerFrame != nullptr
-            ? resources.find(class4BottomStructuredProducerFrame)
-            : resources.end();
-    resource.class4BottomStructuredCurrentOwnedSource =
-        class4BottomA003StructuredCurrentOwnedConsumer
-        && class4BottomStructuredProducerIt != resources.end()
-        && isClass4StructuredBottomProducer(
-            class4BottomStructuredProducerIt->second,
-            class4BottomStructuredProducerFrame);
-
-    const bool useAccumulators = resource.snapshotFromGraphicsBackend
-        && accumulatedHighresWidth == currentSourceWidth
-        && accumulatedHighresHeight == currentSourceHeight;
-    const bool topAccumulatorAvailable = useAccumulators
-        && accumulatedTopHighresValid
-        && accumulatedTopHighresImage != VK_NULL_HANDLE
-        && accumulatedTopHighresView != VK_NULL_HANDLE;
-    const bool bottomAccumulatorAvailable = useAccumulators
-        && accumulatedBottomHighresValid
-        && accumulatedBottomHighresImage != VK_NULL_HANDLE
-        && accumulatedBottomHighresView != VK_NULL_HANDLE;
-    const bool exactTopRegularBottomPassiveSeedHasFrameOwnedBottom =
-        resource.snapshotFromGraphicsBackend
-        && resource.hasSoftPackedDebugData
-        && resource.captureLinesLatched
-            == static_cast<u32>(kScreenHeight)
-        && resource.hasPreparedCapture3dSource
-        && resource.capture3dBuffer != VK_NULL_HANDLE
-        && resource.previousTopRendererSourceValid
-        && resource.previousBottomRendererSourceValid
-        && resource.previousBottomSourceFrame != nullptr
-        && resource.previousBottomSourcePending
-        && !resource.captureBackedClass4Only
-        && !resource.sourceAFullHighresOnlyTop
-        && !resource.sourceAFullHighresOnlyBottom
-        && !resource.replayTopComposedFromPrevious
-        && !resource.replayBottomComposedFromPrevious
-        && resource.frontBufferLatched == 0
-        && resource.screenSwap
-        && liveSourceScreenSwap
-        && !resource.screenSwapToggledFromPrevious
-        && resource.captureCntLatched == 0x80330010u
-        && resource.dispCntALatched == 0x00010308u
-        && resource.dispCntBLatched == 0x00010425u
-        && screenIsFullRegularComp7CaptureSlotWithAbove(
-            resource.topScreenStats)
-        && screenIsFullPassiveComp2(resource.bottomScreenStats);
-    const bool ownershipIntroDebugRelevant =
-        currentBackendIsGraphics
-        && (resource.screenSwapToggledFromPrevious
-            || topUsesPlainStructuredComp7Slot
-            || bottomUsesPlainStructuredComp7Slot
-            || topUsesRegularCapture3d
-            || bottomUsesRegularCapture3d
-            || topUsesVramCapture3d
-            || bottomUsesVramCapture3d
-            || softPackedSnapshot.topScreenStats.CompModeCounts[7] > 0u
-            || softPackedSnapshot.bottomScreenStats.CompModeCounts[7] > 0u
-            || softPackedSnapshot.topScreenStats.DisplayModeCounts[2] > 0u
-            || softPackedSnapshot.bottomScreenStats.DisplayModeCounts[2] > 0u);
-    if (ownershipIntroDebugRelevant
-        && areRendererDebugBgObjLogsEnabled()
-        && ownershipIntroDebugLogsRemaining > 0)
-    {
-        melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Warn,
-            "VulkanOwnershipIntro[Frame]: frameId=%u packedSwap=%u liveSwap=%u backendSwap=%u prevSwap=%u toggled=%u snapshot=%u snapshotSwap=%u capSrc=%u capHintValid=%u capHint=%u exactValid=%u exactSwap=%u class4Pair=%u preserveTopVramBottomPlain=%u preserveAltPlain=%u topSlotHold=%u bottomSlotHold=%u topCurrent=%u bottomCurrent=%u topPlain=%u bottomPlain=%u topOpp=%u bottomOpp=%u topCan=%u bottomCan=%u topNeed=%u bottomNeed=%u topAcc=%u bottomAcc=%u sinceTop=%u sinceBottom=%u topPrevValid=%u bottomPrevValid=%u topDM=%u/%u/%u/%u topReg=%u topVram=%u topForce=%u topComp7=%u topStruct=%u topAbove=%u top2DOnly=%u bottomDM=%u/%u/%u/%u bottomReg=%u bottomVram=%u bottomForce=%u bottomComp7=%u bottomStruct=%u bottomAbove=%u bottom2DOnly=%u remaining=%u",
-            frame != nullptr ? static_cast<unsigned>(frame->frameId) : 0u,
-            resource.screenSwap ? 1u : 0u,
-            liveSourceScreenSwap ? 1u : 0u,
-            backendRenderScreenSwap ? 1u : 0u,
-            previousResource != nullptr && previousResource->screenSwap ? 1u : 0u,
-            resource.screenSwapToggledFromPrevious ? 1u : 0u,
-            resource.hasRenderer3dSnapshot ? 1u : 0u,
-            resource.renderer3dSnapshotScreenSwap ? 1u : 0u,
-            softPackedSnapshot.hasCapture3dSource ? 1u : 0u,
-            renderer3D.IsCurrentCaptureScreenSwapHintValid() ? 1u : 0u,
-            renderer3D.GetCurrentCaptureScreenSwapHint() ? 1u : 0u,
-            renderer3D.IsLastValidExactCaptureAvailable() ? 1u : 0u,
-            renderer3D.GetLastValidExactCaptureScreenSwap() ? 1u : 0u,
-            class4VramStructuredPair ? 1u : 0u,
-            preservePackedOwnerForTopVramBottomPlainStructuredComp7 ? 1u : 0u,
-            preservePackedOwnerForAlternatingPlainStructuredComp7 ? 1u : 0u,
-            topStructuredSlotUsesPreviousWhileBottom2dOnly ? 1u : 0u,
-            bottomStructuredSlotUsesPreviousWhileTop2dOnly ? 1u : 0u,
-            topUsesCurrentCapture3d ? 1u : 0u,
-            bottomUsesCurrentCapture3d ? 1u : 0u,
-            topUsesPlainStructuredComp7Slot ? 1u : 0u,
-            bottomUsesPlainStructuredComp7Slot ? 1u : 0u,
-            topPlainStructuredComp7UsesOppositeLive3d ? 1u : 0u,
-            bottomPlainStructuredComp7UsesOppositeLive3d ? 1u : 0u,
-            topCanUseAccumulatedHighres ? 1u : 0u,
-            bottomCanUseAccumulatedHighres ? 1u : 0u,
-            topNeedsAccumulatedHighres ? 1u : 0u,
-            bottomNeedsAccumulatedHighres ? 1u : 0u,
-            topAccumulatorAvailable ? 1u : 0u,
-            bottomAccumulatorAvailable ? 1u : 0u,
-            framesSinceTopLive3D,
-            framesSinceBottomLive3D,
-            resource.previousTopRendererSourceValid ? 1u : 0u,
-            resource.previousBottomRendererSourceValid ? 1u : 0u,
-            softPackedSnapshot.topScreenStats.DisplayModeCounts[0],
-            softPackedSnapshot.topScreenStats.DisplayModeCounts[1],
-            softPackedSnapshot.topScreenStats.DisplayModeCounts[2],
-            softPackedSnapshot.topScreenStats.DisplayModeCounts[3],
-            softPackedSnapshot.topScreenStats.RegularCaptureUses3dLines,
-            softPackedSnapshot.topScreenStats.VramCaptureUses3dLines,
-            softPackedSnapshot.topScreenStats.ForceLive3dCompMode7Lines,
-            softPackedSnapshot.topScreenStats.CompModeCounts[7],
-            softPackedSnapshot.topScreenStats.StructuredSlotPixels,
-            softPackedSnapshot.topScreenStats.StructuredAbovePixels,
-            softPackedSnapshot.topScreenStats.Structured2DOnlyPixels,
-            softPackedSnapshot.bottomScreenStats.DisplayModeCounts[0],
-            softPackedSnapshot.bottomScreenStats.DisplayModeCounts[1],
-            softPackedSnapshot.bottomScreenStats.DisplayModeCounts[2],
-            softPackedSnapshot.bottomScreenStats.DisplayModeCounts[3],
-            softPackedSnapshot.bottomScreenStats.RegularCaptureUses3dLines,
-            softPackedSnapshot.bottomScreenStats.VramCaptureUses3dLines,
-            softPackedSnapshot.bottomScreenStats.ForceLive3dCompMode7Lines,
-            softPackedSnapshot.bottomScreenStats.CompModeCounts[7],
-            softPackedSnapshot.bottomScreenStats.StructuredSlotPixels,
-            softPackedSnapshot.bottomScreenStats.StructuredAbovePixels,
-            softPackedSnapshot.bottomScreenStats.Structured2DOnlyPixels,
-            ownershipIntroDebugLogsRemaining);
-        ownershipIntroDebugLogsRemaining--;
-    }
-    if (class4VramStructuredPair
-        && areRendererDebugBgObjLogsEnabled()
-        && class4PairDebugLogsRemaining > 0)
-    {
-        melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Warn,
-            "VulkanLive3D[Class4Pair]: frameId=%u packedSwap=%u liveSwap=%u backendSwap=%u capHintValid=%u capHint=%u exactValid=%u exactSwap=%u snapshot=%u snapshotSwap=%u preserveValid=%u preserveTop=%u noAbove=%u smallAboveMarker=%u noAboveActive=%u cadence=%u cadenceMarker=%u cadenceCarry=%u topPackedVisible=%u bottomAboveSampled=%u bottomAboveChanged=%u bottomAboveStable=%u bottomAboveMotion=%u bottomAboveTransition=%u cadencePhase=%u cadenceTop=%u cadenceSuppressTop=%u topDM=%u/%u/%u/%u bottomDM=%u/%u/%u/%u topVram=%u topStruct=%u topAbove=%u bottomVram=%u bottomStruct=%u bottomAbove=%u bottomAboveVisible=%u bottomAboveBlack=%u topCan=%u bottomCan=%u topNeed=%u bottomNeed=%u topAcc=%u bottomAcc=%u sinceTop=%u sinceBottom=%u",
-            frame != nullptr ? static_cast<unsigned>(frame->frameId) : 0u,
-            resource.screenSwap ? 1u : 0u,
-            liveSourceScreenSwap ? 1u : 0u,
-            backendRenderScreenSwap ? 1u : 0u,
-            renderer3D.IsCurrentCaptureScreenSwapHintValid() ? 1u : 0u,
-            renderer3D.GetCurrentCaptureScreenSwapHint() ? 1u : 0u,
-            renderer3D.IsLastValidExactCaptureAvailable() ? 1u : 0u,
-            renderer3D.GetLastValidExactCaptureScreenSwap() ? 1u : 0u,
-            resource.hasRenderer3dSnapshot ? 1u : 0u,
-            resource.renderer3dSnapshotScreenSwap ? 1u : 0u,
-            resource.class4PreservePackedVramValid ? 1u : 0u,
-            resource.class4PreservePackedVramScreenSwap ? 1u : 0u,
-            resource.class4NoAboveVramStructuredPair ? 1u : 0u,
-            class4SmallBottomAboveNoAboveMarker ? 1u : 0u,
-            class4NoAboveVramStructuredActiveForFrame ? 1u : 0u,
-            class4AsymmetricBottomDominantPair ? 1u : 0u,
-            class4BottomDominantAsymmetricMarker ? 1u : 0u,
-            class4BottomDominantAsymmetricCarry ? 1u : 0u,
-            topVramPackedHasVisibleContent ? 1u : 0u,
-            bottomStructuredAboveHashSampled ? 1u : 0u,
-            bottomStructuredAboveChanged ? 1u : 0u,
-            class4BottomAboveStableFrames,
-            class4BottomAboveMotionActive ? 1u : 0u,
-            bottomStructuredAboveTransitionActive ? 1u : 0u,
-            class4AsymmetricCadencePhaseForFrame,
-            class4AsymmetricCadenceAllowsTop ? 1u : 0u,
-            class4AsymmetricCadenceSuppressesTop ? 1u : 0u,
-            softPackedSnapshot.topScreenStats.DisplayModeCounts[0],
-            softPackedSnapshot.topScreenStats.DisplayModeCounts[1],
-            softPackedSnapshot.topScreenStats.DisplayModeCounts[2],
-            softPackedSnapshot.topScreenStats.DisplayModeCounts[3],
-            softPackedSnapshot.bottomScreenStats.DisplayModeCounts[0],
-            softPackedSnapshot.bottomScreenStats.DisplayModeCounts[1],
-            softPackedSnapshot.bottomScreenStats.DisplayModeCounts[2],
-            softPackedSnapshot.bottomScreenStats.DisplayModeCounts[3],
-            softPackedSnapshot.topScreenStats.VramCaptureUses3dLines,
-            softPackedSnapshot.topScreenStats.StructuredSlotPixels,
-            softPackedSnapshot.topScreenStats.StructuredAbovePixels,
-            softPackedSnapshot.bottomScreenStats.VramCaptureUses3dLines,
-            softPackedSnapshot.bottomScreenStats.StructuredSlotPixels,
-            softPackedSnapshot.bottomScreenStats.StructuredAbovePixels,
-            softPackedSnapshot.bottomScreenStats.StructuredAboveVisiblePixels,
-            softPackedSnapshot.bottomScreenStats.StructuredAboveBlackPixels,
-            topCanUseAccumulatedHighres ? 1u : 0u,
-            bottomCanUseAccumulatedHighres ? 1u : 0u,
-            topNeedsAccumulatedHighres ? 1u : 0u,
-            bottomNeedsAccumulatedHighres ? 1u : 0u,
-            topAccumulatorAvailable ? 1u : 0u,
-            bottomAccumulatorAvailable ? 1u : 0u,
-            framesSinceTopLive3D,
-            framesSinceBottomLive3D
-        );
-        class4PairDebugLogsRemaining--;
-    }
-    const bool topCurrentReplayAccumulatorAvailable =
-        useAccumulators
-        && bottomVramToTopStructuredComp7Replay
-        && accumulatedTopHighresValid
-        && accumulatedTopHighresImage != VK_NULL_HANDLE
-        && accumulatedTopHighresView != VK_NULL_HANDLE;
-    const bool bottomCurrentReplayAccumulatorAvailable =
-        useAccumulators
-        && topVramToBottomStructuredComp7Replay
-        && accumulatedBottomHighresValid
-        && accumulatedBottomHighresImage != VK_NULL_HANDLE
-        && accumulatedBottomHighresView != VK_NULL_HANDLE;
-    const bool pingPongServeBoth = resource.alternatingLive3dPingPong;
-    if ((topNeedsAccumulatedHighres || (pingPongServeBoth && topCanUseAccumulatedHighres))
-        && (topAccumulatorAvailable || topCurrentReplayAccumulatorAvailable)
-        && (!topUsesFullRegularComp7 || !live3dOwnerIsTop || pingPongServeBoth))
-    {
-        resource.previousTopRendererSourceImage = accumulatedTopHighresImage;
-        resource.previousTopRendererSourceImageView = accumulatedTopHighresView;
-        resource.previousTopRendererSourceValid = true;
-    }
-    if ((bottomNeedsAccumulatedHighres || (pingPongServeBoth && bottomCanUseAccumulatedHighres))
-        && (bottomAccumulatorAvailable || bottomCurrentReplayAccumulatorAvailable)
-        && (!bottomUsesFullRegularComp7 || live3dOwnerIsTop || pingPongServeBoth)
-        && !exactTopRegularBottomPassiveSeedHasFrameOwnedBottom
-        && !resource.class4Full2dOnlyBottomFrameOwnedHistory
-        && !resource.class4BottomStructuredAboveCurrentOwnedHistory)
-    {
-        resource.previousBottomRendererSourceImage = accumulatedBottomHighresImage;
-        resource.previousBottomRendererSourceImageView = accumulatedBottomHighresView;
-        resource.previousBottomRendererSourceValid = true;
-    }
-
-    if (resource.pinnedCrossReplayBottomForFrame
-        && !resource.class4Full2dOnlyBottomFrameOwnedHistory
-        && !resource.class4BottomStructuredAboveCurrentOwnedHistory
-        && resource.renderer3dSnapshot != VK_NULL_HANDLE
-        && resource.renderer3dSnapshotView != VK_NULL_HANDLE)
-    {
-        resource.previousBottomRendererSourceImage = resource.renderer3dSnapshot;
-        resource.previousBottomRendererSourceImageView = resource.renderer3dSnapshotView;
-        resource.previousBottomRendererSourceValid = true;
-        resource.previousBottomSourceFrame = nullptr;
-        resource.previousBottomSourcePending = false;
-    }
-
-    const bool topStructuredHandoffIncomplete =
-        screenUsesPlainStructuredComp7HandoffSlotFastPath(softPackedSnapshot.topScreenStats)
-        && screenHasStructuredHandoffOverlay(softPackedSnapshot.bottomScreenStats);
-    const bool bottomStructuredHandoffIncomplete =
-        screenUsesPlainStructuredComp7HandoffSlotFastPath(softPackedSnapshot.bottomScreenStats)
-        && screenHasStructuredHandoffOverlay(softPackedSnapshot.topScreenStats);
-    const bool topStructuredHandoffBlankCarry =
-        currentBackendIsGraphics
-        && resource.screenSwapToggledFromPrevious
-        && softPackedSnapshot.topScreenStats.DisplayModeCounts[0] == kScreenHeight
-        && softPackedSnapshot.topScreenStats.RegularCaptureUses3dLines == 0u
-        && softPackedSnapshot.topScreenStats.VramCaptureUses3dLines == 0u
-        && softPackedSnapshot.topScreenStats.ForceLive3dCompMode7Lines == 0u
-        && softPackedSnapshot.topScreenStats.StructuredSlotPixels == 0u
-        && bottomUsesPlainStructuredComp7Slot
-        && lastTopComposedFrame != nullptr
-        && lastTopComposedFrame != frame;
-    const bool bottomStructuredHandoffBlankCarry =
-        currentBackendIsGraphics
-        && resource.screenSwapToggledFromPrevious
-        && softPackedSnapshot.bottomScreenStats.DisplayModeCounts[0] == kScreenHeight
-        && softPackedSnapshot.bottomScreenStats.RegularCaptureUses3dLines == 0u
-        && softPackedSnapshot.bottomScreenStats.VramCaptureUses3dLines == 0u
-        && softPackedSnapshot.bottomScreenStats.ForceLive3dCompMode7Lines == 0u
-        && softPackedSnapshot.bottomScreenStats.StructuredSlotPixels == 0u
-        && topUsesPlainStructuredComp7Slot
-        && lastBottomComposedFrame != nullptr
-        && lastBottomComposedFrame != frame;
-    const bool topStructuredComp7LostSlotCarry =
-        currentBackendIsGraphics
-        && resource.screenSwapToggledFromPrevious
-        && softPackedSnapshot.topScreenStats.CompModeCounts[7] > dominantStructuredSlotThreshold
-        && softPackedSnapshot.topScreenStats.StructuredSlotPixels == 0u
-        && softPackedSnapshot.topScreenStats.Structured2DOnlyVisiblePixels > dominantStructuredSlotThreshold
-        && softPackedSnapshot.topScreenStats.RegularCaptureUses3dLines == 0u
-        && softPackedSnapshot.topScreenStats.VramCaptureUses3dLines == 0u
-        && softPackedSnapshot.topScreenStats.ForceLive3dCompMode7Lines == 0u
-        && lastTopComposedFrame != nullptr
-        && lastTopComposedFrame != frame;
-    const bool bottomStructuredComp7LostSlotCarry =
-        currentBackendIsGraphics
-        && resource.screenSwapToggledFromPrevious
-        && softPackedSnapshot.bottomScreenStats.CompModeCounts[7] > dominantStructuredSlotThreshold
-        && softPackedSnapshot.bottomScreenStats.StructuredSlotPixels == 0u
-        && softPackedSnapshot.bottomScreenStats.Structured2DOnlyVisiblePixels > dominantStructuredSlotThreshold
-        && softPackedSnapshot.bottomScreenStats.RegularCaptureUses3dLines == 0u
-        && softPackedSnapshot.bottomScreenStats.VramCaptureUses3dLines == 0u
-        && softPackedSnapshot.bottomScreenStats.ForceLive3dCompMode7Lines == 0u
-        && lastBottomComposedFrame != nullptr
-        && lastBottomComposedFrame != frame;
-    const bool topPlainStructuredComp7CarriesPreviousPureVram =
-        currentBackendIsGraphics
-        && resource.screenSwapToggledFromPrevious
-        && topUsesPlainStructuredComp7Slot
-        && !topUsesCurrentCapture3d
-        && !bottomUsesCurrentCapture3d
-        && previousResource != nullptr
-        && previousResource->topPureAlternatingVramCapture
-        && lastTopComposedFrame != nullptr
-        && lastTopComposedFrame != frame;
-    const bool bottomPlainStructuredComp7CarriesPreviousPureVram =
-        currentBackendIsGraphics
-        && resource.screenSwapToggledFromPrevious
-        && bottomUsesPlainStructuredComp7Slot
-        && !bottomUsesCurrentCapture3d
-        && !topUsesCurrentCapture3d
-        && previousResource != nullptr
-        && previousResource->bottomPureAlternatingVramCapture
-        && lastBottomComposedFrame != nullptr
-        && lastBottomComposedFrame != frame;
-    const bool bottomPlainStructuredComp7CanUseRegularTopHistory =
-        currentBackendIsGraphics
-        && bottomUsesPlainStructuredComp7Slot
-        && topUsesRegularCapture3d
-        && softPackedSnapshot.topScreenStats.CompModeCounts[0] > dominantStructuredSlotThreshold
-        && bottomNeedsAccumulatedHighres
-        && bottomAccumulatorAvailable
-        && resource.previousBottomRendererSourceValid;
-    const bool topRegularComp7BottomComp2ReplayComposed =
-        currentBackendIsGraphics
-        && resource.screenSwapToggledFromPrevious
-        && screenUsesRegularComp7EmptyPrimarySlot(softPackedSnapshot.topScreenStats)
-        && screenUsesFullStructuredCompMode2Slot(
-            softPackedSnapshot.packedBottomControl,
-            softPackedSnapshot.packedBottomLineMeta)
-        && !bottomUsesRegularCapture3d
-        && !bottomUsesVramCapture3d
-        && lastTopComposedFrame != nullptr
-        && lastTopComposedFrame != frame;
-    const bool topMissingPreparedCaptureReplayComposed =
-        currentBackendIsGraphics
-        && needsPreparedCapture3dSource
-        && !resource.hasPreparedCapture3dSource
-        && (topUsesScreenWideCaptureBackedComp4
-            || topUsesCurrentCapture3d
-            || topCanUseAccumulatedHighres)
-        && lastTopComposedFrame != nullptr
-        && lastTopComposedFrame != frame;
-    const bool bottomMissingPreparedCaptureReplayComposed =
-        currentBackendIsGraphics
-        && needsPreparedCapture3dSource
-        && !resource.hasPreparedCapture3dSource
-        && (bottomUsesScreenWideCaptureBackedComp4
-            || bottomUsesCurrentCapture3d
-            || bottomCanUseAccumulatedHighres)
-        && lastBottomComposedFrame != nullptr
-        && lastBottomComposedFrame != frame;
-    const bool topPlainStructuredComp7ReplayComposed =
-        ((topPlainStructuredComp7UsesOppositeLive3d
-            && !topPlainStructuredComp7PureAlternatingVramPair)
-            || topPlainStructuredComp7PureAlternatingVramNoAboveCarry
-            || topPlainStructuredComp7CarriesPreviousPureVram)
-        && lastTopComposedFrame != nullptr
-        && lastTopComposedFrame != frame;
-    const bool bottomPlainStructuredComp7ReplayComposed =
-        ((bottomPlainStructuredComp7UsesOppositeLive3d
-            && !bottomPlainStructuredComp7PureAlternatingVramPair
-            && !bottomPlainStructuredComp7CanUseRegularTopHistory)
-            || bottomPlainStructuredComp7CarriesPreviousPureVram)
-        && lastBottomComposedFrame != nullptr
-        && lastBottomComposedFrame != frame;
-    const bool topEmptyStructured2dReplayComposed =
-        currentBackendIsGraphics
-        && !softPackedSnapshot.hasCapture3dSource
-        && screenNeedsComposedReplayForEmptyStructured2d(softPackedSnapshot.topScreenStats)
-        && lastTopComposedFrame != nullptr
-        && lastTopComposedFrame != frame;
-    const bool bottomEmptyStructured2dReplayComposed =
-        currentBackendIsGraphics
-        && !softPackedSnapshot.hasCapture3dSource
-        && screenNeedsComposedReplayForEmptyStructured2d(softPackedSnapshot.bottomScreenStats)
-        && lastBottomComposedFrame != nullptr
-        && lastBottomComposedFrame != frame;
-    const bool topPlainStructuredSlotDuringOppositeNoCurrentHandoff =
-        currentBackendIsGraphics
-        &&
-        (topUsesPlainStructuredComp7Slot || topUsesPlainStructured3dSlot)
-        && bottomStructuredHandoffNoCurrent3d;
-    const bool bottomPlainStructuredSlotDuringOppositeNoCurrentHandoff =
-        currentBackendIsGraphics
-        &&
-        (bottomUsesPlainStructuredComp7Slot || bottomUsesPlainStructured3dSlot)
-        && topStructuredHandoffNoCurrent3d;
-    const bool topMissingHighresSourceCarry =
-        currentBackendIsGraphics
-        && topCanUseAccumulatedHighres
-        && !live3dOwnerIsTop
-        && !resource.previousTopRendererSourceValid
-        && lastTopComposedFrame != nullptr
-        && lastTopComposedFrame != frame;
-    const bool bottomMissingHighresSourceCarry =
-        currentBackendIsGraphics
-        && bottomCanUseAccumulatedHighres
-        && live3dOwnerIsTop
-        && !resource.previousBottomRendererSourceValid
-        && lastBottomComposedFrame != nullptr
-        && lastBottomComposedFrame != frame;
-    const auto screenIsVramDisplayDominant = [](const SoftPackedScreenStats& stats) {
-        return stats.DisplayModeCounts[2] > (kScreenHeight / 2u);
-    };
-    const auto screenHasSelfContainedSparseStructured2d = [](
-        const SoftPackedScreenStats& stats,
-        bool topScreen) {
-        constexpr u32 screenPixels = kScreenWidth * kScreenHeight;
-        const u32 coveredStructuredSlots =
-            stats.StructuredAboveVisiblePixels + stats.StructuredAboveBlackPixels;
-        const bool protectedBlackOwnedByScreen =
-            topScreen
-                ? (stats.ProtectedBlackTargetsTopPixels == stats.ProtectedBlackPixels
-                    && stats.ProtectedBlackTargetsBottomPixels == 0u)
-                : (stats.ProtectedBlackTargetsBottomPixels == stats.ProtectedBlackPixels
-                    && stats.ProtectedBlackTargetsTopPixels == 0u);
-        return stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-            && stats.CompModeCounts[7] == screenPixels
-            && stats.StructuredSlotPixels > static_cast<u32>(kScreenWidth)
-            && stats.StructuredSlotPixels <= (screenPixels / 8u)
-            && stats.StructuredAbovePixels == stats.StructuredSlotPixels
-            && coveredStructuredSlots == stats.StructuredSlotPixels
-            && stats.Structured2DOnlyPixels > ((screenPixels * 7u) / 8u)
-            && stats.Plane0VisiblePixels > (screenPixels / 4u)
-            && stats.Plane1VisiblePixels <= coveredStructuredSlots
-            && protectedBlackOwnedByScreen
-            && stats.RegularCaptureUses3dLines == 0u
-            && stats.VramCaptureUses3dLines == 0u
-            && stats.ForceLive3dCompMode7Lines == 0u
-            && stats.CaptureBackedComp4Lines == 0u;
-    };
-    const bool topSparseStructured2dIsCurrentWhileBottomOwnsCapture3d =
-        screenHasSelfContainedSparseStructured2d(softPackedSnapshot.topScreenStats, true)
-        && screenIsVramDisplayDominant(softPackedSnapshot.bottomScreenStats)
-        && softPackedSnapshot.bottomScreenStats.VramCaptureUses3dLines > (kScreenHeight / 2u);
-    const bool bottomSparseStructured2dIsCurrentWhileTopOwnsCapture3d =
-        screenHasSelfContainedSparseStructured2d(softPackedSnapshot.bottomScreenStats, false)
-        && screenIsVramDisplayDominant(softPackedSnapshot.topScreenStats)
-        && softPackedSnapshot.topScreenStats.VramCaptureUses3dLines > (kScreenHeight / 2u);
-    constexpr u32 exactPassiveScreenPixels = kScreenWidth * kScreenHeight;
-    const SoftPackedScreenStats& passiveBottomStats =
-        softPackedSnapshot.bottomScreenStats;
-    const bool exactPassiveBottomComp2 =
-        passiveBottomStats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-        && passiveBottomStats.CompModeCounts[2] == exactPassiveScreenPixels
-        && passiveBottomStats.StructuredSlotPixels == exactPassiveScreenPixels
-        && passiveBottomStats.StructuredAbovePixels == 0u
-        && passiveBottomStats.Structured2DOnlyPixels == 0u
-        && passiveBottomStats.Plane0UsefulPixels == exactPassiveScreenPixels
-        && passiveBottomStats.Plane1UsefulPixels == 0u
-        && passiveBottomStats.ProtectedBlackPixels == 0u
-        && passiveBottomStats.RegularCaptureUses3dLines == 0u
-        && passiveBottomStats.VramCaptureUses3dLines == 0u
-        && passiveBottomStats.ForceLive3dCompMode7Lines == 0u
-        && passiveBottomStats.CaptureBackedComp4Lines == 0u;
-    const bool exactTopProducerPhase =
-        softPackedSnapshot.screenSwapLatched
-        && softPackedSnapshot.captureCntLatched == 0x80330010u
-        && softPackedSnapshot.dispCntALatched == 0x00010308u
-        && softPackedSnapshot.dispCntBLatched == 0x00010425u
-        && softPackedSnapshot.captureAgeLatched == 0u
-        && softPackedSnapshot.topObjCaptureSource.valid
-        && softPackedSnapshot.topObjCaptureSource.polygonCount > 0u
-        && softPackedSnapshot.topObjCaptureSource.captureCnt
-            == softPackedSnapshot.captureCntLatched
-        && softPackedSnapshot.topObjCaptureSource.screenSwap
-        && softPackedSnapshot.topObjCaptureSource.uniformLines
-            == static_cast<u32>(kScreenHeight)
-        && softPackedSnapshot.topObjCaptureSource.consumedPixels
-            == exactPassiveScreenPixels
-        && softPackedSnapshot.topObjCaptureSource.directXYPixels
-            == exactPassiveScreenPixels
-        && softPackedSnapshot.topObjCaptureSource.conflictLines == 0u
-        && !softPackedSnapshot.bottomObjCaptureSource.valid;
-    const bool exactTopConsumerPhase =
-        !softPackedSnapshot.screenSwapLatched
-        && softPackedSnapshot.captureCntLatched == 0x80320010u
-        && softPackedSnapshot.dispCntALatched == 0x00010308u
-        && softPackedSnapshot.dispCntBLatched == 0x00011025u
-        && softPackedSnapshot.captureAgeLatched <= 3u
-        && !softPackedSnapshot.topObjCaptureSource.valid
-        && !softPackedSnapshot.bottomObjCaptureSource.valid;
-    const bool exactTopCaptureWithPassiveBottom =
-        currentBackendIsGraphics
-        && live3dOwnerIsTop
-        && topCanUseAccumulatedHighres
-        && topNeedsAccumulatedHighres
-        && resource.previousTopRendererSourceValid
-        && topAccumulatorAvailable
-        && bottomCanUseAccumulatedHighres
-        && !bottomNeedsAccumulatedHighres
-        && !resource.previousBottomRendererSourceValid
-        && resource.hasRenderer3dSnapshot
-        && resource.renderer3dSnapshotScreenSwap
-        && softPackedSnapshot.captureLinesLatched
-            == static_cast<u32>(kScreenHeight)
-        && softPackedSnapshot.hasCapture3dSource
-        && resource.capture3dSourceScreenSwapHintValid
-        && resource.capture3dSourceScreenSwapHint
-            != softPackedSnapshot.screenSwapLatched
-        && renderer3D.IsLastValidExactCaptureAvailable()
-        && renderer3D.GetLastValidExactCaptureScreenSwap()
-            != softPackedSnapshot.screenSwapLatched
-        && softPackedSnapshot.topScreenStats.DisplayModeCounts[1]
-            == static_cast<u32>(kScreenHeight)
-        && softPackedSnapshot.topScreenStats.StructuredSlotPixels
-            == exactPassiveScreenPixels
-        && exactPassiveBottomComp2
-        && (exactTopProducerPhase || exactTopConsumerPhase);
-    resource.exactTopCaptureWithPassiveBottom =
-        exactTopCaptureWithPassiveBottom;
-    const bool topMissingRequiredHighresHistory =
-        currentBackendIsGraphics
-        && topCanUseAccumulatedHighres
-        && !live3dOwnerIsTop
-        && !resource.previousTopRendererSourceValid
-        && (lastTopComposedFrame == nullptr || lastTopComposedFrame == frame)
-        && !screenIsVramDisplayDominant(softPackedSnapshot.topScreenStats)
-        && !topSparseStructured2dIsCurrentWhileBottomOwnsCapture3d;
-    const bool bottomMissingRequiredHighresHistory =
-        currentBackendIsGraphics
-        && bottomCanUseAccumulatedHighres
-        && live3dOwnerIsTop
-        && !resource.previousBottomRendererSourceValid
-        && (lastBottomComposedFrame == nullptr || lastBottomComposedFrame == frame)
-        && !screenIsVramDisplayDominant(softPackedSnapshot.bottomScreenStats)
-        && !bottomSparseStructured2dIsCurrentWhileTopOwnsCapture3d
-        && !exactTopCaptureWithPassiveBottom;
-    if (topMissingRequiredHighresHistory || bottomMissingRequiredHighresHistory)
-    {
-        if (areRendererDebugBgObjLogsEnabled() && structuredComp7HandoffDebugLogsRemaining > 0)
-        {
-            melonDS::Platform::Log(
-                melonDS::Platform::LogLevel::Warn,
-                "VulkanLive3D[FrameGate]: rejectedMissingHighresHistory frameId=%u topMissing=%u bottomMissing=%u liveTop=%u topCan=%u bottomCan=%u topPrev=%u bottomPrev=%u remaining=%u",
-                frame != nullptr ? static_cast<unsigned>(frame->frameId) : 0u,
-                topMissingRequiredHighresHistory ? 1u : 0u,
-                bottomMissingRequiredHighresHistory ? 1u : 0u,
-                live3dOwnerIsTop ? 1u : 0u,
-                topCanUseAccumulatedHighres ? 1u : 0u,
-                bottomCanUseAccumulatedHighres ? 1u : 0u,
-                resource.previousTopRendererSourceValid ? 1u : 0u,
-                resource.previousBottomRendererSourceValid ? 1u : 0u,
-                structuredComp7HandoffDebugLogsRemaining);
-            structuredComp7HandoffDebugLogsRemaining--;
-        }
-        lastPrepareBlockedByMissingHighresHistory = true;
-        return false;
-    }
-    const bool topFullRegularRepeatComposed =
-        currentBackendIsGraphics
-        && topUsesFullRegularComp7
-        && (!live3dOwnerIsTop
-            || (!bottomUsesFullRegularComp7
-                && softPackedSnapshot.bottomScreenStats.StructuredAboveVisiblePixels > static_cast<u32>(kScreenWidth)))
-        && lastTopComposedFrame != nullptr
-        && lastTopComposedFrame != frame;
-    const auto resolvedMixedRegularCanUsePerLcdHistory =
-        [](const SoftPackedScreenStats& stats, bool previousSourceValid) {
-            constexpr u32 screenPixels = kScreenWidth * kScreenHeight;
-            constexpr u32 meaningfulPixels = screenPixels / 4u;
-            constexpr u32 dominantPixels = screenPixels / 2u;
-            constexpr u32 nearlyFullPixels = (screenPixels * 7u) / 8u;
-            return previousSourceValid
-                && stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-                && stats.CompModeCounts[4] > meaningfulPixels
-                && stats.CompModeCounts[7] > dominantPixels
-                && stats.CompModeCounts[4] + stats.CompModeCounts[7] == screenPixels
-                && stats.CaptureBackedComp4Pixels == 0u
-                && stats.CaptureBackedComp4Lines == 0u
-                && stats.RegularCaptureUses3dLines == static_cast<u32>(kScreenHeight)
-                && stats.VramCaptureUses3dLines == 0u
-                && stats.StructuredSlotPixels == screenPixels
-                && stats.StructuredAbovePixels == stats.CompModeCounts[7]
-                && stats.StructuredAboveVisiblePixels == stats.StructuredAbovePixels
-                && stats.StructuredAboveBlackPixels == 0u
-                && stats.Structured2DOnlyPixels == 0u
-                && stats.Structured2DOnlyVisiblePixels == 0u
-                && stats.Plane0VisiblePixels > meaningfulPixels
-                && stats.Plane0VisiblePixels + stats.Plane1VisiblePixels > nearlyFullPixels
-                && stats.Plane1VisiblePixels == stats.StructuredAboveVisiblePixels
-                && stats.ProtectedBlackPixels == 0u;
-        };
-    const bool bottomResolvedMixedRegularCanUsePerLcdHistory =
-        resolvedMixedRegularCanUsePerLcdHistory(
-            softPackedSnapshot.bottomScreenStats,
-            resource.previousBottomRendererSourceValid);
-    const bool bottomFullRegularRepeatComposed =
-        currentBackendIsGraphics
-        && bottomUsesFullRegularComp7
-        && !bottomResolvedMixedRegularCanUsePerLcdHistory
-        && (live3dOwnerIsTop
-            || (!topUsesFullRegularComp7
-                && softPackedSnapshot.topScreenStats.StructuredAboveVisiblePixels > static_cast<u32>(kScreenWidth)))
-        && lastBottomComposedFrame != nullptr
-        && lastBottomComposedFrame != frame;
-    const bool topStructuredHandoffCarrySource =
-        currentBackendIsGraphics
-        && topStructuredHandoffIncomplete
-        && topAccumulatorAvailable;
-    const bool bottomStructuredHandoffCarrySource =
-        currentBackendIsGraphics
-        && bottomStructuredHandoffIncomplete
-        && bottomAccumulatorAvailable;
-    if (topStructuredHandoffCarrySource)
-    {
-        resource.previousTopRendererSourceImage = accumulatedTopHighresImage;
-        resource.previousTopRendererSourceImageView = accumulatedTopHighresView;
-        resource.previousTopRendererSourceValid = true;
-    }
-    if (bottomStructuredHandoffCarrySource
-        && !resource.pinnedCrossReplayBottomForFrame
-        && !resource.class4Full2dOnlyBottomFrameOwnedHistory
-        && !resource.class4BottomStructuredAboveCurrentOwnedHistory)
-    {
-        resource.previousBottomRendererSourceImage = accumulatedBottomHighresImage;
-        resource.previousBottomRendererSourceImageView = accumulatedBottomHighresView;
-        resource.previousBottomRendererSourceValid = true;
-    }
-    const auto composedFrameIsRecent = [&](Frame* sourceFrame) {
-        if (sourceFrame == nullptr || sourceFrame == frame)
-            return false;
-        if (frame == nullptr)
-            return true;
-        constexpr u32 maxComposedCarryAgeFrames = 8u;
-        return sourceFrame->frameId <= frame->frameId
-            && frame->frameId - sourceFrame->frameId <= maxComposedCarryAgeFrames;
-    };
-    const bool topHasRecentComposedFrame = composedFrameIsRecent(lastTopComposedFrame);
-    const bool bottomHasRecentComposedFrame = composedFrameIsRecent(lastBottomComposedFrame);
-    constexpr u32 fullScreenPixels = kScreenWidth * kScreenHeight;
-    const auto screenHasNoStructuredOverlayOrCapture = [](const SoftPackedScreenStats& stats) {
-        return stats.CaptureBackedComp4Pixels == 0u
-            && stats.CaptureBackedComp4Lines == 0u
-            && stats.RegularCaptureUses3dLines == 0u
-            && stats.VramCaptureUses3dLines == 0u
-            && stats.ForceLive3dCompMode7Lines == 0u
-            && stats.StructuredAbovePixels == 0u
-            && stats.StructuredAboveVisiblePixels == 0u
-            && stats.StructuredAboveBlackPixels == 0u
-            && stats.Structured2DOnlyPixels == 0u
-            && stats.Structured2DOnlyVisiblePixels == 0u
-            && stats.ProtectedBlackPixels == 0u;
-    };
-    const auto screenIsResolvedFullComp7Plane0 = [&](const SoftPackedScreenStats& stats) {
-        return stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-            && stats.CompModeCounts[7] == fullScreenPixels
-            && stats.StructuredSlotPixels == fullScreenPixels
-            && stats.Plane0UsefulPixels == fullScreenPixels
-            && stats.Plane0VisiblePixels == fullScreenPixels
-            && stats.Plane0OpaqueBlackPixels == 0u
-            && packedPlane1IsEmpty(stats)
-            && screenHasNoStructuredOverlayOrCapture(stats);
-    };
-    const auto screenIsOpaqueBlackFullComp7Plane0 = [&](const SoftPackedScreenStats& stats) {
-        return stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-            && stats.CompModeCounts[7] == fullScreenPixels
-            && stats.StructuredSlotPixels == fullScreenPixels
-            && stats.Plane0UsefulPixels == fullScreenPixels
-            && stats.Plane0VisiblePixels == 0u
-            && stats.Plane0OpaqueBlackPixels == fullScreenPixels
-            && packedPlane1IsEmpty(stats)
-            && screenHasNoStructuredOverlayOrCapture(stats);
-    };
-    const auto screenIsNeutralEmptyFullComp0Slot = [&](
-        const SoftPackedScreenStats& stats,
-        const std::array<u32, SoftPackedFrameSnapshot::kLineCount>& lineMeta) {
-        return stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-            && stats.CompModeCounts[0] == fullScreenPixels
-            && stats.StructuredSlotPixels == fullScreenPixels
-            && packedPlane0IsEmpty(stats)
-            && packedPlane1IsEmpty(stats)
-            && screenHasNoStructuredOverlayOrCapture(stats)
-            && screenHasNeutralLineMeta(lineMeta);
-    };
-    const auto packedScreenHasExactFullRegularCaptureLineMeta = [](const void* packedMapped) {
-        if (packedMapped == nullptr)
-            return false;
-        const auto* packed = static_cast<const u32*>(packedMapped);
-        for (int y = 0; y < kScreenHeight; y++)
-        {
-            const size_t rowBase = static_cast<size_t>(y) * static_cast<size_t>(kAcceleratedStride);
-            const u32 meta = packed[rowBase + static_cast<size_t>(kScreenWidth * 3)];
-            if (((meta >> 16u) & 0x3u) != 1u
-                || (meta & (kMetaFlagRegularCaptureUses3d
-                    | kMetaFlagExactRegularCaptureUses3dTransport))
-                    != (kMetaFlagRegularCaptureUses3d
-                        | kMetaFlagExactRegularCaptureUses3dTransport)
-                || (meta & (kMetaFlagVramCaptureUses3d
-                    | kMetaFlagForceLive3dCompMode7)) != 0u)
-            {
-                return false;
-            }
-        }
-        return true;
-    };
-    const bool previousBottomIsExactFullRegularCapture =
-        previousResource != nullptr
-        && previousResource->hasPreparedInputs
-        && previousResource->hasSoftPackedDebugData
-        && previousResource->bottomScreenStats.CompModeCounts[0] == fullScreenPixels
-        && previousResource->bottomScreenStats.StructuredSlotPixels == fullScreenPixels
-        && packedPlane0IsEmpty(previousResource->bottomScreenStats)
-        && packedPlane1IsEmpty(previousResource->bottomScreenStats)
-        && screenUsesPureFullRegular3dCapture(previousResource->bottomScreenStats)
-        && packedScreenHasExactFullRegularCaptureLineMeta(previousResource->bottomPackedMapped);
-    const bool currentBottomIsExactFullRegularCapture =
-        resource.hasSoftPackedDebugData
-        && resource.bottomScreenStats.CompModeCounts[0] == fullScreenPixels
-        && resource.bottomScreenStats.StructuredSlotPixels == fullScreenPixels
-        && packedPlane0IsEmpty(resource.bottomScreenStats)
-        && packedPlane1IsEmpty(resource.bottomScreenStats)
-        && screenUsesPureFullRegular3dCapture(resource.bottomScreenStats)
-        && packedScreenHasExactFullRegularCaptureLineMeta(resource.bottomPackedMapped);
-    resource.topResolvedComp7BeforeExactBottomRegularStoresFullCarry =
-        currentBackendIsGraphics
-        && softPackedSnapshot.valid
-        && resource.hasSoftPackedDebugData
-        && !resource.screenSwap
-        && screenIsResolvedFullComp7Plane0(resource.topScreenStats)
-        && currentBottomIsExactFullRegularCapture;
-    resource.topOpaqueComp7AfterExactBottomRegularUsesComposedCarry =
-        currentBackendIsGraphics
-        && softPackedSnapshot.valid
-        && resource.screenSwap
-        && resource.screenSwapToggledFromPrevious
-        && previousResource != nullptr
-        && !previousResource->screenSwap
-        && screenIsResolvedFullComp7Plane0(previousResource->topScreenStats)
-        && previousBottomIsExactFullRegularCapture
-        && screenIsOpaqueBlackFullComp7Plane0(softPackedSnapshot.topScreenStats)
-        && screenHasNeutralLineMeta(softPackedSnapshot.packedTopLineMeta)
-        && screenIsNeutralEmptyFullComp0Slot(
-            softPackedSnapshot.bottomScreenStats,
-            softPackedSnapshot.packedBottomLineMeta);
-    const auto screenIsExactProtectedRegularComp7 =
-        [&](const SoftPackedScreenStats& stats) {
-            return stats.DisplayModeCounts[0] == 0u
-                && stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-                && stats.DisplayModeCounts[2] == 0u
-                && stats.DisplayModeCounts[3] == 0u
-                && stats.CompModeCounts[7] == fullScreenPixels
-                && stats.RegularCaptureUses3dLines == static_cast<u32>(kScreenHeight)
-                && stats.VramCaptureUses3dLines == 0u
-                && stats.ForceLive3dCompMode7Lines == static_cast<u32>(kScreenHeight)
-                && stats.CaptureBackedComp4Pixels == 0u
-                && stats.CaptureBackedComp4Lines == 0u
-                && stats.StructuredSlotPixels == fullScreenPixels
-                && stats.StructuredAbovePixels == fullScreenPixels
-                && stats.StructuredAboveVisiblePixels == 0u
-                && stats.StructuredAboveBlackPixels == fullScreenPixels
-                && stats.Structured2DOnlyPixels == 0u
-                && stats.Structured2DOnlyVisiblePixels == 0u
-                && packedPlane0IsEmpty(stats)
-                && stats.Plane1UsefulPixels == fullScreenPixels
-                && stats.Plane1VisiblePixels == 0u
-                && stats.Plane1OpaqueBlackPixels == fullScreenPixels
-                && stats.ProtectedBlackPixels == fullScreenPixels
-                && stats.ProtectedBlackTargetsTopPixels == fullScreenPixels
-                && stats.ProtectedBlackTargetsBottomPixels == 0u;
-        };
-    const auto screenIsExactEmptyComp2NoCapture =
-        [&](const SoftPackedScreenStats& stats) {
-            return stats.DisplayModeCounts[0] == 0u
-                && stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-                && stats.DisplayModeCounts[2] == 0u
-                && stats.DisplayModeCounts[3] == 0u
-                && stats.CompModeCounts[2] == fullScreenPixels
-                && stats.CaptureBackedComp4Pixels == 0u
-                && stats.CaptureBackedComp4Lines == 0u
-                && stats.RegularCaptureUses3dLines == 0u
-                && stats.VramCaptureUses3dLines == 0u
-                && stats.ForceLive3dCompMode7Lines == 0u
-                && stats.StructuredSlotPixels == 0u
-                && stats.StructuredAbovePixels == 0u
-                && stats.Structured2DOnlyPixels == 0u
-                && stats.ProtectedBlackPixels == 0u
-                && packedPlane0IsEmpty(stats)
-                && packedPlane1IsEmpty(stats);
-        };
-    const auto screenIsExactVisibleRegularComp7 =
-        [&](const SoftPackedScreenStats& stats) {
-            return stats.DisplayModeCounts[0] == 0u
-                && stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-                && stats.DisplayModeCounts[2] == 0u
-                && stats.DisplayModeCounts[3] == 0u
-                && stats.CompModeCounts[0] == 0u
-                && stats.CompModeCounts[1] == 0u
-                && stats.CompModeCounts[2] == 0u
-                && stats.CompModeCounts[3] == 0u
-                && stats.CompModeCounts[4] == 0u
-                && stats.CompModeCounts[5] == 0u
-                && stats.CompModeCounts[6] == 0u
-                && stats.CompModeCounts[7] == fullScreenPixels
-                && stats.CaptureBackedComp4Pixels == 0u
-                && stats.CaptureBackedComp4Lines == 0u
-                && stats.RegularCaptureUses3dLines == static_cast<u32>(kScreenHeight)
-                && stats.VramCaptureUses3dLines == 0u
-                && stats.ForceLive3dCompMode7Lines == static_cast<u32>(kScreenHeight)
-                && stats.StructuredSlotPixels == fullScreenPixels
-                && stats.StructuredAbovePixels == fullScreenPixels
-                && stats.StructuredAboveVisiblePixels == fullScreenPixels
-                && stats.StructuredAboveBlackPixels == 0u
-                && stats.Structured2DOnlyPixels == 0u
-                && stats.Structured2DOnlyVisiblePixels == 0u
-                && packedPlane0IsEmpty(stats)
-                && stats.Plane1UsefulPixels == fullScreenPixels
-                && stats.Plane1VisiblePixels == fullScreenPixels
-                && stats.Plane1OpaqueBlackPixels == 0u
-                && stats.ProtectedBlackPixels == 0u
-                && stats.ProtectedBlackTargetsTopPixels == 0u
-                && stats.ProtectedBlackTargetsBottomPixels == 0u;
-        };
-    const auto screenIsExactSparseVramCapture =
-        [&](const SoftPackedScreenStats& stats) {
-            return stats.DisplayModeCounts[0] == 0u
-                && stats.DisplayModeCounts[1] == 0u
-                && stats.DisplayModeCounts[2] == static_cast<u32>(kScreenHeight)
-                && stats.DisplayModeCounts[3] == 0u
-                && std::all_of(
-                    stats.CompModeCounts.begin(),
-                    stats.CompModeCounts.end(),
-                    [](u32 count) { return count == 0u; })
-                && stats.CaptureBackedComp4Pixels == 0u
-                && stats.CaptureBackedComp4Lines == 0u
-                && stats.RegularCaptureUses3dLines == 0u
-                && stats.VramCaptureUses3dLines == static_cast<u32>(kScreenHeight)
-                && stats.ForceLive3dCompMode7Lines == 0u
-                && stats.StructuredSlotPixels == 0u
-                && stats.StructuredAbovePixels == 0u
-                && stats.StructuredAboveVisiblePixels == 0u
-                && stats.StructuredAboveBlackPixels == 0u
-                && stats.Structured2DOnlyPixels == 0u
-                && stats.Structured2DOnlyVisiblePixels == 0u
-                && stats.Plane0UsefulPixels == 1u
-                && stats.Plane0VisiblePixels == 1u
-                && stats.Plane0OpaqueBlackPixels == 0u
-                && stats.Plane1UsefulPixels == 1u
-                && stats.Plane1VisiblePixels == 1u
-                && stats.Plane1OpaqueBlackPixels == 0u
-                && stats.ProtectedBlackPixels == 0u
-                && stats.ProtectedBlackTargetsTopPixels == 0u
-                && stats.ProtectedBlackTargetsBottomPixels == 0u;
-        };
-    const auto screenIsExactEmptyRegularComp2 =
-        [&](const SoftPackedScreenStats& stats) {
-            return stats.DisplayModeCounts[0] == 0u
-                && stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-                && stats.DisplayModeCounts[2] == 0u
-                && stats.DisplayModeCounts[3] == 0u
-                && stats.CompModeCounts[0] == 0u
-                && stats.CompModeCounts[1] == 0u
-                && stats.CompModeCounts[2] == fullScreenPixels
-                && stats.CompModeCounts[3] == 0u
-                && stats.CompModeCounts[4] == 0u
-                && stats.CompModeCounts[5] == 0u
-                && stats.CompModeCounts[6] == 0u
-                && stats.CompModeCounts[7] == 0u
-                && stats.CaptureBackedComp4Pixels == 0u
-                && stats.CaptureBackedComp4Lines == 0u
-                && stats.RegularCaptureUses3dLines
-                    == static_cast<u32>(kScreenHeight)
-                && stats.VramCaptureUses3dLines == 0u
-                && stats.ForceLive3dCompMode7Lines == 0u
-                && stats.StructuredSlotPixels == 0u
-                && stats.StructuredAbovePixels == 0u
-                && stats.StructuredAboveVisiblePixels == 0u
-                && stats.StructuredAboveBlackPixels == 0u
-                && stats.Structured2DOnlyPixels == 0u
-                && stats.Structured2DOnlyVisiblePixels == 0u
-                && stats.ProtectedBlackPixels == 0u
-                && stats.ProtectedBlackTargetsTopPixels == 0u
-                && stats.ProtectedBlackTargetsBottomPixels == 0u
-                && packedPlane0IsEmpty(stats)
-                && packedPlane1IsEmpty(stats);
-        };
-    const auto packedScreenHasUniformLineMeta =
-        [](const void* packedMapped, u32 expected) {
-            if (packedMapped == nullptr)
-                return false;
-            const auto* packed = static_cast<const u32*>(packedMapped);
-            for (int y = 0; y < kScreenHeight; y++)
-            {
-                const size_t rowBase =
-                    static_cast<size_t>(y) * static_cast<size_t>(kAcceleratedStride);
-                if (packed[rowBase + static_cast<size_t>(kScreenWidth * 3)]
-                    != expected)
-                {
-                    return false;
-                }
-            }
-            return true;
-        };
-    resource.topExactProtectedRegularComp7 =
-        currentBackendIsGraphics
-        && softPackedSnapshot.valid
-        && resource.hasSoftPackedDebugData
-        && resource.frontBufferLatched == 1
-        && resource.screenSwap
-        && resource.captureCntLatched == 0x80320000u
-        && resource.dispCntALatched == 0x001A115Bu
-        && resource.dispCntBLatched == 0x00111035u
-        && resource.captureLinesLatched == static_cast<u32>(kScreenHeight)
-        && resource.capture3dSourceScreenSwapHintValid
-        && !resource.capture3dSourceScreenSwapHint
-        && resource.alternatingLive3dPingPong
-        && screenIsExactProtectedRegularComp7(resource.topScreenStats)
-        && screenIsExactEmptyComp2NoCapture(resource.bottomScreenStats);
-    resource.previousTopExactProtectedRegularComp7 =
-        currentBackendIsGraphics
-        && previousResource != nullptr
-        && previousResource->hasPreparedInputs
-        && previousResource->hasSoftPackedDebugData
-        && previousResource->frontBufferLatched == 1
-        && previousResource->screenSwap
-        && previousResource->captureCntLatched == 0x80320000u
-        && previousResource->dispCntALatched == 0x001A115Bu
-        && previousResource->dispCntBLatched == 0x00111035u
-        && previousResource->captureLinesLatched == static_cast<u32>(kScreenHeight)
-        && previousResource->capture3dSourceScreenSwapHintValid
-        && !previousResource->capture3dSourceScreenSwapHint
-        && previousResource->alternatingLive3dPingPong
-        && screenIsExactProtectedRegularComp7(previousResource->topScreenStats)
-        && screenIsExactEmptyComp2NoCapture(previousResource->bottomScreenStats);
-    resource.topExactVisibleRegularComp7 =
-        currentBackendIsGraphics
-        && softPackedSnapshot.valid
-        && resource.hasSoftPackedDebugData
-        && resource.frontBufferLatched == 1
-        && resource.screenSwap
-        && resource.captureCntLatched == 0x80320000u
-        && resource.dispCntALatched == 0x001A115Bu
-        && resource.dispCntBLatched == 0x00111035u
-        && resource.captureLinesLatched == static_cast<u32>(kScreenHeight)
-        && resource.capture3dSourceScreenSwapHintValid
-        && !resource.capture3dSourceScreenSwapHint
-        && resource.alternatingLive3dPingPong
-        && !resource.fastHighresOnlyTop
-        && resource.fastHighresOverlay2DTop
-        && !resource.fastPacked2DOnlyTop
-        && resource.fastPacked2DOnlyLayerTop == 2u
-        && resource.previousTopRendererSourceValid
-        && !resource.previousBottomRendererSourceValid
-        && screenIsExactVisibleRegularComp7(resource.topScreenStats)
-        && screenIsExactEmptyComp2NoCapture(resource.bottomScreenStats)
-        && packedScreenHasUniformLineMeta(resource.topPackedMapped, 0x002D2000u)
-        && packedScreenHasUniformLineMeta(resource.bottomPackedMapped, 0x00010000u);
-    resource.topExactSparseVramCapturePredecessor =
-        currentBackendIsGraphics
-        && softPackedSnapshot.valid
-        && resource.hasSoftPackedDebugData
-        && resource.frontBufferLatched == 0
-        && resource.screenSwap
-        && resource.captureCntLatched == 0x80330000u
-        && resource.dispCntALatched == 0x0011115Bu
-        && resource.dispCntBLatched == 0x00010455u
-        && resource.captureLinesLatched == static_cast<u32>(kScreenHeight)
-        && resource.capture3dSourceScreenSwapHintValid
-        && resource.capture3dSourceScreenSwapHint
-        && resource.alternatingLive3dPingPong
-        && !resource.fastHighresOnlyTop
-        && !resource.fastHighresOverlay2DTop
-        && !resource.fastPacked2DOnlyTop
-        && resource.fastPacked2DOnlyLayerTop == 2u
-        && resource.previousTopRendererSourceValid
-        && resource.previousBottomRendererSourceValid
-        && screenIsExactSparseVramCapture(resource.topScreenStats)
-        && screenIsExactEmptyRegularComp2(resource.bottomScreenStats)
-        && packedScreenHasUniformLineMeta(resource.topPackedMapped, 0x00420000u)
-        && packedScreenHasUniformLineMeta(resource.bottomPackedMapped, 0x00210000u);
-    resource.topExactSparseVramCaptureFollowsVisibleRegularComp7 = false;
-    resource.topExactSparseVramCaptureVisibleRegularComp7FrameId = 0u;
-    if (resource.topExactSparseVramCapturePredecessor
-        && previousResource != nullptr
-        && previousResource->topExactVisibleRegularComp7)
-    {
-        resource.topExactSparseVramCaptureFollowsVisibleRegularComp7 = true;
-        resource.topExactSparseVramCaptureVisibleRegularComp7FrameId =
-            previousResource->softPackedFrameId;
-    }
-    if (resource.topExactVisibleRegularComp7
-        && resource.topPackedMapped != nullptr
-        && resource.packedBufferSize
-            == exactVisibleRegularComp7TopPacked.size() * sizeof(u32))
-    {
-        std::memcpy(
-            exactVisibleRegularComp7TopPacked.data(),
-            resource.topPackedMapped,
-            static_cast<size_t>(resource.packedBufferSize));
-        exactVisibleRegularComp7TopPackedValid = true;
-        exactVisibleRegularComp7TopPackedFrameId = resource.softPackedFrameId;
-    }
-    resource.topExactProtectedRegularComp7UsesStablePackedSnapshot = false;
-    if (resource.topExactProtectedRegularComp7
-        && previousResource != nullptr
-        && previousResource->topExactSparseVramCapturePredecessor
-        && previousResource
-            ->topExactSparseVramCaptureFollowsVisibleRegularComp7
-        && previousResource
-            ->topExactSparseVramCaptureVisibleRegularComp7FrameId != 0u
-        && exactVisibleRegularComp7TopPackedValid
-        && exactVisibleRegularComp7TopPackedFrameId
-            == previousResource
-                ->topExactSparseVramCaptureVisibleRegularComp7FrameId
-        && resource.topPackedMapped != nullptr
-        && resource.packedBufferSize
-            == exactVisibleRegularComp7TopPacked.size() * sizeof(u32))
-    {
-        std::memcpy(
-            resource.topPackedMapped,
-            exactVisibleRegularComp7TopPacked.data(),
-            static_cast<size_t>(resource.packedBufferSize));
-        resource.topExactProtectedRegularComp7UsesStablePackedSnapshot = true;
-        exactVisibleRegularComp7TopPackedValid = false;
-        exactVisibleRegularComp7TopPackedFrameId = 0u;
-    }
-    const auto screenHasCurrentFullStructured2D =
-        [](const SoftPackedScreenStats& stats) {
-            constexpr u32 nearlyFullPixelThreshold = (kScreenWidth * kScreenHeight * 7u) / 8u;
-            return stats.DisplayModeCounts[1] > (kScreenHeight / 2u)
-                && stats.Structured2DOnlyVisiblePixels > nearlyFullPixelThreshold
-                && stats.StructuredSlotPixels == 0u
-                && stats.StructuredAboveVisiblePixels == 0u
-                && stats.StructuredAboveBlackPixels == 0u
-                && stats.Plane1VisiblePixels == 0u
-                && stats.RegularCaptureUses3dLines == 0u
-                && stats.VramCaptureUses3dLines == 0u
-                && stats.ForceLive3dCompMode7Lines == 0u
-                && stats.CaptureBackedComp4Lines == 0u;
-        };
-    const bool topCurrentFullStructured2D =
-        screenHasCurrentFullStructured2D(softPackedSnapshot.topScreenStats);
-    const bool bottomCurrentFullStructured2D =
-        screenHasCurrentFullStructured2D(softPackedSnapshot.bottomScreenStats);
-    const bool sourceAFullCaptureLines =
-        softPackedSnapshot.hasCapture3dSource
-        && std::all_of(
-            softPackedSnapshot.captureLineUses3dMask.begin(),
-            softPackedSnapshot.captureLineUses3dMask.end(),
-            [](u8 value) { return value != 0u; });
-    const auto screenUsesSourceAReplayHighresSlot =
-        [](const SoftPackedScreenStats& stats) {
-            return screenUsesSourceAFullHighresSlot(stats)
-                || screenUsesPlainStructuredComp7HandoffSlotFastPath(stats)
-                || screenUsesPlainStructured3dSlot(stats);
-        };
-    const bool topSourceAReplayHighresSide =
-        sourceAFullCaptureLines
-        && screenUsesSourceAReplayHighresSlot(softPackedSnapshot.topScreenStats)
-        && (screenUsesSourceAReplay2DOnly(softPackedSnapshot.bottomScreenStats)
-            || screenUsesSourceAReplayHighresSlot(softPackedSnapshot.bottomScreenStats));
-    const bool bottomSourceAReplayHighresSide =
-        sourceAFullCaptureLines
-        && screenUsesSourceAReplayHighresSlot(softPackedSnapshot.bottomScreenStats)
-        && (screenUsesSourceAReplay2DOnly(softPackedSnapshot.topScreenStats)
-            || screenUsesSourceAReplayHighresSlot(softPackedSnapshot.topScreenStats));
-    resource.replayTopComposedFromPrevious =
-        currentBackendIsGraphics
-        && !topCurrentFullStructured2D
-        && !topSourceAReplayHighresSide
-        && ((topStructuredHandoffIncomplete && !resource.topPackedCarryFromPrevious)
-            || topMissingHighresSourceCarry
-            || topFullRegularRepeatComposed
-            || topStructuredHandoffBlankCarry
-            || topStructuredComp7LostSlotCarry
-            || topPlainStructuredComp7ReplayComposed
-            || topEmptyStructured2dReplayComposed
-            || topPlainStructuredSlotDuringOppositeNoCurrentHandoff
-            || topRegularComp7BottomComp2ReplayComposed
-            || topMissingPreparedCaptureReplayComposed)
-        && topHasRecentComposedFrame;
-    resource.replayBottomComposedFromPrevious =
-        currentBackendIsGraphics
-        && !resource.pinnedCrossReplayBottomForFrame
-        && !bottomCurrentFullStructured2D
-        && !bottomSourceAReplayHighresSide
-        && ((bottomStructuredHandoffIncomplete && !resource.bottomPackedCarryFromPrevious)
-            || bottomMissingHighresSourceCarry
-            || bottomFullRegularRepeatComposed
-            || bottomStructuredHandoffBlankCarry
-            || bottomStructuredComp7LostSlotCarry
-            || bottomPlainStructuredComp7ReplayComposed
-            || bottomEmptyStructured2dReplayComposed
-            || bottomPlainStructuredSlotDuringOppositeNoCurrentHandoff
-            || bottomMissingPreparedCaptureReplayComposed)
-        && bottomHasRecentComposedFrame;
-    resource.replayTopComposedFromLatest = topRegularComp7BottomComp2ReplayComposed;
-    resource.previousTopComposedFrame =
-        (resource.replayTopComposedFromPrevious && !resource.replayTopComposedFromLatest)
-            ? lastTopComposedFrame
-            : nullptr;
-    resource.previousBottomComposedFrame = resource.replayBottomComposedFromPrevious ? lastBottomComposedFrame : nullptr;
-
-    if ((topStructuredHandoffCarrySource || bottomStructuredHandoffCarrySource
-            || resource.replayTopComposedFromPrevious || resource.replayBottomComposedFromPrevious
-            || topStructuredHandoffNoCurrent3d
-            || bottomStructuredHandoffNoCurrent3d
-            || topStructuredHandoffSuppress3d
-            || bottomStructuredHandoffSuppress3d
-            || topStructuredHandoffOverlayHasNoCurrent3dSource
-            || bottomStructuredHandoffOverlayHasNoCurrent3dSource
-            || topStructuredHandoffBlankCarry
-            || bottomStructuredHandoffBlankCarry
-            || topPlainStructuredComp7UsesOppositeLive3d
-            || bottomPlainStructuredComp7UsesOppositeLive3d
-            || topPlainStructuredComp7PureAlternatingVramPair
-            || bottomPlainStructuredComp7PureAlternatingVramPair
-            || topPlainStructuredComp7CarriesPreviousPureVram
-            || bottomPlainStructuredComp7CarriesPreviousPureVram
-            || topPlainStructuredComp7PureAlternatingVramNoAboveCarry
-            || topEmptyStructured2dReplayComposed
-            || bottomEmptyStructured2dReplayComposed
-            || topRegularComp7BottomComp2ReplayComposed
-            || topMissingPreparedCaptureReplayComposed
-            || bottomMissingPreparedCaptureReplayComposed
-            || topPlainStructuredSlotDuringOppositeNoCurrentHandoff
-            || bottomPlainStructuredSlotDuringOppositeNoCurrentHandoff)
-        && areRendererDebugBgObjLogsEnabled()
-        && structuredComp7HandoffDebugLogsRemaining == 0)
-    {
-        structuredComp7HandoffDebugLogsRemaining = 12u;
-    }
-    if ((topStructuredHandoffCarrySource || bottomStructuredHandoffCarrySource
-            || resource.replayTopComposedFromPrevious || resource.replayBottomComposedFromPrevious
-            || topStructuredHandoffNoCurrent3d
-            || bottomStructuredHandoffNoCurrent3d
-            || topStructuredHandoffSuppress3d
-            || bottomStructuredHandoffSuppress3d
-            || topStructuredHandoffOverlayHasNoCurrent3dSource
-            || bottomStructuredHandoffOverlayHasNoCurrent3dSource
-            || topPlainStructuredComp7UsesOppositeLive3d
-            || bottomPlainStructuredComp7UsesOppositeLive3d
-            || topPlainStructuredComp7PureAlternatingVramPair
-            || bottomPlainStructuredComp7PureAlternatingVramPair
-            || topPlainStructuredComp7CarriesPreviousPureVram
-            || bottomPlainStructuredComp7CarriesPreviousPureVram
-            || topPlainStructuredComp7PureAlternatingVramNoAboveCarry
-            || topEmptyStructured2dReplayComposed
-            || bottomEmptyStructured2dReplayComposed
-            || topRegularComp7BottomComp2ReplayComposed
-            || topMissingPreparedCaptureReplayComposed
-            || bottomMissingPreparedCaptureReplayComposed
-            || topPlainStructuredSlotDuringOppositeNoCurrentHandoff
-            || bottomPlainStructuredSlotDuringOppositeNoCurrentHandoff)
-        && areRendererDebugBgObjLogsEnabled()
-        && structuredComp7HandoffDebugLogsRemaining > 0)
-    {
-        melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Warn,
-            "VulkanLive3D[StructuredComp7Handoff]: frameId=%u packedSwap=%u liveSwap=%u prevSwap=%u swapToggled=%u topNoCurrent=%u bottomNoCurrent=%u topSuppress3d=%u bottomSuppress3d=%u replaceAcc=%u topOverlayNo3d=%u bottomOverlayNo3d=%u topBlankCarry=%u bottomBlankCarry=%u topPlainOpposite=%u bottomPlainOpposite=%u topPureAltVram=%u bottomPureAltVram=%u topCarryPureVram=%u bottomCarryPureVram=%u topEmpty2DReplay=%u bottomEmpty2DReplay=%u bottomRegularTopHistory=%u topRegularBottomComp2Replay=%u topNoAboveCarry=%u topPlainOppositeNoCurrent=%u bottomPlainOppositeNoCurrent=%u topCarrySource=%u bottomCarrySource=%u topReplayComposed=%u bottomReplayComposed=%u topAcc=%u bottomAcc=%u topPrev=%u bottomPrev=%u topComp7=%u topStruct=%u topAbove=%u top2DOnly=%u bottomComp7=%u bottomStruct=%u bottomAbove=%u bottom2DOnly=%u remaining=%u",
-            frame != nullptr ? static_cast<unsigned>(frame->frameId) : 0u,
-            resource.screenSwap ? 1u : 0u,
-            liveSourceScreenSwap ? 1u : 0u,
-            previousResource != nullptr && previousResource->screenSwap ? 1u : 0u,
-            resource.screenSwapToggledFromPrevious ? 1u : 0u,
-            topStructuredHandoffNoCurrent3d ? 1u : 0u,
-            bottomStructuredHandoffNoCurrent3d ? 1u : 0u,
-            topStructuredHandoffSuppress3d ? 1u : 0u,
-            bottomStructuredHandoffSuppress3d ? 1u : 0u,
-            replaceAccumulatedHighres ? 1u : 0u,
-            topStructuredHandoffOverlayHasNoCurrent3dSource ? 1u : 0u,
-            bottomStructuredHandoffOverlayHasNoCurrent3dSource ? 1u : 0u,
-            topStructuredHandoffBlankCarry ? 1u : 0u,
-            bottomStructuredHandoffBlankCarry ? 1u : 0u,
-            topPlainStructuredComp7UsesOppositeLive3d ? 1u : 0u,
-            bottomPlainStructuredComp7UsesOppositeLive3d ? 1u : 0u,
-            topPlainStructuredComp7PureAlternatingVramPair ? 1u : 0u,
-            bottomPlainStructuredComp7PureAlternatingVramPair ? 1u : 0u,
-            topPlainStructuredComp7CarriesPreviousPureVram ? 1u : 0u,
-            bottomPlainStructuredComp7CarriesPreviousPureVram ? 1u : 0u,
-            topEmptyStructured2dReplayComposed ? 1u : 0u,
-            bottomEmptyStructured2dReplayComposed ? 1u : 0u,
-            bottomPlainStructuredComp7CanUseRegularTopHistory ? 1u : 0u,
-            topRegularComp7BottomComp2ReplayComposed ? 1u : 0u,
-            topPlainStructuredComp7PureAlternatingVramNoAboveCarry ? 1u : 0u,
-            topPlainStructuredSlotDuringOppositeNoCurrentHandoff ? 1u : 0u,
-            bottomPlainStructuredSlotDuringOppositeNoCurrentHandoff ? 1u : 0u,
-            topStructuredHandoffCarrySource ? 1u : 0u,
-            bottomStructuredHandoffCarrySource ? 1u : 0u,
-            resource.replayTopComposedFromPrevious ? 1u : 0u,
-            resource.replayBottomComposedFromPrevious ? 1u : 0u,
-            topAccumulatorAvailable ? 1u : 0u,
-            bottomAccumulatorAvailable ? 1u : 0u,
-            resource.previousTopRendererSourceValid ? 1u : 0u,
-            resource.previousBottomRendererSourceValid ? 1u : 0u,
-            softPackedSnapshot.topScreenStats.CompModeCounts[7],
-            softPackedSnapshot.topScreenStats.StructuredSlotPixels,
-            softPackedSnapshot.topScreenStats.StructuredAboveVisiblePixels,
-            softPackedSnapshot.topScreenStats.Structured2DOnlyPixels,
-            softPackedSnapshot.bottomScreenStats.CompModeCounts[7],
-            softPackedSnapshot.bottomScreenStats.StructuredSlotPixels,
-            softPackedSnapshot.bottomScreenStats.StructuredAboveVisiblePixels,
-            softPackedSnapshot.bottomScreenStats.Structured2DOnlyPixels,
-            structuredComp7HandoffDebugLogsRemaining);
-        structuredComp7HandoffDebugLogsRemaining--;
-    }
-    recordTemporalStats(
-        softPackedSnapshot,
-        resource,
-        topNeedsAccumulatedHighres,
-        bottomNeedsAccumulatedHighres,
-        topAccumulatorAvailable,
-        bottomAccumulatorAvailable,
-        resource.screenSwap,
-        liveSourceScreenSwap,
-        resource.hasRenderer3dSnapshot,
-        resource.renderer3dSnapshotScreenSwap);
-    if ((resource.hasRenderer3dSnapshot
-            && resource.renderer3dSnapshot != VK_NULL_HANDLE
-            && resource.renderer3dSnapshotView != VK_NULL_HANDLE)
-        || (resource.hasRetainedRenderer3dSource
-            && resource.retainedRenderer3dSourceImage != VK_NULL_HANDLE
-            && resource.retainedRenderer3dSourceImageView != VK_NULL_HANDLE))
-    {
-        if (live3dOwnerIsTop)
-            lastTopRendererSourceFrame = frame;
-        else
-            lastBottomRendererSourceFrame = frame;
-    }
-
-    lastPreparedFrame = frame;
-    prepareFinalizeCpuWindow.Add(PerfNowNs() - finalizeStartNs);
-    prepareCpuWindow.Add(PerfNowNs() - prepareStartNs);
-    logPreparePerformanceIfNeeded();
-    return true;
-}
-
-bool VulkanOutput::updatePreparedCapture3dSourceFastPath(
-    FrameResource& resource,
-    SoftPackedFrameSnapshot& softPackedSnapshot,
-    const FrameResource* previousResource,
-    bool currentBackendIsGraphics,
-    bool currentFrameNeedsCapture3dSource,
-    melonDS::VulkanRenderer3D& renderer3D)
-{
-    resource.hasPreparedCapture3dSource = false;
-    resource.preparedCapture3dRgbaValid = false;
-    resource.captureFallbackLines.fill(0);
-    softPackedSnapshot.captureFallbackLines.fill(0);
-
-    const bool renderer2dDebugControlsActive = areRenderer2DDebugControlsActive();
-    if (renderer2dDebugControlsActive)
-    {
-        lastValidCapture3dSourceLines.fill(0);
-        lastValidTopComp4PlaceholderLines.fill(0);
-        lastValidBottomComp4PlaceholderLines.fill(0);
-    }
-    const bool renderer2dDebug3dBackgroundEnabled =
-        !renderer2dDebugControlsActive
-        || isRenderer2DDebugBackgroundKindEnabled(kRenderer2DDebugFeature3DBackground);
-    const u32* preparedCapture3dSource = softPackedSnapshot.hasCapture3dSource
-        ? softPackedSnapshot.capture3dSourceDsFrame.data()
-        : nullptr;
-    {
-        constexpr u32 fadeDominantPixels = (kScreenWidth * kScreenHeight) / 2u;
-        constexpr u32 fadeNearFullPixels = (kScreenWidth * kScreenHeight * 7u) / 8u;
-        const auto screenIsProtectedBlackFade = [&](const SoftPackedScreenStats& stats) {
-            return stats.Structured2DOnlyPixels > fadeDominantPixels
-                && stats.ProtectedBlackPixels > fadeNearFullPixels;
-        };
-        const bool topIsFade = screenIsProtectedBlackFade(softPackedSnapshot.topScreenStats);
-        const bool bottomIsFade = screenIsProtectedBlackFade(softPackedSnapshot.bottomScreenStats);
-        const bool captureServesNonFadingScreen =
-            (topIsFade
-                && !bottomIsFade
-                && softPackedSnapshot.bottomScreenStats.CaptureBackedComp4Lines > 0u)
-            || (bottomIsFade
-                && !topIsFade
-                && softPackedSnapshot.topScreenStats.CaptureBackedComp4Lines > 0u);
-        if (!renderer2dDebugControlsActive
-            && (topIsFade || bottomIsFade)
-            && !captureServesNonFadingScreen)
-        {
-            lastValidCapture3dSourceLines.fill(0);
-            lastValidTopComp4PlaceholderLines.fill(0);
-            lastValidBottomComp4PlaceholderLines.fill(0);
-        }
-    }
-    const u32* previousPreparedCapture3dSource =
-        !renderer2dDebugControlsActive && previousResource != nullptr && previousResource->hasPreparedCapture3dSource
-        ? (previousResource->capture3dMapped != nullptr
-            ? static_cast<const u32*>(previousResource->capture3dMapped)
-            : previousResource->preparedCapture3dSource.data())
-        : nullptr;
-    const u32* lastValidPreparedCapture3dSource =
-        renderer2dDebugControlsActive ? nullptr : lastValidCapture3dSource.data();
-    const u32 topRegularLineMetaLines =
-        countLineMetaFlag(softPackedSnapshot.packedTopLineMeta, kMetaFlagRegularCaptureUses3d);
-    const u32 topVramLineMetaLines =
-        countLineMetaFlag(softPackedSnapshot.packedTopLineMeta, kMetaFlagVramCaptureUses3d);
-    const u32 topForceLineMetaLines =
-        countLineMetaFlag(softPackedSnapshot.packedTopLineMeta, kMetaFlagForceLive3dCompMode7);
-    const u32 bottomRegularLineMetaLines =
-        countLineMetaFlag(softPackedSnapshot.packedBottomLineMeta, kMetaFlagRegularCaptureUses3d);
-    const u32 bottomVramLineMetaLines =
-        countLineMetaFlag(softPackedSnapshot.packedBottomLineMeta, kMetaFlagVramCaptureUses3d);
-    const u32 bottomForceLineMetaLines =
-        countLineMetaFlag(softPackedSnapshot.packedBottomLineMeta, kMetaFlagForceLive3dCompMode7);
-    const bool frameUsesCurrentRegularCapture3d =
-        softPackedSnapshot.topScreenStats.RegularCaptureUses3dLines > 0u
-        || softPackedSnapshot.topScreenStats.VramCaptureUses3dLines > 0u
-        || softPackedSnapshot.bottomScreenStats.RegularCaptureUses3dLines > 0u
-        || softPackedSnapshot.bottomScreenStats.VramCaptureUses3dLines > 0u
-        || topRegularLineMetaLines > 0u
-        || topVramLineMetaLines > 0u
-        || bottomRegularLineMetaLines > 0u
-        || bottomVramLineMetaLines > 0u;
-    const bool topUsesCurrentRegularCapture3d =
-        softPackedSnapshot.topScreenStats.RegularCaptureUses3dLines > 0u
-        || softPackedSnapshot.topScreenStats.VramCaptureUses3dLines > 0u
-        || topRegularLineMetaLines > 0u
-        || topVramLineMetaLines > 0u;
-    const bool bottomUsesCurrentRegularCapture3d =
-        softPackedSnapshot.bottomScreenStats.RegularCaptureUses3dLines > 0u
-        || softPackedSnapshot.bottomScreenStats.VramCaptureUses3dLines > 0u
-        || bottomRegularLineMetaLines > 0u
-        || bottomVramLineMetaLines > 0u;
-    const bool preferTopComp4Placeholder =
-        !topUsesCurrentRegularCapture3d
-        &&
-        softPackedSnapshot.topScreenStats.CaptureBackedComp4Lines > 0u
-        && softPackedSnapshot.bottomScreenStats.CaptureBackedComp4Lines == 0u;
-    const bool preferBottomComp4Placeholder =
-        !bottomUsesCurrentRegularCapture3d
-        &&
-        softPackedSnapshot.bottomScreenStats.CaptureBackedComp4Lines > 0u
-        && softPackedSnapshot.topScreenStats.CaptureBackedComp4Lines == 0u;
-    const u32* preferredComp4Placeholder = nullptr;
-    bool preferredComp4PlaceholderIsTemporal = false;
-    u32* lastValidComp4Placeholder = nullptr;
-    u8* lastValidComp4PlaceholderLines = nullptr;
-    if (preferTopComp4Placeholder)
-    {
-        preferredComp4Placeholder = renderer2dDebug3dBackgroundEnabled
-            ? softPackedSnapshot.comp4TopPlaceholder.data()
-            : nullptr;
-        preferredComp4PlaceholderIsTemporal = true;
-        lastValidComp4Placeholder = renderer2dDebugControlsActive ? nullptr : lastValidTopComp4Placeholder.data();
-        lastValidComp4PlaceholderLines = renderer2dDebugControlsActive ? nullptr : lastValidTopComp4PlaceholderLines.data();
-    }
-    else if (preferBottomComp4Placeholder)
-    {
-        preferredComp4Placeholder = renderer2dDebug3dBackgroundEnabled
-            ? softPackedSnapshot.comp4BottomPlaceholder.data()
-            : nullptr;
-        preferredComp4PlaceholderIsTemporal = true;
-        lastValidComp4Placeholder = renderer2dDebugControlsActive ? nullptr : lastValidBottomComp4Placeholder.data();
-        lastValidComp4PlaceholderLines = renderer2dDebugControlsActive ? nullptr : lastValidBottomComp4PlaceholderLines.data();
-    }
-    const auto* captureLineUses3dMask = &softPackedSnapshot.captureLineUses3dMask;
-    const bool renderer2dCapture3dSourceHasPixels =
-        renderer2dDebug3dBackgroundEnabled && capture3dSourceHasAnyUsefulPixel(preparedCapture3dSource);
-    if (!currentFrameNeedsCapture3dSource)
-    {
-        prepareCaptureMergeCpuWindow.Add(0);
-        prepareCaptureFallbackPrepareCpuWindow.Add(0);
-        prepareCaptureFallbackLineCpuWindow.Add(0);
-        return true;
-    }
-    if (!renderer2dDebug3dBackgroundEnabled)
-    {
-        prepareCaptureMergeCpuWindow.Add(0);
-        prepareCaptureFallbackPrepareCpuWindow.Add(0);
-        prepareCaptureFallbackLineCpuWindow.Add(0);
-        return true;
-    }
-    const bool currentFrameCanUseRegularCaptureHighresComposition =
-        frameCanUseRegularCaptureHighresComposition(
-            softPackedSnapshot.topScreenStats,
-            softPackedSnapshot.packedTopLineMeta,
-            softPackedSnapshot.bottomScreenStats,
-            softPackedSnapshot.packedBottomLineMeta);
-    const bool currentFrameCanUseForceLiveHighresHistory =
-        frameCanUseForceLiveHighresHistory(
-            softPackedSnapshot.topScreenStats,
-            softPackedSnapshot.packedTopLineMeta,
-            softPackedSnapshot.bottomScreenStats,
-            softPackedSnapshot.packedBottomLineMeta);
-    if (currentFrameCanUseRegularCaptureHighresComposition)
-    {
-        if (renderer2dCapture3dSourceHasPixels && preparedCapture3dSource != nullptr)
-        {
-            auto* capture3dMapped = static_cast<u32*>(resource.capture3dMapped);
-            if (capture3dMapped != nullptr)
-            {
-                std::memcpy(
-                    capture3dMapped,
-                    preparedCapture3dSource,
-                    static_cast<size_t>(kCapture3dBufferSize));
-            }
-            else
-            {
-                for (size_t i = 0; i < SoftPackedFrameSnapshot::kPixelCount; i++)
-                    resource.preparedCapture3dSource[i] = expandPackedColor6ToRgba8(preparedCapture3dSource[i]);
-            }
-
-            if (!renderer2dDebugControlsActive)
-            {
-                std::memcpy(
-                    lastValidCapture3dSource.data(),
-                    preparedCapture3dSource,
-                    static_cast<size_t>(kCapture3dBufferSize));
-                for (int y = 0; y < kScreenHeight; y++)
-                {
-                    lastValidCapture3dSourceLines[static_cast<size_t>(y)] =
-                        capture3dSourceLineHasAnyUsefulPixel(preparedCapture3dSource, y) ? 1u : 0u;
-                }
-            }
-
-            resource.hasPreparedCapture3dSource = true;
-            resource.preparedCapture3dRgbaValid = capture3dMapped == nullptr;
-        }
-        const bool exactRegularCaptureBlackTransitionWithoutUsefulSource =
-            softPackedSnapshot.hasCapture3dSource
-            && softPackedSnapshot.screenSwapLatched
-            && softPackedSnapshot.captureCntLatched == 0x80320000u
-            && softPackedSnapshot.dispCntALatched == 0x001A115Bu
-            && softPackedSnapshot.dispCntBLatched == 0x00111035u
-            && softPackedSnapshot.captureLinesLatched == static_cast<u32>(kScreenHeight)
-            && softPackedSnapshot.captureAgeLatched == 0u
-            && std::all_of(
-                softPackedSnapshot.packedTopLineMeta.begin(),
-                softPackedSnapshot.packedTopLineMeta.end(),
-                [](u32 meta) { return meta == 0x00218010u; })
-            && std::all_of(
-                softPackedSnapshot.packedBottomLineMeta.begin(),
-                softPackedSnapshot.packedBottomLineMeta.end(),
-                [](u32 meta) { return meta == 0x00018010u; });
-        if (!resource.hasPreparedCapture3dSource
-            && exactRegularCaptureBlackTransitionWithoutUsefulSource)
-        {
-            lastPrepareBlockedByMissingRegularCapture3dSource = true;
-        }
-        prepareCaptureMergeCpuWindow.Add(0);
-        prepareCaptureFallbackPrepareCpuWindow.Add(0);
-        prepareCaptureFallbackLineCpuWindow.Add(0);
-        return resource.hasPreparedCapture3dSource;
-    }
-    if (currentFrameCanUseForceLiveHighresHistory)
-    {
-        prepareCaptureMergeCpuWindow.Add(0);
-        prepareCaptureFallbackPrepareCpuWindow.Add(0);
-        prepareCaptureFallbackLineCpuWindow.Add(0);
-        return true;
-    }
-
-    if (resource.capture3dMapped != nullptr)
-        std::memset(resource.capture3dMapped, 0, static_cast<size_t>(kCapture3dBufferSize));
-    else
-        resource.preparedCapture3dSource.fill(0);
-
-    u32 linesFromRenderer2d = 0;
-    u32 linesFromLatchedValid = 0;
-    u32 linesFromPreviousFrame = 0;
-    u32 linesFromRenderer3d = 0;
-    u32 emptyLines = 0;
-    bool needsRenderer3dFallback = false;
-    std::array<u8, kScreenHeight> resolvedLines{};
-
-    auto* capture3dMapped = static_cast<u32*>(resource.capture3dMapped);
-    const bool writeExpandedCapture3dSource = capture3dMapped == nullptr;
-    const u64 mergeStartNs = PerfNowNs();
-    for (int y = 0; y < kScreenHeight; y++)
-    {
-        const bool latchedComp4LineHasPixels =
-            lastValidComp4Placeholder != nullptr
-            && lastValidComp4PlaceholderLines != nullptr
-            && lastValidComp4PlaceholderLines[static_cast<size_t>(y)] != 0u
-            && capture3dSourceLineHasAnyUsefulPixel(lastValidComp4Placeholder, y);
-        const bool preferredComp4LineHasPixels = capture3dSourceLineHasAnyUsefulPixel(preferredComp4Placeholder, y);
-        const bool preferredComp4LineIsSolidOpaqueBlack =
-            preferredComp4PlaceholderIsTemporal
-            && capture3dSourceLineIsSolidOpaqueBlack(preferredComp4Placeholder, y);
-        const bool acceptPreferredComp4Line =
-            preferredComp4LineHasPixels
-            && !(preferredComp4LineIsSolidOpaqueBlack && latchedComp4LineHasPixels);
-        const bool lineHasPixels = capture3dSourceLineHasAnyUsefulPixel(preparedCapture3dSource, y);
-        constexpr u8 latchedCaptureLineMaxAge = 50u;
-        if (lastValidCapture3dSourceLines[static_cast<size_t>(y)] != 0u
-            && !renderer2dDebugControlsActive)
-        {
-            const bool recapturedThisFrame =
-                captureLineUses3dMask != nullptr
-                && (*captureLineUses3dMask)[static_cast<size_t>(y)] != 0u;
-            if (recapturedThisFrame)
-            {
-                lastValidCapture3dSourceLineAge[static_cast<size_t>(y)] = 0u;
-                lastValidCapture3dSourceSeeded[static_cast<size_t>(y)] = 0u;
-            }
-            else if (lastValidCapture3dSourceSeeded[static_cast<size_t>(y)] != 0u)
-            {
-            }
-            else if (lastValidCapture3dSourceLineAge[static_cast<size_t>(y)] < 255u)
-            {
-                lastValidCapture3dSourceLineAge[static_cast<size_t>(y)]++;
-                if (lastValidCapture3dSourceLineAge[static_cast<size_t>(y)] >= latchedCaptureLineMaxAge)
-                    lastValidCapture3dSourceLines[static_cast<size_t>(y)] = 0u;
-            }
-        }
-        const bool latchedLineHasPixels =
-            !renderer2dDebugControlsActive
-            && lastValidCapture3dSourceLines[static_cast<size_t>(y)] != 0u
-            && capture3dSourceLineHasAnyUsefulPixel(lastValidPreparedCapture3dSource, y);
-        const bool previousLineHasPixels = capture3dSourceLineHasAnyUsefulPixel(previousPreparedCapture3dSource, y);
-        const u32 topLineMeta = softPackedSnapshot.packedTopLineMeta[static_cast<size_t>(y)];
-        const u32 bottomLineMeta = softPackedSnapshot.packedBottomLineMeta[static_cast<size_t>(y)];
-        const bool lineMetaUses3d =
-            ((topLineMeta | bottomLineMeta) & (kMetaFlagRegularCaptureUses3d
-                | kMetaFlagVramCaptureUses3d
-                | kMetaFlagForceLive3dCompMode7)) != 0u;
-        const bool lineUses3d =
-            frameUsesCurrentRegularCapture3d
-            || lineMetaUses3d
-            || (captureLineUses3dMask != nullptr
-                && (*captureLineUses3dMask)[static_cast<size_t>(y)] != 0u);
-        const size_t rowOffset = static_cast<size_t>(y) * static_cast<size_t>(kScreenWidth);
-        if (acceptPreferredComp4Line)
-        {
-            if (capture3dMapped != nullptr)
-            {
-                if (lineHasPixels)
-                {
-                    for (int x = 0; x < kScreenWidth; x++)
-                    {
-                        const size_t index = rowOffset + static_cast<size_t>(x);
-                        u32 preferredPixel = preferredComp4Placeholder[index];
-                        if (preferredComp4PlaceholderIsTemporal
-                            && capture3dSourcePixelIsOpaqueBlack(preferredPixel)
-                            && latchedLineHasPixels
-                            && capture3dSourcePixelIsNonBlackUseful(lastValidPreparedCapture3dSource[index]))
-                        {
-                            preferredPixel = lastValidPreparedCapture3dSource[index];
-                        }
-                        capture3dMapped[index] = capture3dSourcePixelIsUseful(preferredPixel)
-                            ? preferredPixel
-                            : preparedCapture3dSource[index];
-                    }
-                }
-                else
-                {
-                    for (int x = 0; x < kScreenWidth; x++)
-                    {
-                        const size_t index = rowOffset + static_cast<size_t>(x);
-                        u32 preferredPixel = preferredComp4Placeholder[index];
-                        if (preferredComp4PlaceholderIsTemporal
-                            && capture3dSourcePixelIsOpaqueBlack(preferredPixel)
-                            && latchedLineHasPixels
-                            && capture3dSourcePixelIsNonBlackUseful(lastValidPreparedCapture3dSource[index]))
-                        {
-                            preferredPixel = lastValidPreparedCapture3dSource[index];
-                        }
-                        capture3dMapped[index] = preferredPixel;
-                    }
-                }
-            }
-            if (writeExpandedCapture3dSource)
-            {
-                for (int x = 0; x < kScreenWidth; x++)
-                {
-                    const size_t index = rowOffset + static_cast<size_t>(x);
-                    u32 preferredPixel = preferredComp4Placeholder[index];
-                    if (preferredComp4PlaceholderIsTemporal
-                        && capture3dSourcePixelIsOpaqueBlack(preferredPixel)
-                        && latchedLineHasPixels
-                        && capture3dSourcePixelIsNonBlackUseful(lastValidPreparedCapture3dSource[index]))
-                    {
-                        preferredPixel = lastValidPreparedCapture3dSource[index];
-                    }
-                    const u32 pixel = lineHasPixels && !capture3dSourcePixelIsUseful(preferredPixel)
-                        ? preparedCapture3dSource[index]
-                        : preferredPixel;
-                    resource.preparedCapture3dSource[rowOffset + static_cast<size_t>(x)] =
-                        expandPackedColor6ToRgba8(pixel);
-                }
-            }
-            if (lastValidComp4Placeholder != nullptr && lastValidComp4PlaceholderLines != nullptr)
-            {
-                for (int x = 0; x < kScreenWidth; x++)
-                {
-                    const size_t index = rowOffset + static_cast<size_t>(x);
-                    u32 preferredPixel = preferredComp4Placeholder[index];
-                    if (preferredComp4PlaceholderIsTemporal
-                        && capture3dSourcePixelIsOpaqueBlack(preferredPixel)
-                        && latchedLineHasPixels
-                        && capture3dSourcePixelIsNonBlackUseful(lastValidPreparedCapture3dSource[index]))
-                    {
-                        preferredPixel = lastValidPreparedCapture3dSource[index];
-                    }
-                    lastValidComp4Placeholder[index] = preferredPixel;
-                }
-                lastValidComp4PlaceholderLines[static_cast<size_t>(y)] = 1u;
-            }
-            resolvedLines[static_cast<size_t>(y)] = 1u;
-            if (preferredComp4PlaceholderIsTemporal)
-                linesFromPreviousFrame++;
-            else
-                linesFromRenderer2d++;
-            continue;
-        }
-
-        if (latchedComp4LineHasPixels)
-        {
-            if (capture3dMapped != nullptr)
-            {
-                if (lineHasPixels)
-                {
-                    for (int x = 0; x < kScreenWidth; x++)
-                    {
-                        const size_t index = rowOffset + static_cast<size_t>(x);
-                        const u32 latchedPixel = lastValidComp4Placeholder[index];
-                        capture3dMapped[index] = capture3dSourcePixelIsUseful(latchedPixel)
-                            ? latchedPixel
-                            : preparedCapture3dSource[index];
-                    }
-                }
-                else
-                {
-                    std::memcpy(
-                        capture3dMapped + rowOffset,
-                        lastValidComp4Placeholder + rowOffset,
-                        static_cast<size_t>(kScreenWidth) * sizeof(u32));
-                }
-            }
-            if (writeExpandedCapture3dSource)
-            {
-                for (int x = 0; x < kScreenWidth; x++)
-                {
-                    const size_t index = rowOffset + static_cast<size_t>(x);
-                    const u32 latchedPixel = lastValidComp4Placeholder[index];
-                    const u32 pixel = lineHasPixels && !capture3dSourcePixelIsUseful(latchedPixel)
-                        ? preparedCapture3dSource[index]
-                        : latchedPixel;
-                    resource.preparedCapture3dSource[rowOffset + static_cast<size_t>(x)] =
-                        expandPackedColor6ToRgba8(pixel);
-                }
-            }
-            resolvedLines[static_cast<size_t>(y)] = 1u;
-            linesFromLatchedValid++;
-            continue;
-        }
-
-        if (lineHasPixels)
-        {
-            if (capture3dMapped != nullptr)
-            {
-                std::memcpy(
-                    capture3dMapped + rowOffset,
-                    preparedCapture3dSource + rowOffset,
-                    static_cast<size_t>(kScreenWidth) * sizeof(u32));
-            }
-            if (writeExpandedCapture3dSource)
-            {
-                for (int x = 0; x < kScreenWidth; x++)
-                {
-                    resource.preparedCapture3dSource[rowOffset + static_cast<size_t>(x)] =
-                        expandPackedColor6ToRgba8(preparedCapture3dSource[rowOffset + static_cast<size_t>(x)]);
-                }
-            }
-            if (!renderer2dDebugControlsActive)
-            {
-                std::memcpy(
-                    lastValidCapture3dSource.data() + rowOffset,
-                    preparedCapture3dSource + rowOffset,
-                    static_cast<size_t>(kScreenWidth) * sizeof(u32));
-                lastValidCapture3dSourceLines[static_cast<size_t>(y)] = 1u;
-            }
-            resolvedLines[static_cast<size_t>(y)] = 1u;
-            linesFromRenderer2d++;
-            continue;
-        }
-
-        const bool currentLineWasCaptured =
-            captureLineUses3dMask != nullptr
-            && (*captureLineUses3dMask)[static_cast<size_t>(y)] != 0u
-            && preparedCapture3dSource != nullptr;
-        if (currentLineWasCaptured)
-        {
-            if (capture3dMapped != nullptr)
-            {
-                std::memcpy(
-                    capture3dMapped + rowOffset,
-                    preparedCapture3dSource + rowOffset,
-                    static_cast<size_t>(kScreenWidth) * sizeof(u32));
-            }
-            if (writeExpandedCapture3dSource)
-            {
-                for (int x = 0; x < kScreenWidth; x++)
-                {
-                    resource.preparedCapture3dSource[rowOffset + static_cast<size_t>(x)] =
-                        expandPackedColor6ToRgba8(preparedCapture3dSource[rowOffset + static_cast<size_t>(x)]);
-                }
-            }
-            resolvedLines[static_cast<size_t>(y)] = 1u;
-            linesFromRenderer2d++;
-            continue;
-        }
-
-        if (latchedLineHasPixels)
-        {
-            if (capture3dMapped != nullptr)
-            {
-                std::memcpy(
-                    capture3dMapped + rowOffset,
-                    lastValidPreparedCapture3dSource + rowOffset,
-                    static_cast<size_t>(kScreenWidth) * sizeof(u32));
-            }
-            if (writeExpandedCapture3dSource)
-            {
-                for (int x = 0; x < kScreenWidth; x++)
-                {
-                    resource.preparedCapture3dSource[rowOffset + static_cast<size_t>(x)] =
-                        expandPackedColor6ToRgba8(lastValidPreparedCapture3dSource[rowOffset + static_cast<size_t>(x)]);
-                }
-            }
-            resolvedLines[static_cast<size_t>(y)] = 1u;
-            linesFromLatchedValid++;
-            continue;
-        }
-
-        if (currentBackendIsGraphics && lineUses3d && previousLineHasPixels)
-        {
-            if (capture3dMapped != nullptr)
-            {
-                std::memcpy(
-                    capture3dMapped + rowOffset,
-                    previousPreparedCapture3dSource + rowOffset,
-                    static_cast<size_t>(kScreenWidth) * sizeof(u32));
-            }
-            if (writeExpandedCapture3dSource)
-            {
-                for (int x = 0; x < kScreenWidth; x++)
-                {
-                    resource.preparedCapture3dSource[rowOffset + static_cast<size_t>(x)] =
-                        expandPackedColor6ToRgba8(previousPreparedCapture3dSource[rowOffset + static_cast<size_t>(x)]);
-                }
-            }
-            resolvedLines[static_cast<size_t>(y)] = 1u;
-            linesFromPreviousFrame++;
-            continue;
-        }
-
-        if (currentBackendIsGraphics && lineUses3d)
-        {
-            needsRenderer3dFallback = true;
-            continue;
-        }
-
-        if (previousLineHasPixels)
-        {
-            if (capture3dMapped != nullptr)
-            {
-                std::memcpy(
-                    capture3dMapped + rowOffset,
-                    previousPreparedCapture3dSource + rowOffset,
-                    static_cast<size_t>(kScreenWidth) * sizeof(u32));
-            }
-            if (writeExpandedCapture3dSource)
-            {
-                for (int x = 0; x < kScreenWidth; x++)
-                {
-                    resource.preparedCapture3dSource[rowOffset + static_cast<size_t>(x)] =
-                        expandPackedColor6ToRgba8(previousPreparedCapture3dSource[rowOffset + static_cast<size_t>(x)]);
-                }
-            }
-            resolvedLines[static_cast<size_t>(y)] = 1u;
-            linesFromPreviousFrame++;
-            continue;
-        }
-
-        emptyLines++;
-    }
-    prepareCaptureMergeCpuWindow.Add(PerfNowNs() - mergeStartNs);
-
-    const bool regularCaptureHistoryOnly =
-        currentBackendIsGraphics
-        && currentFrameNeedsCapture3dSource
-        && !needsRenderer3dFallback
-        && (softPackedSnapshot.topScreenStats.RegularCaptureUses3dLines > 0u
-            || softPackedSnapshot.topScreenStats.VramCaptureUses3dLines > 0u
-            || softPackedSnapshot.bottomScreenStats.RegularCaptureUses3dLines > 0u
-            || softPackedSnapshot.bottomScreenStats.VramCaptureUses3dLines > 0u
-            || topRegularLineMetaLines > 0u
-            || topVramLineMetaLines > 0u
-            || bottomRegularLineMetaLines > 0u
-            || bottomVramLineMetaLines > 0u)
-        && softPackedSnapshot.topScreenStats.CaptureBackedComp4Lines == 0u
-        && softPackedSnapshot.bottomScreenStats.CaptureBackedComp4Lines == 0u
-        && softPackedSnapshot.topScreenStats.ForceLive3dCompMode7Lines == 0u
-        && softPackedSnapshot.bottomScreenStats.ForceLive3dCompMode7Lines == 0u
-        && topForceLineMetaLines == 0u
-        && bottomForceLineMetaLines == 0u;
-    const bool missingRequiredRenderer2dCaptureSource =
-        !renderer2dCapture3dSourceHasPixels
-        && !regularCaptureHistoryOnly;
-    if (currentBackendIsGraphics
-        && currentFrameNeedsCapture3dSource
-        && (needsRenderer3dFallback || missingRequiredRenderer2dCaptureSource))
-    {
-        const u64 fallbackPrepareStartNs = PerfNowNs();
-        renderer3D.PrepareCaptureFrame();
-        prepareCaptureFallbackPrepareCpuWindow.Add(PerfNowNs() - fallbackPrepareStartNs);
-        if (renderer3D.IsExactCaptureLineCacheFallbackOnly())
-        {
-            prepareCaptureFallbackLineCpuWindow.Add(0);
-            if (areRendererDebugBgObjLogsEnabled() && packedDebugLogsRemaining > 0)
-            {
-                melonDS::Platform::Log(
-                    melonDS::Platform::LogLevel::Warn,
-                    "VulkanCapture3D[Prepared]: rejectedFallbackOnlyLineCache=1 remaining=%u",
-                    packedDebugLogsRemaining);
-                packedDebugLogsRemaining--;
-            }
-        }
-        else
-        {
-        const u64 fallbackLineStartNs = PerfNowNs();
-        for (int y = 0; y < kScreenHeight; y++)
-        {
-            const bool renderer2dLineHasPixels = capture3dSourceLineHasAnyUsefulPixel(preparedCapture3dSource, y);
-            const u32 topLineMeta = softPackedSnapshot.packedTopLineMeta[static_cast<size_t>(y)];
-            const u32 bottomLineMeta = softPackedSnapshot.packedBottomLineMeta[static_cast<size_t>(y)];
-            const bool lineMetaUses3d =
-                ((topLineMeta | bottomLineMeta) & (kMetaFlagRegularCaptureUses3d
-                    | kMetaFlagVramCaptureUses3d
-                    | kMetaFlagForceLive3dCompMode7)) != 0u;
-            const bool lineUses3d =
-                frameUsesCurrentRegularCapture3d
-                || lineMetaUses3d
-                || (captureLineUses3dMask != nullptr
-                    && (*captureLineUses3dMask)[static_cast<size_t>(y)] != 0u);
-            if (resolvedLines[static_cast<size_t>(y)] != 0u)
-                continue;
-            if (renderer2dLineHasPixels)
-                continue;
-            if (preparedCapture3dSource != nullptr && !lineUses3d && renderer2dCapture3dSourceHasPixels)
-                continue;
-
-            const u32* line = renderer3D.GetLine(y);
-            if (line == nullptr)
-                return false;
-            if (renderer3D.IsExactCaptureLineCacheFallbackOnly())
-                break;
-
-            const size_t rowOffset = static_cast<size_t>(y) * static_cast<size_t>(kScreenWidth);
-            if (capture3dMapped != nullptr)
-                std::memcpy(capture3dMapped + rowOffset, line, static_cast<size_t>(kScreenWidth) * sizeof(u32));
-
-            if (writeExpandedCapture3dSource)
-            {
-                for (int x = 0; x < kScreenWidth; x++)
-                    resource.preparedCapture3dSource[rowOffset + static_cast<size_t>(x)] = expandPackedColor6ToRgba8(line[x]);
-            }
-            if (!renderer2dDebugControlsActive)
-            {
-                std::memcpy(
-                    lastValidCapture3dSource.data() + rowOffset,
-                    line,
-                    static_cast<size_t>(kScreenWidth) * sizeof(u32));
-                lastValidCapture3dSourceLines[static_cast<size_t>(y)] = 1u;
-            }
-            resolvedLines[static_cast<size_t>(y)] = 1u;
-            resource.captureFallbackLines[static_cast<size_t>(y)] = 1u;
-            softPackedSnapshot.captureFallbackLines[static_cast<size_t>(y)] = 1u;
-            linesFromRenderer3d++;
-        }
-        prepareCaptureFallbackLineCpuWindow.Add(PerfNowNs() - fallbackLineStartNs);
-        }
-    }
-    else
-    {
-        prepareCaptureFallbackPrepareCpuWindow.Add(0);
-        prepareCaptureFallbackLineCpuWindow.Add(0);
-    }
-
-    resource.hasPreparedCapture3dSource = (linesFromRenderer2d + linesFromLatchedValid + linesFromPreviousFrame + linesFromRenderer3d) > 0u;
-    resource.preparedCapture3dRgbaValid = resource.hasPreparedCapture3dSource && writeExpandedCapture3dSource;
-    if (areRendererDebugBgObjLogsEnabled() && packedDebugLogsRemaining > 0)
-    {
-        const auto* capture3dSource = capture3dMapped != nullptr
-            ? capture3dMapped
-            : resource.preparedCapture3dSource.data();
-        const size_t centerIndex = static_cast<size_t>(96) * 256u + 128u;
-                melonDS::Platform::Log(
-                melonDS::Platform::LogLevel::Warn,
-                "VulkanCapture3D[Prepared]: source=merged front=%d renderer2dLines=%u latchedLines=%u previousLines=%u renderer3dLines=%u emptyLines=%u any2d=%u line0=%08X center=%08X last=%08X valid=%u remaining=%u",
-                softPackedSnapshot.frontBufferLatched,
-                linesFromRenderer2d,
-                linesFromLatchedValid,
-                linesFromPreviousFrame,
-                linesFromRenderer3d,
-                emptyLines,
-            renderer2dCapture3dSourceHasPixels ? 1u : 0u,
-            capture3dSource[0],
-            capture3dSource[centerIndex],
-            capture3dSource[(256u * 192u) - 1u],
-            resource.hasPreparedCapture3dSource ? 1u : 0u,
-            packedDebugLogsRemaining
-        );
-        packedDebugLogsRemaining--;
-    }
-
-    const bool preparedCapture3dResult =
-        resource.hasPreparedCapture3dSource
-        || !currentFrameNeedsCapture3dSource
-        || regularCaptureHistoryOnly;
-    return preparedCapture3dResult;
-}
-
-bool VulkanOutput::captureRenderer3dSnapshot(Frame* frame, const melonDS::VulkanRenderer3D& renderer3D, bool snapshotScreenSwap)
-{
-    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
+    std::scoped_lock lifetimeLock(faithfulLifetimeLock);
     std::scoped_lock commandLock(commandPoolLock);
 
     if (frame != nullptr)
@@ -8673,7 +7838,6 @@ bool VulkanOutput::captureRenderer3dSnapshot(Frame* frame, const melonDS::Vulkan
         return false;
 
     FrameResource& resource = iterator->second;
-    resource.hasPreparedInputs = false;
     resource.snapshotFromPreRun = false;
     resource.snapshotFromInitializedTarget = false;
     resource.snapshotFromGraphicsBackend = false;
@@ -8690,28 +7854,339 @@ bool VulkanOutput::captureRenderer3dSnapshot(Frame* frame, const melonDS::Vulkan
     resource.snapshotFromPreRun = true;
     resource.snapshotFromInitializedTarget = true;
     resource.snapshotFromGraphicsBackend =
-        renderer3D.GetActiveBackendMode() == melonDS::VulkanRenderer3D::BackendMode::GraphicsHardware;
+        renderer3D.UsesStructured2DMetadata();
     resource.previousTopSourceFrame = nullptr;
     resource.previousTopSourcePending = false;
     resource.previousBottomSourceFrame = nullptr;
     resource.previousBottomSourcePending = false;
+
+    if (deferSubmit && faithfulPipelineReady)
+        return true;
 
     const bool submitted = submitFrameCommand(frame, resource, true);
     if (submitted)
     {
         resource.timestampPending = false;
     }
-    else if (melonDS::UsesVulkanFastPath(
-                 renderer3D.GetVulkanPipelineProfile()))
-    {
-        resource.hasRenderer3dSnapshot = false;
-        resource.renderer3dSnapshotSourceIdentityValid = false;
-        resource.renderer3dSnapshotSourceSequence = 0;
-        resource.renderer3dSnapshotSourcePolygonCount = 0;
-        resource.renderer3dSnapshotSourceCaptureCnt = 0;
-        resource.renderer3dSnapshotSourceScreenSwap = false;
-    }
     return submitted;
+}
+
+bool VulkanOutput::flushRenderer3dSnapshot(Frame* frame)
+{
+    std::scoped_lock lifetimeLock(faithfulLifetimeLock);
+    std::scoped_lock commandLock(commandPoolLock);
+    const auto iterator = resources.find(frame);
+    if (iterator == resources.end())
+        return false;
+    FrameResource& resource = iterator->second;
+    if (!resource.cbAbierto)
+        return resource.renderer3dSnapshotState == Renderer3dSnapshotState::Published;
+    const bool submitted = submitFrameCommand(frame, resource, true);
+    if (submitted)
+        resource.timestampPending = false;
+    return submitted;
+}
+
+bool VulkanOutput::preservePublishedRenderer3dSnapshot(const Frame* frame,
+    const melonDS::VulkanRenderer3D& renderer3D, bool snapshotScreenSwap)
+{
+    if (!initialized || frame == nullptr || !renderer3D.IsColorTargetInitialized()
+        || renderer3D.GetColorTargetWidth() <= 256u)
+        return false;
+    const auto own = resources.find(const_cast<Frame*>(frame));
+    if (own == resources.end() || own->second.width <= 256u)
+        return false;
+    const u32 width = own->second.width, height = own->second.height;
+    melonDS::VulkanRenderer3D::SubmittedRenderIdentity identity{};
+    if (!renderer3D.GetPublishedRenderIdentity(identity) || !identity.Valid
+        || identity.RenderProductEpoch == 0u || identity.Sequence == 0u)
+        return false;
+    u32 dstWidth = 0u, dstHeight = 0u;
+    renderer3dSnapshotDstDims(renderer3D.GetColorTargetWidth(),
+        renderer3D.GetColorTargetHeight(), width, dstWidth, dstHeight);
+    {
+        std::scoped_lock lifetimeLock(faithfulLifetimeLock);
+        for (const auto& [owner, source] : resources)
+        {
+            (void)owner;
+            if (source.renderer3dSnapshotState == Renderer3dSnapshotState::Published
+                && source.hasRenderer3dSnapshot && source.snapshotFromGraphicsBackend
+                && source.renderer3dSnapshotSourceIdentityValid
+                && source.renderer3dSnapshotSourceEpoch == identity.RenderProductEpoch
+                && source.renderer3dSnapshotSourceSequence == identity.Sequence
+                && source.renderer3dSnapshotProjection.valid()
+                && source.renderer3dSnapshotProjection.sourceWidth == renderer3D.GetColorTargetWidth()
+                && source.renderer3dSnapshotProjection.sourceHeight == renderer3D.GetColorTargetHeight()
+                && source.snapshotWidth == dstWidth && source.snapshotHeight == dstHeight)
+                return true;
+        }
+        const auto bridge = resources.find(&bridgeRenderer3dFrame);
+        if (bridge != resources.end() && bridge->second.hasRenderer3dSnapshot)
+            return false;
+    }
+    if (!ensureFrameResources(&bridgeRenderer3dFrame, width, height))
+        return false;
+    std::scoped_lock lifetimeLock(faithfulLifetimeLock);
+    std::scoped_lock commandLock(commandPoolLock);
+    FrameResource& bridge = resources.at(&bridgeRenderer3dFrame);
+    if (!beginFrameCommand(bridge))
+        return false;
+    const bool copied = recordRenderer3dSnapshotCopy(
+        bridge, renderer3D, snapshotScreenSwap, false);
+    if (copied)
+    {
+        bridge.snapshotFromPreRun = true;
+        bridge.snapshotFromInitializedTarget = true;
+        bridge.snapshotFromGraphicsBackend = renderer3D.UsesStructured2DMetadata();
+    }
+
+    const bool submitted = submitFrameCommand(&bridgeRenderer3dFrame, bridge, true);
+    bridge.timestampPending = false;
+    if (areRendererDebugToolsEnabled())
+        melonDS::Platform::Log(melonDS::Platform::LogLevel::Warn,
+            "VulkanTail[LiveBridge]: epoch=%llu sequence=%llu copied=%u submitted=%u",
+            static_cast<unsigned long long>(identity.RenderProductEpoch),
+            static_cast<unsigned long long>(identity.Sequence),
+            copied ? 1u : 0u, submitted ? 1u : 0u);
+    return copied && submitted;
+}
+
+void VulkanOutput::resetFaithfulCompose(Frame* frame)
+{
+    if (frame == nullptr)
+        return;
+    auto iterator = resources.find(frame);
+    if (iterator != resources.end())
+        iterator->second.faithfulComposedFrameId = ~0ull;
+}
+
+VulkanOutput::FrameResource*
+VulkanOutput::findExactFaithfulNativeProjectionLocked(
+    u64 renderProductEpoch, u64 sequence,
+    const FrameResource* excludedResource)
+{
+    if (renderProductEpoch == 0u || sequence == 0u)
+        return nullptr;
+
+    FrameResource* selected = nullptr;
+    u32 sourceWidth = 0u;
+    u32 sourceHeight = 0u;
+    for (auto& [candidateFrame, candidate] : resources)
+    {
+        (void)candidateFrame;
+        if (&candidate == excludedResource
+            || candidate.renderer3dSnapshotState
+                != Renderer3dSnapshotState::Published
+            || !candidate.hasRenderer3dSnapshot
+            || !candidate.snapshotFromGraphicsBackend
+            || !candidate.renderer3dSnapshotSourceIdentityValid
+            || candidate.renderer3dSnapshotSourceEpoch
+                != renderProductEpoch
+            || candidate.renderer3dSnapshotSourceSequence != sequence
+            || !candidate.renderer3dSnapshotProjection
+                    .hasExactNativeProjection()
+            || !candidate.renderer3dNativeProjectionValid
+            || candidate.renderer3dNativeProjectionBuffer == VK_NULL_HANDLE
+            || candidate.renderer3dNativeProjectionMemory == VK_NULL_HANDLE)
+        {
+            continue;
+        }
+
+        const auto& projection = candidate.renderer3dSnapshotProjection;
+        const bool exactDimensions = projection.sourceWidth != 0u
+            && projection.sourceHeight != 0u
+            && (projection.sourceWidth % 256u) == 0u
+            && (projection.sourceHeight % 192u) == 0u
+            && projection.sourceWidth / 256u
+                == projection.sourceHeight / 192u;
+        if (!exactDimensions)
+            continue;
+        if (selected == nullptr)
+        {
+            selected = &candidate;
+            sourceWidth = projection.sourceWidth;
+            sourceHeight = projection.sourceHeight;
+            continue;
+        }
+
+        if (projection.sourceWidth != sourceWidth
+            || projection.sourceHeight != sourceHeight)
+        {
+            return nullptr;
+        }
+    }
+    return selected;
+}
+
+void VulkanOutput::setFaithfulNativeFallbackIdentity(
+    u64 renderProductEpoch, u64 sequence, bool gpuBacked)
+{
+    std::scoped_lock lifetimeLock(faithfulLifetimeLock);
+    faithfulNativeFallbackEpoch = renderProductEpoch;
+    faithfulNativeFallbackSequence = sequence;
+    faithfulNativeFallbackGpuBacked = gpuBacked
+        && renderProductEpoch != 0u && sequence != 0u;
+}
+
+bool VulkanOutput::liveCausalSourceAvailable(const Frame* frame, u32 escala,
+                                             u32* lineasDirectas, u32* coincidencias, bool* ambigua) const
+{
+    if (lineasDirectas != nullptr) *lineasDirectas = 0u;
+    if (coincidencias != nullptr) *coincidencias = 0u;
+    if (ambigua != nullptr) *ambigua = false;
+    std::scoped_lock lifetimeLock(faithfulLifetimeLock);
+    if (faithfulRing >= kFielRanuras || faithfulCausalMapped[faithfulRing] == nullptr)
+        return true;
+    const u8* const causalBytes = static_cast<const u8*>(faithfulCausalMapped[faithfulRing]);
+    const auto* const header = reinterpret_cast<const FaithfulCausalHeaderGpu*>(causalBytes);
+    if ((header->Valid & kFaithfulCausalHeaderRoutesValid) == 0u)
+        return true;
+    const auto* const lines = reinterpret_cast<const FaithfulCausalRouteLiveGpu*>(causalBytes + kFaithfulCausalRouteOffset);
+    u32 directas = 0u; u64 epoch = 0u, sequence = 0u; bool hasKey = false, amb = false;
+    for (u32 screen = 0u; screen < 2u; screen++)
+    {
+        for (u32 y = 0u; y < 192u; y++)
+        {
+            const FaithfulCausalRouteLiveGpu& line = lines[screen * 192u + y];
+            const u32 routeFlags = line.RouteFlags, liveFlags = line.LiveFlags;
+            const bool exactDirectLine = (routeFlags & 0xFFu) == 0x03u && ((routeFlags >> 8u) & 0xFFu) == 0u
+                && ((routeFlags >> 16u) & 0xFFu) == screen && (liveFlags & 0x0Fu) == 0x0Fu && (liveFlags & 0x10u) == 0u
+                && ((liveFlags >> 8u) & 0xFFu) == 0u && ((liveFlags >> 16u) & 0xFFu) == screen;
+            if (!exactDirectLine)
+                continue;
+            directas++;
+            const u64 e = static_cast<u64>(line.ProductEpochLo) | (static_cast<u64>(line.ProductEpochHi) << 32u);
+            const u64 q = static_cast<u64>(line.ProductSequenceLo) | (static_cast<u64>(line.ProductSequenceHi) << 32u);
+            if (e == 0u || q == 0u) { amb = true; continue; }
+            if (!hasKey) { hasKey = true; epoch = e; sequence = q; }
+            else if (epoch != e || sequence != q) amb = true;
+        }
+    }
+    if (lineasDirectas != nullptr) *lineasDirectas = directas;
+    if (ambigua != nullptr) *ambigua = amb;
+    if (directas == 0u)
+        return true;
+    if (amb || !hasKey)
+        return false;
+    const FrameResource* own = nullptr;
+    if (frame != nullptr)
+    {
+        const auto it = resources.find(const_cast<Frame*>(frame));
+        if (it != resources.end()) own = &it->second;
+    }
+
+    u32 anchoSalida = own != nullptr ? own->width : 0u;
+    if (anchoSalida == 0u)
+        for (const auto& [f2, r2] : resources) { (void)f2; if (r2.width != 0u) { anchoSalida = r2.width; break; } }
+    const u32 escalaSalida = (anchoSalida >= 256u) ? anchoSalida / 256u : escala;
+    if (escalaSalida <= 1u)
+        return true;
+    u32 matches = 0u; bool usable = false;
+    for (const auto& [candidateFrame, candidate] : resources)
+    {
+        (void)candidateFrame;
+        const bool visible = candidate.renderer3dSnapshotState == Renderer3dSnapshotState::Published
+            || (&candidate == own && candidate.renderer3dSnapshotState == Renderer3dSnapshotState::PendingSubmit);
+        if (!visible || !candidate.hasRenderer3dSnapshot || candidate.renderer3dSnapshot == VK_NULL_HANDLE
+            || candidate.renderer3dSnapshotView == VK_NULL_HANDLE || !candidate.renderer3dSnapshotSourceIdentityValid
+            || candidate.renderer3dSnapshotSourceEpoch != epoch || candidate.renderer3dSnapshotSourceSequence != sequence
+            || !candidate.snapshotFromGraphicsBackend)
+            continue;
+        matches++;
+        const auto& p = candidate.renderer3dSnapshotProjection;
+        if (p.valid() && candidate.snapshotWidth == p.destinationWidth && candidate.snapshotHeight == p.destinationHeight
+            && p.destinationWidth >= 256u * escalaSalida && (p.destinationWidth % (256u * escalaSalida)) == 0u
+            && p.destinationHeight * 4u == p.destinationWidth * 3u && p.destinationWidth <= 0xFFFFu && p.destinationHeight <= 0xFFFFu)
+            usable = true;
+    }
+    if (coincidencias != nullptr) *coincidencias = matches;
+    return matches != 0u && usable;
+}
+
+bool VulkanOutput::frameHasOwnRenderer3dSnapshot(
+    const Frame* frame, bool requireExactNativeProjection) const
+{
+    if (frame == nullptr)
+        return false;
+    std::scoped_lock lifetimeLock(faithfulLifetimeLock);
+    const auto iterator = resources.find(const_cast<Frame*>(frame));
+    if (iterator == resources.end())
+        return false;
+    const FrameResource& resource = iterator->second;
+    if (!resource.hasRenderer3dSnapshot)
+        return false;
+    if (requireExactNativeProjection
+        && (!resource.snapshotFromGraphicsBackend
+            || !resource.renderer3dSnapshotSourceIdentityValid
+            || resource.renderer3dSnapshotSourceEpoch == 0u
+            || resource.renderer3dSnapshotSourceSequence == 0u
+            || !resource.renderer3dSnapshotProjection.hasExactNativeProjection()
+            || !resource.renderer3dNativeProjectionValid
+            || resource.renderer3dNativeProjectionBuffer == VK_NULL_HANDLE
+            || resource.renderer3dNativeProjectionMemory == VK_NULL_HANDLE))
+        return false;
+    if (resource.renderer3dSnapshotState == Renderer3dSnapshotState::PendingSubmit)
+        return true;
+    return resource.renderer3dSnapshotState == Renderer3dSnapshotState::Published
+        && resource.renderer3dSnapshotFrameId == frame->frameId;
+}
+
+bool VulkanOutput::getExactFaithfulNativeProjectionIdentity(
+    Frame* frame, u64& renderProductEpoch, u64& sequence)
+{
+    renderProductEpoch = 0u;
+    sequence = 0u;
+    if (frame == nullptr)
+        return false;
+
+    std::scoped_lock lifetimeLock(faithfulLifetimeLock);
+    const auto iterator = resources.find(frame);
+    if (iterator == resources.end())
+        return false;
+    const FrameResource& resource = iterator->second;
+    const bool exact = resource.renderer3dSnapshotState
+            != Renderer3dSnapshotState::Published
+        ? false
+        : resource.hasRenderer3dSnapshot
+            && resource.snapshotFromGraphicsBackend
+            && resource.renderer3dSnapshotSourceIdentityValid
+            && resource.renderer3dSnapshotSourceEpoch != 0u
+            && resource.renderer3dSnapshotSourceSequence != 0u
+            && resource.renderer3dSnapshotProjection
+                .hasExactNativeProjection()
+            && resource.renderer3dNativeProjectionValid
+            && resource.renderer3dNativeProjectionBuffer != VK_NULL_HANDLE
+            && resource.renderer3dNativeProjectionMemory != VK_NULL_HANDLE;
+    if (!exact)
+        return false;
+    renderProductEpoch = resource.renderer3dSnapshotSourceEpoch;
+    sequence = resource.renderer3dSnapshotSourceSequence;
+    return true;
+}
+
+bool VulkanOutput::getFramePresentationDependency(
+    const Frame* frame, VkSemaphore& semaphore, u64& value) const
+{
+    semaphore = VK_NULL_HANDLE;
+    value = 0;
+    if (!initialized || !useTimelineSemaphores || timelineSemaphore == VK_NULL_HANDLE
+        || frame == nullptr || frame->backend != FrameBackend::VulkanImage
+        || frame->renderTimelineValue == 0)
+        return false;
+
+    std::scoped_lock lifetimeLock(faithfulLifetimeLock);
+    const auto it = resources.find(const_cast<Frame*>(frame));
+    if (it == resources.end())
+        return false;
+    const auto& resource = it->second;
+    if (resource.faithfulComposedFrameId != frame->frameId
+        || resource.submissionValue != frame->renderTimelineValue
+        || resource.image == VK_NULL_HANDLE || resource.imageView == VK_NULL_HANDLE)
+        return false;
+
+    semaphore = timelineSemaphore;
+    value = frame->renderTimelineValue;
+    return true;
 }
 
 bool VulkanOutput::composeAndSubmitFrame(
@@ -8721,7 +8196,6 @@ bool VulkanOutput::composeAndSubmitFrame(
     if (!initialized || frame == nullptr || inputs.scale < 1 || inputs.sourceImage == VK_NULL_HANDLE || inputs.sourceImageView == VK_NULL_HANDLE)
         return false;
 
-    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     auto iterator = resources.find(frame);
     if (iterator == resources.end())
         return false;
@@ -8735,237 +8209,11 @@ bool VulkanOutput::composeAndSubmitFrame(
     return dispatched;
 }
 
-bool VulkanOutput::composeAndSubmitVisibleFrame(
-    Frame* frame,
-    const VulkanCompositionInputs& inputs,
-    VkImage targetImage,
-    VkImageView targetImageView,
-    VkImageLayout targetLayout,
-    bool targetHasContent,
-    u32 targetWidth,
-    u32 targetHeight,
-    VkImage previousImage,
-    bool previousValid,
-    const VulkanVisibleCompositorRegion* regions,
-    u32 regionCount)
-{
-    if (!initialized
-        || frame == nullptr
-        || inputs.scale < 1
-        || inputs.sourceImage == VK_NULL_HANDLE
-        || inputs.sourceImageView == VK_NULL_HANDLE
-        || targetImage == VK_NULL_HANDLE
-        || targetImageView == VK_NULL_HANDLE
-        || targetWidth == 0
-        || targetHeight == 0
-        || regions == nullptr
-        || regionCount == 0)
-    {
-        return false;
-    }
-
-    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
-    auto iterator = resources.find(frame);
-    if (iterator == resources.end())
-        return false;
-
-    FrameResource& resource = iterator->second;
-
-    const u64 composeStartNs = PerfNowNs();
-    const bool dispatched = dispatchVisibleCompositor(
-        frame,
-        resource,
-        inputs,
-        targetImage,
-        targetImageView,
-        targetLayout,
-        targetHasContent,
-        targetWidth,
-        targetHeight,
-        previousImage,
-        previousValid,
-        regions,
-        regionCount);
-    composeCpuWindow.Add(PerfNowNs() - composeStartNs);
-    logPerformanceIfNeeded();
-    return dispatched;
-}
-
-bool VulkanOutput::buildCompositionInputsCompatibility(
-    const Frame* frame,
-    const melonDS::VulkanRenderer3D& renderer3D,
-    int scale,
-    VulkanFilterMode filtering,
-    bool needsReadback,
-    bool multiSurface,
-    bool validationMode,
-    VulkanCompositionInputs& outInputs) const
-{
-    if (!initialized || frame == nullptr || scale < 1)
-        return false;
-
-    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
-    std::lock_guard<std::mutex> lock(temporalReferenceLock);
-    auto iterator = resources.find(const_cast<Frame*>(frame));
-    if (iterator == resources.end())
-        return false;
-
-    const FrameResource& resource = iterator->second;
-    if (!resource.hasPreparedInputs)
-        return false;
-
-    const bool hasRenderer3dSnapshot =
-        resource.hasRenderer3dSnapshot
-        && resource.renderer3dSnapshot != VK_NULL_HANDLE
-        && resource.renderer3dSnapshotView != VK_NULL_HANDLE;
-    if (!hasRenderer3dSnapshot && !renderer3D.HasColorTarget())
-        return false;
-
-    if (hasRenderer3dSnapshot)
-    {
-        outInputs.sourceImage = resource.renderer3dSnapshot;
-        outInputs.sourceImageView = resource.renderer3dSnapshotView;
-        outInputs.rendererWidth = resource.snapshotWidth;
-        outInputs.rendererHeight = resource.snapshotHeight;
-    }
-    else
-    {
-        outInputs.sourceImage = renderer3D.GetColorTargetImage();
-        outInputs.sourceImageView = renderer3D.GetColorTargetImageView();
-        outInputs.rendererWidth = renderer3D.GetColorTargetWidth();
-        outInputs.rendererHeight = renderer3D.GetColorTargetHeight();
-    }
-    outInputs.exactObjSourceImage = outInputs.sourceImage;
-    outInputs.exactObjSourceImageView = outInputs.sourceImageView;
-    outInputs.exactBottomObjPresenterValid = false;
-    outInputs.previousTopSourceValid = resource.previousTopRendererSourceValid;
-    outInputs.previousTopSourceImage =
-        outInputs.previousTopSourceValid
-            && resource.previousTopRendererSourceImage != VK_NULL_HANDLE
-        ? resource.previousTopRendererSourceImage
-        : outInputs.sourceImage;
-    outInputs.previousTopSourceImageView =
-        outInputs.previousTopSourceValid
-            && resource.previousTopRendererSourceImageView != VK_NULL_HANDLE
-        ? resource.previousTopRendererSourceImageView
-        : outInputs.sourceImageView;
-    outInputs.previousBottomSourceValid =
-        resource.previousBottomRendererSourceValid;
-    outInputs.previousBottomSourceImage =
-        outInputs.previousBottomSourceValid
-            && resource.previousBottomRendererSourceImage != VK_NULL_HANDLE
-        ? resource.previousBottomRendererSourceImage
-        : outInputs.sourceImage;
-    outInputs.previousBottomSourceImageView =
-        outInputs.previousBottomSourceValid
-            && resource.previousBottomRendererSourceImageView != VK_NULL_HANDLE
-        ? resource.previousBottomRendererSourceImageView
-        : outInputs.sourceImageView;
-    outInputs.liveSourceScreenSwap = resource.hasRenderer3dSnapshot
-        ? resource.renderer3dSnapshotScreenSwap
-        : resource.screenSwap;
-
-    constexpr u32 currentCaptureLineThreshold = kScreenHeight / 2u;
-    constexpr u32 dominantStructuredSlotThreshold =
-        (kScreenWidth * kScreenHeight) / 2u;
-    const bool topUsesRegularCapture3d =
-        resource.topScreenStats.RegularCaptureUses3dLines
-            > currentCaptureLineThreshold;
-    const bool bottomUsesRegularCapture3d =
-        resource.bottomScreenStats.RegularCaptureUses3dLines
-            > currentCaptureLineThreshold;
-    const bool topUsesVramCapture3d =
-        resource.topScreenStats.VramCaptureUses3dLines
-            > currentCaptureLineThreshold;
-    const bool bottomUsesVramCapture3d =
-        resource.bottomScreenStats.VramCaptureUses3dLines
-            > currentCaptureLineThreshold;
-    const bool topUsesStructured3d =
-        resource.topScreenStats.StructuredSlotPixels
-            > dominantStructuredSlotThreshold;
-    const bool bottomUsesStructured3d =
-        resource.bottomScreenStats.StructuredSlotPixels
-            > dominantStructuredSlotThreshold;
-    const bool topUsesCurrentCapture3d =
-        topUsesRegularCapture3d || topUsesVramCapture3d;
-    const bool bottomUsesCurrentCapture3d =
-        bottomUsesRegularCapture3d || bottomUsesVramCapture3d;
-    const bool topHasVisibleStructured3d =
-        resource.topScreenStats.StructuredAboveVisiblePixels > 0
-        || topUsesCurrentCapture3d;
-    const bool bottomHasVisibleStructured3d =
-        resource.bottomScreenStats.StructuredAboveVisiblePixels > 0
-        || bottomUsesCurrentCapture3d;
-    outInputs.currentSourceHasHighres3d =
-        topHasVisibleStructured3d || bottomHasVisibleStructured3d;
-    outInputs.class4VramStructuredPair =
-        resource.captureBackedClass4Only
-        && !topUsesRegularCapture3d
-        && !bottomUsesRegularCapture3d
-        && (topUsesVramCapture3d != bottomUsesVramCapture3d)
-        && (topUsesStructured3d != bottomUsesStructured3d);
-    outInputs.class4NoAboveVramStructuredPair =
-        outInputs.class4VramStructuredPair
-        && resource.class4NoAboveVramStructuredPair;
-    outInputs.class4PreservePackedVramValid =
-        outInputs.class4VramStructuredPair
-        && resource.class4PreservePackedVramValid;
-    outInputs.class4PreservePackedVramScreenSwap =
-        resource.class4PreservePackedVramScreenSwap;
-    outInputs.topStructuredHandoffNoCurrent3d =
-        resource.topStructuredHandoffNoCurrent3d;
-    outInputs.bottomStructuredHandoffNoCurrent3d =
-        resource.bottomStructuredHandoffNoCurrent3d;
-    outInputs.topStructuredHandoffSuppress3d =
-        resource.topStructuredHandoffSuppress3d;
-    outInputs.bottomStructuredHandoffSuppress3d =
-        resource.bottomStructuredHandoffSuppress3d;
-    outInputs.topPackedBuffer = resource.topPackedBuffer;
-    outInputs.bottomPackedBuffer = resource.bottomPackedBuffer;
-    outInputs.capture3dBuffer = resource.capture3dBuffer;
-    outInputs.packedBufferSize = resource.packedBufferSize;
-    outInputs.capture3dBufferSize = kCapture3dBufferSize;
-    outInputs.packedStride = kAcceleratedStride;
-    outInputs.screenSwap = resource.screenSwap ? 1u : 0u;
-    outInputs.scale = static_cast<u32>(scale);
-    outInputs.filtering = filtering;
-    outInputs.pipelineProfile = melonDS::VulkanPipelineProfile::Compatibility;
-    outInputs.capture3dSourceValid =
-        resource.hasPreparedCapture3dSource
-        && resource.capture3dBuffer != VK_NULL_HANDLE;
-    const bool asymmetricRegularCapture3d =
-        topUsesRegularCapture3d != bottomUsesRegularCapture3d
-        && !topUsesVramCapture3d
-        && !bottomUsesVramCapture3d;
-    outInputs.capture3dSourceScreenSwapValid =
-        asymmetricRegularCapture3d
-        || (topUsesCurrentCapture3d != bottomUsesCurrentCapture3d);
-    outInputs.capture3dSourceScreenSwap = asymmetricRegularCapture3d
-        ? topUsesRegularCapture3d
-        : topUsesCurrentCapture3d;
-    outInputs.needsReadback = needsReadback;
-    outInputs.multiSurface = multiSurface;
-    outInputs.validationMode = validationMode;
-    outInputs.compositorMode = static_cast<u32>(VulkanRuntime::GetCompositorMode());
-    outInputs.debugView = static_cast<u32>(VulkanRuntime::GetDebugView());
-
-    return outInputs.sourceImage != VK_NULL_HANDLE
-        && outInputs.sourceImageView != VK_NULL_HANDLE
-        && outInputs.previousTopSourceImage != VK_NULL_HANDLE
-        && outInputs.previousTopSourceImageView != VK_NULL_HANDLE
-        && outInputs.previousBottomSourceImage != VK_NULL_HANDLE
-        && outInputs.previousBottomSourceImageView != VK_NULL_HANDLE
-        && outInputs.topPackedBuffer != VK_NULL_HANDLE
-        && outInputs.bottomPackedBuffer != VK_NULL_HANDLE
-        && outInputs.capture3dBuffer != VK_NULL_HANDLE;
-}
-
 bool VulkanOutput::buildCompositionInputs(
     const Frame* frame,
     const melonDS::VulkanRenderer3D& renderer3D,
     int scale,
     VulkanFilterMode filtering,
-    melonDS::VulkanPipelineProfile pipelineProfile,
     bool needsReadback,
     bool multiSurface,
     bool validationMode,
@@ -8973,1736 +8221,169 @@ bool VulkanOutput::buildCompositionInputs(
 {
     if (!initialized || frame == nullptr || scale < 1)
         return false;
-    if (pipelineProfile != this->pipelineProfile)
-        return false;
 
-    if (!melonDS::UsesVulkanFastPath(pipelineProfile))
-    {
-        return buildCompositionInputsCompatibility(
-            frame,
-            renderer3D,
-            scale,
-            filtering,
-            needsReadback,
-            multiSurface,
-            validationMode,
-            outInputs);
-    }
-
-    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     std::lock_guard<std::mutex> lock(temporalReferenceLock);
     auto iterator = resources.find(const_cast<Frame*>(frame));
     if (iterator == resources.end())
         return false;
 
     const FrameResource& resource = iterator->second;
-    if (!resource.hasPreparedInputs)
-        return false;
-    outInputs.pipelineProfile = pipelineProfile;
 
-    const bool hasRenderer3dSnapshot =
-        resource.hasRenderer3dSnapshot
-        && resource.renderer3dSnapshot != VK_NULL_HANDLE
-        && resource.renderer3dSnapshotView != VK_NULL_HANDLE;
-    const bool hasRetainedRenderer3dSource =
-        resource.hasRetainedRenderer3dSource
-        && resource.retainedRenderer3dSourceImage != VK_NULL_HANDLE
-        && resource.retainedRenderer3dSourceImageView != VK_NULL_HANDLE;
-    if (!hasRenderer3dSnapshot && !hasRetainedRenderer3dSource && !renderer3D.HasColorTarget())
-        return false;
+    {
+        outInputs.scale = static_cast<u32>(scale);
+        outInputs.filtering = filtering;
+        outInputs.needsReadback = needsReadback;
+        outInputs.multiSurface = multiSurface;
+        outInputs.validationMode = validationMode;
 
-    if (hasRenderer3dSnapshot)
-    {
-        outInputs.sourceImage = resource.renderer3dSnapshot;
-        outInputs.sourceImageView = resource.renderer3dSnapshotView;
-        outInputs.rendererWidth = resource.snapshotWidth;
-        outInputs.rendererHeight = resource.snapshotHeight;
-    }
-    else if (hasRetainedRenderer3dSource)
-    {
-        outInputs.sourceImage = resource.retainedRenderer3dSourceImage;
-        outInputs.sourceImageView = resource.retainedRenderer3dSourceImageView;
-        outInputs.rendererWidth = resource.retainedRenderer3dSourceWidth;
-        outInputs.rendererHeight = resource.retainedRenderer3dSourceHeight;
-    }
-    else
-    {
-        outInputs.sourceImage = renderer3D.GetColorTargetImage();
-        outInputs.sourceImageView = renderer3D.GetColorTargetImageView();
-        outInputs.rendererWidth = renderer3D.GetColorTargetWidth();
-        outInputs.rendererHeight = renderer3D.GetColorTargetHeight();
-    }
-    const SoftPackedObjCaptureSourceIdentity& exactObjIdentity =
-        resource.exactObjRenderer3dSnapshotIdentity;
-    const bool exactObjSnapshotValid =
-        resource.hasExactObjRenderer3dSnapshot
-        && resource.exactObjRenderer3dSnapshot != VK_NULL_HANDLE
-        && resource.exactObjRenderer3dSnapshotView != VK_NULL_HANDLE
-        && resource.exactObjSnapshotLayoutReady
-        && resource.exactObjSnapshotWidth == outInputs.rendererWidth
-        && resource.exactObjSnapshotHeight == outInputs.rendererHeight
-        && exactObjIdentity.valid
-        && exactObjIdentity.polygonCount > 0u
-        && exactObjIdentity.captureCnt == 0x80330000u
-        && !exactObjIdentity.screenSwap
-        && exactObjIdentity.uniformLines == static_cast<u32>(kScreenHeight)
-        && exactObjIdentity.consumedPixels
-            == static_cast<u32>(kScreenWidth * kScreenHeight)
-        && exactObjIdentity.directXYPixels == exactObjIdentity.consumedPixels
-        && exactObjIdentity.conflictLines == 0u
-        && resource.screenSwap
-        && resource.topScreenStats.DisplayModeCounts[2] == kScreenHeight
-        && resource.topScreenStats.VramCaptureUses3dLines == kScreenHeight
-        && resource.topScreenStats.RegularCaptureUses3dLines == 0u
-        && resource.bottomScreenStats.DisplayModeCounts[1] == kScreenHeight
-        && resource.bottomScreenStats.RegularCaptureUses3dLines == kScreenHeight
-        && resource.bottomScreenStats.VramCaptureUses3dLines == 0u
-        && resource.bottomScreenStats.CompModeCounts[3]
-            == static_cast<u32>(kScreenWidth * kScreenHeight)
-        && resource.bottomScreenStats.StructuredSlotPixels == 0u
-        && resource.bottomScreenStats.StructuredAbovePixels == 0u
-        && resource.bottomScreenStats.Structured2DOnlyPixels == 0u
-        && resource.bottomScreenStats.HasOffsets
-        && resource.bottomScreenStats.MinXOffset == 0
-        && resource.bottomScreenStats.MaxXOffset == 0;
-    outInputs.exactObjSourceImage = exactObjSnapshotValid
-        ? resource.exactObjRenderer3dSnapshot
-        : outInputs.sourceImage;
-    outInputs.exactObjSourceImageView = exactObjSnapshotValid
-        ? resource.exactObjRenderer3dSnapshotView
-        : outInputs.sourceImageView;
-    outInputs.exactBottomObjPresenterValid = exactObjSnapshotValid;
-    outInputs.previousTopSourceValid = resource.previousTopRendererSourceValid;
-    outInputs.previousTopSourceImage = outInputs.previousTopSourceValid && resource.previousTopRendererSourceImage != VK_NULL_HANDLE
-        ? resource.previousTopRendererSourceImage
-        : outInputs.sourceImage;
-    outInputs.previousTopSourceImageView = outInputs.previousTopSourceValid && resource.previousTopRendererSourceImageView != VK_NULL_HANDLE
-        ? resource.previousTopRendererSourceImageView
-        : outInputs.sourceImageView;
-    const SoftPackedDisplayedCaptureSourceIdentity&
-        exactBottomDisplayedIdentity =
-            resource.exactTopDisplayedCaptureRenderer3dSnapshotIdentity;
-    const bool exactBottomDisplayedSnapshotValid =
-        resource.hasExactTopDisplayedCaptureRenderer3dSnapshot
-        && resource.exactTopDisplayedCaptureRenderer3dSnapshot
-            != VK_NULL_HANDLE
-        && resource.exactTopDisplayedCaptureRenderer3dSnapshotView
-            != VK_NULL_HANDLE
-        && resource.exactTopDisplayedCaptureSnapshotLayoutReady
-        && resource.exactTopDisplayedCaptureSnapshotWidth
-            == outInputs.rendererWidth
-        && resource.exactTopDisplayedCaptureSnapshotHeight
-            == outInputs.rendererHeight
-        && resource.captureBackedClass4Only
-        && !resource.screenSwap
-        && resource.captureCntLatched == 0x80330010u
-        && (resource.dispCntALatched & 0x000F0000u) == 0x000E0000u
-        && (resource.dispCntBLatched & 0x00030000u) == 0x00010000u
-        && resource.class4PreservePackedVramValid
-        && !resource.class4PreservePackedVramScreenSwap
-        && !resource.class4Full2dOnlyBottomPackedAuthoritative
-        && resource.topScreenStats.DisplayModeCounts[1] == kScreenHeight
-        && resource.topScreenStats.CompModeCounts[7]
-            == static_cast<u32>(kScreenWidth * kScreenHeight)
-        && resource.topScreenStats.StructuredSlotPixels
-            == static_cast<u32>(kScreenWidth * kScreenHeight)
-        && resource.topScreenStats.StructuredAbovePixels
-            == static_cast<u32>(kScreenWidth * kScreenHeight)
-        && resource.topScreenStats.Structured2DOnlyPixels == 0u
-        && resource.topScreenStats.RegularCaptureUses3dLines == 0u
-        && resource.topScreenStats.VramCaptureUses3dLines == 0u
-        && resource.bottomScreenStats.DisplayModeCounts[2] == kScreenHeight
-        && resource.bottomScreenStats.RegularCaptureUses3dLines == 0u
-        && resource.bottomScreenStats.VramCaptureUses3dLines
-            == kScreenHeight
-        && resource.bottomScreenStats.StructuredSlotPixels == 0u
-        && resource.bottomScreenStats.StructuredAbovePixels == 0u
-        && resource.bottomScreenStats.Structured2DOnlyPixels == 0u
-        && exactBottomDisplayedIdentity.valid
-        && exactBottomDisplayedIdentity.polygonCount > 0u
-        && exactBottomDisplayedIdentity.captureCnt == 0x80330010u
-        && exactBottomDisplayedIdentity.screenSwap
-        && exactBottomDisplayedIdentity.vramBank == 3u
-        && exactBottomDisplayedIdentity.exactLineCount == kScreenHeight
-        && exactBottomDisplayedIdentity.exactFastLineCount
-                + exactBottomDisplayedIdentity.exactGeneralLineCount
-                + exactBottomDisplayedIdentity.exactUnknownLineCount
-            == kScreenHeight
-        && exactBottomDisplayedIdentity.exactUnknownLineCount == 0u;
-    outInputs.previousBottomSourceValid =
-        exactBottomDisplayedSnapshotValid
-        || resource.previousBottomRendererSourceValid;
-    outInputs.previousBottomSourceImage =
-        exactBottomDisplayedSnapshotValid
-            ? resource.exactTopDisplayedCaptureRenderer3dSnapshot
-            : (outInputs.previousBottomSourceValid
-                    && resource.previousBottomRendererSourceImage
-                        != VK_NULL_HANDLE
-                ? resource.previousBottomRendererSourceImage
-                : outInputs.sourceImage);
-    outInputs.previousBottomSourceImageView =
-        exactBottomDisplayedSnapshotValid
-            ? resource.exactTopDisplayedCaptureRenderer3dSnapshotView
-            : (outInputs.previousBottomSourceValid
-                    && resource.previousBottomRendererSourceImageView
-                        != VK_NULL_HANDLE
-                ? resource.previousBottomRendererSourceImageView
-                : outInputs.sourceImageView);
-    outInputs.liveSourceScreenSwap = resource.hasRenderer3dSnapshot
-        ? resource.renderer3dSnapshotScreenSwap
-        : (resource.hasRetainedRenderer3dSource
-            ? resource.retainedRenderer3dSourceScreenSwap
-            : resource.screenSwap);
-    constexpr u32 currentCaptureLineThreshold = kScreenHeight / 2u;
-    constexpr u32 dominantStructuredSlotThreshold = (kScreenWidth * kScreenHeight) / 2u;
-    const bool topUsesRegularCapture3d =
-        resource.topScreenStats.RegularCaptureUses3dLines > currentCaptureLineThreshold;
-    const bool bottomUsesRegularCapture3d =
-        resource.bottomScreenStats.RegularCaptureUses3dLines > currentCaptureLineThreshold;
-    const bool topUsesVramCapture3d =
-        resource.topScreenStats.VramCaptureUses3dLines > currentCaptureLineThreshold;
-    const bool bottomUsesVramCapture3d =
-        resource.bottomScreenStats.VramCaptureUses3dLines > currentCaptureLineThreshold;
-    const bool topUsesStructured3d =
-        resource.topScreenStats.StructuredSlotPixels > dominantStructuredSlotThreshold;
-    const bool bottomUsesStructured3d =
-        resource.bottomScreenStats.StructuredSlotPixels > dominantStructuredSlotThreshold;
-    const bool topUsesCurrentCapture3d = topUsesRegularCapture3d || topUsesVramCapture3d;
-    const bool bottomUsesCurrentCapture3d = bottomUsesRegularCapture3d || bottomUsesVramCapture3d;
-    const bool topSourceAReplay2DOnly =
-        screenUsesSourceAReplay2DOnly(resource.topScreenStats);
-    const bool bottomSourceAReplay2DOnly =
-        screenUsesSourceAReplay2DOnly(resource.bottomScreenStats);
-    const bool sourceAReplayPair =
-        ((resource.sourceAFullHighresOnlyTop || resource.fastHighresOnlyTop) && bottomSourceAReplay2DOnly)
-        || ((resource.sourceAFullHighresOnlyBottom || resource.fastHighresOnlyBottom) && topSourceAReplay2DOnly);
-    const bool suppressTopVisible2DForSourceA =
-        resource.sourceAFullHighresOnlyTop
-        || (sourceAReplayPair && topSourceAReplay2DOnly);
-    const bool suppressBottomVisible2DForSourceA =
-        resource.sourceAFullHighresOnlyBottom
-        || (sourceAReplayPair && bottomSourceAReplay2DOnly);
-    const bool topHasVisibleStructured3d =
-        resource.topScreenStats.StructuredAboveVisiblePixels > 0
-        || topUsesCurrentCapture3d
-        || resource.sourceAFullHighresOnlyTop
-        || resource.fastHighresOnlyTop;
-    const bool bottomHasVisibleStructured3d =
-        resource.bottomScreenStats.StructuredAboveVisiblePixels > 0
-        || bottomUsesCurrentCapture3d
-        || resource.sourceAFullHighresOnlyBottom
-        || resource.fastHighresOnlyBottom;
-    outInputs.currentSourceHasHighres3d =
-        topHasVisibleStructured3d
-        || bottomHasVisibleStructured3d;
-    outInputs.class4VramStructuredPair =
-        resource.captureBackedClass4Only
-        && !topUsesRegularCapture3d
-        && !bottomUsesRegularCapture3d
-        && (topUsesVramCapture3d != bottomUsesVramCapture3d)
-        && (topUsesStructured3d != bottomUsesStructured3d);
-    outInputs.class4NoAboveVramStructuredPair =
-        outInputs.class4VramStructuredPair
-        && resource.class4NoAboveVramStructuredPair;
-    outInputs.class4PreservePackedVramValid =
-        outInputs.class4VramStructuredPair
-        && resource.class4PreservePackedVramValid;
-    outInputs.class4Full2dOnlyBottomPackedAuthoritative =
-        resource.class4Full2dOnlyBottomPackedAuthoritative;
-    outInputs.class4Full2dOnlyBottomFrameOwnedHistory =
-        resource.class4Full2dOnlyBottomFrameOwnedHistory;
-    outInputs.class4ExactBottomDisplayedCapture =
-        exactBottomDisplayedSnapshotValid;
-    outInputs.class4PackedVramMode =
-        resource.class4BottomStructuredCurrentOwnedSource
-            ? 6u
-            : (resource.class4BottomStructuredAboveCurrentOwnedHistory
-                ? 5u
-                : (outInputs.class4ExactBottomDisplayedCapture
-                    ? 3u
-                    : (outInputs.class4Full2dOnlyBottomFrameOwnedHistory
-                        ? 4u
-                        : (outInputs.class4Full2dOnlyBottomPackedAuthoritative
-                            ? 2u
-                            : (outInputs.class4PreservePackedVramValid
-                                ? 1u
-                                : 0u)))));
-    outInputs.class4PreservePackedVramScreenSwap =
-        resource.class4PreservePackedVramScreenSwap;
-    constexpr u32 class4ScreenPixels =
-        static_cast<u32>(kScreenWidth * kScreenHeight);
-    const auto displayModesMatch =
-        [](const SoftPackedScreenStats& stats, std::array<u32, 4> expected) {
-            return stats.DisplayModeCounts == expected;
-        };
-    const auto compModesMatch =
-        [](const SoftPackedScreenStats& stats, std::array<u32, 8> expected) {
-            return stats.CompModeCounts == expected;
-        };
-    const auto hasNoCaptureBackedComp4 =
-        [](const SoftPackedScreenStats& stats) {
-            return stats.CaptureBackedComp4Pixels == 0u
-                && stats.CaptureBackedComp4Lines == 0u;
-        };
-    const auto hasNoStructuredAbove =
-        [](const SoftPackedScreenStats& stats) {
-            return stats.StructuredAbovePixels == 0u
-                && stats.StructuredAboveVisiblePixels == 0u
-                && stats.StructuredAboveBlackPixels == 0u;
-        };
-    const bool exactCurrentGraphicsFrame =
-        frame != nullptr
-        && resource.hasPreparedInputs
-        && resource.hasSoftPackedDebugData
-        && resource.snapshotFromGraphicsBackend
-        && resource.captureBackedClass4Only
-        && resource.softPackedFrameId == frame->frameId;
-    const SoftPackedScreenStats& class4Top = resource.topScreenStats;
-    const SoftPackedScreenStats& class4Bottom = resource.bottomScreenStats;
-    outInputs.class4BottomExactDisplayedOverlayProducer =
-        exactCurrentGraphicsFrame
-        && outInputs.class4ExactBottomDisplayedCapture
-        && !resource.screenSwap
-        && resource.captureCntLatched == 0x80330010u
-        && resource.dispCntALatched == 0x000E135Du
-        && resource.dispCntBLatched == 0x00010555u
-        && resource.captureLinesLatched == static_cast<u32>(kScreenHeight)
-        && resource.captureAgeLatched == 0u
-        && resource.hasPreparedCapture3dSource
-        && outInputs.class4VramStructuredPair
-        && !outInputs.class4NoAboveVramStructuredPair
-        && outInputs.class4PreservePackedVramValid
-        && outInputs.class4PackedVramMode == 3u
-        && !outInputs.class4PreservePackedVramScreenSwap;
-    outInputs.class4BottomNoAboveOverlayBridge =
-        exactCurrentGraphicsFrame
-        && resource.screenSwap
-        && resource.captureCntLatched == 0x00330010u
-        && resource.dispCntALatched == 0x000E115Du
-        && resource.dispCntBLatched == 0x00010555u
-        && resource.captureLinesLatched == static_cast<u32>(kScreenHeight)
-        && resource.captureAgeLatched == 0u
-        && resource.hasPreparedCapture3dSource
-        && outInputs.class4VramStructuredPair
-        && outInputs.class4NoAboveVramStructuredPair
-        && outInputs.class4PreservePackedVramValid
-        && outInputs.class4PackedVramMode == 1u
-        && outInputs.class4PreservePackedVramScreenSwap
-        && displayModesMatch(class4Top, {0u, 0u, 192u, 0u})
-        && compModesMatch(class4Top, {})
-        && class4Top.StructuredSlotPixels == 0u
-        && hasNoStructuredAbove(class4Top)
-        && class4Top.Structured2DOnlyPixels == 0u
-        && displayModesMatch(class4Bottom, {0u, 192u, 0u, 0u})
-        && compModesMatch(
-            class4Bottom,
-            {0u, 0u, 0u, 0u, 0u, 0u, 0u, class4ScreenPixels})
-        && class4Bottom.StructuredSlotPixels == class4ScreenPixels
-        && hasNoStructuredAbove(class4Bottom)
-        && class4Bottom.Structured2DOnlyPixels == 0u;
-    outInputs.class4BottomCadenceSuppressedOverlayBridge =
-        exactCurrentGraphicsFrame
-        && resource.class4AsymmetricCadenceSuppressesTop
-        && resource.screenSwap
-        && resource.captureCntLatched == 0x80330010u
-        && resource.dispCntALatched == 0x000E115Du
-        && resource.dispCntBLatched == 0x00010555u
-        && resource.captureLinesLatched == static_cast<u32>(kScreenHeight)
-        && resource.captureAgeLatched == 0u
-        && resource.hasPreparedCapture3dSource
-        && resource.hasRenderer3dSnapshot
-        && !resource.renderer3dSnapshotScreenSwap
-        && !outInputs.liveSourceScreenSwap
-        && outInputs.class4VramStructuredPair
-        && !outInputs.class4NoAboveVramStructuredPair
-        && outInputs.class4PreservePackedVramValid
-        && outInputs.class4PreservePackedVramScreenSwap
-        && outInputs.class4PackedVramMode == 1u
-        && displayModesMatch(class4Top, {0u, 0u, 192u, 0u})
-        && compModesMatch(class4Top, {})
-        && class4Top.StructuredSlotPixels == 0u
-        && hasNoStructuredAbove(class4Top)
-        && class4Top.Structured2DOnlyPixels == 0u
-        && displayModesMatch(class4Bottom, {0u, 192u, 0u, 0u})
-        && compModesMatch(
-            class4Bottom,
-            {0u, 0u, 0u, 0u, 0u, 0u, 0u, class4ScreenPixels})
-        && class4Bottom.StructuredSlotPixels == class4ScreenPixels
-        && class4Bottom.StructuredAbovePixels > 0u
-        && class4Bottom.StructuredAboveVisiblePixels
-            == class4Bottom.StructuredAbovePixels
-        && class4Bottom.StructuredAboveBlackPixels == 0u
-        && class4Bottom.Structured2DOnlyPixels == 0u;
-    outInputs.class4BottomCadencePresentedOverlayBridge =
-        exactCurrentGraphicsFrame
-        && resource.class4AsymmetricCadenceActive
-        && !resource.class4AsymmetricCadenceSuppressesTop
-        && resource.screenSwap
-        && resource.captureCntLatched == 0x80330010u
-        && resource.dispCntALatched == 0x000E115Du
-        && resource.dispCntBLatched == 0x00010555u
-        && resource.captureLinesLatched == static_cast<u32>(kScreenHeight)
-        && resource.captureAgeLatched == 0u
-        && resource.hasPreparedCapture3dSource
-        && resource.hasRenderer3dSnapshot
-        && resource.renderer3dSnapshotScreenSwap
-        && outInputs.liveSourceScreenSwap
-        && outInputs.class4VramStructuredPair
-        && !outInputs.class4NoAboveVramStructuredPair
-        && outInputs.class4PreservePackedVramValid
-        && outInputs.class4PreservePackedVramScreenSwap
-        && outInputs.class4PackedVramMode == 1u
-        && displayModesMatch(class4Top, {0u, 0u, 192u, 0u})
-        && compModesMatch(class4Top, {})
-        && class4Top.StructuredSlotPixels == 0u
-        && hasNoStructuredAbove(class4Top)
-        && class4Top.Structured2DOnlyPixels == 0u
-        && displayModesMatch(class4Bottom, {0u, 192u, 0u, 0u})
-        && compModesMatch(
-            class4Bottom,
-            {0u, 0u, 0u, 0u, 0u, 0u, 0u, class4ScreenPixels})
-        && class4Bottom.StructuredSlotPixels == class4ScreenPixels
-        && class4Bottom.StructuredAbovePixels > 0u
-        && class4Bottom.StructuredAboveVisiblePixels
-            == class4Bottom.StructuredAbovePixels
-        && class4Bottom.StructuredAboveBlackPixels == 0u
-        && class4Bottom.Structured2DOnlyPixels == 0u;
-    outInputs.class4BottomPostHandoffOneShotProducer =
-        exactCurrentGraphicsFrame
-        && !resource.screenSwap
-        && resource.captureCntLatched == 0x80330010u
-        && resource.dispCntALatched == 0x000E115Du
-        && resource.dispCntBLatched == 0x00010555u
-        && resource.captureLinesLatched == static_cast<u32>(kScreenHeight)
-        && resource.captureAgeLatched == 1u
-        && !resource.hasPreparedCapture3dSource
-        && !outInputs.class4VramStructuredPair
-        && !outInputs.class4PreservePackedVramValid
-        && outInputs.class4PackedVramMode == 0u
-        && resource.capture3dSourceScreenSwapHintValid
-        && resource.capture3dSourceScreenSwapHint
-        && !resource.hasRenderer3dSnapshot
-        && !outInputs.liveSourceScreenSwap
-        && !outInputs.previousTopSourceValid
-        && !outInputs.previousBottomSourceValid
-        && displayModesMatch(class4Top, {0u, 192u, 0u, 0u})
-        && compModesMatch(
-            class4Top,
-            {0u, 0u, 0u, 0u, 0u, 0u, 0u, class4ScreenPixels})
-        && hasNoCaptureBackedComp4(class4Top)
-        && class4Top.RegularCaptureUses3dLines == 0u
-        && class4Top.VramCaptureUses3dLines == 0u
-        && class4Top.ForceLive3dCompMode7Lines == 0u
-        && class4Top.StructuredSlotPixels == 0u
-        && hasNoStructuredAbove(class4Top)
-        && class4Top.Structured2DOnlyPixels == 0u
-        && displayModesMatch(class4Bottom, {0u, 0u, 192u, 0u})
-        && compModesMatch(class4Bottom, {})
-        && hasNoCaptureBackedComp4(class4Bottom)
-        && class4Bottom.RegularCaptureUses3dLines == 0u
-        && class4Bottom.VramCaptureUses3dLines == 0u
-        && class4Bottom.ForceLive3dCompMode7Lines == 0u
-        && class4Bottom.StructuredSlotPixels == 0u
-        && hasNoStructuredAbove(class4Bottom)
-        && class4Bottom.Structured2DOnlyPixels == 0u;
-    outInputs.class4BottomFull2dOnlyOneShotConsumer =
-        exactCurrentGraphicsFrame
-        && !resource.screenSwap
-        && resource.captureCntLatched == 0x80330010u
-        && resource.dispCntALatched == 0x000E135Du
-        && resource.dispCntBLatched == 0x00010555u
-        && resource.captureLinesLatched == static_cast<u32>(kScreenHeight)
-        && resource.captureAgeLatched == 0u
-        && resource.hasPreparedCapture3dSource
-        && outInputs.class4Full2dOnlyBottomPackedAuthoritative
-        && !outInputs.class4VramStructuredPair
-        && !outInputs.class4PreservePackedVramValid
-        && outInputs.class4PackedVramMode == 2u
-        && resource.capture3dSourceScreenSwapHintValid
-        && !resource.capture3dSourceScreenSwapHint
-        && resource.hasRenderer3dSnapshot
-        && resource.renderer3dSnapshot != VK_NULL_HANDLE
-        && resource.renderer3dSnapshotView != VK_NULL_HANDLE
-        && !resource.renderer3dSnapshotScreenSwap
-        && resource.renderer3dSnapshotSourceIdentityValid
-        && resource.renderer3dSnapshotSourceSequence > 0u
-        && resource.renderer3dSnapshotSourcePolygonCount > 0u
-        && resource.renderer3dSnapshotSourceCaptureCnt == 0x80330010u
-        && !resource.renderer3dSnapshotSourceScreenSwap
-        && !outInputs.liveSourceScreenSwap
-        && !outInputs.previousTopSourceValid
-        && outInputs.previousBottomSourceValid
-        && displayModesMatch(class4Top, {0u, 192u, 0u, 0u})
-        && compModesMatch(
-            class4Top,
-            {0u, 0u, 0u, 0u, 0u, 0u, 0u, class4ScreenPixels})
-        && hasNoCaptureBackedComp4(class4Top)
-        && class4Top.RegularCaptureUses3dLines == 0u
-        && class4Top.VramCaptureUses3dLines == 0u
-        && class4Top.ForceLive3dCompMode7Lines == 0u
-        && class4Top.StructuredSlotPixels == 0u
-        && hasNoStructuredAbove(class4Top)
-        && class4Top.Structured2DOnlyPixels == class4ScreenPixels
-        && displayModesMatch(class4Bottom, {0u, 0u, 192u, 0u})
-        && compModesMatch(class4Bottom, {})
-        && hasNoCaptureBackedComp4(class4Bottom)
-        && class4Bottom.RegularCaptureUses3dLines == 0u
-        && class4Bottom.VramCaptureUses3dLines == 192u
-        && class4Bottom.ForceLive3dCompMode7Lines == 0u
-        && class4Bottom.StructuredSlotPixels == 0u
-        && hasNoStructuredAbove(class4Bottom)
-        && class4Bottom.Structured2DOnlyPixels == 0u;
-    outInputs.topStructuredHandoffNoCurrent3d = resource.topStructuredHandoffNoCurrent3d;
-    outInputs.bottomStructuredHandoffNoCurrent3d = resource.bottomStructuredHandoffNoCurrent3d;
-    outInputs.topStructuredHandoffSuppress3d = resource.topStructuredHandoffSuppress3d;
-    outInputs.bottomStructuredHandoffSuppress3d = resource.bottomStructuredHandoffSuppress3d;
-    outInputs.replayTopComposedFromPrevious = resource.replayTopComposedFromPrevious;
-    outInputs.replayBottomComposedFromPrevious = resource.replayBottomComposedFromPrevious;
-    outInputs.topResolvedComp7BeforeExactBottomRegularStoresFullCarry =
-        resource.topResolvedComp7BeforeExactBottomRegularStoresFullCarry;
-    outInputs.topOpaqueComp7AfterExactBottomRegularUsesComposedCarry =
-        resource.topOpaqueComp7AfterExactBottomRegularUsesComposedCarry;
-    outInputs.capture3dSourceValid =
-        resource.hasPreparedCapture3dSource
-        && resource.capture3dBuffer != VK_NULL_HANDLE;
-    outInputs.bottomExactRegularCapturePreservesCurrentBlack =
-        resource.snapshotFromGraphicsBackend
-        && resource.hasSoftPackedDebugData
-        && outInputs.capture3dSourceValid
-        && !resource.captureBackedClass4Only
-        && !resource.sourceAFullHighresOnlyTop
-        && !resource.sourceAFullHighresOnlyBottom
-        && resource.bottomExactRegularCapturePreservesCurrentBlackMetadata;
-    const bool topDisplayModeBlank =
-        resource.topScreenStats.DisplayModeCounts[0] >= kScreenHeight
-        && resource.topScreenStats.Plane0VisiblePixels == 0u
-        && resource.topScreenStats.Plane1VisiblePixels == 0u
-        && resource.topScreenStats.StructuredAboveVisiblePixels == 0u
-        && resource.topScreenStats.Structured2DOnlyVisiblePixels == 0u;
-    const bool bottomDisplayModeBlank =
-        resource.bottomScreenStats.DisplayModeCounts[0] >= kScreenHeight
-        && resource.bottomScreenStats.Plane0VisiblePixels == 0u
-        && resource.bottomScreenStats.Plane1VisiblePixels == 0u
-        && resource.bottomScreenStats.StructuredAboveVisiblePixels == 0u
-        && resource.bottomScreenStats.Structured2DOnlyVisiblePixels == 0u;
-    const bool topOwnsLiveSource = outInputs.liveSourceScreenSwap;
-    const bool bottomOwnsLiveSource = !outInputs.liveSourceScreenSwap;
-    const bool topStructured2dOnlyCanUseHighresHistory =
-        (screenCanUseHighresHistoryForStructured2dOnly(resource.topScreenStats)
-            || (sourceAReplayPair && topSourceAReplay2DOnly))
-        && !topOwnsLiveSource
-        && (resource.topScreenStats.Plane0VisiblePixels == 0u
-            || (sourceAReplayPair && topSourceAReplay2DOnly))
-        && outInputs.previousTopSourceValid
-        && bottomHasVisibleStructured3d;
-    const bool bottomStructured2dOnlyCanUseHighresHistory =
-        (screenCanUseHighresHistoryForStructured2dOnly(resource.bottomScreenStats)
-            || (sourceAReplayPair && bottomSourceAReplay2DOnly))
-        && !bottomOwnsLiveSource
-        && (resource.bottomScreenStats.Plane0VisiblePixels == 0u
-            || (sourceAReplayPair && bottomSourceAReplay2DOnly))
-        && outInputs.previousBottomSourceValid
-        && topHasVisibleStructured3d;
-    const bool topAlternatingStructuredNeedsComposedCarry =
-        topUsesStructured3d
-        && !topOwnsLiveSource;
-    const bool bottomAlternatingStructuredNeedsComposedCarry =
-        bottomUsesStructured3d
-        && !bottomOwnsLiveSource
-        && !resource.exactTopCaptureWithPassiveBottom;
-    const bool topBlankNeedsComposedCarry =
-        topDisplayModeBlank && lastTopComposedFrame != nullptr;
-    const bool bottomBlankNeedsComposedCarry =
-        bottomDisplayModeBlank && lastBottomComposedFrame != nullptr;
-    outInputs.directPresentTopCarryRequired =
-        resource.replayTopComposedFromPrevious
-        || topBlankNeedsComposedCarry
-        || topStructured2dOnlyCanUseHighresHistory
-        || topAlternatingStructuredNeedsComposedCarry;
-    outInputs.directPresentBottomCarryRequired =
-        resource.replayBottomComposedFromPrevious
-        || bottomBlankNeedsComposedCarry
-        || bottomStructured2dOnlyCanUseHighresHistory
-        || bottomAlternatingStructuredNeedsComposedCarry;
-    outInputs.directPresentTopComposedCarryRequired =
-        resource.replayTopComposedFromPrevious
-        || topBlankNeedsComposedCarry;
-    outInputs.directPresentBottomComposedCarryRequired =
-        resource.replayBottomComposedFromPrevious
-        || bottomBlankNeedsComposedCarry;
-    const auto screenIsVramDisplayDominantForAlternating =
-        [](const SoftPackedScreenStats& stats) {
-            return stats.DisplayModeCounts[2] > (kScreenHeight / 2u);
-        };
-    const bool topAlternatingStructuredMissingHistory =
-        topAlternatingStructuredNeedsComposedCarry
-        && !outInputs.previousTopSourceValid
-        && !screenIsVramDisplayDominantForAlternating(resource.topScreenStats);
-    const bool bottomAlternatingStructuredMissingHistory =
-        bottomAlternatingStructuredNeedsComposedCarry
-        && !outInputs.previousBottomSourceValid
-        && !screenIsVramDisplayDominantForAlternating(resource.bottomScreenStats);
-    const bool dualRegularCaptureStructuredPair =
-        resource.topScreenStats.RegularCaptureUses3dLines > 0u
-        && resource.bottomScreenStats.RegularCaptureUses3dLines > 0u
-        && resource.topScreenStats.StructuredSlotPixels > static_cast<u32>(kScreenWidth)
-        && resource.bottomScreenStats.StructuredSlotPixels > static_cast<u32>(kScreenWidth)
-        && resource.topScreenStats.VramCaptureUses3dLines == 0u
-        && resource.bottomScreenStats.VramCaptureUses3dLines == 0u
-        && resource.topScreenStats.ForceLive3dCompMode7Lines == 0u
-        && resource.bottomScreenStats.ForceLive3dCompMode7Lines == 0u;
-    const bool topFullRegularComp7 =
-        screenUsesFullRegularComp7(resource.topScreenStats);
-    const bool bottomFullRegularComp7 =
-        screenUsesFullRegularComp7(resource.bottomScreenStats);
-    const bool topEmptyStructured2dNeedsPackedFallback =
-        screenNeedsComposedReplayForEmptyStructured2d(resource.topScreenStats);
-    const bool bottomEmptyStructured2dNeedsPackedFallback =
-        screenNeedsComposedReplayForEmptyStructured2d(resource.bottomScreenStats);
-    const bool topHasCurrentVisible2D =
-        !suppressTopVisible2DForSourceA
-        && (resource.topScreenStats.Plane0VisiblePixels > 0u
-            || resource.topScreenStats.Plane1VisiblePixels > 0u
-            || resource.topScreenStats.Structured2DOnlyVisiblePixels > 0u
-            || resource.topScreenStats.StructuredAboveVisiblePixels > 0u
-            || resource.topScreenStats.ProtectedBlackPixels > 0u);
-    const bool bottomHasCurrentVisible2D =
-        !suppressBottomVisible2DForSourceA
-        && (resource.bottomScreenStats.Plane0VisiblePixels > 0u
-            || resource.bottomScreenStats.Plane1VisiblePixels > 0u
-            || resource.bottomScreenStats.Structured2DOnlyVisiblePixels > 0u
-            || resource.bottomScreenStats.StructuredAboveVisiblePixels > 0u
-            || resource.bottomScreenStats.ProtectedBlackPixels > 0u);
-    const bool frameHasCapture3dLines =
-        std::any_of(
-            resource.captureLineUses3dMask.begin(),
-            resource.captureLineUses3dMask.end(),
-            [](u8 value) { return value != 0u; });
-    const bool frameHasCaptureMixed3D =
-        outInputs.capture3dSourceValid
-        || frameHasCapture3dLines
-        || resource.topScreenStats.RegularCaptureUses3dLines > 0u
-        || resource.bottomScreenStats.RegularCaptureUses3dLines > 0u
-        || resource.topScreenStats.VramCaptureUses3dLines > 0u
-        || resource.bottomScreenStats.VramCaptureUses3dLines > 0u
-        || resource.topScreenStats.CaptureBackedComp4Lines > 0u
-        || resource.bottomScreenStats.CaptureBackedComp4Lines > 0u;
-    const bool top2DMixedWithCaptureHighres =
-        frameHasCaptureMixed3D
-        && topHasCurrentVisible2D
-        && !topUsesStructured3d
-        && !topUsesCurrentCapture3d
-        && (bottomUsesStructured3d || bottomUsesCurrentCapture3d || bottomHasVisibleStructured3d);
-    const bool bottom2DMixedWithCaptureHighres =
-        frameHasCaptureMixed3D
-        && bottomHasCurrentVisible2D
-        && !bottomUsesStructured3d
-        && !bottomUsesCurrentCapture3d
-        && (topUsesStructured3d || topUsesCurrentCapture3d || topHasVisibleStructured3d);
-    const bool topFullRegularComp7DirectCovered =
-        topFullRegularComp7
-        && (topOwnsLiveSource || topAlternatingStructuredNeedsComposedCarry)
-        && (!topHasCurrentVisible2D || resource.fastHighresOverlay2DTop);
-    const bool bottomFullRegularComp7DirectCovered =
-        bottomFullRegularComp7
-        && (bottomOwnsLiveSource || bottomAlternatingStructuredNeedsComposedCarry)
-        && (!bottomHasCurrentVisible2D || resource.fastHighresOverlay2DBottom);
-    const auto screenCanDirectCoverPartialRegularCapture =
-        [](const SoftPackedScreenStats& stats, bool overlayAvailable) {
-        const u32 minCaptureLines = overlayAvailable
-            ? (kScreenHeight / 4u)
-            : (kScreenHeight / 2u);
-        return stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-            && stats.RegularCaptureUses3dLines > minCaptureLines
-            && stats.VramCaptureUses3dLines == 0u
-            && stats.ForceLive3dCompMode7Lines == 0u
-            && stats.CaptureBackedComp4Lines == 0u
-            && stats.StructuredSlotPixels > static_cast<u32>(kScreenWidth);
-    };
-    const bool topPartialRegularCaptureDirectCovered =
-        screenCanDirectCoverPartialRegularCapture(
-            resource.topScreenStats, resource.fastHighresOverlay2DTop)
-        && (topOwnsLiveSource || outInputs.previousTopSourceValid)
-        && (!topHasCurrentVisible2D || resource.fastHighresOverlay2DTop);
-    const bool bottomPartialRegularCaptureDirectCovered =
-        screenCanDirectCoverPartialRegularCapture(
-            resource.bottomScreenStats, resource.fastHighresOverlay2DBottom)
-        && (bottomOwnsLiveSource || outInputs.previousBottomSourceValid)
-        && (!bottomHasCurrentVisible2D || resource.fastHighresOverlay2DBottom);
-    const bool topRegularCaptureDirectCovered =
-        topFullRegularComp7DirectCovered || topPartialRegularCaptureDirectCovered;
-    const bool bottomRegularCaptureDirectCovered =
-        bottomFullRegularComp7DirectCovered || bottomPartialRegularCaptureDirectCovered;
-    const bool topUncoveredCompositorHasMaterial =
-        !topRegularCaptureDirectCovered
-        && lastTopComposedFrame != nullptr;
-    const bool bottomUncoveredCompositorHasMaterial =
-        !bottomRegularCaptureDirectCovered
-        && lastBottomComposedFrame != nullptr;
-    const bool dualRegularCaptureStructuredNeedsCompositor =
-        dualRegularCaptureStructuredPair
-        && !(topRegularCaptureDirectCovered && bottomRegularCaptureDirectCovered)
-        && (topUncoveredCompositorHasMaterial || bottomUncoveredCompositorHasMaterial);
-    const bool top2DOnlyNeedsHighresHistoryComposite =
-        top2DMixedWithCaptureHighres
-        && outInputs.previousTopSourceValid;
-    const bool bottom2DOnlyNeedsHighresHistoryComposite =
-        bottom2DMixedWithCaptureHighres
-        && outInputs.previousBottomSourceValid;
-    const auto screenCanUseFastPacked2DOnly = [](const SoftPackedScreenStats& stats) {
-        return stats.RegularCaptureUses3dLines == 0u
-            && stats.VramCaptureUses3dLines == 0u
-            && stats.ForceLive3dCompMode7Lines == 0u
-            && stats.CaptureBackedComp4Lines == 0u
-            && stats.StructuredSlotPixels == 0u;
-    };
-    outInputs.directPresentTopPackedRequired = topEmptyStructured2dNeedsPackedFallback;
-    outInputs.directPresentBottomPackedRequired = bottomEmptyStructured2dNeedsPackedFallback;
-    const bool topHistoryFallbackHasReplay = lastTopComposedFrame != nullptr;
-    const bool bottomHistoryFallbackHasReplay = lastBottomComposedFrame != nullptr;
-    const bool topRequiresPackedFallback =
-        ((screenRequiresPackedDirectFallback(resource.topScreenStats)
-                && outInputs.currentSourceHasHighres3d
-                && !outInputs.previousTopSourceValid
-                && topHistoryFallbackHasReplay)
-            || topAlternatingStructuredMissingHistory
-            || dualRegularCaptureStructuredNeedsCompositor);
-    const bool bottomRequiresPackedFallback =
-        ((screenRequiresPackedDirectFallback(resource.bottomScreenStats)
-                && outInputs.currentSourceHasHighres3d
-                && !outInputs.previousBottomSourceValid
-                && bottomHistoryFallbackHasReplay)
-            || bottomAlternatingStructuredMissingHistory
-            || dualRegularCaptureStructuredNeedsCompositor);
-    outInputs.directPresentRequiresPackedFallback =
-        topRequiresPackedFallback
-        || bottomRequiresPackedFallback;
-    outInputs.directPresentRequiresComposedFallback =
-        outInputs.directPresentTopComposedCarryRequired
-        || outInputs.directPresentBottomComposedCarryRequired
-        || outInputs.directPresentRequiresPackedFallback;
-    if (outInputs.directPresentRequiresComposedFallback
-        && areRendererDebugToolsEnabled()
-        && fallbackWhyLogsRemaining > 0)
-    {
-        fallbackWhyLogsRemaining--;
-        melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Warn,
-            "VulkanTemporal[FallbackWhy]: frame=%u topCarry=%u botCarry=%u topPacked=%u botPacked=%u "
-            "replayTop=%u replayBot=%u blankTop=%u blankBot=%u topReqDirectFb=%u botReqDirectFb=%u "
-            "altTopMiss=%u altBotMiss=%u dualReg=%u prevTop=%u prevBot=%u lastCompTop=%u lastCompBot=%u",
-            frame != nullptr ? static_cast<unsigned>(frame->frameId) : 0u,
-            outInputs.directPresentTopComposedCarryRequired ? 1u : 0u,
-            outInputs.directPresentBottomComposedCarryRequired ? 1u : 0u,
-            topRequiresPackedFallback ? 1u : 0u,
-            bottomRequiresPackedFallback ? 1u : 0u,
-            resource.replayTopComposedFromPrevious ? 1u : 0u,
-            resource.replayBottomComposedFromPrevious ? 1u : 0u,
-            topBlankNeedsComposedCarry ? 1u : 0u,
-            bottomBlankNeedsComposedCarry ? 1u : 0u,
-            screenRequiresPackedDirectFallback(resource.topScreenStats) ? 1u : 0u,
-            screenRequiresPackedDirectFallback(resource.bottomScreenStats) ? 1u : 0u,
-            topAlternatingStructuredMissingHistory ? 1u : 0u,
-            bottomAlternatingStructuredMissingHistory ? 1u : 0u,
-            dualRegularCaptureStructuredNeedsCompositor ? 1u : 0u,
-            outInputs.previousTopSourceValid ? 1u : 0u,
-            outInputs.previousBottomSourceValid ? 1u : 0u,
-            lastTopComposedFrame != nullptr ? 1u : 0u,
-            lastBottomComposedFrame != nullptr ? 1u : 0u
-        );
-        if (dualRegularCaptureStructuredNeedsCompositor)
+        if (resource.hasRenderer3dSnapshot
+            && resource.renderer3dSnapshot != VK_NULL_HANDLE
+            && resource.renderer3dSnapshotView != VK_NULL_HANDLE)
         {
-            const auto logScreen = [&](const char* tag, const SoftPackedScreenStats& st, bool covered, bool full, bool partial, bool overlay, bool owns) {
-                melonDS::Platform::Log(
-                    melonDS::Platform::LogLevel::Warn,
-                    "VulkanTemporal[FallbackDualReg]: %s dm1=%u regCap=%u slot=%u 2dOnly=%u/%uvis above=%uvis p0vis=%u p1vis=%u protB=%u comp7px=%u covered=%u full=%u partial=%u overlay=%u owns=%u",
-                    tag,
-                    st.DisplayModeCounts[1],
-                    st.RegularCaptureUses3dLines,
-                    st.StructuredSlotPixels,
-                    st.Structured2DOnlyPixels,
-                    st.Structured2DOnlyVisiblePixels,
-                    st.StructuredAboveVisiblePixels,
-                    st.Plane0VisiblePixels,
-                    st.Plane1VisiblePixels,
-                    st.ProtectedBlackPixels,
-                    st.CompModeCounts[7],
-                    covered ? 1u : 0u,
-                    full ? 1u : 0u,
-                    partial ? 1u : 0u,
-                    overlay ? 1u : 0u,
-                    owns ? 1u : 0u
-                );
-            };
-            logScreen("top", resource.topScreenStats, topRegularCaptureDirectCovered,
-                topFullRegularComp7DirectCovered, topPartialRegularCaptureDirectCovered,
-                resource.fastHighresOverlay2DTop, topOwnsLiveSource);
-            logScreen("bot", resource.bottomScreenStats, bottomRegularCaptureDirectCovered,
-                bottomFullRegularComp7DirectCovered, bottomPartialRegularCaptureDirectCovered,
-                resource.fastHighresOverlay2DBottom, bottomOwnsLiveSource);
+            outInputs.sourceImage = resource.renderer3dSnapshot;
+            outInputs.sourceImageView = resource.renderer3dSnapshotView;
+            outInputs.rendererWidth = resource.snapshotWidth;
+            outInputs.rendererHeight = resource.snapshotHeight;
         }
-    }
-    outInputs.deferPresentationUntilHistoryReady =
-        outInputs.currentSourceHasHighres3d
-        && ((screenRequiresPackedDirectFallback(resource.topScreenStats)
-                && !outInputs.previousTopSourceValid
-                && topHistoryFallbackHasReplay)
-            || (screenRequiresPackedDirectFallback(resource.bottomScreenStats)
-                && !outInputs.previousBottomSourceValid
-                && bottomHistoryFallbackHasReplay)
-            || topAlternatingStructuredMissingHistory
-            || bottomAlternatingStructuredMissingHistory);
-    outInputs.fastHighresOnlyTop =
-        (resource.fastHighresOnlyTop
-            || topStructured2dOnlyCanUseHighresHistory
-            || (topRegularCaptureDirectCovered && !topHasCurrentVisible2D))
-        && (topOwnsLiveSource || outInputs.previousTopSourceValid);
-    outInputs.fastHighresOnlyBottom =
-        (resource.fastHighresOnlyBottom
-            || bottomStructured2dOnlyCanUseHighresHistory
-            || (bottomRegularCaptureDirectCovered && !bottomHasCurrentVisible2D))
-        && (bottomOwnsLiveSource || outInputs.previousBottomSourceValid);
-    outInputs.fastHighresOverlay2DTop =
-        resource.fastHighresOverlay2DTop
-        && !suppressTopVisible2DForSourceA
-        && (topOwnsLiveSource || outInputs.previousTopSourceValid);
-    outInputs.fastHighresOverlay2DBottom =
-        resource.fastHighresOverlay2DBottom
-        && !suppressBottomVisible2DForSourceA
-        && (bottomOwnsLiveSource || outInputs.previousBottomSourceValid);
-    const auto fastPacked2DOnlyLayerFor = [&](const SoftPackedScreenStats& stats) -> u32 {
-        if (stats.Structured2DOnlyPixels > 0u
-            || stats.StructuredAbovePixels > 0u
-            || stats.StructuredAboveVisiblePixels > 0u
-            || stats.StructuredAboveBlackPixels > 0u
-            || stats.ProtectedBlackPixels > 0u) {
-            return 2u;
+        else if (renderer3D.HasColorTarget())
+        {
+            outInputs.sourceImage = renderer3D.GetColorTargetImage();
+            outInputs.sourceImageView = renderer3D.GetColorTargetImageView();
+            outInputs.rendererWidth = renderer3D.GetColorTargetWidth();
+            outInputs.rendererHeight = renderer3D.GetColorTargetHeight();
         }
+        else
+        {
 
-        if (!packedControlIsEmpty(stats))
-            return 2u;
+            outInputs.sourceImage = faithfulOutImage;
+            outInputs.sourceImageView = faithfulOutView;
+            outInputs.rendererWidth = 256u;
+            outInputs.rendererHeight = 384u;
+        }
+        return outInputs.sourceImage != VK_NULL_HANDLE
+            && outInputs.sourceImageView != VK_NULL_HANDLE;
+    }
+}
 
-        const bool plane0HasContent = !packedPlane0IsEmpty(stats);
-        const bool plane1HasContent = !packedPlane1IsEmpty(stats);
-        if (plane0HasContent == plane1HasContent)
-            return 2u;
+void VulkanOutput::destroyRenderer3dNativeProjection(FrameResource& resource)
+{
+    if (resource.renderer3dNativeProjectionDescriptorPool != VK_NULL_HANDLE)
+    {
+        vkDestroyDescriptorPool(
+            device, resource.renderer3dNativeProjectionDescriptorPool,
+            nullptr);
+        resource.renderer3dNativeProjectionDescriptorPool = VK_NULL_HANDLE;
+        resource.renderer3dNativeProjectionDescriptorSet = VK_NULL_HANDLE;
+    }
+    if (resource.renderer3dNativeProjectionBuffer != VK_NULL_HANDLE)
+    {
+        vkDestroyBuffer(
+            device, resource.renderer3dNativeProjectionBuffer, nullptr);
+        resource.renderer3dNativeProjectionBuffer = VK_NULL_HANDLE;
+    }
+    if (resource.renderer3dNativeProjectionMemory != VK_NULL_HANDLE)
+    {
+        vkFreeMemory(
+            device, resource.renderer3dNativeProjectionMemory, nullptr);
+        resource.renderer3dNativeProjectionMemory = VK_NULL_HANDLE;
+    }
+    resource.renderer3dNativeProjectionDescriptorGeneration = 0u;
+    resource.renderer3dNativeProjectionValid = false;
+}
 
-        return plane1HasContent ? 1u : 0u;
+bool VulkanOutput::ensureRenderer3dNativeProjection(FrameResource& resource)
+{
+    constexpr VkDeviceSize kNativeProjectionBytes =
+        256u * 192u * sizeof(u32);
+    if (renderer3dNativeProjectionPipeline == VK_NULL_HANDLE
+        || renderer3dNativeProjectionSetLayout == VK_NULL_HANDLE
+        || faithfulSampler == VK_NULL_HANDLE
+        || renderer3dNativeProjectionPipelineGeneration == 0u)
+        return false;
+
+    if (resource.renderer3dNativeProjectionBuffer != VK_NULL_HANDLE
+        && resource.renderer3dNativeProjectionMemory != VK_NULL_HANDLE
+        && resource.renderer3dNativeProjectionDescriptorPool
+            != VK_NULL_HANDLE
+        && resource.renderer3dNativeProjectionDescriptorSet
+            != VK_NULL_HANDLE
+        && resource.renderer3dNativeProjectionDescriptorGeneration
+            == renderer3dNativeProjectionPipelineGeneration)
+        return true;
+
+    destroyRenderer3dNativeProjection(resource);
+
+    VkBufferCreateInfo bufferInfo{};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = kNativeProjectionBytes;
+    bufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    if (vkCreateBuffer(
+            device, &bufferInfo, nullptr,
+            &resource.renderer3dNativeProjectionBuffer) != VK_SUCCESS)
+        return false;
+
+    VkMemoryRequirements requirements{};
+    vkGetBufferMemoryRequirements(
+        device, resource.renderer3dNativeProjectionBuffer, &requirements);
+    VkMemoryAllocateInfo allocationInfo{};
+    allocationInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocationInfo.allocationSize = requirements.size;
+    allocationInfo.memoryTypeIndex = findMemoryType(
+        requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if (allocationInfo.memoryTypeIndex == UINT32_MAX
+        || vkAllocateMemory(
+               device, &allocationInfo, nullptr,
+               &resource.renderer3dNativeProjectionMemory) != VK_SUCCESS
+        || vkBindBufferMemory(
+               device, resource.renderer3dNativeProjectionBuffer,
+               resource.renderer3dNativeProjectionMemory, 0u) != VK_SUCCESS)
+    {
+        destroyRenderer3dNativeProjection(resource);
+        return false;
+    }
+
+    VkDescriptorPoolSize poolSizes[2] = {
+        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1u},
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1u},
     };
-    outInputs.fastPacked2DOnlyTop =
-        screenCanUseFastPacked2DOnly(resource.topScreenStats)
-        && !suppressTopVisible2DForSourceA
-        && !outInputs.class4Full2dOnlyBottomPackedAuthoritative
-        && !outInputs.directPresentTopPackedRequired
-        && !outInputs.directPresentTopCarryRequired
-        && !outInputs.directPresentTopComposedCarryRequired
-        && !top2DOnlyNeedsHighresHistoryComposite;
-    const bool bottomFullClass0SourceAOnlyMode2DirectOverlay =
-        resource.bottomFullClass0SourceAOnlyMode2DirectOverlay
-        && !suppressBottomVisible2DForSourceA
-        && !outInputs.directPresentBottomPackedRequired
-        && !outInputs.directPresentBottomCarryRequired
-        && !outInputs.directPresentBottomComposedCarryRequired
-        && !bottom2DOnlyNeedsHighresHistoryComposite;
-    outInputs.fastPacked2DOnlyBottom =
-        bottomFullClass0SourceAOnlyMode2DirectOverlay
-        || (screenCanUseFastPacked2DOnly(resource.bottomScreenStats)
-            && !suppressBottomVisible2DForSourceA
-            && !outInputs.directPresentBottomPackedRequired
-            && !outInputs.directPresentBottomCarryRequired
-            && !outInputs.directPresentBottomComposedCarryRequired
-            && !bottom2DOnlyNeedsHighresHistoryComposite);
-    outInputs.fastPacked2DOnlyLayerTop =
-        outInputs.fastPacked2DOnlyTop ? fastPacked2DOnlyLayerFor(resource.topScreenStats) : 2u;
-    outInputs.fastPacked2DOnlyLayerBottom =
-        bottomFullClass0SourceAOnlyMode2DirectOverlay
-            ? 2u
-            : (outInputs.fastPacked2DOnlyBottom
-                ? fastPacked2DOnlyLayerFor(resource.bottomScreenStats)
-                : 2u);
-    outInputs.topOverlay2DMinX = resource.topOverlay2DMinX;
-    outInputs.topOverlay2DMinY = resource.topOverlay2DMinY;
-    outInputs.topOverlay2DMaxX = resource.topOverlay2DMaxX;
-    outInputs.topOverlay2DMaxY = resource.topOverlay2DMaxY;
-    outInputs.bottomOverlay2DMinX = resource.bottomOverlay2DMinX;
-    outInputs.bottomOverlay2DMinY = resource.bottomOverlay2DMinY;
-    outInputs.bottomOverlay2DMaxX = resource.bottomOverlay2DMaxX;
-    outInputs.bottomOverlay2DMaxY = resource.bottomOverlay2DMaxY;
-    outInputs.topPackedBuffer = resource.topPackedBuffer;
-    outInputs.bottomPackedBuffer = resource.bottomPackedBuffer;
-    outInputs.capture3dBuffer = resource.capture3dBuffer;
-    outInputs.packedBufferSize = resource.packedBufferSize;
-    outInputs.capture3dBufferSize = kCapture3dBufferSize;
-    outInputs.packedStride = kAcceleratedStride;
-    outInputs.screenSwap = resource.screenSwap ? 1u : 0u;
-    outInputs.scale = static_cast<u32>(scale);
-    outInputs.filtering = filtering;
-    const bool asymmetricRegularCapture3d =
-        topUsesRegularCapture3d != bottomUsesRegularCapture3d
-        && !topUsesVramCapture3d
-        && !bottomUsesVramCapture3d;
-    const bool dualCurrentCapture3d =
-        topUsesCurrentCapture3d
-        && bottomUsesCurrentCapture3d;
-    const bool derivedCapture3dSourceScreenSwapValid =
-        !dualCurrentCapture3d
-        && (asymmetricRegularCapture3d || (topUsesCurrentCapture3d != bottomUsesCurrentCapture3d));
-    const bool derivedCapture3dSourceScreenSwap = asymmetricRegularCapture3d
-        ? topUsesRegularCapture3d
-        : topUsesCurrentCapture3d;
-    const bool capture3dSourceHintUsable =
-        resource.capture3dSourceScreenSwapHintValid
-        && !dualCurrentCapture3d;
-    const bool topComp4Backed = resource.topScreenStats.CaptureBackedComp4Lines > 0u;
-    const bool bottomComp4Backed = resource.bottomScreenStats.CaptureBackedComp4Lines > 0u;
-    const bool comp4PlaceholderSwapDerivable =
-        !dualCurrentCapture3d
-        && !capture3dSourceHintUsable
-        && !derivedCapture3dSourceScreenSwapValid
-        && (topComp4Backed != bottomComp4Backed);
-    outInputs.capture3dSourceScreenSwapValid =
-        !resource.sharedCaptureReplayPairStable
-        && (capture3dSourceHintUsable
-            || derivedCapture3dSourceScreenSwapValid
-            || comp4PlaceholderSwapDerivable);
-    outInputs.capture3dSourceScreenSwap = capture3dSourceHintUsable
-        ? resource.capture3dSourceScreenSwapHint
-        : (derivedCapture3dSourceScreenSwapValid
-            ? derivedCapture3dSourceScreenSwap
-            : topComp4Backed);
-    outInputs.alternatingLive3dPingPong = resource.alternatingLive3dPingPong;
+    VkDescriptorPoolCreateInfo poolInfo{};
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.maxSets = 1u;
+    poolInfo.poolSizeCount = 2u;
+    poolInfo.pPoolSizes = poolSizes;
+    if (vkCreateDescriptorPool(
+            device, &poolInfo, nullptr,
+            &resource.renderer3dNativeProjectionDescriptorPool)
+        != VK_SUCCESS)
     {
-        constexpr u32 fullScreenPixelCount = static_cast<u32>(kScreenWidth * kScreenHeight);
-        const auto screenHasNoTemporalCapture = [](const SoftPackedScreenStats& stats) {
-            return stats.CaptureBackedComp4Pixels == 0u
-                && stats.CaptureBackedComp4Lines == 0u
-                && stats.RegularCaptureUses3dLines == 0u
-                && stats.VramCaptureUses3dLines == 0u
-                && stats.ForceLive3dCompMode7Lines == 0u;
-        };
-        const auto screenIsFullStructured = [&](const SoftPackedScreenStats& stats) {
-            return stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-                && stats.CompModeCounts[0] == fullScreenPixelCount
-                && stats.StructuredSlotPixels == fullScreenPixelCount
-                && stats.StructuredAbovePixels == 0u
-                && stats.Structured2DOnlyPixels == 0u;
-        };
-        const auto screenIsFullStructured2DOnly = [&](const SoftPackedScreenStats& stats) {
-            return stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-                && stats.CompModeCounts[7] == fullScreenPixelCount
-                && stats.StructuredSlotPixels == 0u
-                && stats.StructuredAbovePixels == 0u
-                && stats.Structured2DOnlyPixels == fullScreenPixelCount;
-        };
-        const auto screenIsSparseStructuredOverlay = [&](const SoftPackedScreenStats& stats,
-                                                          const SoftPackedScreenStats& opposite) {
-            return stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-                && stats.StructuredSlotPixels == fullScreenPixelCount
-                && stats.CompModeCounts[0] == 0u
-                && stats.CompModeCounts[4] > 0u
-                && stats.CompModeCounts[7] > 0u
-                && stats.CompModeCounts[7] <= 2048u
-                && stats.CompModeCounts[4] + stats.CompModeCounts[7] == fullScreenPixelCount
-                && stats.StructuredAbovePixels == stats.CompModeCounts[7]
-                && stats.StructuredAboveVisiblePixels == stats.CompModeCounts[7]
-                && stats.StructuredAboveBlackPixels == 0u
-                && stats.Plane1VisiblePixels == stats.CompModeCounts[7]
-                && stats.Structured2DOnlyPixels == 0u
-                && stats.Structured2DOnlyVisiblePixels == 0u
-                && stats.ProtectedBlackPixels == 0u
-                && stats.Plane0VisiblePixels + stats.StructuredAbovePixels
-                    == opposite.Plane0VisiblePixels;
-        };
-        const bool topFullStructured = screenIsFullStructured(resource.topScreenStats);
-        const bool bottomFullStructured = screenIsFullStructured(resource.bottomScreenStats);
-        const bool topSparseStructuredOverlay =
-            screenIsSparseStructuredOverlay(resource.topScreenStats, resource.bottomScreenStats)
-            && screenIsFullStructured2DOnly(resource.bottomScreenStats);
-        const bool bottomSparseStructuredOverlay =
-            screenIsSparseStructuredOverlay(resource.bottomScreenStats, resource.topScreenStats)
-            && screenIsFullStructured2DOnly(resource.topScreenStats);
-        const bool singleStructuredDisplayPair =
-            (topFullStructured && screenIsFullStructured2DOnly(resource.bottomScreenStats))
-            || (bottomFullStructured && screenIsFullStructured2DOnly(resource.topScreenStats))
-            || topSparseStructuredOverlay
-            || bottomSparseStructuredOverlay;
-        const bool captureMaskEmpty = std::none_of(
-            resource.captureLineUses3dMask.begin(),
-            resource.captureLineUses3dMask.end(),
-            [](u8 value) { return value != 0u; });
-        const bool captureFallbackLinesEmpty = std::none_of(
-            resource.captureFallbackLines.begin(),
-            resource.captureFallbackLines.end(),
-            [](u8 value) { return value != 0u; });
-        const bool suppressLateFinalBlackHistory =
-            resource.snapshotFromGraphicsBackend
-            && resource.hasSoftPackedDebugData
-            && singleStructuredDisplayPair
-            && screenHasNoTemporalCapture(resource.topScreenStats)
-            && screenHasNoTemporalCapture(resource.bottomScreenStats)
-            && captureMaskEmpty
-            && captureFallbackLinesEmpty
-            && !resource.captureBackedClass4Only
-            && !resource.sourceAFullHighresOnlyTop
-            && !resource.sourceAFullHighresOnlyBottom
-            && !resource.hasPreparedCapture3dSource
-            && !resource.preparedCapture3dRgbaValid
-            && !resource.capture3dSourceScreenSwapHintValid
-            && !resource.alternatingLive3dPingPong
-            && !resource.sharedCaptureReplayPairStable
-            && !resource.topPackedCarryFromPrevious
-            && !resource.bottomPackedCarryFromPrevious
-            && !resource.replayTopComposedFromPrevious
-            && !resource.replayBottomComposedFromPrevious
-            && !resource.topStructuredHandoffNoCurrent3d
-            && !resource.bottomStructuredHandoffNoCurrent3d
-            && !resource.topStructuredHandoffSuppress3d
-            && !resource.bottomStructuredHandoffSuppress3d
-            && !resource.topPureAlternatingVramCapture
-            && !resource.bottomPureAlternatingVramCapture;
-        outInputs.suppressLateFinalBlackHistoryMask = suppressLateFinalBlackHistory
-            ? ((topFullStructured || topSparseStructuredOverlay) ? 1u : 2u)
-            : 0u;
+        destroyRenderer3dNativeProjection(resource);
+        return false;
+    }
 
-        const bool topPartialForceLiveHasAuthoritativeCurrentBlack =
-            resource.topPartialForceLiveSuppressesLateFinalBlackHistoryMetadata
-            && resource.snapshotFromGraphicsBackend
-            && resource.hasSoftPackedDebugData
-            && resource.screenSwap
-            && resource.hasRenderer3dSnapshot
-            && resource.renderer3dSnapshotScreenSwap
-            && !resource.hasRetainedRenderer3dSource
-            && outInputs.capture3dSourceValid
-            && outInputs.liveSourceScreenSwap
-            && outInputs.previousTopSourceValid
-            && resource.alternatingLive3dPingPong
-            && !resource.captureBackedClass4Only
-            && !resource.sourceAFullHighresOnlyTop
-            && !resource.sourceAFullHighresOnlyBottom;
-        if (topPartialForceLiveHasAuthoritativeCurrentBlack)
-            outInputs.suppressLateFinalBlackHistoryMask |= 1u;
+    VkDescriptorSetAllocateInfo setInfo{};
+    setInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    setInfo.descriptorPool =
+        resource.renderer3dNativeProjectionDescriptorPool;
+    setInfo.descriptorSetCount = 1u;
+    setInfo.pSetLayouts = &renderer3dNativeProjectionSetLayout;
+    if (vkAllocateDescriptorSets(
+            device, &setInfo,
+            &resource.renderer3dNativeProjectionDescriptorSet) != VK_SUCCESS)
+    {
+        destroyRenderer3dNativeProjection(resource);
+        return false;
+    }
 
-        const auto topIsExactAlternatingVramCaptureOwner = [&](const SoftPackedScreenStats& stats) {
-            return stats.DisplayModeCounts[0] == 0u
-                && stats.DisplayModeCounts[1] == 0u
-                && stats.DisplayModeCounts[2] == static_cast<u32>(kScreenHeight)
-                && stats.DisplayModeCounts[3] == 0u
-                && std::all_of(
-                    stats.CompModeCounts.begin(),
-                    stats.CompModeCounts.end(),
-                    [](u32 count) { return count == 0u; })
-                && stats.CaptureBackedComp4Pixels == 0u
-                && stats.CaptureBackedComp4Lines == 0u
-                && stats.RegularCaptureUses3dLines == 0u
-                && stats.VramCaptureUses3dLines == static_cast<u32>(kScreenHeight)
-                && stats.ForceLive3dCompMode7Lines == 0u
-                && stats.StructuredSlotPixels == 0u
-                && stats.StructuredAbovePixels == 0u
-                && stats.Structured2DOnlyPixels == 0u
-                && stats.ProtectedBlackPixels == 0u;
-        };
-        const auto bottomIsExactAlternatingRegularDestination =
-            [&](const SoftPackedScreenStats& stats, u32 compMode) {
-            if (compMode >= stats.CompModeCounts.size()
-                || stats.CompModeCounts[compMode] != fullScreenPixelCount)
-            {
-                return false;
-            }
-            for (size_t index = 0; index < stats.CompModeCounts.size(); index++)
-            {
-                if (index != compMode && stats.CompModeCounts[index] != 0u)
-                    return false;
-            }
-            return stats.DisplayModeCounts[0] == 0u
-                && stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-                && stats.DisplayModeCounts[2] == 0u
-                && stats.DisplayModeCounts[3] == 0u
-                && stats.CaptureBackedComp4Pixels == 0u
-                && stats.CaptureBackedComp4Lines == 0u
-                && stats.RegularCaptureUses3dLines == static_cast<u32>(kScreenHeight)
-                && stats.VramCaptureUses3dLines == 0u
-                && stats.ForceLive3dCompMode7Lines == 0u
-                && stats.StructuredSlotPixels == 0u
-                && stats.StructuredAbovePixels == 0u
-                && stats.Structured2DOnlyPixels == 0u
-                && stats.StructuredAboveVisiblePixels == 0u
-                && stats.StructuredAboveBlackPixels == 0u
-                && stats.Structured2DOnlyVisiblePixels == 0u
-                && stats.ProtectedBlackPixels == 0u
-                && stats.ProtectedBlackTargetsTopPixels == 0u
-                && stats.ProtectedBlackTargetsBottomPixels == 0u
-                && packedPlane0IsEmpty(stats)
-                && packedPlane1IsEmpty(stats);
-        };
-        const bool bottomRegularCapturePhysicalBase =
-            resource.snapshotFromGraphicsBackend
-            && resource.hasSoftPackedDebugData
-            && resource.screenSwap
-            && outInputs.capture3dSourceValid
-            && !outInputs.liveSourceScreenSwap
-            && outInputs.previousBottomSourceValid
-            && !resource.captureBackedClass4Only
-            && !resource.sourceAFullHighresOnlyTop
-            && !resource.sourceAFullHighresOnlyBottom
-            && topIsExactAlternatingVramCaptureOwner(resource.topScreenStats);
-        const bool bottomAlternatingRegularCaptureBase =
-            bottomRegularCapturePhysicalBase
-            && resource.alternatingLive3dPingPong;
-        const bool bottomAlternatingRegularComp3HasAuthoritativeCurrentBlack =
-            bottomAlternatingRegularCaptureBase
-            && bottomIsExactAlternatingRegularDestination(resource.bottomScreenStats, 3u);
-        outInputs.bottomAlternatingRegularComp3StoresFullCarry =
-            bottomAlternatingRegularComp3HasAuthoritativeCurrentBlack;
-        outInputs.bottomAlternatingRegularComp2StoresOneShotCarry =
-            bottomRegularCapturePhysicalBase
-            && resource.captureCntLatched == 0x80330000u
-            && resource.dispCntALatched == 0x0011115Bu
-            && resource.dispCntBLatched == 0x00010455u
-            && resource.captureLinesLatched == static_cast<u32>(kScreenHeight)
-            && resource.capture3dSourceScreenSwapHintValid
-            && resource.capture3dSourceScreenSwapHint
-            && !outInputs.fastHighresOverlay2DBottom
-            && !outInputs.fastHighresOnlyBottom
-            && !outInputs.fastPacked2DOnlyBottom
-            && !outInputs.directPresentBottomCarryRequired
-            && !outInputs.directPresentBottomComposedCarryRequired
-            && bottomIsExactAlternatingRegularDestination(resource.bottomScreenStats, 2u);
-        if (outInputs.bottomAlternatingRegularComp2StoresOneShotCarry)
-            outInputs.suppressLateFinalBlackHistoryMask |= 2u;
-        if (bottomAlternatingRegularComp3HasAuthoritativeCurrentBlack)
-            outInputs.suppressLateFinalBlackHistoryMask |= 2u;
-    }
-    {
-        constexpr u32 screenPixels = kScreenWidth * kScreenHeight;
-        constexpr u32 sparsePixels = screenPixels / 8u;
-        constexpr u32 halfScreenPixels = screenPixels / 2u;
-        constexpr u32 nearlyFullPixels = (screenPixels * 7u) / 8u;
-        const auto isSparseCurrentTopPair = [&](const SoftPackedScreenStats& stats) {
-            return stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-                && stats.CompModeCounts[4] > nearlyFullPixels
-                && stats.CompModeCounts[7] > 0u
-                && stats.CompModeCounts[7] <= sparsePixels
-                && stats.CompModeCounts[4] + stats.CompModeCounts[7] == screenPixels
-                && stats.CaptureBackedComp4Pixels == 0u
-                && stats.CaptureBackedComp4Lines == 0u
-                && stats.RegularCaptureUses3dLines == 0u
-                && stats.VramCaptureUses3dLines == 0u
-                && stats.ForceLive3dCompMode7Lines == 0u
-                && stats.StructuredSlotPixels == screenPixels
-                && stats.StructuredAbovePixels == stats.CompModeCounts[7]
-                && stats.Structured2DOnlyPixels == 0u
-                && stats.Plane0VisiblePixels > nearlyFullPixels
-                && stats.Plane1VisiblePixels == stats.StructuredAboveVisiblePixels
-                && stats.ProtectedBlackPixels > 0u
-                && stats.ProtectedBlackTargetsTopPixels == stats.ProtectedBlackPixels
-                && stats.ProtectedBlackTargetsBottomPixels == 0u;
-        };
-        const auto isBottomDominantRegularCapturePair = [&](const SoftPackedScreenStats& stats) {
-            return stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-                && stats.CompModeCounts[4] > 0u
-                && stats.CompModeCounts[7] > halfScreenPixels
-                && stats.CompModeCounts[4] + stats.CompModeCounts[7] == screenPixels
-                && stats.CaptureBackedComp4Pixels == 0u
-                && stats.CaptureBackedComp4Lines == 0u
-                && stats.RegularCaptureUses3dLines == static_cast<u32>(kScreenHeight)
-                && stats.VramCaptureUses3dLines == 0u
-                && stats.ForceLive3dCompMode7Lines == 0u
-                && stats.StructuredSlotPixels == screenPixels
-                && stats.StructuredAbovePixels == stats.CompModeCounts[7]
-                && stats.StructuredAboveVisiblePixels > halfScreenPixels
-                && stats.Structured2DOnlyPixels == 0u
-                && stats.Plane0VisiblePixels > 0u
-                && stats.Plane1VisiblePixels == stats.StructuredAboveVisiblePixels
-                && stats.ProtectedBlackPixels > 0u
-                && stats.ProtectedBlackTargetsTopPixels == 0u
-                && stats.ProtectedBlackTargetsBottomPixels == stats.ProtectedBlackPixels;
-        };
-        outInputs.bottomDominantRegularCaptureUsesComposedCarry =
-            !outInputs.liveSourceScreenSwap
-            && isSparseCurrentTopPair(resource.topScreenStats)
-            && isBottomDominantRegularCapturePair(resource.bottomScreenStats);
-    }
-    {
-        const auto slotResolvedUnderVramPair = [&](const SoftPackedScreenStats& self,
-                                                   const SoftPackedScreenStats& other) {
-            return self.StructuredSlotPixels > (kScreenWidth * kScreenHeight / 2u)
-                && self.Plane0VisiblePixels > (kScreenWidth * kScreenHeight * 3u / 4u)
-                && self.RegularCaptureUses3dLines == 0u
-                && self.VramCaptureUses3dLines == 0u
-                && other.DisplayModeCounts[2] > (kScreenHeight / 2u);
-        };
-        outInputs.topSlotHasResolved2DUnderVramPair = slotResolvedUnderVramPair(
-            resource.topScreenStats, resource.bottomScreenStats);
-        outInputs.bottomSlotHasResolved2DUnderVramPair = slotResolvedUnderVramPair(
-            resource.bottomScreenStats, resource.topScreenStats);
-    }
-    const auto topOwnsAlternatingRegularCapture = [&](const SoftPackedScreenStats& stats) {
-        const u32 screenPixels = static_cast<u32>(kScreenWidth * kScreenHeight);
-        return stats.DisplayModeCounts[0] == 0u
-            && stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-            && stats.DisplayModeCounts[2] == 0u
-            && stats.DisplayModeCounts[3] == 0u
-            && stats.CompModeCounts[0] == 0u
-            && stats.CompModeCounts[3] == 0u
-            && stats.CompModeCounts[4] == 0u
-            && stats.CompModeCounts[5] == 0u
-            && stats.CompModeCounts[6] == 0u
-            && stats.CompModeCounts[1] + stats.CompModeCounts[2] > 0u
-            && stats.CompModeCounts[1] + stats.CompModeCounts[2]
-                + stats.CompModeCounts[7] == screenPixels
-            && stats.CaptureBackedComp4Pixels == 0u
-            && stats.CaptureBackedComp4Lines == 0u
-            && stats.RegularCaptureUses3dLines == static_cast<u32>(kScreenHeight)
-            && stats.VramCaptureUses3dLines == 0u
-            && stats.StructuredSlotPixels + stats.Structured2DOnlyPixels == screenPixels
-            && stats.StructuredAbovePixels <= stats.StructuredSlotPixels
-            && stats.StructuredAboveVisiblePixels + stats.StructuredAboveBlackPixels
-                == stats.StructuredAbovePixels
-            && stats.Structured2DOnlyVisiblePixels == 0u
-            && stats.ProtectedBlackPixels
-                == stats.Structured2DOnlyPixels + stats.StructuredAboveBlackPixels
-            && stats.ProtectedBlackTargetsTopPixels == stats.ProtectedBlackPixels
-            && stats.ProtectedBlackTargetsBottomPixels == 0u
-            && stats.Plane0VisiblePixels == 0u
-            && stats.Plane1VisiblePixels == stats.StructuredAboveVisiblePixels;
-    };
-    const auto bottomIsAuthoritativeEmptyComp2 = [&](const SoftPackedScreenStats& stats) {
-        const u32 screenPixels = static_cast<u32>(kScreenWidth * kScreenHeight);
-        return stats.DisplayModeCounts[0] == 0u
-            && stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-            && stats.DisplayModeCounts[2] == 0u
-            && stats.DisplayModeCounts[3] == 0u
-            && stats.CompModeCounts[0] == 0u
-            && stats.CompModeCounts[1] == 0u
-            && stats.CompModeCounts[2] == screenPixels
-            && stats.CompModeCounts[3] == 0u
-            && stats.CompModeCounts[4] == 0u
-            && stats.CompModeCounts[5] == 0u
-            && stats.CompModeCounts[6] == 0u
-            && stats.CompModeCounts[7] == 0u
-            && stats.CaptureBackedComp4Pixels == 0u
-            && stats.CaptureBackedComp4Lines == 0u
-            && stats.RegularCaptureUses3dLines == 0u
-            && stats.VramCaptureUses3dLines == 0u
-            && stats.ForceLive3dCompMode7Lines == 0u
-            && stats.StructuredSlotPixels == 0u
-            && stats.StructuredAbovePixels == 0u
-            && stats.Structured2DOnlyPixels == 0u
-            && stats.StructuredAboveVisiblePixels == 0u
-            && stats.StructuredAboveBlackPixels == 0u
-            && stats.Structured2DOnlyVisiblePixels == 0u
-            && stats.ProtectedBlackPixels == 0u
-            && stats.ProtectedBlackTargetsTopPixels == 0u
-            && stats.ProtectedBlackTargetsBottomPixels == 0u
-            && packedPlane0IsEmpty(stats)
-            && packedPlane1IsEmpty(stats)
-            && packedControlIsEmpty(stats);
-    };
-    const auto topIsExactOpaqueBlackVramCapture = [&](const SoftPackedScreenStats& stats) {
-        const u32 screenPixels = static_cast<u32>(kScreenWidth * kScreenHeight);
-        return stats.DisplayModeCounts[0] == 0u
-            && stats.DisplayModeCounts[1] == 0u
-            && stats.DisplayModeCounts[2] == static_cast<u32>(kScreenHeight)
-            && stats.DisplayModeCounts[3] == 0u
-            && std::all_of(
-                stats.CompModeCounts.begin(),
-                stats.CompModeCounts.end(),
-                [](u32 count) { return count == 0u; })
-            && stats.CaptureBackedComp4Pixels == 0u
-            && stats.CaptureBackedComp4Lines == 0u
-            && stats.RegularCaptureUses3dLines == 0u
-            && stats.VramCaptureUses3dLines == static_cast<u32>(kScreenHeight)
-            && stats.ForceLive3dCompMode7Lines == 0u
-            && stats.StructuredSlotPixels == 0u
-            && stats.StructuredAbovePixels == 0u
-            && stats.Structured2DOnlyPixels == 0u
-            && stats.Plane0UsefulPixels == screenPixels
-            && stats.Plane0VisiblePixels == 0u
-            && stats.Plane0OpaqueBlackPixels == screenPixels
-            && stats.Plane1UsefulPixels == 0u
-            && stats.Plane1VisiblePixels == 0u
-            && stats.Plane1OpaqueBlackPixels == 0u
-            && stats.ProtectedBlackPixels == 0u
-            && stats.ProtectedBlackTargetsTopPixels == 0u
-            && stats.ProtectedBlackTargetsBottomPixels == 0u
-            && packedPlane1IsEmpty(stats);
-    };
-    const auto bottomIsExactEmptyRegularComp2 = [&](const SoftPackedScreenStats& stats) {
-        const u32 screenPixels = static_cast<u32>(kScreenWidth * kScreenHeight);
-        return stats.DisplayModeCounts[0] == 0u
-            && stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-            && stats.DisplayModeCounts[2] == 0u
-            && stats.DisplayModeCounts[3] == 0u
-            && stats.CompModeCounts[0] == 0u
-            && stats.CompModeCounts[1] == 0u
-            && stats.CompModeCounts[2] == screenPixels
-            && stats.CompModeCounts[3] == 0u
-            && stats.CompModeCounts[4] == 0u
-            && stats.CompModeCounts[5] == 0u
-            && stats.CompModeCounts[6] == 0u
-            && stats.CompModeCounts[7] == 0u
-            && stats.CaptureBackedComp4Pixels == 0u
-            && stats.CaptureBackedComp4Lines == 0u
-            && stats.RegularCaptureUses3dLines == static_cast<u32>(kScreenHeight)
-            && stats.VramCaptureUses3dLines == 0u
-            && stats.ForceLive3dCompMode7Lines == 0u
-            && stats.StructuredSlotPixels == 0u
-            && stats.StructuredAbovePixels == 0u
-            && stats.Structured2DOnlyPixels == 0u
-            && stats.StructuredAboveVisiblePixels == 0u
-            && stats.StructuredAboveBlackPixels == 0u
-            && stats.Structured2DOnlyVisiblePixels == 0u
-            && stats.ProtectedBlackPixels == 0u
-            && stats.ProtectedBlackTargetsTopPixels == 0u
-            && stats.ProtectedBlackTargetsBottomPixels == 0u
-            && packedPlane0IsEmpty(stats)
-            && packedPlane1IsEmpty(stats);
-    };
-    outInputs.bottomEmptyPackedPreservesBlackUnderOppositeRegularCapture =
-        resource.screenSwap
-        && outInputs.capture3dSourceValid
-        && outInputs.liveSourceScreenSwap
-        && !outInputs.previousBottomSourceValid
-        && !resource.captureBackedClass4Only
-        && !resource.sourceAFullHighresOnlyTop
-        && !resource.sourceAFullHighresOnlyBottom
-        && topOwnsAlternatingRegularCapture(resource.topScreenStats)
-        && bottomIsAuthoritativeEmptyComp2(resource.bottomScreenStats);
-    {
-        constexpr u32 screenPixels = static_cast<u32>(kScreenWidth * kScreenHeight);
-        const auto topIsExactRegularComp3OverlayDestination = [&](const SoftPackedScreenStats& stats) {
-            return stats.DisplayModeCounts[0] == 0u
-                && stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-                && stats.DisplayModeCounts[2] == 0u
-                && stats.DisplayModeCounts[3] == 0u
-                && stats.CompModeCounts[0] == 0u
-                && stats.CompModeCounts[1] == 0u
-                && stats.CompModeCounts[2] == 0u
-                && stats.CompModeCounts[3] > 0u
-                && stats.CompModeCounts[4] == 0u
-                && stats.CompModeCounts[5] == 0u
-                && stats.CompModeCounts[6] == 0u
-                && stats.CompModeCounts[7] > 0u
-                && stats.CompModeCounts[3] + stats.CompModeCounts[7] == screenPixels
-                && stats.CaptureBackedComp4Pixels == 0u
-                && stats.CaptureBackedComp4Lines == 0u
-                && stats.RegularCaptureUses3dLines == static_cast<u32>(kScreenHeight)
-                && stats.VramCaptureUses3dLines == 0u
-                && stats.StructuredSlotPixels == screenPixels
-                && stats.StructuredAbovePixels == stats.CompModeCounts[7]
-                && stats.StructuredAboveVisiblePixels + stats.StructuredAboveBlackPixels
-                    == stats.StructuredAbovePixels
-                && stats.Structured2DOnlyPixels == 0u
-                && stats.Structured2DOnlyVisiblePixels == 0u
-                && stats.Plane0VisiblePixels == 0u
-                && stats.Plane1VisiblePixels == stats.StructuredAboveVisiblePixels
-                && stats.ProtectedBlackPixels > 0u
-                && stats.ProtectedBlackPixels == stats.StructuredAboveBlackPixels
-                && stats.ProtectedBlackTargetsTopPixels == stats.ProtectedBlackPixels
-                && stats.ProtectedBlackTargetsBottomPixels == 0u;
-        };
-        outInputs.topRegularComp3OverlayPreservesCurrentBlack =
-            resource.snapshotFromGraphicsBackend
-            && resource.hasSoftPackedDebugData
-            && resource.screenSwap
-            && outInputs.capture3dSourceValid
-            && outInputs.capture3dSourceScreenSwapValid
-            && !outInputs.capture3dSourceScreenSwap
-            && outInputs.liveSourceScreenSwap
-            && !resource.captureBackedClass4Only
-            && !resource.sourceAFullHighresOnlyTop
-            && !resource.sourceAFullHighresOnlyBottom
-            && topIsExactRegularComp3OverlayDestination(resource.topScreenStats)
-            && bottomIsAuthoritativeEmptyComp2(resource.bottomScreenStats);
-    }
-    {
-        constexpr u32 screenPixels = static_cast<u32>(kScreenWidth * kScreenHeight);
-        const auto topIsExactRegularComp3CarrySource = [&](const SoftPackedScreenStats& stats) {
-            return stats.DisplayModeCounts[0] == 0u
-                && stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-                && stats.DisplayModeCounts[2] == 0u
-                && stats.DisplayModeCounts[3] == 0u
-                && stats.CompModeCounts[0] == 0u
-                && stats.CompModeCounts[1] == 0u
-                && stats.CompModeCounts[2] == 0u
-                && stats.CompModeCounts[3] == screenPixels
-                && stats.CompModeCounts[4] == 0u
-                && stats.CompModeCounts[5] == 0u
-                && stats.CompModeCounts[6] == 0u
-                && stats.CompModeCounts[7] == 0u
-                && stats.CaptureBackedComp4Pixels == 0u
-                && stats.CaptureBackedComp4Lines == 0u
-                && stats.RegularCaptureUses3dLines == static_cast<u32>(kScreenHeight)
-                && stats.VramCaptureUses3dLines == 0u
-                && stats.ForceLive3dCompMode7Lines == 0u
-                && stats.StructuredSlotPixels == screenPixels
-                && stats.StructuredAbovePixels == 0u
-                && stats.StructuredAboveVisiblePixels == 0u
-                && stats.StructuredAboveBlackPixels == 0u
-                && stats.Structured2DOnlyPixels == 0u
-                && stats.Structured2DOnlyVisiblePixels == 0u
-                && stats.ProtectedBlackPixels == 0u
-                && stats.ProtectedBlackTargetsTopPixels == 0u
-                && stats.ProtectedBlackTargetsBottomPixels == 0u
-                && stats.Plane0VisiblePixels == 0u
-                && stats.Plane1VisiblePixels == 0u;
-        };
-        const auto bottomIsExactEmptyComp3CarryDestination = [&](const SoftPackedScreenStats& stats) {
-            return stats.DisplayModeCounts[0] == 0u
-                && stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-                && stats.DisplayModeCounts[2] == 0u
-                && stats.DisplayModeCounts[3] == 0u
-                && stats.CompModeCounts[0] == 0u
-                && stats.CompModeCounts[1] == 0u
-                && stats.CompModeCounts[2] == 0u
-                && stats.CompModeCounts[3] == screenPixels
-                && stats.CompModeCounts[4] == 0u
-                && stats.CompModeCounts[5] == 0u
-                && stats.CompModeCounts[6] == 0u
-                && stats.CompModeCounts[7] == 0u
-                && stats.CaptureBackedComp4Pixels == 0u
-                && stats.CaptureBackedComp4Lines == 0u
-                && stats.RegularCaptureUses3dLines == 0u
-                && stats.VramCaptureUses3dLines == 0u
-                && stats.ForceLive3dCompMode7Lines == 0u
-                && stats.StructuredSlotPixels == 0u
-                && stats.StructuredAbovePixels == 0u
-                && stats.StructuredAboveVisiblePixels == 0u
-                && stats.StructuredAboveBlackPixels == 0u
-                && stats.Structured2DOnlyPixels == 0u
-                && stats.Structured2DOnlyVisiblePixels == 0u
-                && stats.ProtectedBlackPixels == 0u
-                && stats.ProtectedBlackTargetsTopPixels == 0u
-                && stats.ProtectedBlackTargetsBottomPixels == 0u
-                && packedPlane0IsEmpty(stats)
-                && packedPlane1IsEmpty(stats)
-                && packedControlIsEmpty(stats);
-        };
-        outInputs.bottomEmptyComp3UsesFullCarry =
-            resource.snapshotFromGraphicsBackend
-            && resource.hasSoftPackedDebugData
-            && resource.screenSwap
-            && outInputs.capture3dSourceValid
-            && outInputs.liveSourceScreenSwap
-            && !outInputs.previousBottomSourceValid
-            && resource.alternatingLive3dPingPong
-            && !resource.captureBackedClass4Only
-            && !resource.sourceAFullHighresOnlyTop
-            && !resource.sourceAFullHighresOnlyBottom
-            && topIsExactRegularComp3CarrySource(resource.topScreenStats)
-            && bottomIsExactEmptyComp3CarryDestination(resource.bottomScreenStats);
-        const auto topIsExactMixedRegularComp23CarryDestination =
-            [&](const SoftPackedScreenStats& stats) {
-                return stats.DisplayModeCounts[0] == 0u
-                    && stats.DisplayModeCounts[1] == static_cast<u32>(kScreenHeight)
-                    && stats.DisplayModeCounts[2] == 0u
-                    && stats.DisplayModeCounts[3] == 0u
-                    && stats.CompModeCounts[0] == 0u
-                    && stats.CompModeCounts[1] == 0u
-                    && stats.CompModeCounts[2] > 0u
-                    && stats.CompModeCounts[3] > 0u
-                    && stats.CompModeCounts[2] + stats.CompModeCounts[3] == screenPixels
-                    && stats.CompModeCounts[4] == 0u
-                    && stats.CompModeCounts[5] == 0u
-                    && stats.CompModeCounts[6] == 0u
-                    && stats.CompModeCounts[7] == 0u
-                    && stats.CaptureBackedComp4Pixels == 0u
-                    && stats.CaptureBackedComp4Lines == 0u
-                    && stats.RegularCaptureUses3dLines == static_cast<u32>(kScreenHeight)
-                    && stats.VramCaptureUses3dLines == 0u
-                    && stats.ForceLive3dCompMode7Lines == 0u
-                    && stats.StructuredSlotPixels == screenPixels
-                    && stats.StructuredAbovePixels == 0u
-                    && stats.StructuredAboveVisiblePixels == 0u
-                    && stats.StructuredAboveBlackPixels == 0u
-                    && stats.Structured2DOnlyPixels == 0u
-                    && stats.Structured2DOnlyVisiblePixels == 0u
-                    && stats.Plane1UsefulPixels == 0u
-                    && stats.Plane1VisiblePixels == 0u
-                    && stats.Plane1OpaqueBlackPixels == 0u
-                    && stats.ProtectedBlackPixels == 0u
-                    && stats.ProtectedBlackTargetsTopPixels == 0u
-                    && stats.ProtectedBlackTargetsBottomPixels == 0u;
-            };
-        const bool topMixedRegularComp23UsesComposedCarry =
-            resource.snapshotFromGraphicsBackend
-            && resource.hasSoftPackedDebugData
-            && resource.screenSwap
-            && resource.captureCntLatched == 0x80320000u
-            && resource.dispCntALatched == 0x001A115Bu
-            && resource.dispCntBLatched == 0x00111035u
-            && resource.captureLinesLatched == static_cast<u32>(kScreenHeight)
-            && outInputs.capture3dSourceValid
-            && outInputs.capture3dSourceScreenSwapValid
-            && !outInputs.capture3dSourceScreenSwap
-            && outInputs.liveSourceScreenSwap
-            && outInputs.previousTopSourceValid
-            && !outInputs.previousBottomSourceValid
-            && resource.alternatingLive3dPingPong
-            && !resource.captureBackedClass4Only
-            && !resource.sourceAFullHighresOnlyTop
-            && !resource.sourceAFullHighresOnlyBottom
-            && topIsExactMixedRegularComp23CarryDestination(resource.topScreenStats)
-            && bottomIsExactEmptyComp3CarryDestination(resource.bottomScreenStats);
-        const bool topProtectedRegularComp7UsesComposedCarry =
-            resource.snapshotFromGraphicsBackend
-            && resource.hasSoftPackedDebugData
-            && resource.frontBufferLatched == 1
-            && resource.screenSwap
-            && resource.captureCntLatched == 0x80320000u
-            && resource.dispCntALatched == 0x001A115Bu
-            && resource.dispCntBLatched == 0x00111035u
-            && resource.captureLinesLatched == static_cast<u32>(kScreenHeight)
-            && outInputs.capture3dSourceValid
-            && outInputs.capture3dSourceScreenSwapValid
-            && !outInputs.capture3dSourceScreenSwap
-            && outInputs.liveSourceScreenSwap
-            && outInputs.previousTopSourceValid
-            && !outInputs.previousBottomSourceValid
-            && resource.alternatingLive3dPingPong
-            && !resource.captureBackedClass4Only
-            && !resource.sourceAFullHighresOnlyTop
-            && !resource.sourceAFullHighresOnlyBottom
-            && resource.topExactProtectedRegularComp7
-            && bottomIsAuthoritativeEmptyComp2(resource.bottomScreenStats);
-        const bool topOpaqueVramCaptureUsesComposedCarry =
-            resource.snapshotFromGraphicsBackend
-            && resource.hasSoftPackedDebugData
-            && resource.frontBufferLatched == 0
-            && resource.screenSwap
-            && resource.captureCntLatched == 0x80330000u
-            && resource.dispCntALatched == 0x0011115Bu
-            && resource.dispCntBLatched == 0x00010455u
-            && resource.captureLinesLatched == static_cast<u32>(kScreenHeight)
-            && outInputs.capture3dSourceValid
-            && !outInputs.capture3dSourceScreenSwapValid
-            && !outInputs.liveSourceScreenSwap
-            && outInputs.previousTopSourceValid
-            && outInputs.previousBottomSourceValid
-            && resource.alternatingLive3dPingPong
-            && !resource.captureBackedClass4Only
-            && !resource.sourceAFullHighresOnlyTop
-            && !resource.sourceAFullHighresOnlyBottom
-            && resource.previousTopExactProtectedRegularComp7
-            && topIsExactOpaqueBlackVramCapture(resource.topScreenStats)
-            && bottomIsExactEmptyRegularComp2(resource.bottomScreenStats);
-        outInputs.topAlternatingMixedRegularComp23UsesComposedCarry =
-            topMixedRegularComp23UsesComposedCarry
-            || (topProtectedRegularComp7UsesComposedCarry
-                && !resource.topExactProtectedRegularComp7UsesStablePackedSnapshot)
-            || topOpaqueVramCaptureUsesComposedCarry;
-        outInputs.bottomAlternatingRegularComp2ConsumesOneShotCarry =
-            resource.snapshotFromGraphicsBackend
-            && resource.hasSoftPackedDebugData
-            && resource.screenSwap
-            && resource.captureCntLatched == 0x80320000u
-            && resource.dispCntALatched == 0x001A115Bu
-            && resource.dispCntBLatched == 0x00111035u
-            && resource.captureLinesLatched == static_cast<u32>(kScreenHeight)
-            && outInputs.capture3dSourceValid
-            && outInputs.capture3dSourceScreenSwapValid
-            && !outInputs.capture3dSourceScreenSwap
-            && outInputs.liveSourceScreenSwap
-            && !outInputs.previousBottomSourceValid
-            && !resource.captureBackedClass4Only
-            && !resource.sourceAFullHighresOnlyTop
-            && !resource.sourceAFullHighresOnlyBottom
-            && bottomIsAuthoritativeEmptyComp2(resource.bottomScreenStats)
-            && outInputs.fastPacked2DOnlyBottom
-            && outInputs.fastPacked2DOnlyLayerBottom == 2u
-            && !outInputs.directPresentBottomCarryRequired
-            && !outInputs.directPresentBottomComposedCarryRequired;
-    }
-    {
-        const bool commonRegularPairBase =
-            resource.snapshotFromGraphicsBackend
-            && resource.hasSoftPackedDebugData
-            && resource.captureLinesLatched
-                == static_cast<u32>(kScreenHeight)
-            && outInputs.capture3dSourceValid
-            && outInputs.previousTopSourceValid
-            && outInputs.previousBottomSourceValid
-            && !resource.captureBackedClass4Only
-            && !resource.sourceAFullHighresOnlyTop
-            && !resource.sourceAFullHighresOnlyBottom
-            && !resource.replayTopComposedFromPrevious
-            && !resource.replayBottomComposedFromPrevious;
-        const bool commonAlternatingRegularPair =
-            commonRegularPairBase
-            && resource.screenSwapToggledFromPrevious;
-        outInputs.topFullRegularComp7BottomPassiveComp2Producer =
-            commonRegularPairBase
-            && resource.frontBufferLatched == 0
-            && resource.screenSwap
-            && outInputs.liveSourceScreenSwap
-            && resource.captureCntLatched == 0x80330010u
-            && resource.dispCntALatched == 0x00010308u
-            && resource.dispCntBLatched == 0x00010425u
-            && screenIsFullRegularComp7CaptureSlotWithAbove(
-                resource.topScreenStats)
-            && screenIsFullPassiveComp2(resource.bottomScreenStats);
-        outInputs.topFullRegularComp7BottomPassiveComp2Phase =
-            outInputs.topFullRegularComp7BottomPassiveComp2Producer
-            && resource.screenSwapToggledFromPrevious;
-        outInputs.topPassiveComp2BottomFullRegularComp7Phase =
-            commonAlternatingRegularPair
-            && resource.frontBufferLatched == 1
-            && !resource.screenSwap
-            && !outInputs.liveSourceScreenSwap
-            && resource.captureCntLatched == 0x80320010u
-            && resource.dispCntALatched == 0x00010308u
-            && resource.dispCntBLatched == 0x00011025u
-            && screenIsFullPassiveComp2(resource.topScreenStats)
-            && screenIsFullRegularComp7CaptureSlotWithAbove(
-                resource.bottomScreenStats);
-        outInputs.suppressPreviousTop3dOnZeroLineReentry =
-            resource.suppressPreviousTop3dOnZeroLineReentry;
-    }
-    {
-        constexpr u32 screenPixels = kScreenWidth * kScreenHeight;
-        const auto screenHasNoCaptureOverlay = [](const SoftPackedScreenStats& stats) {
-            return stats.CaptureBackedComp4Pixels == 0u
-                && stats.CaptureBackedComp4Lines == 0u
-                && stats.VramCaptureUses3dLines == 0u;
-        };
-        const bool bottomBlackProducerShape =
-            resource.bottomScreenStats.DisplayModeCounts[1]
-                == static_cast<u32>(kScreenHeight)
-            && resource.bottomScreenStats.CompModeCounts[7] == screenPixels
-            && resource.bottomScreenStats.StructuredSlotPixels == screenPixels
-            && resource.bottomScreenStats.StructuredAbovePixels == screenPixels
-            && resource.bottomScreenStats.StructuredAboveVisiblePixels
-                    + resource.bottomScreenStats.StructuredAboveBlackPixels
-                == screenPixels
-            && resource.bottomScreenStats.Structured2DOnlyPixels == 0u
-            && resource.bottomScreenStats.Plane0VisiblePixels == 0u
-            && resource.bottomScreenStats.Plane1UsefulPixels == screenPixels
-            && resource.bottomScreenStats.Plane1VisiblePixels
-                == resource.bottomScreenStats.StructuredAboveVisiblePixels
-            && resource.bottomScreenStats.Plane1OpaqueBlackPixels
-                == resource.bottomScreenStats.StructuredAboveBlackPixels
-            && resource.bottomScreenStats.ProtectedBlackPixels
-                == resource.bottomScreenStats.StructuredAboveBlackPixels
-            && resource.bottomScreenStats.ProtectedBlackTargetsTopPixels == 0u
-            && resource.bottomScreenStats.ProtectedBlackTargetsBottomPixels
-                == resource.bottomScreenStats.ProtectedBlackPixels
-            && resource.bottomScreenStats.RegularCaptureUses3dLines
-                == static_cast<u32>(kScreenHeight)
-            && screenHasNoCaptureOverlay(resource.bottomScreenStats);
-        const bool bottomBlackProducerBase =
-            resource.snapshotFromGraphicsBackend
-            && resource.hasSoftPackedDebugData
-            && !resource.captureBackedClass4Only
-            && !resource.sourceAFullHighresOnlyTop
-            && !resource.sourceAFullHighresOnlyBottom
-            && !resource.screenSwap
-            && resource.captureCntLatched == 0x80320010u
-            && resource.dispCntALatched == 0x00010308u
-            && (resource.dispCntBLatched & ~0x10u) == 0x00011025u
-            && resource.captureLinesLatched == static_cast<u32>(kScreenHeight)
-            && outInputs.capture3dSourceValid
-            && outInputs.capture3dSourceScreenSwapValid
-            && outInputs.capture3dSourceScreenSwap
-            && !outInputs.liveSourceScreenSwap
-            && screenIsFullPassiveComp2(resource.topScreenStats)
-            && resource.bottomScreenStats.DisplayModeCounts[1]
-                == static_cast<u32>(kScreenHeight)
-            && resource.bottomScreenStats.CompModeCounts[7] == screenPixels
-            && resource.bottomScreenStats.StructuredSlotPixels == screenPixels
-            && resource.bottomScreenStats.StructuredAbovePixels == screenPixels
-            && resource.bottomScreenStats.Structured2DOnlyPixels == 0u
-            && resource.bottomScreenStats.Plane0VisiblePixels == 0u
-            && resource.bottomScreenStats.RegularCaptureUses3dLines
-                == static_cast<u32>(kScreenHeight)
-            && screenHasNoCaptureOverlay(resource.bottomScreenStats);
-        outInputs.bottomExactRegularComp7BlackProducer =
-            bottomBlackProducerBase && bottomBlackProducerShape;
-
-        const bool passiveBottomConsumerBase =
-            resource.snapshotFromGraphicsBackend
-            && resource.hasSoftPackedDebugData
-            && !resource.captureBackedClass4Only
-            && !resource.sourceAFullHighresOnlyTop
-            && !resource.sourceAFullHighresOnlyBottom
-            && resource.screenSwap
-            && resource.captureCntLatched == 0x80330010u
-            && resource.dispCntALatched == 0x00010308u
-            && (resource.dispCntBLatched & ~0x10u) == 0x00010425u
-            && resource.captureLinesLatched == static_cast<u32>(kScreenHeight)
-            && !outInputs.capture3dSourceValid
-            && outInputs.capture3dSourceScreenSwapValid
-            && !outInputs.capture3dSourceScreenSwap
-            && outInputs.liveSourceScreenSwap
-            && screenIsFullPassiveComp2(resource.bottomScreenStats)
-            && resource.topScreenStats.DisplayModeCounts[1]
-                == static_cast<u32>(kScreenHeight)
-            && resource.topScreenStats.CompModeCounts[7] == screenPixels
-            && resource.topScreenStats.StructuredAbovePixels == 0u
-            && resource.topScreenStats.StructuredAboveVisiblePixels == 0u
-            && resource.topScreenStats.StructuredAboveBlackPixels == 0u
-            && resource.topScreenStats.Plane1VisiblePixels == 0u
-            && resource.topScreenStats.RegularCaptureUses3dLines == 0u
-            && resource.topScreenStats.ForceLive3dCompMode7Lines == 0u
-            && screenHasNoCaptureOverlay(resource.topScreenStats);
-        const bool passiveBottomConsumerFullPartition =
-            resource.topScreenStats.StructuredSlotPixels
-                    + resource.topScreenStats.Structured2DOnlyPixels
-                == screenPixels;
-        const bool passiveBottomConsumerHas2DOnly =
-            resource.topScreenStats.Structured2DOnlyPixels > 0u;
-        const bool passiveBottomConsumer2DOnlyInvisible =
-            resource.topScreenStats.Structured2DOnlyVisiblePixels == 0u;
-        const bool passiveBottomConsumerHasPlane0 =
-            resource.topScreenStats.Plane0VisiblePixels > 0u;
-        const bool passiveBottomConsumerProtectedBlackMatches2DOnly =
-            resource.topScreenStats.ProtectedBlackPixels
-                == resource.topScreenStats.Structured2DOnlyPixels;
-        const bool passiveBottomConsumerProtectedBlackOwnedByTop =
-            resource.topScreenStats.ProtectedBlackTargetsTopPixels
-                    == resource.topScreenStats.ProtectedBlackPixels
-                && resource.topScreenStats.ProtectedBlackTargetsBottomPixels
-                    == 0u;
-        const bool passiveBottomConsumerProtectedBlackOwnedByBottom =
-            resource.topScreenStats.ProtectedBlackTargetsTopPixels == 0u
-            && resource.topScreenStats.ProtectedBlackTargetsBottomPixels
-                == resource.topScreenStats.ProtectedBlackPixels;
-        outInputs.bottomExactPassiveComp2WhiteConsumerA2 =
-            passiveBottomConsumerBase
-            && passiveBottomConsumerFullPartition
-            && passiveBottomConsumerHas2DOnly
-            && passiveBottomConsumer2DOnlyInvisible
-            && passiveBottomConsumerHasPlane0
-            && passiveBottomConsumerProtectedBlackMatches2DOnly
-            && passiveBottomConsumerProtectedBlackOwnedByTop;
-        outInputs.bottomOppositeOwnedPassiveComp2BlackMaskCandidate =
-            passiveBottomConsumerBase
-            && passiveBottomConsumerFullPartition
-            && passiveBottomConsumerHas2DOnly
-            && passiveBottomConsumer2DOnlyInvisible
-            && passiveBottomConsumerHasPlane0
-            && passiveBottomConsumerProtectedBlackMatches2DOnly
-            && passiveBottomConsumerProtectedBlackOwnedByBottom;
-    }
-    outInputs.needsReadback = needsReadback;
-    outInputs.multiSurface = multiSurface;
-    outInputs.validationMode = validationMode;
-    outInputs.compositorMode = static_cast<u32>(VulkanRuntime::GetCompositorMode());
-    outInputs.debugView = static_cast<u32>(VulkanRuntime::GetDebugView());
-    return outInputs.sourceImage != VK_NULL_HANDLE
-        && outInputs.sourceImageView != VK_NULL_HANDLE
-        && outInputs.previousTopSourceImage != VK_NULL_HANDLE
-        && outInputs.previousTopSourceImageView != VK_NULL_HANDLE
-        && outInputs.previousBottomSourceImage != VK_NULL_HANDLE
-        && outInputs.previousBottomSourceImageView != VK_NULL_HANDLE
-        && outInputs.exactObjSourceImage != VK_NULL_HANDLE
-        && outInputs.exactObjSourceImageView != VK_NULL_HANDLE
-        && outInputs.topPackedBuffer != VK_NULL_HANDLE
-        && outInputs.bottomPackedBuffer != VK_NULL_HANDLE
-        && outInputs.capture3dBuffer != VK_NULL_HANDLE;
+    resource.renderer3dNativeProjectionDescriptorGeneration =
+        renderer3dNativeProjectionPipelineGeneration;
+    resource.renderer3dNativeProjectionValid = false;
+    return true;
 }
 
 void VulkanOutput::destroyRenderer3dSnapshot(FrameResource& resource)
 {
+    destroyRenderer3dNativeProjection(resource);
     if (resource.renderer3dSnapshotView != VK_NULL_HANDLE)
     {
         vkDestroyImageView(device, resource.renderer3dSnapshotView, nullptr);
@@ -10721,12 +8402,7 @@ void VulkanOutput::destroyRenderer3dSnapshot(FrameResource& resource)
 
     resource.snapshotWidth = 0;
     resource.snapshotHeight = 0;
-    resource.hasRenderer3dSnapshot = false;
-    resource.renderer3dSnapshotSourceIdentityValid = false;
-    resource.renderer3dSnapshotSourceSequence = 0;
-    resource.renderer3dSnapshotSourcePolygonCount = 0;
-    resource.renderer3dSnapshotSourceCaptureCnt = 0;
-    resource.renderer3dSnapshotSourceScreenSwap = false;
+    clearRenderer3dSnapshotPublication(resource, true);
 }
 
 void VulkanOutput::destroyExactObjRenderer3dSnapshot(FrameResource& resource)
@@ -10789,6 +8465,30 @@ void VulkanOutput::destroyExactTopDisplayedCaptureRenderer3dSnapshot(
     resource.exactTopDisplayedCaptureRenderer3dSnapshotIdentity = {};
 }
 
+void VulkanOutput::clearRenderer3dSnapshotPublication(
+    FrameResource& resource, bool forgetLayout)
+{
+    resource.hasRenderer3dSnapshot = false;
+    resource.renderer3dSnapshotState = Renderer3dSnapshotState::Empty;
+    resource.renderer3dSnapshotFrameId = 0u;
+    resource.renderer3dSnapshotPublicationGeneration = 0u;
+    resource.renderer3dSnapshotProjection = {};
+    resource.renderer3dNativeProjectionValid = false;
+    resource.renderer3dSnapshotScreenSwap = false;
+    resource.renderer3dSnapshotZeroPolygons = false;
+    resource.renderer3dSnapshotSourceIdentityValid = false;
+    resource.renderer3dSnapshotSourceEpoch = 0u;
+    resource.renderer3dSnapshotSourceSequence = 0u;
+    resource.renderer3dSnapshotSourcePolygonCount = 0u;
+    resource.renderer3dSnapshotSourceCaptureCnt = 0u;
+    resource.renderer3dSnapshotSourceScreenSwap = false;
+    resource.snapshotFromPreRun = false;
+    resource.snapshotFromInitializedTarget = false;
+    resource.snapshotFromGraphicsBackend = false;
+    if (forgetLayout)
+        resource.renderer3dSnapshotLayoutInitialized = false;
+}
+
 void VulkanOutput::releaseRetainedRenderer3dSource(FrameResource& resource)
 {
     if (resource.renderer3dPresentationOwner != nullptr && resource.renderer3dPresentationToken != 0)
@@ -10826,7 +8526,9 @@ bool VulkanOutput::ensureRenderer3dSnapshot(FrameResource& resource, u32 width, 
     imageCreateInfo.arrayLayers = 1;
     imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-    imageCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
+
+    imageCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT
+                          | VK_IMAGE_USAGE_SAMPLED_BIT;
     imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
@@ -10901,7 +8603,7 @@ bool VulkanOutput::ensureExactObjRenderer3dSnapshot(FrameResource& resource, u32
     imageCreateInfo.arrayLayers = 1;
     imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-    imageCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
+    imageCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
     imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
@@ -10994,7 +8696,7 @@ bool VulkanOutput::ensureExactTopDisplayedCaptureRenderer3dSnapshot(
     imageCreateInfo.arrayLayers = 1;
     imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-    imageCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
+    imageCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
     imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
@@ -11464,7 +9166,8 @@ bool VulkanOutput::recordExactTopDisplayedCaptureRenderer3dSnapshotCopy(
     vkCmdPipelineBarrier(
         resource.commandBuffer,
         VK_PIPELINE_STAGE_TRANSFER_BIT,
-        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
         0,
         0,
         nullptr,
@@ -11509,15 +9212,12 @@ bool VulkanOutput::ensureSameBankMode2SourceCache(
     SameBankMode2SourceCache& cache =
         sameBankMode2SourceCaches[vramBank];
     if (cache.image != VK_NULL_HANDLE
-        && cache.imageView != VK_NULL_HANDLE
         && cache.width == width
         && cache.height == height)
     {
         return true;
     }
 
-    if (cache.imageView != VK_NULL_HANDLE)
-        vkDestroyImageView(device, cache.imageView, nullptr);
     if (cache.image != VK_NULL_HANDLE)
         vkDestroyImage(device, cache.image, nullptr);
     if (cache.memory != VK_NULL_HANDLE)
@@ -11534,10 +9234,7 @@ bool VulkanOutput::ensureSameBankMode2SourceCache(
     imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
     imageCreateInfo.usage =
-        VK_IMAGE_USAGE_TRANSFER_SRC_BIT
-        | VK_IMAGE_USAGE_TRANSFER_DST_BIT
-        | VK_IMAGE_USAGE_SAMPLED_BIT
-        | VK_IMAGE_USAGE_STORAGE_BIT;
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     if (vkCreateImage(device, &imageCreateInfo, nullptr, &cache.image)
@@ -11576,25 +9273,6 @@ bool VulkanOutput::ensureSameBankMode2SourceCache(
         return false;
     }
 
-    VkImageViewCreateInfo viewCreateInfo{};
-    viewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    viewCreateInfo.image = cache.image;
-    viewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    viewCreateInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
-    viewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    viewCreateInfo.subresourceRange.baseMipLevel = 0u;
-    viewCreateInfo.subresourceRange.levelCount = 1u;
-    viewCreateInfo.subresourceRange.baseArrayLayer = 0u;
-    viewCreateInfo.subresourceRange.layerCount = 1u;
-    if (vkCreateImageView(device, &viewCreateInfo, nullptr, &cache.imageView)
-        != VK_SUCCESS)
-    {
-        vkFreeMemory(device, cache.memory, nullptr);
-        vkDestroyImage(device, cache.image, nullptr);
-        cache = {};
-        return false;
-    }
-
     cache.width = width;
     cache.height = height;
     return true;
@@ -11604,8 +9282,6 @@ void VulkanOutput::destroySameBankMode2SourceCaches()
 {
     for (SameBankMode2SourceCache& cache : sameBankMode2SourceCaches)
     {
-        if (cache.imageView != VK_NULL_HANDLE)
-            vkDestroyImageView(device, cache.imageView, nullptr);
         if (cache.image != VK_NULL_HANDLE)
             vkDestroyImage(device, cache.image, nullptr);
         if (cache.memory != VK_NULL_HANDLE)
@@ -11866,7 +9542,10 @@ bool VulkanOutput::recordSameBankMode2DisplayedSourceCopy(
                 static_cast<u32>(postCopyBarriers.size()),
                 postCopyBarriers.data());
         };
-    const bool destinationLayoutReady = resource.hasRenderer3dSnapshot;
+    const bool destinationLayoutReady =
+        resource.renderer3dSnapshotLayoutInitialized
+        || resource.renderer3dSnapshotState
+            == Renderer3dSnapshotState::PendingSubmit;
     recordCopy(
         displayedSourceImage,
         displayedSourceWidth,
@@ -11876,11 +9555,23 @@ bool VulkanOutput::recordSameBankMode2DisplayedSourceCopy(
 
     releaseRetainedRenderer3dSource(resource);
     resource.hasRenderer3dSnapshot = true;
+    resource.renderer3dSnapshotState =
+        Renderer3dSnapshotState::PendingSubmit;
+    resource.renderer3dSnapshotProjection = {
+        displayedSourceWidth,
+        displayedSourceHeight,
+        displayedSourceWidth,
+        displayedSourceHeight,
+        vkCmdCopyImage != nullptr
+            ? Renderer3dSnapshotCopyOp::Copy
+            : Renderer3dSnapshotCopyOp::BlitNearest,
+    };
     resource.renderer3dSnapshotScreenSwap =
         expectedIdentity.source.screenSwap;
     resource.renderer3dSnapshotZeroPolygons =
         expectedIdentity.source.polygonCount == 0u;
     resource.renderer3dSnapshotSourceIdentityValid = true;
+    resource.renderer3dSnapshotSourceEpoch = 0;
     resource.renderer3dSnapshotSourceSequence =
         expectedIdentity.source.sequence;
     resource.renderer3dSnapshotSourcePolygonCount =
@@ -11926,433 +9617,6 @@ bool VulkanOutput::recordSameBankMode2DisplayedSourceCopy(
     return true;
 }
 
-bool VulkanOutput::recordDirectPresentationPrep(
-    Frame* frame,
-    FrameResource& resource,
-    melonDS::VulkanRenderer3D& renderer3D,
-    bool snapshotScreenSwap,
-    bool allowRetainedLiveSource,
-    bool accumulateTopHighres,
-    bool accumulateBottomHighres,
-    bool replaceAccumulatedHighres,
-    int crossLcdReplayTarget,
-    bool usePublishedOppositeAsLiveSource,
-    const SoftPackedObjCaptureSourceIdentity* exactBottomObjSource,
-    const SoftPackedDisplayedCaptureSourceIdentity* exactTopDisplayedCaptureSource,
-    const SoftPackedSameBankMode2DisplayedSourceIdentity*
-        sameBankMode2DisplayedSource)
-{
-    if (!melonDS::UsesVulkanFastPath(renderer3D.GetVulkanPipelineProfile()))
-    {
-        std::scoped_lock commandLock(commandPoolLock);
-
-        if (!beginFrameCommand(resource))
-            return false;
-
-        if (!recordRenderer3dSnapshotCopy(
-                resource,
-                renderer3D,
-                snapshotScreenSwap,
-                false))
-        {
-            return false;
-        }
-
-        resource.snapshotFromPreRun = false;
-        resource.snapshotFromInitializedTarget =
-            renderer3D.IsColorTargetInitialized();
-        resource.snapshotFromGraphicsBackend =
-            renderer3D.GetActiveBackendMode()
-                == melonDS::VulkanRenderer3D::BackendMode::GraphicsHardware;
-
-        if (resource.snapshotFromGraphicsBackend
-            && resource.hasRenderer3dSnapshot)
-        {
-            VkBufferMemoryBarrier topPackedToAccumulateBarrier{};
-            topPackedToAccumulateBarrier.sType =
-                VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-            topPackedToAccumulateBarrier.srcAccessMask =
-                VK_ACCESS_HOST_WRITE_BIT;
-            topPackedToAccumulateBarrier.dstAccessMask =
-                VK_ACCESS_SHADER_READ_BIT;
-            topPackedToAccumulateBarrier.srcQueueFamilyIndex =
-                VK_QUEUE_FAMILY_IGNORED;
-            topPackedToAccumulateBarrier.dstQueueFamilyIndex =
-                VK_QUEUE_FAMILY_IGNORED;
-            topPackedToAccumulateBarrier.buffer = resource.topPackedBuffer;
-            topPackedToAccumulateBarrier.offset = 0;
-            topPackedToAccumulateBarrier.size = resource.packedBufferSize;
-
-            VkBufferMemoryBarrier bottomPackedToAccumulateBarrier{};
-            bottomPackedToAccumulateBarrier.sType =
-                VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-            bottomPackedToAccumulateBarrier.srcAccessMask =
-                VK_ACCESS_HOST_WRITE_BIT;
-            bottomPackedToAccumulateBarrier.dstAccessMask =
-                VK_ACCESS_SHADER_READ_BIT;
-            bottomPackedToAccumulateBarrier.srcQueueFamilyIndex =
-                VK_QUEUE_FAMILY_IGNORED;
-            bottomPackedToAccumulateBarrier.dstQueueFamilyIndex =
-                VK_QUEUE_FAMILY_IGNORED;
-            bottomPackedToAccumulateBarrier.buffer =
-                resource.bottomPackedBuffer;
-            bottomPackedToAccumulateBarrier.offset = 0;
-            bottomPackedToAccumulateBarrier.size = resource.packedBufferSize;
-
-            std::array<VkBufferMemoryBarrier, 2>
-                packedToAccumulateBarriers = {
-                    topPackedToAccumulateBarrier,
-                    bottomPackedToAccumulateBarrier,
-                };
-            vkCmdPipelineBarrier(
-                resource.commandBuffer,
-                VK_PIPELINE_STAGE_HOST_BIT,
-                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                0,
-                0,
-                nullptr,
-                static_cast<u32>(packedToAccumulateBarriers.size()),
-                packedToAccumulateBarriers.data(),
-                0,
-                nullptr);
-
-            if (accumulateTopHighres)
-            {
-                (void)recordAccumulateMergeCompatibility(
-                    resource,
-                    true,
-                    replaceAccumulatedHighres);
-            }
-            if (accumulateBottomHighres)
-            {
-                (void)recordAccumulateMergeCompatibility(
-                    resource,
-                    false,
-                    replaceAccumulatedHighres);
-            }
-        }
-
-        VkBufferMemoryBarrier topPackedBarrier{};
-        topPackedBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-        topPackedBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-        topPackedBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        topPackedBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        topPackedBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        topPackedBarrier.buffer = resource.topPackedBuffer;
-        topPackedBarrier.offset = 0;
-        topPackedBarrier.size = resource.packedBufferSize;
-
-        VkBufferMemoryBarrier bottomPackedBarrier{};
-        bottomPackedBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-        bottomPackedBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-        bottomPackedBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        bottomPackedBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        bottomPackedBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        bottomPackedBarrier.buffer = resource.bottomPackedBuffer;
-        bottomPackedBarrier.offset = 0;
-        bottomPackedBarrier.size = resource.packedBufferSize;
-
-        std::array<VkBufferMemoryBarrier, 2> bufferBarriers = {
-            topPackedBarrier,
-            bottomPackedBarrier,
-        };
-        vkCmdPipelineBarrier(
-            resource.commandBuffer,
-            VK_PIPELINE_STAGE_HOST_BIT,
-            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
-                | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            0,
-            0,
-            nullptr,
-            static_cast<u32>(bufferBarriers.size()),
-            bufferBarriers.data(),
-            0,
-            nullptr);
-
-        const bool submitted = submitFrameCommand(frame, resource, true);
-        if (submitted)
-            resource.timestampPending = false;
-        return submitted;
-    }
-
-    const auto failDirectPrep = [&](const char* reason) -> bool {
-        melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Warn,
-            "VulkanOutput[DirectPrepFail]: reason=%s frame=%u graphics=%u retainedAllowed=%u hasLive=%u hasSnapshot=%u colorInit=%u size=%ux%u",
-            reason != nullptr ? reason : "unknown",
-            frame != nullptr ? static_cast<unsigned>(frame->frameId) : 0u,
-            renderer3D.GetActiveBackendMode() == melonDS::VulkanRenderer3D::BackendMode::GraphicsHardware ? 1u : 0u,
-            allowRetainedLiveSource ? 1u : 0u,
-            resource.hasRetainedRenderer3dSource ? 1u : 0u,
-            resource.hasRenderer3dSnapshot ? 1u : 0u,
-            renderer3D.IsColorTargetInitialized() ? 1u : 0u,
-            renderer3D.GetColorTargetWidth(),
-            renderer3D.GetColorTargetHeight()
-        );
-        return false;
-    };
-
-    const u64 directStartNs = PerfNowNs();
-    const u64 lockStartNs = PerfNowNs();
-    std::scoped_lock commandLock(commandPoolLock);
-    directLockCpuWindow.Add(PerfNowNs() - lockStartNs);
-
-    const u64 beginStartNs = PerfNowNs();
-    if (!beginFrameCommand(resource))
-        return failDirectPrep("begin-command");
-    directBeginCpuWindow.Add(PerfNowNs() - beginStartNs);
-
-    const u64 sourceStartNs = PerfNowNs();
-    const bool graphicsBackend =
-        renderer3D.GetActiveBackendMode() == melonDS::VulkanRenderer3D::BackendMode::GraphicsHardware;
-    resource.sameBankMode2DisplayedSourceApplied = false;
-    resource.sameBankMode2DisplayedSourceFromCache = false;
-    resource.sameBankMode2CacheWritePending = false;
-    resource.sameBankMode2CacheWriteBank = 0xFFu;
-    resource.sameBankMode2CacheWriteIdentity = {};
-    const bool needsRenderer3dSource =
-        allowRetainedLiveSource
-        || accumulateTopHighres
-        || accumulateBottomHighres
-        || replaceAccumulatedHighres;
-    if (!needsRenderer3dSource && renderer3D.HasColorTarget())
-    {
-        releaseRetainedRenderer3dSource(resource);
-        resource.hasRenderer3dSnapshot = false;
-        resource.renderer3dSnapshotScreenSwap = snapshotScreenSwap;
-        resource.renderer3dSnapshotSourceIdentityValid = false;
-        resource.renderer3dSnapshotSourceSequence = 0;
-        resource.renderer3dSnapshotSourcePolygonCount = 0;
-        resource.renderer3dSnapshotSourceCaptureCnt = 0;
-        resource.renderer3dSnapshotSourceScreenSwap = false;
-    }
-    else if (graphicsBackend
-        && allowRetainedLiveSource
-        && melonDS::UsesVulkanFastPath(renderer3D.GetVulkanPipelineProfile()))
-    {
-        if (!recordRenderer3dLiveSourcePrep(resource, renderer3D, snapshotScreenSwap))
-        {
-            if (!recordRenderer3dSnapshotCopy(
-                    resource,
-                    renderer3D,
-                    snapshotScreenSwap,
-                    crossLcdReplayTarget >= 0))
-                return failDirectPrep("live-source-and-snapshot");
-        }
-    }
-    else if (!recordRenderer3dSnapshotCopy(
-            resource,
-            renderer3D,
-            snapshotScreenSwap,
-            crossLcdReplayTarget >= 0))
-    {
-        return failDirectPrep("snapshot-copy");
-    }
-    resource.hasExactObjRenderer3dSnapshot = false;
-    resource.exactObjRenderer3dSnapshotIdentity = {};
-    if (exactBottomObjSource != nullptr)
-    {
-        (void)recordExactObjRenderer3dSnapshotCopy(
-            resource,
-            renderer3D,
-            *exactBottomObjSource);
-    }
-    resource.hasExactTopDisplayedCaptureRenderer3dSnapshot = false;
-    resource.exactTopDisplayedCaptureRenderer3dSnapshotIdentity = {};
-    if (exactTopDisplayedCaptureSource != nullptr)
-    {
-        (void)recordExactTopDisplayedCaptureRenderer3dSnapshotCopy(
-            resource,
-            renderer3D,
-            *exactTopDisplayedCaptureSource);
-    }
-    if (sameBankMode2DisplayedSource != nullptr)
-    {
-        (void)recordSameBankMode2DisplayedSourceCopy(
-            resource,
-            renderer3D,
-            *sameBankMode2DisplayedSource);
-    }
-    directSourceCpuWindow.Add(PerfNowNs() - sourceStartNs);
-
-    resource.snapshotFromPreRun = false;
-    resource.snapshotFromInitializedTarget = renderer3D.IsColorTargetInitialized();
-    resource.snapshotFromGraphicsBackend = graphicsBackend;
-
-    const u64 accumulateStartNs = PerfNowNs();
-    if (resource.snapshotFromGraphicsBackend
-        && (resource.hasRenderer3dSnapshot || resource.hasRetainedRenderer3dSource))
-    {
-        VkBufferMemoryBarrier topPackedToAccumulateBarrier{};
-        topPackedToAccumulateBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-        topPackedToAccumulateBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-        topPackedToAccumulateBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        topPackedToAccumulateBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        topPackedToAccumulateBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        topPackedToAccumulateBarrier.buffer = resource.topPackedBuffer;
-        topPackedToAccumulateBarrier.offset = 0;
-        topPackedToAccumulateBarrier.size = resource.packedBufferSize;
-
-        VkBufferMemoryBarrier bottomPackedToAccumulateBarrier{};
-        bottomPackedToAccumulateBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-        bottomPackedToAccumulateBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-        bottomPackedToAccumulateBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        bottomPackedToAccumulateBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        bottomPackedToAccumulateBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        bottomPackedToAccumulateBarrier.buffer = resource.bottomPackedBuffer;
-        bottomPackedToAccumulateBarrier.offset = 0;
-        bottomPackedToAccumulateBarrier.size = resource.packedBufferSize;
-
-        std::array<VkBufferMemoryBarrier, 2> packedToAccumulateBarriers = {
-            topPackedToAccumulateBarrier,
-            bottomPackedToAccumulateBarrier,
-        };
-        vkCmdPipelineBarrier(
-            resource.commandBuffer,
-            VK_PIPELINE_STAGE_HOST_BIT,
-            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            0,
-            0,
-            nullptr,
-            static_cast<u32>(packedToAccumulateBarriers.size()),
-            packedToAccumulateBarriers.data(),
-            0,
-            nullptr
-        );
-
-        if (usePublishedOppositeAsLiveSource
-            && recordRenderer3dLiveSourcePrep(resource, renderer3D, snapshotScreenSwap))
-        {
-            resource.pinnedCrossReplayBottomForFrame = true;
-        }
-
-        if (!resource.pinnedCrossReplayBottomForFrame
-            && (accumulateTopHighres || accumulateBottomHighres))
-        {
-            const bool sourceParityTop = resource.hasRetainedRenderer3dSource
-                ? resource.retainedRenderer3dSourceScreenSwap
-                : resource.renderer3dSnapshotScreenSwap;
-            const bool mergeTargetTop = crossLcdReplayTarget >= 0
-                ? crossLcdReplayTarget == 1
-                : sourceParityTop;
-            (void)recordAccumulateMerge(
-                resource,
-                mergeTargetTop,
-                replaceAccumulatedHighres,
-                crossLcdReplayTarget >= 0);
-        }
-
-    }
-    directAccumulateCpuWindow.Add(PerfNowNs() - accumulateStartNs);
-
-    const u64 barrierStartNs = PerfNowNs();
-    VkBufferMemoryBarrier topPackedBarrier{};
-    topPackedBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    topPackedBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-    topPackedBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    topPackedBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    topPackedBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    topPackedBarrier.buffer = resource.topPackedBuffer;
-    topPackedBarrier.offset = 0;
-    topPackedBarrier.size = resource.packedBufferSize;
-
-    VkBufferMemoryBarrier bottomPackedBarrier{};
-    bottomPackedBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    bottomPackedBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-    bottomPackedBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    bottomPackedBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    bottomPackedBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    bottomPackedBarrier.buffer = resource.bottomPackedBuffer;
-    bottomPackedBarrier.offset = 0;
-    bottomPackedBarrier.size = resource.packedBufferSize;
-
-    std::array<VkBufferMemoryBarrier, 2> bufferBarriers = {
-        topPackedBarrier,
-        bottomPackedBarrier,
-    };
-    vkCmdPipelineBarrier(
-        resource.commandBuffer,
-        VK_PIPELINE_STAGE_HOST_BIT,
-        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        0,
-        0,
-        nullptr,
-        static_cast<u32>(bufferBarriers.size()),
-        bufferBarriers.data(),
-        0,
-        nullptr
-    );
-    directBarrierCpuWindow.Add(PerfNowNs() - barrierStartNs);
-
-    const u64 submitStartNs = PerfNowNs();
-    const bool submitted = submitFrameCommand(frame, resource, true);
-    if (submitted)
-    {
-        if (resource.sameBankMode2CacheWritePending
-            && resource.sameBankMode2CacheWriteBank
-                < sameBankMode2SourceCaches.size())
-        {
-            SameBankMode2SourceCache& cache =
-                sameBankMode2SourceCaches[
-                    resource.sameBankMode2CacheWriteBank];
-            cache.valid = true;
-            cache.layoutReady = true;
-            cache.identity =
-                resource.sameBankMode2CacheWriteIdentity;
-        }
-        if (sameBankMode2DisplayedSource != nullptr
-            && areRendererDebugBgObjLogsEnabled()
-            && sameBankMode2SourceDebugLogsRemaining > 0u)
-        {
-            melonDS::Platform::Log(
-                melonDS::Platform::LogLevel::Warn,
-                "VulkanExact[SameBankDM2]: frame=%u bank=%u applied=%u source=%s displayed=%llu/%08X/%u completedValid=%u completed=%llu/%08X/%u cacheWrite=%u remaining=%u",
-                frame != nullptr
-                    ? static_cast<unsigned>(frame->frameId)
-                    : 0u,
-                sameBankMode2DisplayedSource->vramBank,
-                resource.sameBankMode2DisplayedSourceApplied ? 1u : 0u,
-                resource.sameBankMode2DisplayedSourceFromCache
-                    ? "bank-cache"
-                    : (resource.sameBankMode2DisplayedSourceApplied
-                        ? "exact-ring"
-                        : "established"),
-                static_cast<unsigned long long>(
-                    sameBankMode2DisplayedSource->source.sequence),
-                sameBankMode2DisplayedSource->source.captureCnt,
-                sameBankMode2DisplayedSource->source.screenSwap ? 1u : 0u,
-                sameBankMode2DisplayedSource->completedWriterValid ? 1u : 0u,
-                static_cast<unsigned long long>(
-                    sameBankMode2DisplayedSource
-                        ->completedWriterSource.sequence),
-                sameBankMode2DisplayedSource
-                    ->completedWriterSource.captureCnt,
-                sameBankMode2DisplayedSource
-                    ->completedWriterSource.screenSwap ? 1u : 0u,
-                resource.sameBankMode2CacheWritePending ? 1u : 0u,
-                sameBankMode2SourceDebugLogsRemaining - 1u);
-            sameBankMode2SourceDebugLogsRemaining--;
-        }
-        directSubmitCpuWindow.Add(PerfNowNs() - submitStartNs);
-        directPrepCpuWindow.Add(PerfNowNs() - directStartNs);
-        resource.timestampPending = false;
-        logDirectPerformanceIfNeeded();
-    }
-    else
-    {
-        resource.hasRenderer3dSnapshot = false;
-        resource.renderer3dSnapshotSourceIdentityValid = false;
-        resource.renderer3dSnapshotSourceSequence = 0;
-        resource.renderer3dSnapshotSourcePolygonCount = 0;
-        resource.renderer3dSnapshotSourceCaptureCnt = 0;
-        resource.renderer3dSnapshotSourceScreenSwap = false;
-    }
-    resource.sameBankMode2CacheWritePending = false;
-    resource.sameBankMode2CacheWriteBank = 0xFFu;
-    resource.sameBankMode2CacheWriteIdentity = {};
-    return submitted ? true : failDirectPrep("submit");
-}
-
 bool VulkanOutput::recordRenderer3dLiveSourcePrep(FrameResource& resource, melonDS::VulkanRenderer3D& renderer3D, bool sourceScreenSwap)
 {
     const u32 rendererWidth = renderer3D.GetColorTargetWidth();
@@ -12380,12 +9644,7 @@ bool VulkanOutput::recordRenderer3dLiveSourcePrep(FrameResource& resource, melon
     resource.retainedRenderer3dSourceScreenSwap = sourceScreenSwap;
     resource.renderer3dPresentationToken = token;
     resource.renderer3dPresentationOwner = &renderer3D;
-    resource.hasRenderer3dSnapshot = false;
-    resource.renderer3dSnapshotSourceIdentityValid = false;
-    resource.renderer3dSnapshotSourceSequence = 0;
-    resource.renderer3dSnapshotSourcePolygonCount = 0;
-    resource.renderer3dSnapshotSourceCaptureCnt = 0;
-    resource.renderer3dSnapshotSourceScreenSwap = false;
+    clearRenderer3dSnapshotPublication(resource, false);
     resource.snapshotWidth = rendererWidth;
     resource.snapshotHeight = rendererHeight;
 
@@ -12422,6 +9681,29 @@ bool VulkanOutput::recordRenderer3dLiveSourcePrep(FrameResource& resource, melon
     return true;
 }
 
+void VulkanOutput::renderer3dSnapshotDstDims(u32 rendererWidth, u32 rendererHeight,
+                                             u32 resourceWidth, u32& dstWidth, u32& dstHeight) noexcept
+{
+    dstWidth = rendererWidth;
+    dstHeight = rendererHeight;
+    if (rendererWidth >= 256u && (rendererWidth % 256u) == 0u)
+    {
+        const u32 escala3d = rendererWidth / 256u;
+        if (rendererHeight == 192u * escala3d)
+        {
+
+            u32 salida = escala3d;
+            if (resourceWidth >= 256u && (resourceWidth % 256u) == 0u)
+                salida = std::min<u32>(salida, resourceWidth / 256u);
+            if (salida < escala3d)
+            {
+                dstWidth = 256u * salida;
+                dstHeight = 192u * salida;
+            }
+        }
+    }
+}
+
 bool VulkanOutput::recordRenderer3dSnapshotCopy(
     FrameResource& resource,
     const melonDS::VulkanRenderer3D& renderer3D,
@@ -12429,133 +9711,198 @@ bool VulkanOutput::recordRenderer3dSnapshotCopy(
     bool preferPinnedCaptureSource)
 {
     releaseRetainedRenderer3dSource(resource);
-    const bool fastPathProfile =
-        melonDS::UsesVulkanFastPath(renderer3D.GetVulkanPipelineProfile());
     VkImage snapshotSourceImage = renderer3D.GetColorTargetImage();
+    VkImageView snapshotSourceImageView =
+        renderer3D.GetColorTargetImageView();
     u32 rendererWidth = renderer3D.GetColorTargetWidth();
     u32 rendererHeight = renderer3D.GetColorTargetHeight();
     bool snapshotSourceZeroPolygons =
-        fastPathProfile
-        && (renderer3D.IsPublishedRenderMetadataValid()
+        (renderer3D.IsPublishedRenderMetadataValid()
             ? renderer3D.GetPublishedRenderPolygonCount() == 0u
             : renderer3D.GetLastSubmittedRenderPolygonCount() == 0u);
     melonDS::VulkanRenderer3D::SubmittedRenderIdentity selectedIdentity{};
-    if (fastPathProfile)
+
+    const bool faithfulNativeProjectionEnabled = resource.width >= 256u;
     {
-        bool usedParity = false;
-        bool usedPinnedCapture = false;
-        if (preferPinnedCaptureSource)
-        {
-            VkImage pinnedImage = VK_NULL_HANDLE;
-            VkImageView pinnedView = VK_NULL_HANDLE;
-            u32 pinnedWidth = 0;
-            u32 pinnedHeight = 0;
-            bool pinnedZeroPolygons = false;
-            melonDS::VulkanRenderer3D::SubmittedRenderIdentity pinnedIdentity{};
-            if (renderer3D.GetPinnedCaptureRender(
-                    pinnedImage,
-                    pinnedView,
-                    pinnedWidth,
-                    pinnedHeight,
-                    pinnedZeroPolygons,
-                    &pinnedIdentity)
-                && pinnedImage != VK_NULL_HANDLE
-                && pinnedWidth != 0u
-                && pinnedHeight != 0u
-                && !pinnedZeroPolygons)
-            {
-                snapshotSourceImage = pinnedImage;
-                rendererWidth = pinnedWidth;
-                rendererHeight = pinnedHeight;
-                snapshotSourceZeroPolygons = false;
-                usedParity = true;
-                usedPinnedCapture = true;
-                selectedIdentity = pinnedIdentity;
-            }
-        }
-        VkImage parityImage = VK_NULL_HANDLE;
-        VkImageView parityView = VK_NULL_HANDLE;
-        u32 parityWidth = 0;
-        u32 parityHeight = 0;
-        bool parityZeroPolygons = false;
-        melonDS::VulkanRenderer3D::SubmittedRenderIdentity parityIdentity{};
-        if (!usedParity)
-        {
-            usedParity = renderer3D.GetNewestSubmittedRenderForParity(
-                    snapshotScreenSwap,
-                    parityImage,
-                    parityView,
-                    parityWidth,
-                    parityHeight,
-                    parityZeroPolygons,
-                    &parityIdentity)
-                && parityImage != VK_NULL_HANDLE
-                && parityWidth != 0
-                && parityHeight != 0;
-            if (usedParity)
-                selectedIdentity = parityIdentity;
-        }
-        const bool requestedParityMissingOrEmpty =
-            !usedParity || parityZeroPolygons;
-        const bool staleNonemptyFallbackEligible =
-            usedParity
-            && !parityZeroPolygons
-            && !preferPinnedCaptureSource;
-        if (!usedPinnedCapture
-            && (requestedParityMissingOrEmpty
-                || staleNonemptyFallbackEligible)
-            && !renderer3D.IsParitySubmitFresh(snapshotScreenSwap, 2u)
-            && renderer3D.IsParitySubmitFresh(!snapshotScreenSwap, 2u))
-        {
-            VkImage liveImage = VK_NULL_HANDLE;
-            VkImageView liveView = VK_NULL_HANDLE;
-            u32 liveWidth = 0;
-            u32 liveHeight = 0;
-            bool liveZeroPolygons = false;
-            melonDS::VulkanRenderer3D::SubmittedRenderIdentity liveIdentity{};
-            const bool usedLive = renderer3D.GetNewestSubmittedRenderForParity(
-                    !snapshotScreenSwap,
-                    liveImage,
-                    liveView,
-                    liveWidth,
-                    liveHeight,
-                    liveZeroPolygons,
-                    &liveIdentity)
-                && liveImage != VK_NULL_HANDLE
-                && liveWidth != 0
-                && liveHeight != 0
-                && !liveZeroPolygons
-                && (requestedParityMissingOrEmpty
-                    || (parityIdentity.Valid
-                        && liveIdentity.Valid
-                        && liveIdentity.Sequence > parityIdentity.Sequence));
-            if (usedLive)
-            {
-                parityImage = liveImage;
-                parityView = liveView;
-                parityWidth = liveWidth;
-                parityHeight = liveHeight;
-                parityZeroPolygons = false;
-                usedParity = true;
-                selectedIdentity = liveIdentity;
-            }
-        }
-        if (usedParity && !usedPinnedCapture)
-        {
-            snapshotSourceImage = parityImage;
-            rendererWidth = parityWidth;
-            rendererHeight = parityHeight;
-            snapshotSourceZeroPolygons = parityZeroPolygons;
-        }
+
+        clearRenderer3dSnapshotPublication(resource, false);
+
+        if (!renderer3D.GetPublishedRenderIdentity(selectedIdentity))
+            selectedIdentity = {};
     }
-    if (!ensureRenderer3dSnapshot(resource, rendererWidth, rendererHeight))
+    if (snapshotSourceImage == VK_NULL_HANDLE
+        || rendererWidth == 0u || rendererHeight == 0u)
+    {
+        clearRenderer3dSnapshotPublication(resource, false);
         return false;
+    }
+
+    u32 snapshotDstWidth = rendererWidth;
+    u32 snapshotDstHeight = rendererHeight;
+    renderer3dSnapshotDstDims(rendererWidth, rendererHeight, resource.width,
+                              snapshotDstWidth, snapshotDstHeight);
+    const bool snapshotReduce = snapshotDstWidth != rendererWidth;
+    Renderer3dSnapshotCopyOp projectionOperation =
+        Renderer3dSnapshotCopyOp::None;
+    if (!snapshotReduce && vkCmdCopyImage != nullptr)
+    {
+        projectionOperation = Renderer3dSnapshotCopyOp::Copy;
+    }
+    else if (vkCmdBlitImage != nullptr)
+    {
+        projectionOperation = snapshotReduce && ssaaTecho()
+            ? Renderer3dSnapshotCopyOp::BlitLinear
+            : Renderer3dSnapshotCopyOp::BlitNearest;
+    }
+    else
+    {
+        return false;
+    }
+    Renderer3dSnapshotProjectionKey projectionKey {
+        rendererWidth,
+        rendererHeight,
+        snapshotDstWidth,
+        snapshotDstHeight,
+        projectionOperation,
+        Renderer3dNativeProjectionOp::None,
+    };
+
+    const bool snapshotNeedsRecreate =
+        resource.renderer3dSnapshot == VK_NULL_HANDLE
+        || resource.renderer3dSnapshotView == VK_NULL_HANDLE
+        || resource.snapshotWidth != snapshotDstWidth
+        || resource.snapshotHeight != snapshotDstHeight;
+    const bool nativeProjectionNeedsRecreate = faithfulNativeProjectionEnabled
+        && (resource.renderer3dNativeProjectionBuffer == VK_NULL_HANDLE
+            || resource.renderer3dNativeProjectionMemory == VK_NULL_HANDLE
+            || resource.renderer3dNativeProjectionDescriptorPool
+                == VK_NULL_HANDLE
+            || resource.renderer3dNativeProjectionDescriptorSet
+                == VK_NULL_HANDLE
+            || resource.renderer3dNativeProjectionDescriptorGeneration
+                != renderer3dNativeProjectionPipelineGeneration);
+    if ((snapshotNeedsRecreate || nativeProjectionNeedsRecreate)
+        && !waitFaithfulLiveSnapshotUseLocked(resource))
+    {
+        return false;
+    }
+    if (!ensureRenderer3dSnapshot(resource, snapshotDstWidth, snapshotDstHeight))
+        return false;
+
+    const bool exactNativeDimensions = rendererWidth != 0u
+        && rendererHeight != 0u
+        && (rendererWidth % 256u) == 0u
+        && (rendererHeight % 192u) == 0u
+        && rendererWidth / 256u == rendererHeight / 192u;
+    const bool recordNativeProjection =
+        faithfulNativeProjectionEnabled
+        && snapshotSourceImage != VK_NULL_HANDLE
+        && snapshotSourceImageView != VK_NULL_HANDLE
+        && exactNativeDimensions
+        && ensureRenderer3dNativeProjection(resource);
+    if (recordNativeProjection)
+        projectionKey.nativeOperation =
+            Renderer3dNativeProjectionOp::Center6A5;
+    else
+        resource.renderer3dNativeProjectionValid = false;
+
+    if (recordNativeProjection)
+    {
+        constexpr VkDeviceSize kNativeProjectionBytes =
+            256u * 192u * sizeof(u32);
+        VkDescriptorImageInfo sourceInfo{
+            faithfulSampler, snapshotSourceImageView,
+            VK_IMAGE_LAYOUT_GENERAL};
+        VkDescriptorBufferInfo projectionInfo{
+            resource.renderer3dNativeProjectionBuffer, 0u,
+            kNativeProjectionBytes};
+        VkWriteDescriptorSet projectionWrites[2]{};
+        projectionWrites[0].sType =
+            VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        projectionWrites[0].dstSet =
+            resource.renderer3dNativeProjectionDescriptorSet;
+        projectionWrites[0].dstBinding = 0u;
+        projectionWrites[0].descriptorCount = 1u;
+        projectionWrites[0].descriptorType =
+            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        projectionWrites[0].pImageInfo = &sourceInfo;
+        projectionWrites[1].sType =
+            VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        projectionWrites[1].dstSet =
+            resource.renderer3dNativeProjectionDescriptorSet;
+        projectionWrites[1].dstBinding = 1u;
+        projectionWrites[1].descriptorCount = 1u;
+        projectionWrites[1].descriptorType =
+            VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        projectionWrites[1].pBufferInfo = &projectionInfo;
+        vkUpdateDescriptorSets(device, 2u, projectionWrites, 0u, nullptr);
+
+        VkImageMemoryBarrier sourceToProjection{};
+        sourceToProjection.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        sourceToProjection.srcAccessMask =
+            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+            | VK_ACCESS_SHADER_WRITE_BIT
+            | VK_ACCESS_TRANSFER_WRITE_BIT;
+        sourceToProjection.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        sourceToProjection.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+        sourceToProjection.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+        sourceToProjection.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        sourceToProjection.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        sourceToProjection.image = snapshotSourceImage;
+        sourceToProjection.subresourceRange = {
+            VK_IMAGE_ASPECT_COLOR_BIT, 0u, 1u, 0u, 1u};
+        VkBufferMemoryBarrier projectionWritable{};
+        projectionWritable.sType =
+            VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+        projectionWritable.srcAccessMask =
+            VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+        projectionWritable.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+        projectionWritable.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        projectionWritable.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        projectionWritable.buffer =
+            resource.renderer3dNativeProjectionBuffer;
+        projectionWritable.offset = 0u;
+        projectionWritable.size = kNativeProjectionBytes;
+        vkCmdPipelineBarrier(
+            resource.commandBuffer,
+            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            0u, 0u, nullptr, 1u, &projectionWritable,
+            1u, &sourceToProjection);
+
+        vkCmdBindPipeline(
+            resource.commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+            renderer3dNativeProjectionPipeline);
+        vkCmdBindDescriptorSets(
+            resource.commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+            renderer3dNativeProjectionPipeLayout, 0u, 1u,
+            &resource.renderer3dNativeProjectionDescriptorSet,
+            0u, nullptr);
+        const u32 projectionPush[2] = {rendererWidth, rendererHeight};
+        vkCmdPushConstants(
+            resource.commandBuffer, renderer3dNativeProjectionPipeLayout,
+            VK_SHADER_STAGE_COMPUTE_BIT, 0u,
+            sizeof(projectionPush), projectionPush);
+        vkCmdDispatch(resource.commandBuffer, 16u, 12u, 1u);
+
+        VkBufferMemoryBarrier projectionReadable = projectionWritable;
+        projectionReadable.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+        projectionReadable.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        vkCmdPipelineBarrier(
+            resource.commandBuffer,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            0u, 0u, nullptr, 1u, &projectionReadable,
+            0u, nullptr);
+        resource.renderer3dNativeProjectionValid = true;
+    }
 
     VkImageMemoryBarrier sourceToTransferBarrier{};
     sourceToTransferBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
     sourceToTransferBarrier.srcAccessMask =
         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
         VK_ACCESS_SHADER_WRITE_BIT |
+        VK_ACCESS_SHADER_READ_BIT |
         VK_ACCESS_TRANSFER_WRITE_BIT |
         VK_ACCESS_TRANSFER_READ_BIT;
     sourceToTransferBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
@@ -12572,9 +9919,17 @@ bool VulkanOutput::recordRenderer3dSnapshotCopy(
 
     VkImageMemoryBarrier snapshotToTransferBarrier{};
     snapshotToTransferBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    snapshotToTransferBarrier.srcAccessMask = resource.hasRenderer3dSnapshot ? VK_ACCESS_SHADER_READ_BIT : 0;
+    const bool destinationLayoutReady =
+        resource.renderer3dSnapshotLayoutInitialized
+        || resource.renderer3dSnapshotState
+            == Renderer3dSnapshotState::PendingSubmit;
+    snapshotToTransferBarrier.srcAccessMask = destinationLayoutReady
+        ? (VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT
+            | VK_ACCESS_TRANSFER_READ_BIT)
+        : 0u;
     snapshotToTransferBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    snapshotToTransferBarrier.oldLayout = resource.hasRenderer3dSnapshot ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED;
+    snapshotToTransferBarrier.oldLayout = destinationLayoutReady
+        ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED;
     snapshotToTransferBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
     snapshotToTransferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     snapshotToTransferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -12602,7 +9957,7 @@ bool VulkanOutput::recordRenderer3dSnapshotCopy(
         preCopyBarriers.data()
     );
 
-    if (vkCmdCopyImage != nullptr)
+    if (projectionOperation == Renderer3dSnapshotCopyOp::Copy)
     {
         VkImageCopy copyRegion{};
         copyRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -12620,7 +9975,7 @@ bool VulkanOutput::recordRenderer3dSnapshotCopy(
             &copyRegion
         );
     }
-    else if (vkCmdBlitImage != nullptr)
+    else
     {
         VkImageBlit blitRegion{};
         blitRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -12628,7 +9983,7 @@ bool VulkanOutput::recordRenderer3dSnapshotCopy(
         blitRegion.srcOffsets[1] = {static_cast<int32_t>(rendererWidth), static_cast<int32_t>(rendererHeight), 1};
         blitRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         blitRegion.dstSubresource.layerCount = 1;
-        blitRegion.dstOffsets[1] = {static_cast<int32_t>(rendererWidth), static_cast<int32_t>(rendererHeight), 1};
+        blitRegion.dstOffsets[1] = {static_cast<int32_t>(snapshotDstWidth), static_cast<int32_t>(snapshotDstHeight), 1};
         vkCmdBlitImage(
             resource.commandBuffer,
             snapshotSourceImage,
@@ -12637,12 +9992,9 @@ bool VulkanOutput::recordRenderer3dSnapshotCopy(
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             1,
             &blitRegion,
-            VK_FILTER_NEAREST
+            projectionOperation == Renderer3dSnapshotCopyOp::BlitLinear
+                ? VK_FILTER_LINEAR : VK_FILTER_NEAREST
         );
-    }
-    else
-    {
-        return false;
     }
 
     VkImageMemoryBarrier sourceBackToGeneralBarrier{};
@@ -12685,7 +10037,8 @@ bool VulkanOutput::recordRenderer3dSnapshotCopy(
     vkCmdPipelineBarrier(
         resource.commandBuffer,
         VK_PIPELINE_STAGE_TRANSFER_BIT,
-        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
         0,
         0,
         nullptr,
@@ -12695,97 +10048,15 @@ bool VulkanOutput::recordRenderer3dSnapshotCopy(
         postCopyBarriers.data()
     );
 
-    if (VulkanRuntime::GetCompositorMode() == VulkanRuntime::CompositorMode::Precise
-        && resource.captureAgeLatched == 0u
-        && resource.captureLinesLatched >= static_cast<u32>(kScreenHeight)
-        && (resource.captureCntLatched & (1u << 31u)) != 0u
-        && ((resource.captureCntLatched >> 29u) & 0x3u) != 1u)
-    {
-        const u32 captureBank = (resource.captureCntLatched >> 16u) & 0x3u;
-        if (ensureSameBankMode2SourceCache(captureBank, rendererWidth, rendererHeight))
-        {
-            SameBankMode2SourceCache& cache = sameBankMode2SourceCaches[captureBank];
-            VkImageMemoryBarrier snapToSrc{};
-            snapToSrc.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-            snapToSrc.srcAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
-            snapToSrc.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-            snapToSrc.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-            snapToSrc.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-            snapToSrc.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            snapToSrc.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            snapToSrc.image = resource.renderer3dSnapshot;
-            snapToSrc.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            snapToSrc.subresourceRange.levelCount = 1u;
-            snapToSrc.subresourceRange.layerCount = 1u;
-
-            VkImageMemoryBarrier cacheToDst{};
-            cacheToDst.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-            cacheToDst.srcAccessMask = cache.layoutReady ? (VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT) : 0u;
-            cacheToDst.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-            cacheToDst.oldLayout = cache.layoutReady ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED;
-            cacheToDst.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-            cacheToDst.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            cacheToDst.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            cacheToDst.image = cache.image;
-            cacheToDst.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            cacheToDst.subresourceRange.levelCount = 1u;
-            cacheToDst.subresourceRange.layerCount = 1u;
-
-            std::array<VkImageMemoryBarrier, 2> cachePreBarriers = {snapToSrc, cacheToDst};
-            vkCmdPipelineBarrier(
-                resource.commandBuffer,
-                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
-                VK_PIPELINE_STAGE_TRANSFER_BIT,
-                0, 0, nullptr, 0, nullptr,
-                static_cast<u32>(cachePreBarriers.size()),
-                cachePreBarriers.data());
-
-            if (vkCmdCopyImage != nullptr)
-            {
-                VkImageCopy copyRegion{};
-                copyRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-                copyRegion.srcSubresource.layerCount = 1u;
-                copyRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-                copyRegion.dstSubresource.layerCount = 1u;
-                copyRegion.extent = {rendererWidth, rendererHeight, 1u};
-                vkCmdCopyImage(
-                    resource.commandBuffer,
-                    resource.renderer3dSnapshot,
-                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                    cache.image,
-                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                    1u,
-                    &copyRegion);
-            }
-
-            snapToSrc.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-            snapToSrc.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-            snapToSrc.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-            snapToSrc.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-            cacheToDst.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-            cacheToDst.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT;
-            cacheToDst.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-            cacheToDst.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-            std::array<VkImageMemoryBarrier, 2> cachePostBarriers = {snapToSrc, cacheToDst};
-            vkCmdPipelineBarrier(
-                resource.commandBuffer,
-                VK_PIPELINE_STAGE_TRANSFER_BIT,
-                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                0, 0, nullptr, 0, nullptr,
-                static_cast<u32>(cachePostBarriers.size()),
-                cachePostBarriers.data());
-
-            cache.valid = true;
-            cache.layoutReady = true;
-        }
-    }
-
     resource.hasRenderer3dSnapshot = true;
+    resource.renderer3dSnapshotState =
+        Renderer3dSnapshotState::PendingSubmit;
+    resource.renderer3dSnapshotProjection = projectionKey;
     resource.renderer3dSnapshotScreenSwap = snapshotScreenSwap;
     resource.renderer3dSnapshotZeroPolygons = snapshotSourceZeroPolygons;
     resource.renderer3dSnapshotSourceIdentityValid = selectedIdentity.Valid;
+    resource.renderer3dSnapshotSourceEpoch =
+        selectedIdentity.RenderProductEpoch;
     resource.renderer3dSnapshotSourceSequence = selectedIdentity.Sequence;
     resource.renderer3dSnapshotSourcePolygonCount = selectedIdentity.PolygonCount;
     resource.renderer3dSnapshotSourceCaptureCnt = selectedIdentity.CaptureCnt;
@@ -12798,1103 +10069,24 @@ bool VulkanOutput::dispatchCompositor(
     FrameResource& resource,
     const VulkanCompositionInputs& inputs)
 {
-    if (inputs.pipelineProfile != pipelineProfile
-        || compositorPipeline == VK_NULL_HANDLE)
+
     {
-        melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Error,
-            "VulkanOutput: compositor Strategy/profile mismatch");
-        return false;
-    }
-
-    const bool fastPathProfile = melonDS::UsesVulkanFastPath(pipelineProfile);
-    {
-    const u64 lockStartNs = PerfNowNs();
-    std::scoped_lock commandLock(commandPoolLock);
-    composeLockCpuWindow.Add(PerfNowNs() - lockStartNs);
-
-    const u64 beginStartNs = PerfNowNs();
-    if (!beginFrameCommand(resource))
-        return false;
-    composeBeginCpuWindow.Add(PerfNowNs() - beginStartNs);
-    const u64 recordStartNs = PerfNowNs();
-
-    if (resource.timestampQueryPool != VK_NULL_HANDLE)
-        vkCmdWriteTimestamp(resource.commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, resource.timestampQueryPool, 0);
-
-    VkImageMemoryBarrier outputToGeneralBarrier{};
-    outputToGeneralBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    outputToGeneralBarrier.srcAccessMask = resource.hasContent ? (VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT) : 0;
-    outputToGeneralBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-    outputToGeneralBarrier.oldLayout = resource.hasContent ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED;
-    outputToGeneralBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-    outputToGeneralBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    outputToGeneralBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    outputToGeneralBarrier.image = resource.image;
-    outputToGeneralBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    outputToGeneralBarrier.subresourceRange.baseMipLevel = 0;
-    outputToGeneralBarrier.subresourceRange.levelCount = 1;
-    outputToGeneralBarrier.subresourceRange.baseArrayLayer = 0;
-    outputToGeneralBarrier.subresourceRange.layerCount = 1;
-
-    vkCmdPipelineBarrier(
-        resource.commandBuffer,
-        resource.hasContent ? VK_PIPELINE_STAGE_ALL_COMMANDS_BIT : VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        0,
-        0,
-        nullptr,
-        0,
-        nullptr,
-        1,
-        &outputToGeneralBarrier
-    );
-
-    std::array<VkImageMemoryBarrier, 3> renderer3dReadableBarriers{};
-    u32 renderer3dBarrierCount = 0;
-    auto appendRenderer3dBarrier = [&](VkImage image) {
-        if (image == VK_NULL_HANDLE)
-            return;
-
-        for (u32 i = 0; i < renderer3dBarrierCount; i++)
+        if (dispatchFaithfulCompositor(frame, resource, &inputs))
+            return true;
+        static bool avisado = false;
+        if (!avisado)
         {
-            if (renderer3dReadableBarriers[i].image == image)
-                return;
-        }
-
-        VkImageMemoryBarrier& barrier = renderer3dReadableBarriers[renderer3dBarrierCount++];
-        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        barrier.srcAccessMask =
-            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-            VK_ACCESS_SHADER_WRITE_BIT |
-            VK_ACCESS_TRANSFER_WRITE_BIT |
-            VK_ACCESS_TRANSFER_READ_BIT;
-        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        barrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-        barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.image = image;
-        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        barrier.subresourceRange.baseMipLevel = 0;
-        barrier.subresourceRange.levelCount = 1;
-        barrier.subresourceRange.baseArrayLayer = 0;
-        barrier.subresourceRange.layerCount = 1;
-    };
-    appendRenderer3dBarrier(inputs.sourceImage);
-    if (renderer3dBarrierCount < renderer3dReadableBarriers.size())
-        appendRenderer3dBarrier(inputs.previousTopSourceImage);
-    if (renderer3dBarrierCount < renderer3dReadableBarriers.size())
-        appendRenderer3dBarrier(inputs.previousBottomSourceImage);
-    if (renderer3dBarrierCount > 0)
-    {
-        vkCmdPipelineBarrier(
-            resource.commandBuffer,
-            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            0,
-            0,
-            nullptr,
-            0,
-            nullptr,
-            renderer3dBarrierCount,
-            renderer3dReadableBarriers.data()
-        );
-    }
-
-    VkBufferMemoryBarrier topPackedBarrier{};
-    topPackedBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    topPackedBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-    topPackedBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    topPackedBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    topPackedBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    topPackedBarrier.buffer = resource.topPackedBuffer;
-    topPackedBarrier.offset = 0;
-    topPackedBarrier.size = resource.packedBufferSize;
-
-    VkBufferMemoryBarrier bottomPackedBarrier{};
-    bottomPackedBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    bottomPackedBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-    bottomPackedBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    bottomPackedBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    bottomPackedBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    bottomPackedBarrier.buffer = resource.bottomPackedBuffer;
-    bottomPackedBarrier.offset = 0;
-    bottomPackedBarrier.size = resource.packedBufferSize;
-
-    VkBufferMemoryBarrier capture3dBarrier{};
-    capture3dBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    capture3dBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-    capture3dBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    capture3dBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    capture3dBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    capture3dBarrier.buffer = resource.capture3dBuffer;
-    capture3dBarrier.offset = 0;
-    capture3dBarrier.size = kCapture3dBufferSize;
-
-    std::array<VkBufferMemoryBarrier, 3> compositorBufferBarriers = {
-        topPackedBarrier,
-        bottomPackedBarrier,
-        capture3dBarrier,
-    };
-
-    vkCmdPipelineBarrier(
-        resource.commandBuffer,
-        VK_PIPELINE_STAGE_HOST_BIT,
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        0,
-        0,
-        nullptr,
-        static_cast<u32>(compositorBufferBarriers.size()),
-        compositorBufferBarriers.data(),
-        0,
-        nullptr
-    );
-
-    VkDescriptorImageInfo outputImageInfo{};
-    outputImageInfo.imageView = resource.imageView;
-    outputImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-    VkDescriptorImageInfo input3dImageInfo{};
-    input3dImageInfo.imageView = inputs.sourceImageView;
-    input3dImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-    VkDescriptorImageInfo previousTopInput3dImageInfo{};
-    previousTopInput3dImageInfo.imageView = inputs.previousTopSourceImageView;
-    previousTopInput3dImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-    VkDescriptorImageInfo previousBottomInput3dImageInfo{};
-    previousBottomInput3dImageInfo.imageView = inputs.previousBottomSourceImageView;
-    previousBottomInput3dImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-    VkDescriptorBufferInfo topPackedBufferInfo{};
-    topPackedBufferInfo.buffer = resource.topPackedBuffer;
-    topPackedBufferInfo.offset = 0;
-    topPackedBufferInfo.range = resource.packedBufferSize;
-
-    VkDescriptorBufferInfo bottomPackedBufferInfo{};
-    bottomPackedBufferInfo.buffer = resource.bottomPackedBuffer;
-    bottomPackedBufferInfo.offset = 0;
-    bottomPackedBufferInfo.range = resource.packedBufferSize;
-
-    VkDescriptorBufferInfo capture3dBufferInfo{};
-    capture3dBufferInfo.buffer = resource.capture3dBuffer;
-    capture3dBufferInfo.offset = 0;
-    capture3dBufferInfo.range = kCapture3dBufferSize;
-
-    if (!resource.descriptorSetReady
-        || resource.cachedRendererImageView != inputs.sourceImageView
-        || resource.cachedPreviousTopRendererImageView != inputs.previousTopSourceImageView
-        || resource.cachedPreviousBottomRendererImageView != inputs.previousBottomSourceImageView)
-    {
-        const u64 descriptorStartNs = PerfNowNs();
-        std::array<VkWriteDescriptorSet, 7> descriptorWrites{};
-        descriptorWrites[0] = makeImageDescriptorWrite(resource.descriptorSet, 0, &outputImageInfo);
-        descriptorWrites[1] = makeImageDescriptorWrite(resource.descriptorSet, 1, &input3dImageInfo);
-        descriptorWrites[2] = makeBufferDescriptorWrite(resource.descriptorSet, 2, &topPackedBufferInfo);
-        descriptorWrites[3] = makeBufferDescriptorWrite(resource.descriptorSet, 3, &bottomPackedBufferInfo);
-        descriptorWrites[4] = makeImageDescriptorWrite(resource.descriptorSet, 4, &previousTopInput3dImageInfo);
-        descriptorWrites[5] = makeBufferDescriptorWrite(resource.descriptorSet, 5, &capture3dBufferInfo);
-        descriptorWrites[6] = makeImageDescriptorWrite(resource.descriptorSet, 6, &previousBottomInput3dImageInfo);
-
-        vkUpdateDescriptorSets(device, static_cast<u32>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
-        composeDescriptorCpuWindow.Add(PerfNowNs() - descriptorStartNs);
-        resource.descriptorSetReady = true;
-        resource.cachedRendererImageView = inputs.sourceImageView;
-        resource.cachedPreviousTopRendererImageView = inputs.previousTopSourceImageView;
-        resource.cachedPreviousBottomRendererImageView = inputs.previousBottomSourceImageView;
-    }
-
-    vkCmdBindPipeline(
-        resource.commandBuffer,
-        VK_PIPELINE_BIND_POINT_COMPUTE,
-        compositorPipeline);
-    vkCmdBindDescriptorSets(
-        resource.commandBuffer,
-        VK_PIPELINE_BIND_POINT_COMPUTE,
-        compositorPipelineLayout,
-        0,
-        1,
-        &resource.descriptorSet,
-        0,
-        nullptr
-    );
-
-    CompositorPushConstants pushConstants{};
-    pushConstants.outputWidth = resource.width;
-    pushConstants.outputHeight = resource.height;
-    pushConstants.scale = inputs.scale;
-    pushConstants.rendererWidth = inputs.rendererWidth;
-    pushConstants.rendererHeight = inputs.rendererHeight;
-    pushConstants.packedStride = inputs.packedStride;
-    pushConstants.screenSwap = inputs.screenSwap;
-    pushConstants.filtering = static_cast<u32>(inputs.filtering);
-    pushConstants.previousTopSourceValid = inputs.previousTopSourceValid ? 1u : 0u;
-    pushConstants.previousBottomSourceValid = inputs.previousBottomSourceValid ? 1u : 0u;
-    pushConstants.captureSourceValid = inputs.capture3dSourceValid ? 1u : 0u;
-    pushConstants.captureSourceScreenSwapValid = inputs.capture3dSourceScreenSwapValid ? 1u : 0u;
-    pushConstants.captureSourceScreenSwap = inputs.capture3dSourceScreenSwap ? 1u : 0u;
-    pushConstants.liveSourceScreenSwap = inputs.liveSourceScreenSwap ? 1u : 0u;
-    pushConstants.class4VramStructuredPair = inputs.class4VramStructuredPair ? 1u : 0u;
-    pushConstants.class4NoAboveVramStructuredPair = inputs.class4NoAboveVramStructuredPair ? 1u : 0u;
-    pushConstants.class4PackedVramMode = fastPathProfile
-        ? inputs.class4PackedVramMode
-        : (inputs.class4PreservePackedVramValid ? 1u : 0u);
-    pushConstants.class4PreservePackedVramScreenSwap = inputs.class4PreservePackedVramScreenSwap ? 1u : 0u;
-    pushConstants.topStructuredHandoffNoCurrent3d = inputs.topStructuredHandoffNoCurrent3d ? 1u : 0u;
-    pushConstants.bottomStructuredHandoffNoCurrent3d = inputs.bottomStructuredHandoffNoCurrent3d ? 1u : 0u;
-    pushConstants.topStructuredHandoffSuppress3d = inputs.topStructuredHandoffSuppress3d ? 1u : 0u;
-    pushConstants.bottomStructuredHandoffSuppress3d = inputs.bottomStructuredHandoffSuppress3d ? 1u : 0u;
-    pushConstants.fastHighresOnlyTop = inputs.fastHighresOnlyTop ? 1u : 0u;
-    pushConstants.fastHighresOnlyBottom = inputs.fastHighresOnlyBottom ? 1u : 0u;
-    pushConstants.compositorMode = inputs.compositorMode;
-    pushConstants.debugView = inputs.debugView;
-
-    const u32 safeScale = inputs.scale == 0u ? 1u : inputs.scale;
-    const u32 screenRegionWidth = kScreenWidth * safeScale;
-    const u32 screenRegionHeight = kScreenHeight * safeScale;
-    const u32 bottomRegionY = (kScreenHeight + 2u) * safeScale;
-    const bool topOwnsLiveHighres = inputs.liveSourceScreenSwap;
-    const auto canReplayComposedLcd = [&](Frame* sourceFrame, bool topLcd) {
-        if (sourceFrame == nullptr || sourceFrame == frame)
-            return false;
-        const auto sourceIt = resources.find(sourceFrame);
-        if (sourceIt == resources.end())
-            return false;
-        const FrameResource& sourceResource = sourceIt->second;
-        const u32 copyY = topLcd ? 0u : bottomRegionY;
-        return sourceResource.hasContent
-            && sourceResource.image != VK_NULL_HANDLE
-            && sourceResource.width == resource.width
-            && sourceResource.height == resource.height
-            && screenRegionWidth <= resource.width
-            && copyY + screenRegionHeight <= resource.height;
-    };
-    constexpr bool kEnableFastHighresRegionalCompose = false;
-    const bool fastHighresRegionalCompose =
-        kEnableFastHighresRegionalCompose
-        &&
-        inputs.fastHighresOnlyTop
-        && inputs.fastHighresOnlyBottom
-        && inputs.previousTopSourceValid
-        && inputs.previousBottomSourceValid
-        && !inputs.needsReadback
-        && resource.width >= screenRegionWidth
-        && resource.height >= bottomRegionY + screenRegionHeight
-        && ((topOwnsLiveHighres && canReplayComposedLcd(lastBottomComposedFrame, false))
-            || (!topOwnsLiveHighres && canReplayComposedLcd(lastTopComposedFrame, true)));
-
-    if (fastHighresRegionalCompose)
-    {
-        const bool regionTopScreen = topOwnsLiveHighres;
-        pushConstants.regionMode = 1u;
-        pushConstants.regionTopScreen = regionTopScreen ? 1u : 0u;
-        pushConstants.regionX = 0u;
-        pushConstants.regionY = regionTopScreen ? 0u : bottomRegionY;
-        pushConstants.regionWidth = screenRegionWidth;
-        pushConstants.regionHeight = screenRegionHeight;
-    }
-
-    const u32 compositorPushConstantSize = sizeof(pushConstants);
-    vkCmdPushConstants(
-        resource.commandBuffer,
-        compositorPipelineLayout,
-        VK_SHADER_STAGE_COMPUTE_BIT,
-        0,
-        compositorPushConstantSize,
-        &pushConstants
-    );
-
-    const u32 dispatchWidth = fastHighresRegionalCompose ? screenRegionWidth : resource.width;
-    const u32 dispatchHeight = fastHighresRegionalCompose ? screenRegionHeight : resource.height;
-    const u32 compositorWorkgroupSize = fastPathProfile ? 16u : 8u;
-    const u32 groupCountX =
-        (dispatchWidth + compositorWorkgroupSize - 1u) / compositorWorkgroupSize;
-    const u32 groupCountY =
-        (dispatchHeight + compositorWorkgroupSize - 1u) / compositorWorkgroupSize;
-    vkCmdDispatch(resource.commandBuffer, groupCountX, groupCountY, 1);
-
-    auto replayPreviousComposedLcd = [&](Frame* sourceFrame, bool topLcd) {
-        if (sourceFrame == nullptr || sourceFrame == frame)
-            return false;
-
-        const auto sourceIt = resources.find(sourceFrame);
-        if (sourceIt == resources.end())
-            return false;
-
-        const FrameResource& sourceResource = sourceIt->second;
-        if (!sourceResource.hasContent
-            || sourceResource.image == VK_NULL_HANDLE
-            || sourceResource.width != resource.width
-            || sourceResource.height != resource.height)
-        {
-            return false;
-        }
-
-        const u32 safeScale = inputs.scale == 0u ? 1u : inputs.scale;
-        const u32 copyWidth = kScreenWidth * safeScale;
-        const u32 copyHeight = kScreenHeight * safeScale;
-        const u32 copyY = topLcd ? 0u : ((kScreenHeight + 2u) * safeScale);
-        if (copyWidth > resource.width || copyY + copyHeight > resource.height)
-            return false;
-
-        VkImageMemoryBarrier sourceToTransfer{};
-        sourceToTransfer.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        sourceToTransfer.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
-        sourceToTransfer.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-        sourceToTransfer.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-        sourceToTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        sourceToTransfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        sourceToTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        sourceToTransfer.image = sourceResource.image;
-        sourceToTransfer.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        sourceToTransfer.subresourceRange.levelCount = 1;
-        sourceToTransfer.subresourceRange.layerCount = 1;
-
-        VkImageMemoryBarrier destToTransfer{};
-        destToTransfer.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        destToTransfer.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-        destToTransfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        destToTransfer.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-        destToTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        destToTransfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        destToTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        destToTransfer.image = resource.image;
-        destToTransfer.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        destToTransfer.subresourceRange.levelCount = 1;
-        destToTransfer.subresourceRange.layerCount = 1;
-
-        std::array<VkImageMemoryBarrier, 2> toTransferBarriers = {sourceToTransfer, destToTransfer};
-        vkCmdPipelineBarrier(
-            resource.commandBuffer,
-            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            0,
-            0,
-            nullptr,
-            0,
-            nullptr,
-            static_cast<u32>(toTransferBarriers.size()),
-            toTransferBarriers.data()
-        );
-
-        VkImageCopy copyRegion{};
-        copyRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        copyRegion.srcSubresource.layerCount = 1;
-        copyRegion.srcOffset = {0, static_cast<int32_t>(copyY), 0};
-        copyRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        copyRegion.dstSubresource.layerCount = 1;
-        copyRegion.dstOffset = {0, static_cast<int32_t>(copyY), 0};
-        copyRegion.extent = {copyWidth, copyHeight, 1};
-        vkCmdCopyImage(
-            resource.commandBuffer,
-            sourceResource.image,
-            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            resource.image,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            1,
-            &copyRegion
-        );
-
-        sourceToTransfer.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-        sourceToTransfer.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-        sourceToTransfer.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        sourceToTransfer.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-        destToTransfer.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        destToTransfer.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
-        destToTransfer.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        destToTransfer.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-        std::array<VkImageMemoryBarrier, 2> fromTransferBarriers = {sourceToTransfer, destToTransfer};
-        vkCmdPipelineBarrier(
-            resource.commandBuffer,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-            0,
-            0,
-            nullptr,
-            0,
-            nullptr,
-            static_cast<u32>(fromTransferBarriers.size()),
-            fromTransferBarriers.data()
-        );
-        return true;
-    };
-
-    Frame* topComposedReplaySource = resource.replayTopComposedFromLatest
-        ? lastTopComposedFrame
-        : resource.previousTopComposedFrame;
-    if (topComposedReplaySource == frame)
-        topComposedReplaySource = nullptr;
-
-    const bool replayTopFromPrevious =
-        resource.replayTopComposedFromPrevious
-        || (fastHighresRegionalCompose && !topOwnsLiveHighres);
-    const bool replayBottomFromPrevious =
-        resource.replayBottomComposedFromPrevious
-        || (fastHighresRegionalCompose && topOwnsLiveHighres);
-    if (fastHighresRegionalCompose && !topOwnsLiveHighres)
-        topComposedReplaySource = lastTopComposedFrame;
-    Frame* bottomComposedReplaySource = fastHighresRegionalCompose && topOwnsLiveHighres
-        ? lastBottomComposedFrame
-        : resource.previousBottomComposedFrame;
-
-    const bool replayedTopComposed = replayTopFromPrevious
-        && replayPreviousComposedLcd(topComposedReplaySource, true);
-    const bool replayedBottomComposed = replayBottomFromPrevious
-        && replayPreviousComposedLcd(bottomComposedReplaySource, false);
-    const bool incompleteReplay =
-        (replayTopFromPrevious && !replayedTopComposed)
-        || (replayBottomFromPrevious && !replayedBottomComposed);
-    if (fastPathProfile && incompleteReplay)
-    {
-        if (areRendererDebugBgObjLogsEnabled() && structuredComp7HandoffDebugLogsRemaining > 0)
-        {
-            melonDS::Platform::Log(
-                melonDS::Platform::LogLevel::Warn,
-                "VulkanLive3D[ReplayComposed]: rejectedIncompleteReplay frameId=%u topRequested=%u topCopied=%u bottomRequested=%u bottomCopied=%u remaining=%u",
-                frame != nullptr ? static_cast<unsigned>(frame->frameId) : 0u,
-                replayTopFromPrevious ? 1u : 0u,
-                replayedTopComposed ? 1u : 0u,
-                replayBottomFromPrevious ? 1u : 0u,
-                replayedBottomComposed ? 1u : 0u,
-                structuredComp7HandoffDebugLogsRemaining);
-            structuredComp7HandoffDebugLogsRemaining--;
+            avisado = true;
+            melonDS::Platform::Log(melonDS::Platform::LogLevel::Warn,
+                "VulkanOutput: faithful composition unavailable; frame not submitted");
         }
         return false;
     }
-    const bool compatibilityReplayDiagnostic =
-        !fastPathProfile
-        && (resource.replayTopComposedFromPrevious
-            || resource.replayBottomComposedFromPrevious)
-        && (!replayedTopComposed || !replayedBottomComposed);
-    if (compatibilityReplayDiagnostic
-        && areRendererDebugBgObjLogsEnabled()
-        && structuredComp7HandoffDebugLogsRemaining > 0)
-    {
-        const auto describeComposedSource = [&](Frame* sourceFrame, bool topLcd) {
-            if (sourceFrame == nullptr)
-                return 0u;
-            const auto sourceIt = resources.find(sourceFrame);
-            if (sourceIt == resources.end())
-                return 1u;
-            const FrameResource& sourceResource = sourceIt->second;
-            if (!sourceResource.hasContent)
-                return 2u;
-            if (sourceResource.image == VK_NULL_HANDLE)
-                return 3u;
-            if (sourceResource.width != resource.width || sourceResource.height != resource.height)
-                return 4u;
-            const u32 safeScale = inputs.scale == 0u ? 1u : inputs.scale;
-            const u32 copyWidth = kScreenWidth * safeScale;
-            const u32 copyHeight = kScreenHeight * safeScale;
-            const u32 copyY = topLcd ? 0u : ((kScreenHeight + 2u) * safeScale);
-            if (copyWidth > resource.width || copyY + copyHeight > resource.height)
-                return 5u;
-            return 9u;
-        };
-        melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Warn,
-            "VulkanLive3D[ReplayComposed]: frameId=%u topRequested=%u topCopied=%u topSourceFrame=%u topSourceState=%u bottomRequested=%u bottomCopied=%u bottomSourceFrame=%u bottomSourceState=%u remaining=%u",
-            frame != nullptr ? static_cast<unsigned>(frame->frameId) : 0u,
-            resource.replayTopComposedFromPrevious ? 1u : 0u,
-            replayedTopComposed ? 1u : 0u,
-            topComposedReplaySource != nullptr ? static_cast<unsigned>(topComposedReplaySource->frameId) : 0u,
-            describeComposedSource(topComposedReplaySource, true),
-            resource.replayBottomComposedFromPrevious ? 1u : 0u,
-            replayedBottomComposed ? 1u : 0u,
-            resource.previousBottomComposedFrame != nullptr ? static_cast<unsigned>(resource.previousBottomComposedFrame->frameId) : 0u,
-            describeComposedSource(resource.previousBottomComposedFrame, false),
-            structuredComp7HandoffDebugLogsRemaining);
-        structuredComp7HandoffDebugLogsRemaining--;
-    }
-
-    if (resource.timestampQueryPool != VK_NULL_HANDLE)
-        vkCmdWriteTimestamp(resource.commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, resource.timestampQueryPool, 1);
-
-    VkImageMemoryBarrier outputReadableBarrier{};
-    outputReadableBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    outputReadableBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
-    outputReadableBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_MEMORY_READ_BIT;
-    outputReadableBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-    outputReadableBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-    outputReadableBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    outputReadableBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    outputReadableBarrier.image = resource.image;
-    outputReadableBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    outputReadableBarrier.subresourceRange.baseMipLevel = 0;
-    outputReadableBarrier.subresourceRange.levelCount = 1;
-    outputReadableBarrier.subresourceRange.baseArrayLayer = 0;
-    outputReadableBarrier.subresourceRange.layerCount = 1;
-
-    vkCmdPipelineBarrier(
-        resource.commandBuffer,
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
-        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-        0,
-        0,
-        nullptr,
-        0,
-        nullptr,
-        1,
-        &outputReadableBarrier
-    );
-
-    composeRecordCpuWindow.Add(PerfNowNs() - recordStartNs);
-    const u64 submitStartNs = PerfNowNs();
-    if (!submitFrameCommand(frame, resource, true))
-        return false;
-    composeSubmitCpuWindow.Add(PerfNowNs() - submitStartNs);
-    }
-
-    resource.hasContent = true;
-    markFramePreviousSourcesSubmitted(frame);
-    {
-        std::lock_guard<std::mutex> temporalLock(temporalReferenceLock);
-        lastTopComposedFrame = frame;
-        lastBottomComposedFrame = frame;
-    }
-    return true;
 }
 
-bool VulkanOutput::dispatchVisibleCompositor(
-    Frame* frame,
-    FrameResource& resource,
-    const VulkanCompositionInputs& inputs,
-    VkImage targetImage,
-    VkImageView targetImageView,
-    VkImageLayout targetLayout,
-    bool targetHasContent,
-    u32 targetWidth,
-    u32 targetHeight,
-    VkImage previousImage,
-    bool previousValid,
-    const VulkanVisibleCompositorRegion* regions,
-    u32 regionCount)
-{
-    if (!melonDS::UsesVulkanFastPath(pipelineProfile)
-        || inputs.pipelineProfile != pipelineProfile
-        || compositorPipeline == VK_NULL_HANDLE)
-    {
-        melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Error,
-            "VulkanOutput: visible compositor requires the FastPath Strategy");
-        return false;
-    }
-
-    std::scoped_lock commandLock(commandPoolLock);
-
-    if (!beginFrameCommand(resource))
-        return false;
-
-    if (resource.timestampQueryPool != VK_NULL_HANDLE)
-        vkCmdWriteTimestamp(resource.commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, resource.timestampQueryPool, 0);
-
-    bool hasPreviousCopyRegion = false;
-    for (u32 i = 0; i < regionCount; i++)
-    {
-        const VulkanVisibleCompositorRegion& region = regions[i];
-        if (region.enabled
-            && region.copyFromPrevious
-            && region.width > 0
-            && region.height > 0
-            && region.x + region.width <= targetWidth
-            && region.y + region.height <= targetHeight)
-        {
-            hasPreviousCopyRegion = true;
-            break;
-        }
-    }
-
-    const bool targetWasGeneral = targetHasContent && targetLayout != VK_IMAGE_LAYOUT_UNDEFINED;
-    const bool needsInitialClear = !targetHasContent || targetLayout == VK_IMAGE_LAYOUT_UNDEFINED;
-    const bool needsTransferDst = needsInitialClear || hasPreviousCopyRegion;
-    if (needsTransferDst)
-    {
-        VkImageMemoryBarrier targetToTransferBarrier{};
-        targetToTransferBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        targetToTransferBarrier.srcAccessMask = targetWasGeneral ? (VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT) : 0;
-        targetToTransferBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        targetToTransferBarrier.oldLayout = targetWasGeneral ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED;
-        targetToTransferBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        targetToTransferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        targetToTransferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        targetToTransferBarrier.image = targetImage;
-        targetToTransferBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        targetToTransferBarrier.subresourceRange.baseMipLevel = 0;
-        targetToTransferBarrier.subresourceRange.levelCount = 1;
-        targetToTransferBarrier.subresourceRange.baseArrayLayer = 0;
-        targetToTransferBarrier.subresourceRange.layerCount = 1;
-
-        vkCmdPipelineBarrier(
-            resource.commandBuffer,
-            targetWasGeneral ? VK_PIPELINE_STAGE_ALL_COMMANDS_BIT : VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            0,
-            0,
-            nullptr,
-            0,
-            nullptr,
-            1,
-            &targetToTransferBarrier
-        );
-
-        if (needsInitialClear)
-        {
-            VkClearColorValue clearColor{};
-            clearColor.float32[3] = 1.0f;
-            VkImageSubresourceRange clearRange{};
-            clearRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            clearRange.baseMipLevel = 0;
-            clearRange.levelCount = 1;
-            clearRange.baseArrayLayer = 0;
-            clearRange.layerCount = 1;
-            vkCmdClearColorImage(
-                resource.commandBuffer,
-                targetImage,
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                &clearColor,
-                1,
-                &clearRange
-            );
-        }
-    }
-    else
-    {
-        VkImageMemoryBarrier targetWritableBarrier{};
-        targetWritableBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        targetWritableBarrier.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
-        targetWritableBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-        targetWritableBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-        targetWritableBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-        targetWritableBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        targetWritableBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        targetWritableBarrier.image = targetImage;
-        targetWritableBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        targetWritableBarrier.subresourceRange.baseMipLevel = 0;
-        targetWritableBarrier.subresourceRange.levelCount = 1;
-        targetWritableBarrier.subresourceRange.baseArrayLayer = 0;
-        targetWritableBarrier.subresourceRange.layerCount = 1;
-
-        vkCmdPipelineBarrier(
-            resource.commandBuffer,
-            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            0,
-            0,
-            nullptr,
-            0,
-            nullptr,
-            1,
-            &targetWritableBarrier
-        );
-    }
-
-    bool copiedFromPrevious = false;
-    const bool canCopyPrevious = hasPreviousCopyRegion && previousValid && previousImage != VK_NULL_HANDLE && previousImage != targetImage;
-    if (canCopyPrevious)
-    {
-        VkImageMemoryBarrier previousToTransfer{};
-        previousToTransfer.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        previousToTransfer.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
-        previousToTransfer.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-        previousToTransfer.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-        previousToTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        previousToTransfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        previousToTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        previousToTransfer.image = previousImage;
-        previousToTransfer.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        previousToTransfer.subresourceRange.baseMipLevel = 0;
-        previousToTransfer.subresourceRange.levelCount = 1;
-        previousToTransfer.subresourceRange.baseArrayLayer = 0;
-        previousToTransfer.subresourceRange.layerCount = 1;
-
-        vkCmdPipelineBarrier(
-            resource.commandBuffer,
-            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            0,
-            0,
-            nullptr,
-            0,
-            nullptr,
-            1,
-            &previousToTransfer
-        );
-
-        for (u32 i = 0; i < regionCount; i++)
-        {
-            const VulkanVisibleCompositorRegion& region = regions[i];
-            if (!region.enabled || !region.copyFromPrevious)
-                continue;
-            if (region.x + region.width > targetWidth || region.y + region.height > targetHeight)
-                continue;
-
-            VkImageCopy copyRegion{};
-            copyRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            copyRegion.srcSubresource.layerCount = 1;
-            copyRegion.srcOffset = {static_cast<int32_t>(region.x), static_cast<int32_t>(region.y), 0};
-            copyRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            copyRegion.dstSubresource.layerCount = 1;
-            copyRegion.dstOffset = {static_cast<int32_t>(region.x), static_cast<int32_t>(region.y), 0};
-            copyRegion.extent = {region.width, region.height, 1};
-            vkCmdCopyImage(
-                resource.commandBuffer,
-                previousImage,
-                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                targetImage,
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                1,
-                &copyRegion
-            );
-            copiedFromPrevious = true;
-        }
-
-        previousToTransfer.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-        previousToTransfer.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-        previousToTransfer.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        previousToTransfer.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-        vkCmdPipelineBarrier(
-            resource.commandBuffer,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-            0,
-            0,
-            nullptr,
-            0,
-            nullptr,
-            1,
-            &previousToTransfer
-        );
-    }
-
-    if (needsTransferDst)
-    {
-        VkImageMemoryBarrier targetToGeneralBarrier{};
-        targetToGeneralBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        targetToGeneralBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        targetToGeneralBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-        targetToGeneralBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        targetToGeneralBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-        targetToGeneralBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        targetToGeneralBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        targetToGeneralBarrier.image = targetImage;
-        targetToGeneralBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        targetToGeneralBarrier.subresourceRange.baseMipLevel = 0;
-        targetToGeneralBarrier.subresourceRange.levelCount = 1;
-        targetToGeneralBarrier.subresourceRange.baseArrayLayer = 0;
-        targetToGeneralBarrier.subresourceRange.layerCount = 1;
-
-        vkCmdPipelineBarrier(
-            resource.commandBuffer,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            0,
-            0,
-            nullptr,
-            0,
-            nullptr,
-            1,
-            &targetToGeneralBarrier
-        );
-    }
-
-    std::array<VkImageMemoryBarrier, 3> renderer3dReadableBarriers{};
-    u32 renderer3dBarrierCount = 0;
-    auto appendRenderer3dBarrier = [&](VkImage image) {
-        if (image == VK_NULL_HANDLE)
-            return;
-        for (u32 i = 0; i < renderer3dBarrierCount; i++)
-        {
-            if (renderer3dReadableBarriers[i].image == image)
-                return;
-        }
-
-        VkImageMemoryBarrier& barrier = renderer3dReadableBarriers[renderer3dBarrierCount++];
-        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        barrier.srcAccessMask =
-            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-            VK_ACCESS_SHADER_WRITE_BIT |
-            VK_ACCESS_TRANSFER_WRITE_BIT |
-            VK_ACCESS_TRANSFER_READ_BIT;
-        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        barrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-        barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.image = image;
-        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        barrier.subresourceRange.baseMipLevel = 0;
-        barrier.subresourceRange.levelCount = 1;
-        barrier.subresourceRange.baseArrayLayer = 0;
-        barrier.subresourceRange.layerCount = 1;
-    };
-    appendRenderer3dBarrier(inputs.sourceImage);
-    if (renderer3dBarrierCount < renderer3dReadableBarriers.size())
-        appendRenderer3dBarrier(inputs.previousTopSourceImage);
-    if (renderer3dBarrierCount < renderer3dReadableBarriers.size())
-        appendRenderer3dBarrier(inputs.previousBottomSourceImage);
-    if (renderer3dBarrierCount > 0)
-    {
-        vkCmdPipelineBarrier(
-            resource.commandBuffer,
-            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            0,
-            0,
-            nullptr,
-            0,
-            nullptr,
-            renderer3dBarrierCount,
-            renderer3dReadableBarriers.data()
-        );
-    }
-
-    VkBufferMemoryBarrier topPackedBarrier{};
-    topPackedBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    topPackedBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-    topPackedBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    topPackedBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    topPackedBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    topPackedBarrier.buffer = resource.topPackedBuffer;
-    topPackedBarrier.offset = 0;
-    topPackedBarrier.size = resource.packedBufferSize;
-
-    VkBufferMemoryBarrier bottomPackedBarrier{};
-    bottomPackedBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    bottomPackedBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-    bottomPackedBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    bottomPackedBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    bottomPackedBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    bottomPackedBarrier.buffer = resource.bottomPackedBuffer;
-    bottomPackedBarrier.offset = 0;
-    bottomPackedBarrier.size = resource.packedBufferSize;
-
-    VkBufferMemoryBarrier capture3dBarrier{};
-    capture3dBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    capture3dBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-    capture3dBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    capture3dBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    capture3dBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    capture3dBarrier.buffer = resource.capture3dBuffer;
-    capture3dBarrier.offset = 0;
-    capture3dBarrier.size = kCapture3dBufferSize;
-
-    std::array<VkBufferMemoryBarrier, 3> compositorBufferBarriers = {
-        topPackedBarrier,
-        bottomPackedBarrier,
-        capture3dBarrier,
-    };
-
-    vkCmdPipelineBarrier(
-        resource.commandBuffer,
-        VK_PIPELINE_STAGE_HOST_BIT,
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        0,
-        0,
-        nullptr,
-        static_cast<u32>(compositorBufferBarriers.size()),
-        compositorBufferBarriers.data(),
-        0,
-        nullptr
-    );
-
-    VkDescriptorImageInfo outputImageInfo{};
-    outputImageInfo.imageView = targetImageView;
-    outputImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-    VkDescriptorImageInfo input3dImageInfo{};
-    input3dImageInfo.imageView = inputs.sourceImageView;
-    input3dImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-    VkDescriptorImageInfo previousTopInput3dImageInfo{};
-    previousTopInput3dImageInfo.imageView = inputs.previousTopSourceImageView;
-    previousTopInput3dImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-    VkDescriptorImageInfo previousBottomInput3dImageInfo{};
-    previousBottomInput3dImageInfo.imageView = inputs.previousBottomSourceImageView;
-    previousBottomInput3dImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-    VkDescriptorBufferInfo topPackedBufferInfo{};
-    topPackedBufferInfo.buffer = resource.topPackedBuffer;
-    topPackedBufferInfo.offset = 0;
-    topPackedBufferInfo.range = resource.packedBufferSize;
-    VkDescriptorBufferInfo bottomPackedBufferInfo{};
-    bottomPackedBufferInfo.buffer = resource.bottomPackedBuffer;
-    bottomPackedBufferInfo.offset = 0;
-    bottomPackedBufferInfo.range = resource.packedBufferSize;
-    VkDescriptorBufferInfo capture3dBufferInfo{};
-    capture3dBufferInfo.buffer = resource.capture3dBuffer;
-    capture3dBufferInfo.offset = 0;
-    capture3dBufferInfo.range = kCapture3dBufferSize;
-
-    std::array<VkWriteDescriptorSet, 7> descriptorWrites{};
-    descriptorWrites[0] = makeImageDescriptorWrite(resource.descriptorSet, 0, &outputImageInfo);
-    descriptorWrites[1] = makeImageDescriptorWrite(resource.descriptorSet, 1, &input3dImageInfo);
-    descriptorWrites[2] = makeBufferDescriptorWrite(resource.descriptorSet, 2, &topPackedBufferInfo);
-    descriptorWrites[3] = makeBufferDescriptorWrite(resource.descriptorSet, 3, &bottomPackedBufferInfo);
-    descriptorWrites[4] = makeImageDescriptorWrite(resource.descriptorSet, 4, &previousTopInput3dImageInfo);
-    descriptorWrites[5] = makeBufferDescriptorWrite(resource.descriptorSet, 5, &capture3dBufferInfo);
-    descriptorWrites[6] = makeImageDescriptorWrite(resource.descriptorSet, 6, &previousBottomInput3dImageInfo);
-    vkUpdateDescriptorSets(device, static_cast<u32>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
-    resource.descriptorSetReady = false;
-
-    vkCmdBindPipeline(resource.commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, compositorPipeline);
-    vkCmdBindDescriptorSets(
-        resource.commandBuffer,
-        VK_PIPELINE_BIND_POINT_COMPUTE,
-        compositorPipelineLayout,
-        0,
-        1,
-        &resource.descriptorSet,
-        0,
-        nullptr
-    );
-
-    bool dispatchedAnyRegion = false;
-    for (u32 i = 0; i < regionCount; i++)
-    {
-        const VulkanVisibleCompositorRegion& region = regions[i];
-        if (!region.enabled || region.copyFromPrevious || region.width == 0 || region.height == 0)
-            continue;
-        if (region.x + region.width > targetWidth || region.y + region.height > targetHeight)
-            continue;
-
-        CompositorPushConstants pushConstants{};
-        pushConstants.outputWidth = targetWidth;
-        pushConstants.outputHeight = targetHeight;
-        pushConstants.scale = inputs.scale;
-        pushConstants.rendererWidth = inputs.rendererWidth;
-        pushConstants.rendererHeight = inputs.rendererHeight;
-        pushConstants.packedStride = inputs.packedStride;
-        pushConstants.screenSwap = inputs.screenSwap;
-        pushConstants.filtering = static_cast<u32>(inputs.filtering);
-        pushConstants.previousTopSourceValid = inputs.previousTopSourceValid ? 1u : 0u;
-        pushConstants.previousBottomSourceValid = inputs.previousBottomSourceValid ? 1u : 0u;
-        pushConstants.captureSourceValid = inputs.capture3dSourceValid ? 1u : 0u;
-        pushConstants.captureSourceScreenSwapValid = inputs.capture3dSourceScreenSwapValid ? 1u : 0u;
-        pushConstants.captureSourceScreenSwap = inputs.capture3dSourceScreenSwap ? 1u : 0u;
-        pushConstants.liveSourceScreenSwap = inputs.liveSourceScreenSwap ? 1u : 0u;
-        pushConstants.class4VramStructuredPair = inputs.class4VramStructuredPair ? 1u : 0u;
-        pushConstants.class4NoAboveVramStructuredPair = inputs.class4NoAboveVramStructuredPair ? 1u : 0u;
-        pushConstants.class4PackedVramMode = inputs.class4PackedVramMode;
-        pushConstants.class4PreservePackedVramScreenSwap = inputs.class4PreservePackedVramScreenSwap ? 1u : 0u;
-        pushConstants.topStructuredHandoffNoCurrent3d = inputs.topStructuredHandoffNoCurrent3d ? 1u : 0u;
-        pushConstants.bottomStructuredHandoffNoCurrent3d = inputs.bottomStructuredHandoffNoCurrent3d ? 1u : 0u;
-        pushConstants.topStructuredHandoffSuppress3d = inputs.topStructuredHandoffSuppress3d ? 1u : 0u;
-        pushConstants.bottomStructuredHandoffSuppress3d = inputs.bottomStructuredHandoffSuppress3d ? 1u : 0u;
-        pushConstants.regionMode = 1u;
-        pushConstants.regionTopScreen = region.topScreen ? 1u : 0u;
-        pushConstants.regionX = region.x;
-        pushConstants.regionY = region.y;
-        pushConstants.regionWidth = region.width;
-        pushConstants.regionHeight = region.height;
-        pushConstants.fastHighresOnlyTop = inputs.fastHighresOnlyTop ? 1u : 0u;
-        pushConstants.fastHighresOnlyBottom = inputs.fastHighresOnlyBottom ? 1u : 0u;
-        pushConstants.compositorMode = inputs.compositorMode;
-        pushConstants.debugView = inputs.debugView;
-
-        vkCmdPushConstants(
-            resource.commandBuffer,
-            compositorPipelineLayout,
-            VK_SHADER_STAGE_COMPUTE_BIT,
-            0,
-            sizeof(pushConstants),
-            &pushConstants
-        );
-
-        vkCmdDispatch(resource.commandBuffer, (region.width + 15u) / 16u, (region.height + 15u) / 16u, 1);
-        dispatchedAnyRegion = true;
-    }
-
-    if (resource.timestampQueryPool != VK_NULL_HANDLE)
-        vkCmdWriteTimestamp(resource.commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, resource.timestampQueryPool, 1);
-
-    VkImageMemoryBarrier targetReadableBarrier{};
-    targetReadableBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    targetReadableBarrier.srcAccessMask =
-        VK_ACCESS_TRANSFER_WRITE_BIT |
-        (dispatchedAnyRegion ? VK_ACCESS_SHADER_WRITE_BIT : 0);
-    targetReadableBarrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_SHADER_READ_BIT;
-    targetReadableBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-    targetReadableBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-    targetReadableBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    targetReadableBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    targetReadableBarrier.image = targetImage;
-    targetReadableBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    targetReadableBarrier.subresourceRange.baseMipLevel = 0;
-    targetReadableBarrier.subresourceRange.levelCount = 1;
-    targetReadableBarrier.subresourceRange.baseArrayLayer = 0;
-    targetReadableBarrier.subresourceRange.layerCount = 1;
-
-    vkCmdPipelineBarrier(
-        resource.commandBuffer,
-        VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-        0,
-        0,
-        nullptr,
-        0,
-        nullptr,
-        1,
-        &targetReadableBarrier
-    );
-
-    (void)copiedFromPrevious;
-    if (!submitFrameCommand(frame, resource, true))
-        return false;
-
-    markFramePreviousSourcesSubmitted(frame);
-    return dispatchedAnyRegion || copiedFromPrevious;
-}
-
-bool VulkanOutput::validateCompositorSubmission(Frame* frame, const melonDS::VulkanRenderer3D& renderer3D, int scale, u64 waitTimeoutNs)
-{
-    if (!initialized || frame == nullptr || scale < 1 || !renderer3D.HasColorTarget())
-        return false;
-
-    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
-    auto iterator = resources.find(frame);
-    if (iterator == resources.end())
-        return false;
-
-    FrameResource& resource = iterator->second;
-    if (resource.topPackedMapped == nullptr || resource.bottomPackedMapped == nullptr || resource.packedBufferSize == 0)
-        return false;
-    std::memset(resource.topPackedMapped, 0, static_cast<size_t>(resource.packedBufferSize));
-    std::memset(resource.bottomPackedMapped, 0, static_cast<size_t>(resource.packedBufferSize));
-    resource.topPackedPlane0Zeroed = true;
-    resource.topPackedPlane1Zeroed = true;
-    resource.topPackedControlZeroed = true;
-    resource.bottomPackedPlane0Zeroed = true;
-    resource.bottomPackedPlane1Zeroed = true;
-    resource.bottomPackedControlZeroed = true;
-    resource.hasPreparedInputs = true;
-
-    VulkanCompositionInputs inputs{};
-    if (!buildCompositionInputs(
-            frame,
-            renderer3D,
-            scale,
-            VulkanFilterMode::Nearest,
-            pipelineProfile,
-            false,
-            false,
-            true,
-            inputs))
-        return false;
-
-    if (!dispatchCompositor(frame, resource, inputs))
-        return false;
-
-    if (!waitForFrame(frame, waitTimeoutNs))
-    {
-        melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Error,
-            "VulkanOutput: validateCompositorSubmission timed out (timeoutNs=%llu)",
-            static_cast<unsigned long long>(waitTimeoutNs)
-        );
-        return false;
-    }
-
-    return true;
-}
 
 bool VulkanOutput::validateFrameSubmission(Frame* frame, u64 waitTimeoutNs)
 {
-    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     std::scoped_lock commandLock(commandPoolLock);
 
     if (!initialized || frame == nullptr)
@@ -14019,7 +10211,8 @@ bool VulkanOutput::validateRuntimePath(u32 width, u32 height, const melonDS::Vul
     return validationResult;
 }
 
-bool VulkanOutput::waitForFrame(const Frame* frame, u64 timeoutNs)
+bool VulkanOutput::waitForFrame(const Frame* frame, u64 timeoutNs,
+                                WaitSite site)
 {
     if (!initialized || frame == nullptr || frame->backend != FrameBackend::VulkanImage)
     {
@@ -14047,23 +10240,13 @@ bool VulkanOutput::waitForFrame(const Frame* frame, u64 timeoutNs)
     }
     else
     {
-        VkFence fenceToWait = VK_NULL_HANDLE;
-        {
-            std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
-            auto iterator = resources.find(const_cast<Frame*>(frame));
-            if (iterator == resources.end())
-            {
-                waitFailureResourceMissing++;
-                return false;
-            }
-            fenceToWait = iterator->second.submitFence;
-        }
-        if (fenceToWait == VK_NULL_HANDLE)
+        auto iterator = resources.find(const_cast<Frame*>(frame));
+        if (iterator == resources.end())
         {
             waitFailureResourceMissing++;
             return false;
         }
-        waitSucceeded = vkWaitForFences(device, 1, &fenceToWait, VK_TRUE, timeoutNs) == VK_SUCCESS;
+        waitSucceeded = vkWaitForFences(device, 1, &iterator->second.submitFence, VK_TRUE, timeoutNs) == VK_SUCCESS;
     }
 
     if (!waitSucceeded)
@@ -14075,14 +10258,16 @@ bool VulkanOutput::waitForFrame(const Frame* frame, u64 timeoutNs)
         return false;
     }
 
-    waitCpuWindow.Add(PerfNowNs() - waitStartNs);
+    const u64 waitElapsedNs = PerfNowNs() - waitStartNs;
+    waitCpuWindow.Add(waitElapsedNs);
+    if (site == WaitSite::Presentation)
+        waitPresentationCpuWindow.Add(waitElapsedNs);
+    else
+        waitOtherCpuWindow.Add(waitElapsedNs);
 
-    {
-        std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
-        auto iterator = resources.find(const_cast<Frame*>(frame));
-        if (iterator != resources.end())
-            consumeFrameGpuTiming(iterator->second);
-    }
+    auto iterator = resources.find(const_cast<Frame*>(frame));
+    if (iterator != resources.end())
+        consumeFrameGpuTiming(iterator->second);
 
     logPerformanceIfNeeded();
     return true;
@@ -14096,28 +10281,18 @@ bool VulkanOutput::getPreparedRenderer3dDimensions(const Frame* frame, u32& outW
     if (!initialized || frame == nullptr)
         return false;
 
-    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
+    std::scoped_lock lifetimeLock(faithfulLifetimeLock);
     auto iterator = resources.find(const_cast<Frame*>(frame));
     if (iterator == resources.end())
         return false;
 
     const FrameResource& resource = iterator->second;
-    if (!resource.hasPreparedInputs)
+    if (!resource.hasPublishedRenderer3dForFrame(*frame))
         return false;
 
-    if (resource.hasRenderer3dSnapshot
-        && resource.renderer3dSnapshot != VK_NULL_HANDLE)
-    {
-        outWidth = resource.snapshotWidth;
-        outHeight = resource.snapshotHeight;
-    }
-    else if (resource.hasRetainedRenderer3dSource
-        && resource.retainedRenderer3dSourceImage != VK_NULL_HANDLE)
-    {
-        outWidth = resource.retainedRenderer3dSourceWidth;
-        outHeight = resource.retainedRenderer3dSourceHeight;
-    }
-    return outWidth > 0 && outHeight > 0;
+    outWidth = resource.snapshotWidth;
+    outHeight = resource.snapshotHeight;
+    return true;
 }
 
 bool VulkanOutput::getPreparedRenderer3dCaptureFrame(
@@ -14130,34 +10305,8 @@ bool VulkanOutput::getPreparedRenderer3dCaptureFrame(
     outWidth = 0;
     outHeight = 0;
 
-    if (!initialized || frame == nullptr)
-        return false;
-
-    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
-    auto iterator = resources.find(const_cast<Frame*>(frame));
-    if (iterator == resources.end())
-        return false;
-
-    FrameResource& resource = const_cast<FrameResource&>(iterator->second);
-    if (!resource.hasPreparedInputs || !resource.hasPreparedCapture3dSource)
-        return false;
-
-    if (!resource.preparedCapture3dRgbaValid && resource.capture3dMapped != nullptr)
-    {
-        const u64 lazyRgbaStartNs = PerfNowNs();
-        const auto* capture3d = static_cast<const u32*>(resource.capture3dMapped);
-        for (size_t i = 0; i < resource.preparedCapture3dSource.size(); i++)
-            resource.preparedCapture3dSource[i] = expandPackedColor6ToRgba8(capture3d[i]);
-        resource.preparedCapture3dRgbaValid = true;
-        prepareCaptureLazyRgbaCpuWindow.Add(PerfNowNs() - lazyRgbaStartNs);
-    }
-    if (!resource.preparedCapture3dRgbaValid)
-        return false;
-
-    outPixels = resource.preparedCapture3dSource.data();
-    outWidth = kScreenWidth;
-    outHeight = kScreenHeight;
-    return true;
+    (void)frame;
+    return false;
 }
 
 bool VulkanOutput::getPreparedPackedBuffers(
@@ -14174,24 +10323,8 @@ bool VulkanOutput::getPreparedPackedBuffers(
     outPackedHeight = 0;
     outScreenSwap = false;
 
-    if (!initialized || frame == nullptr)
-        return false;
-
-    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
-    auto iterator = resources.find(const_cast<Frame*>(frame));
-    if (iterator == resources.end())
-        return false;
-
-    const FrameResource& resource = iterator->second;
-    if (!resource.hasPreparedInputs || resource.topPackedMapped == nullptr || resource.bottomPackedMapped == nullptr)
-        return false;
-
-    outTopPacked = static_cast<const u32*>(resource.topPackedMapped);
-    outBottomPacked = static_cast<const u32*>(resource.bottomPackedMapped);
-    outPackedStride = kAcceleratedStride;
-    outPackedHeight = kScreenHeight;
-    outScreenSwap = resource.screenSwap;
-    return true;
+    (void)frame;
+    return false;
 }
 
 bool VulkanOutput::getPreparedSoftPackedFrameDebugView(
@@ -14203,7 +10336,6 @@ bool VulkanOutput::getPreparedSoftPackedFrameDebugView(
     if (!initialized || frame == nullptr)
         return false;
 
-    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     auto iterator = resources.find(const_cast<Frame*>(frame));
     if (iterator == resources.end())
         return false;
@@ -14244,7 +10376,6 @@ bool VulkanOutput::isFrameReady(const Frame* frame) const
             return completedValue >= frame->renderTimelineValue;
     }
 
-    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     auto iterator = resources.find(const_cast<Frame*>(frame));
     if (iterator == resources.end())
         return false;
@@ -14260,7 +10391,6 @@ bool VulkanOutput::isFrameReferencedAsPendingPreviousSource(const Frame* frame) 
     if (!initialized || frame == nullptr)
         return false;
 
-    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     std::lock_guard<std::mutex> lock(temporalReferenceLock);
     if (frame == lastTopRendererSourceFrame
         || frame == lastBottomRendererSourceFrame
@@ -14289,29 +10419,64 @@ void VulkanOutput::consumeFrameGpuTiming(FrameResource& resource)
     if (!resource.timestampPending || resource.timestampQueryPool == VK_NULL_HANDLE || timestampPeriodNs <= 0.0f)
         return;
 
-    u64 timestamps[2]{};
+    u64 timestamps[8]{};
+    const u32 queryCount = resource.faithfulTimestampBreakdownPending
+        ? 8u : 2u;
     const VkResult queryResult = vkGetQueryPoolResults(
         device,
         resource.timestampQueryPool,
         0,
-        2,
-        sizeof(timestamps),
+        queryCount,
+        static_cast<size_t>(queryCount) * sizeof(u64),
         timestamps,
         sizeof(u64),
         VK_QUERY_RESULT_64_BIT
     );
-    if (queryResult == VK_SUCCESS && timestamps[1] >= timestamps[0])
+    if (queryResult == VK_SUCCESS)
     {
-        const u64 gpuTimeNs = static_cast<u64>(static_cast<double>(timestamps[1] - timestamps[0]) * static_cast<double>(timestampPeriodNs));
-        compositorGpuWindow.Add(gpuTimeNs);
+        const auto elapsedNs = [&](u32 begin, u32 end) -> u64 {
+            if (end >= queryCount || timestamps[end] < timestamps[begin])
+                return 0u;
+            return static_cast<u64>(
+                static_cast<double>(timestamps[end] - timestamps[begin])
+                * static_cast<double>(timestampPeriodNs));
+        };
+        const u32 finalQuery = queryCount - 1u;
+        compositorGpuWindow.Add(elapsedNs(0u, finalQuery));
+        if (resource.faithfulTimestampBreakdownPending)
+        {
+            faithfulSnapshotGpuWindow.Add(elapsedNs(0u, 1u));
+            faithfulObjGpuWindow.Add(elapsedNs(1u, 2u));
+            faithfulB1GpuWindow.Add(elapsedNs(2u, 3u));
+            faithfulCaptureGpuWindow.Add(elapsedNs(3u, 4u));
+            faithfulCompactGpuWindow.Add(elapsedNs(4u, 5u));
+            faithfulFinalGpuWindow.Add(elapsedNs(5u, 6u));
+            faithfulReadbackGpuWindow.Add(elapsedNs(6u, 7u));
+        }
     }
 
     resource.timestampPending = false;
+    resource.faithfulTimestampBreakdownPending = false;
+}
+
+static bool perfForzadoPorPropiedadVO()
+{
+#ifdef __ANDROID__
+    static const bool forzado = [] {
+        char v[92] = {};
+        return __system_property_get("debug.melonds.perf", v) > 0 && v[0] == '1';
+    }();
+    return forzado;
+#else
+    return false;
+#endif
 }
 
 void VulkanOutput::logPerformanceIfNeeded()
 {
-    if (!areRendererDebugToolsEnabled())
+
+    static const bool perfFuerza = std::getenv("MELON_PERF_FUERZA") != nullptr;
+    if (!perfFuerza && !perfForzadoPorPropiedadVO() && !areRendererDebugToolsEnabled())
         return;
 
     if (!composeCpuWindow.Ready())
@@ -14326,6 +10491,20 @@ void VulkanOutput::logPerformanceIfNeeded()
     const PerfSampleWindow<120>::Summary submitSummary = composeSubmitCpuWindow.SummarizeAndReset();
     const PerfSampleWindow<120>::Summary waitSummary = waitCpuWindow.SummarizeAndReset();
     const PerfSampleWindow<120>::Summary gpuSummary = compositorGpuWindow.SummarizeAndReset();
+    const PerfSampleWindow<120>::Summary faithfulSnapshotGpuSummary =
+        faithfulSnapshotGpuWindow.SummarizeAndReset();
+    const PerfSampleWindow<120>::Summary faithfulObjGpuSummary =
+        faithfulObjGpuWindow.SummarizeAndReset();
+    const PerfSampleWindow<120>::Summary faithfulB1GpuSummary =
+        faithfulB1GpuWindow.SummarizeAndReset();
+    const PerfSampleWindow<120>::Summary faithfulCaptureGpuSummary =
+        faithfulCaptureGpuWindow.SummarizeAndReset();
+    const PerfSampleWindow<120>::Summary faithfulCompactGpuSummary =
+        faithfulCompactGpuWindow.SummarizeAndReset();
+    const PerfSampleWindow<120>::Summary faithfulFinalGpuSummary =
+        faithfulFinalGpuWindow.SummarizeAndReset();
+    const PerfSampleWindow<120>::Summary faithfulReadbackGpuSummary =
+        faithfulReadbackGpuWindow.SummarizeAndReset();
 
     melonDS::Platform::Log(
         melonDS::Platform::LogLevel::Warn,
@@ -14355,6 +10534,31 @@ void VulkanOutput::logPerformanceIfNeeded()
         static_cast<unsigned long long>(waitFailureFiniteTimeout),
         static_cast<unsigned long long>(waitFailureInfinite)
     );
+    {
+
+        const PerfSampleWindow<120>::Summary waitPresentation =
+            waitPresentationCpuWindow.SummarizeAndReset();
+        const PerfSampleWindow<120>::Summary waitOther =
+            waitOtherCpuWindow.SummarizeAndReset();
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Warn,
+            "VulkanPerf[OutputWait]: presentation avg=%.3fms p95=%.3fms n=%zu other avg=%.3fms p95=%.3fms n=%zu",
+            PerfNsToMs(waitPresentation.MeanNs), PerfNsToMs(waitPresentation.P95Ns), waitPresentation.Count,
+            PerfNsToMs(waitOther.MeanNs), PerfNsToMs(waitOther.P95Ns), waitOther.Count);
+    }
+    if (faithfulSnapshotGpuSummary.Count != 0u)
+    {
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Warn,
+            "VulkanPerf[FaithfulGpuPasses]: snapshot=%.3fms obj=%.3fms b1=%.3fms capture=%.3fms compact=%.3fms final=%.3fms readback=%.3fms",
+            PerfNsToMs(faithfulSnapshotGpuSummary.MeanNs),
+            PerfNsToMs(faithfulObjGpuSummary.MeanNs),
+            PerfNsToMs(faithfulB1GpuSummary.MeanNs),
+            PerfNsToMs(faithfulCaptureGpuSummary.MeanNs),
+            PerfNsToMs(faithfulCompactGpuSummary.MeanNs),
+            PerfNsToMs(faithfulFinalGpuSummary.MeanNs),
+            PerfNsToMs(faithfulReadbackGpuSummary.MeanNs));
+    }
     waitFailureInvalidFrame = 0;
     waitFailureTimelineZero = 0;
     waitFailureResourceMissing = 0;
@@ -14451,6 +10655,7 @@ bool VulkanOutput::readResourceImagePixels(
     size_t destinationPixelCount,
     u64 waitTimeoutNs)
 {
+
     std::scoped_lock commandLock(commandPoolLock);
 
     if (!initialized || frame == nullptr || destinationPixels == nullptr || image == VK_NULL_HANDLE || width == 0 || height == 0)
@@ -14596,59 +10801,38 @@ bool VulkanOutput::readPreparedRenderer3dPixels(
     if (!initialized || frame == nullptr)
         return false;
 
-    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
+    std::scoped_lock lifetimeLock(faithfulLifetimeLock);
     auto iterator = resources.find(const_cast<Frame*>(frame));
     if (iterator == resources.end())
         return false;
 
     FrameResource& resource = iterator->second;
-    if (!resource.hasPreparedInputs)
+    if (!resource.hasPublishedRenderer3dForFrame(*frame))
         return false;
 
-    VkImage sourceImage = VK_NULL_HANDLE;
-    const char* sourceKind = "none";
-    if (resource.hasRenderer3dSnapshot
-        && resource.renderer3dSnapshot != VK_NULL_HANDLE)
-    {
-        sourceImage = resource.renderer3dSnapshot;
-        outWidth = resource.snapshotWidth;
-        outHeight = resource.snapshotHeight;
-        sourceKind = "owned_snapshot";
-    }
-    else if (resource.hasRetainedRenderer3dSource
-        && resource.retainedRenderer3dSourceImage != VK_NULL_HANDLE)
-    {
-        sourceImage = resource.retainedRenderer3dSourceImage;
-        outWidth = resource.retainedRenderer3dSourceWidth;
-        outHeight = resource.retainedRenderer3dSourceHeight;
-        sourceKind = "retained_frame_source";
-    }
-    else
-    {
-        return false;
-    }
+    outWidth = resource.snapshotWidth;
+    outHeight = resource.snapshotHeight;
 
     if (areRendererDebugToolsEnabled())
     {
         melonDS::Platform::Log(
             melonDS::Platform::LogLevel::Warn,
-            "VulkanDebug[Renderer3dReadback]: frame=%llu source=%s size=%ux%u labelSwap=%u zeroPolygonsKnown=%u zeroPolygons=%u token=%llu",
-            static_cast<unsigned long long>(resource.softPackedFrameId),
-            sourceKind,
+            "VulkanDebug[Renderer3dReadback]: frame=%llu generation=%llu source=owned_snapshot size=%ux%u labelSwap=%u zeroPolygons=%u sourceIdentityValid=%u sourceEpoch=%llu sourceSequence=%llu",
+            static_cast<unsigned long long>(frame->frameId),
+            static_cast<unsigned long long>(frame->publicationGeneration),
             outWidth,
             outHeight,
-            resource.hasRenderer3dSnapshot
-                ? (resource.renderer3dSnapshotScreenSwap ? 1u : 0u)
-                : (resource.retainedRenderer3dSourceScreenSwap ? 1u : 0u),
-            resource.hasRenderer3dSnapshot ? 1u : 0u,
-            resource.hasRenderer3dSnapshot && resource.renderer3dSnapshotZeroPolygons ? 1u : 0u,
-            static_cast<unsigned long long>(resource.renderer3dPresentationToken));
+            resource.renderer3dSnapshotScreenSwap ? 1u : 0u,
+            resource.renderer3dSnapshotZeroPolygons ? 1u : 0u,
+            resource.renderer3dSnapshotSourceIdentityValid ? 1u : 0u,
+            static_cast<unsigned long long>(resource.renderer3dSnapshotSourceEpoch),
+            static_cast<unsigned long long>(resource.renderer3dSnapshotSourceSequence));
     }
 
     return readResourceImagePixels(
         resource,
         frame,
-        sourceImage,
+        resource.renderer3dSnapshot,
         outWidth,
         outHeight,
         destinationPixels,
@@ -14661,7 +10845,7 @@ bool VulkanOutput::readFramePixels(const Frame* frame, u32* destinationPixels, s
     if (!initialized || frame == nullptr || destinationPixels == nullptr)
         return false;
 
-    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
+    std::scoped_lock lifetimeLock(faithfulLifetimeLock);
     auto iterator = resources.find(const_cast<Frame*>(frame));
     if (iterator == resources.end())
         return false;
@@ -14683,7 +10867,6 @@ VkImage VulkanOutput::getFrameImage(const Frame* frame) const
     if (frame == nullptr)
         return VK_NULL_HANDLE;
 
-    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     auto iterator = resources.find(const_cast<Frame*>(frame));
     if (iterator == resources.end())
         return VK_NULL_HANDLE;
@@ -14696,7 +10879,6 @@ VkImageView VulkanOutput::getFrameImageView(const Frame* frame) const
     if (frame == nullptr)
         return VK_NULL_HANDLE;
 
-    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     auto iterator = resources.find(const_cast<Frame*>(frame));
     if (iterator == resources.end())
         return VK_NULL_HANDLE;

@@ -1,80 +1,68 @@
-#include "MicInputOboeCallback.h"
-#include "types.h"
 #include <algorithm>
 #include <cmath>
+#include "MicInputOboeCallback.h"
 
-#define MIC_GAIN 10
+using namespace melonDS;
 
 std::atomic<bool> MicInputOboeCallback::agcEnabled{true};
 std::atomic<float> MicInputOboeCallback::noiseGateThreshold{350.0f};
 
-MicInputOboeCallback::MicInputOboeCallback(int bufferSize, std::mutex& micBufferMutex, std::ostream* recordingStream) : bufferSize(bufferSize), micBufferMutex(micBufferMutex), _recordingStream(recordingStream) {
+MicInputOboeCallback::MicInputOboeCallback(int bufferSize, std::mutex& micBufferMutex, int gain, std::ostream* recordingStream)
+    : bufferSize(bufferSize), micBufferMutex(micBufferMutex), gain(std::clamp(gain, 1, 10)), _recordingStream(recordingStream) {
     this->buffer = new s16[bufferSize];
 }
 
-oboe::DataCallbackResult
-MicInputOboeCallback::onAudioReady(oboe::AudioStream *stream, void *audioData, int32_t numFrames) {
+void MicInputOboeCallback::setGain(int newGain) {
+    this->gain.store(std::clamp(newGain, 1, 10), std::memory_order_relaxed);
+}
+
+oboe::DataCallbackResult MicInputOboeCallback::onAudioReady(oboe::AudioStream *stream, void *audioData, int32_t numFrames) {
     if (numFrames <= 0 || audioData == nullptr)
         return oboe::DataCallbackResult::Continue;
 
-    s16* input = (s16*) audioData;
+    s16* input = static_cast<s16*>(audioData);
+    std::lock_guard<std::mutex> lock(micBufferMutex);
+    int maxlen = bufferSize;
+    int outlen = static_cast<int>(std::round((numFrames * 44100.0) / 48000.0));
 
-    float f_len_out = (numFrames * 47743.4659091 * (60.0/60.0)) / (float)stream->getSampleRate();
-    f_len_out += micSampleFrac;
-    int len_out = (int)floor(f_len_out);
-    micSampleFrac = f_len_out - len_out;
-
-    std::unique_lock bufferLock(micBufferMutex);
-    int maxlen = bufferSize / sizeof(s16);
-    int outlen = len_out;
-
-    // alter output length slightly to keep the buffer happy
-    if (bufferCount < (maxlen >> 2))
-        outlen += 6;
-    else if (bufferCount > (3 * (maxlen >> 2)))
-        outlen -= 6;
+    if ((bufferCount + outlen) > maxlen)
+    {
+        outlen = maxlen - bufferCount;
+    }
 
     if (outlen <= 0)
         return oboe::DataCallbackResult::Continue;
 
-    float res_incr = numFrames / (float)outlen;
+    float res_incr = numFrames / static_cast<float>(outlen);
     float res_timer = -0.5f;
     int res_pos = 0;
 
+    const int userGain = gain.load(std::memory_order_relaxed);
+    const bool useAgc = agcEnabled.load(std::memory_order_relaxed);
+    const float gateThreshold = std::clamp(noiseGateThreshold.load(std::memory_order_relaxed), 0.0f, 1600.0f);
+
     for (int i = 0; i < outlen; i++)
     {
-        if (bufferCount >= maxlen)
-            break;
-
         int idx1 = std::clamp(res_pos, 0, numFrames - 1);
         int idx2 = std::min(idx1 + 1, numFrames - 1);
         s16 s1 = input[idx1];
         s16 s2 = input[idx2];
 
         const float interpFrac = std::max(0.0f, res_timer);
-        float s = (float)s1 + ((s2 - s1) * interpFrac);
+        float s = static_cast<float>(s1) + ((s2 - s1) * interpFrac);
 
-        if (agcEnabled.load(std::memory_order_relaxed))
+        if (useAgc)
         {
-            // 1st order High Pass Filter (DC offset & low rumble removal)
-            float x = s;
-            float hp = x - prevX + 0.992f * prevHp;
-            prevX = x;
+            float hp = s - prevX + 0.992f * prevHp;
+            prevX = s;
             prevHp = hp;
 
-            // Smooth envelope detector
             float absSample = std::abs(hp);
             if (absSample > envelope)
-            {
                 envelope = envelope * 0.90f + absSample * 0.10f;
-            }
             else
-            {
                 envelope = envelope * 0.998f + absSample * 0.002f;
-            }
 
-            // Noise gate: suppress ambient room noise below configurable threshold
-            const float gateThreshold = std::clamp(noiseGateThreshold.load(std::memory_order_relaxed), 0.0f, 1600.0f);
             float gate = 1.0f;
             if (gateThreshold > 1.0f && envelope < gateThreshold)
             {
@@ -82,51 +70,44 @@ MicInputOboeCallback::onAudioReady(oboe::AudioStream *stream, void *audioData, i
                 gate = std::clamp((envelope - kneeFloor) / std::max(gateThreshold - kneeFloor, 1.0f), 0.0f, 1.0f);
             }
 
-            // Adaptive Gain Control (AGC): normalize voice & blow towards ~22000
             float targetGain = (envelope > 120.0f) ? (22000.0f / envelope) : 1.0f;
             targetGain = std::clamp(targetGain, 0.5f, 16.0f);
             currentGain = currentGain * 0.995f + targetGain * 0.005f;
 
-            float processed = hp * currentGain * gate;
+            float gainBoost = 1.0f + (static_cast<float>(userGain - 1) * 0.15f);
+            float processed = hp * currentGain * gate * gainBoost;
 
-            // Soft limiter to prevent digital clipping when exceeding ~28000
             constexpr float LIMIT_THRESHOLD = 28000.0f;
             if (processed > LIMIT_THRESHOLD)
-            {
                 processed = LIMIT_THRESHOLD + (32767.0f - LIMIT_THRESHOLD) * std::tanh((processed - LIMIT_THRESHOLD) / (32767.0f - LIMIT_THRESHOLD));
-            }
             else if (processed < -LIMIT_THRESHOLD)
-            {
                 processed = -LIMIT_THRESHOLD + (-32768.0f - (-LIMIT_THRESHOLD)) * std::tanh((-processed - LIMIT_THRESHOLD) / (32768.0f - LIMIT_THRESHOLD));
-            }
 
             buffer[bufferOffset] = static_cast<s16>(std::clamp<float>(std::round(processed), -32768.0f, 32767.0f));
         }
         else
         {
-            buffer[bufferOffset] = static_cast<s16>(std::clamp<double>(static_cast<double>(std::round(s)) * MIC_GAIN, -32768.0, 32767.0));
+            const float manualScale = static_cast<float>(userGain);
+            buffer[bufferOffset] = static_cast<s16>(std::clamp<double>(static_cast<double>(std::round(s)) * manualScale, -32768.0, 32767.0));
         }
 
         bufferOffset++;
         if (bufferOffset >= maxlen)
             bufferOffset = 0;
 
-        bufferCount++;
-
         res_timer += res_incr;
-        while (res_timer >= 1.0)
+        while (res_timer >= 1.0f)
         {
-            res_timer -= 1.0;
+            res_timer -= 1.0f;
             res_pos++;
         }
     }
 
-    // Never perform blocking std::ostream disk I/O inside the real-time Oboe audio callback.
     (void)_recordingStream;
-
+    bufferCount += outlen;
     return oboe::DataCallbackResult::Continue;
 }
 
 MicInputOboeCallback::~MicInputOboeCallback() {
-    delete[] this->buffer;
+    delete[] buffer;
 }

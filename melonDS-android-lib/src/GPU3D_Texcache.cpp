@@ -99,8 +99,11 @@ void ConvertBitmapTexture(u32 width, u32 height, u32* output, u32 addr, GPU& gpu
 template void ConvertBitmapTexture<outputFmt_RGB6A5>(u32 width, u32 height, u32* output, u32 addr, GPU& gpu);
 
 template <int outputFmt>
-void ConvertCompressedTexture(u32 width, u32 height, u32* output, u32 addr, u32 addrAux, u32 palAddr, GPU& gpu)
+void ConvertCompressedTexture(u32 width, u32 height, u32* output, u32 addr, u32 addrAux,
+    u32 palAddr, GPU& gpu, u32& paletteStart, u32& paletteSize)
 {
+    u32 firstPaletteOffset = 0x10000u;
+    u32 lastPaletteEnd = 0u;
     // we process a whole block at the time
     for (int y = 0; y < height / 4; y++)
     {
@@ -109,7 +112,11 @@ void ConvertCompressedTexture(u32 width, u32 height, u32* output, u32 addr, u32 
             u32 data = gpu.ReadVRAMFlat_Texture<u32>(addr + (x + y * (width / 4))*4);
             u16 auxData = gpu.ReadVRAMFlat_Texture<u16>(addrAux + (x + y * (width / 4))*2);
 
-            u32 paletteOffset = palAddr + (auxData & 0x3FFF) * 4;
+            const u32 blockPaletteOffset = (auxData & 0x3FFF) * 4u;
+
+            firstPaletteOffset = std::min(firstPaletteOffset, blockPaletteOffset);
+            lastPaletteEnd = std::max(lastPaletteEnd, blockPaletteOffset + 8u);
+            u32 paletteOffset = palAddr + blockPaletteOffset;
             u16 color0 = gpu.ReadVRAMFlat_TexPal<u16>(paletteOffset) | 0x8000;
             u16 color1 = gpu.ReadVRAMFlat_TexPal<u16>(paletteOffset+2) | 0x8000;
             u16 color2 = gpu.ReadVRAMFlat_TexPal<u16>(paletteOffset+4) | 0x8000;
@@ -194,9 +201,12 @@ void ConvertCompressedTexture(u32 width, u32 height, u32* output, u32 addr, u32 
             }
         }
     }
+    paletteStart = (palAddr + firstPaletteOffset) & (sizeof(gpu.VRAMFlat_TexPal) - 1u);
+    paletteSize = lastPaletteEnd > firstPaletteOffset
+        ? lastPaletteEnd - firstPaletteOffset : 0u;
 }
 
-template void ConvertCompressedTexture<outputFmt_RGB6A5>(u32, u32, u32*, u32, u32, u32, GPU&);
+template void ConvertCompressedTexture<outputFmt_RGB6A5>(u32, u32, u32*, u32, u32, u32, GPU&, u32&, u32&);
 
 template <int outputFmt, int X, int Y>
 void ConvertAXIYTexture(u32 width, u32 height, u32* output, u32 addr, u32 palAddr, GPU& gpu)

@@ -1,17 +1,20 @@
+#include "MultiplayerSession.h"
+#include "EmulationThreadCpuPolicy.h"
+#include "ThreadLifecycleScope.h"
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <GLES3/gl3.h>
 #include <android/bitmap.h>
+#include <android/log.h>
 #include <android/native_window_jni.h>
 #include <jni.h>
 #include <string>
 #include <sstream>
 #include <vector>
-#include <atomic>
-#include <cerrno>
 #include <mutex>
-#include <thread>
+#include <atomic>
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <stdlib.h>
 #include <cstdint>
@@ -21,7 +24,11 @@
 #include <unistd.h>
 #include <cstdlib>
 #include <time.h>
-#include <sys/resource.h>
+#include <sys/system_properties.h>
+#include <new>
+#include <cstdio>
+#include <fcntl.h>
+#include <memory>
 #include <MelonDS.h>
 #include <MelonDSAudio.h>
 #include <RomGbaSlotConfig.h>
@@ -29,6 +36,7 @@
 #include "UriFileHandler.h"
 #include "JniEnvHandler.h"
 #include "AndroidMelonEventMessenger.h"
+#include "ExactLiveGuide.h"
 #include "MelonDSAndroidInterface.h"
 #include "MelonDSAndroidConfiguration.h"
 #include "MelonDSAndroidCameraHandler.h"
@@ -38,17 +46,19 @@
 #include "renderer/VulkanFilterMode.h"
 #include "performancehint/ThreadSafePerformanceHintSession.h"
 #include "performancehint/PerformanceHintManagerFactory.h"
+#include "performancehint/PerformanceHintWorker.h"
+
+#include "Platform.h"
+#include "RomDecryptor.h"
+#include "VulkanContext.h"
+#include "VulkanRuntimeControls.h"
+#include "MicInputOboeCallback.h"
 #include "net/MPInterface.h"
 #include "net/LAN.h"
 #include <arpa/inet.h>
 #include <fstream>
 #include <filesystem>
-
-#include "Platform.h"
-#include "MelonInstance.h"
-#include "MicInputOboeCallback.h"
-#include "VulkanContext.h"
-#include "VulkanRuntimeControls.h"
+#include "WMService.h"
 
 #ifndef MELONDS_ANDROID_DEBUG_BUILD
 #define MELONDS_ANDROID_DEBUG_BUILD 0
@@ -60,36 +70,94 @@ enum GbaSlotType {
     RUMBLE_PAK = 2,
     MEMORY_EXPANSION = 3,
     ANALOG_INPUT = 4,
+    MOTION_PAK_HOMEBREW = 5,
+    MOTION_PAK_RETAIL = 6,
 };
 
 void* emulate(void*);
 MelonDSAndroid::RomGbaSlotConfig* buildGbaSlotConfig(GbaSlotType slotType, const char* romPath, const char* savePath);
 
 pthread_t emuThread;
+
 pthread_mutex_t emuThreadMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t emuThreadCond = PTHREAD_COND_INITIALIZER;
 
-std::atomic<bool> started{false};
-std::atomic<bool> stop{false};
-std::atomic<bool> paused{false};
-std::atomic<bool> frameStepRequested{false};
-std::atomic_bool isThreadReallyPaused{false};
+std::mutex emulatorLifecycleMutex;
+
+std::mutex emulationCoreAccessMutex;
+bool emulatorResourcesActive = false;
+
+std::atomic_bool started{false};
+std::atomic_bool stop{false};
+bool paused;
+
+int debugFrameStepsRemaining = 0;
+std::atomic_bool isThreadReallyPaused = false;
+std::atomic<uint64_t> retroAchievementsBootstrapServiceGeneration{0};
 int observedFrames = 0;
 std::atomic<float> fps{0.0f};
-std::atomic<int> targetFps{60};
+std::atomic_int targetFps{60};
 std::atomic<float> fastForwardSpeedMultiplier{0.0f};
 std::atomic<float> frameLimitSpeedMultiplier{1.0f};
-std::atomic<bool> limitFps{true};
-std::atomic<bool> isFastForwardEnabled{false};
 
-jobject globalCameraManager = nullptr;
-MelonDSAndroidCameraHandler* androidCameraHandler = nullptr;
+std::atomic<int> frameskipMode{2};
+std::atomic<int> frameskipManualValue{1};
+
+std::atomic<bool> vulkanDrsEnabled{false};
+std::atomic_bool limitFps{true};
+std::atomic_bool isFastForwardEnabled{false};
+
+jobject globalCameraManager;
+MelonDSAndroidCameraHandler* androidCameraHandler;
 jclass frameRenderCallbackClass = nullptr;
 jmethodID frameRenderMethodId = nullptr;
 std::mutex frameRenderCallbackLock;
 
+namespace MelonDSAndroid
+{
+void requestRetroAchievementsBootstrapService()
+{
+    retroAchievementsBootstrapServiceGeneration.fetch_add(1, std::memory_order_release);
+    pthread_mutex_lock(&emuThreadMutex);
+    pthread_cond_broadcast(&emuThreadCond);
+    pthread_mutex_unlock(&emuThreadMutex);
+}
+}
+
 namespace
 {
+class PthreadMutexGuard final
+{
+public:
+    explicit PthreadMutexGuard(pthread_mutex_t& mutex) : mutex(&mutex)
+    {
+        pthread_mutex_lock(this->mutex);
+    }
+
+    ~PthreadMutexGuard()
+    {
+        pthread_mutex_unlock(mutex);
+    }
+
+    PthreadMutexGuard(const PthreadMutexGuard&) = delete;
+    PthreadMutexGuard& operator=(const PthreadMutexGuard&) = delete;
+
+private:
+    pthread_mutex_t* mutex;
+};
+
+bool waitForEmulationThreadPaused()
+{
+    while (started.load(std::memory_order_acquire)
+        && !stop.load(std::memory_order_acquire))
+    {
+        if (isThreadReallyPaused.load(std::memory_order_acquire))
+            return true;
+        usleep(50);
+    }
+    return false;
+}
+
 bool rendererDebugControlsAvailable()
 {
     return MELONDS_ANDROID_DEBUG_BUILD != 0;
@@ -106,9 +174,7 @@ MelonDSAndroid::VulkanFilterMode mapVulkanFilterMode(jint ordinal)
         case 5: return MelonDSAndroid::VulkanFilterMode::Quilez;
         case 6: return MelonDSAndroid::VulkanFilterMode::Lcd;
         case 7: return MelonDSAndroid::VulkanFilterMode::Scanlines;
-        case 8: return MelonDSAndroid::VulkanFilterMode::Scale2x;
-        case 9: return MelonDSAndroid::VulkanFilterMode::AiUpscale;
-        case 10: return MelonDSAndroid::VulkanFilterMode::RetroArch;
+        case 8: return MelonDSAndroid::VulkanFilterMode::RetroArch;
         case 0:
         default: return MelonDSAndroid::VulkanFilterMode::Nearest;
     }
@@ -146,20 +212,16 @@ jmethodID getMethodIdOrNull(JNIEnv* env, jclass classRef, const char* methodName
 
 jmethodID getOrInitFrameRenderMethodId(JNIEnv* env, jobject callbackObject)
 {
-    if (callbackObject == nullptr)
-        return nullptr;
+    if (frameRenderMethodId != nullptr)
+        return frameRenderMethodId;
 
     std::lock_guard<std::mutex> lock(frameRenderCallbackLock);
     if (frameRenderMethodId != nullptr)
         return frameRenderMethodId;
 
     jclass localClass = env->GetObjectClass(callbackObject);
-    if (localClass == nullptr || env->ExceptionCheck())
-    {
-        clearPendingJniException(env);
-        if (localClass != nullptr) env->DeleteLocalRef(localClass);
+    if (localClass == nullptr)
         return nullptr;
-    }
 
     frameRenderCallbackClass = reinterpret_cast<jclass>(env->NewGlobalRef(localClass));
     env->DeleteLocalRef(localClass);
@@ -167,14 +229,6 @@ jmethodID getOrInitFrameRenderMethodId(JNIEnv* env, jobject callbackObject)
         return nullptr;
 
     frameRenderMethodId = env->GetMethodID(frameRenderCallbackClass, "renderFrame", "(ZI)V");
-    if (frameRenderMethodId == nullptr || env->ExceptionCheck())
-    {
-        clearPendingJniException(env);
-        env->DeleteGlobalRef(frameRenderCallbackClass);
-        frameRenderCallbackClass = nullptr;
-        frameRenderMethodId = nullptr;
-        return nullptr;
-    }
     return frameRenderMethodId;
 }
 
@@ -193,6 +247,204 @@ bool getEnumOrdinal(JNIEnv* env, jobject enumObject, jint* ordinalOut)
         return false;
 
     *ordinalOut = env->CallIntMethod(enumObject, ordinalMethod);
+    if (env->ExceptionCheck())
+    {
+        clearPendingJniException(env);
+        return false;
+    }
+
+    return true;
+}
+
+bool setAccessibleOnField(JNIEnv* env, jobject fieldObject)
+{
+    if (fieldObject == nullptr)
+        return false;
+
+    jclass accessibleObjectClass = env->FindClass("java/lang/reflect/AccessibleObject");
+    if (accessibleObjectClass == nullptr)
+        return false;
+
+    jmethodID setAccessibleMethod = env->GetMethodID(accessibleObjectClass, "setAccessible", "(Z)V");
+    env->DeleteLocalRef(accessibleObjectClass);
+    if (setAccessibleMethod == nullptr)
+        return false;
+
+    env->CallVoidMethod(fieldObject, setAccessibleMethod, JNI_TRUE);
+    if (env->ExceptionCheck())
+    {
+        clearPendingJniException(env);
+        return false;
+    }
+
+    return true;
+}
+
+jobject getDeclaredFieldObject(JNIEnv* env, jobject targetObject, const char* fieldName)
+{
+    if (targetObject == nullptr || fieldName == nullptr)
+        return nullptr;
+
+    jclass classClass = env->FindClass("java/lang/Class");
+    if (classClass == nullptr)
+        return nullptr;
+
+    jmethodID getDeclaredFieldMethod = env->GetMethodID(classClass, "getDeclaredField", "(Ljava/lang/String;)Ljava/lang/reflect/Field;");
+    env->DeleteLocalRef(classClass);
+    if (getDeclaredFieldMethod == nullptr)
+        return nullptr;
+
+    jclass targetClass = env->GetObjectClass(targetObject);
+    if (targetClass == nullptr)
+        return nullptr;
+
+    jstring fieldNameString = env->NewStringUTF(fieldName);
+    jobject fieldObject = env->CallObjectMethod(targetClass, getDeclaredFieldMethod, fieldNameString);
+    env->DeleteLocalRef(fieldNameString);
+    env->DeleteLocalRef(targetClass);
+    if (fieldObject == nullptr || env->ExceptionCheck())
+    {
+        clearPendingJniException(env);
+        return nullptr;
+    }
+
+    if (!setAccessibleOnField(env, fieldObject))
+    {
+        env->DeleteLocalRef(fieldObject);
+        return nullptr;
+    }
+
+    return fieldObject;
+}
+
+jobject getObjectFieldByName(JNIEnv* env, jobject targetObject, const char* fieldName)
+{
+    jobject fieldObject = getDeclaredFieldObject(env, targetObject, fieldName);
+    if (fieldObject == nullptr)
+        return nullptr;
+
+    jclass fieldClass = env->FindClass("java/lang/reflect/Field");
+    if (fieldClass == nullptr)
+    {
+        env->DeleteLocalRef(fieldObject);
+        return nullptr;
+    }
+
+    jmethodID getMethod = env->GetMethodID(fieldClass, "get", "(Ljava/lang/Object;)Ljava/lang/Object;");
+    env->DeleteLocalRef(fieldClass);
+    if (getMethod == nullptr)
+    {
+        env->DeleteLocalRef(fieldObject);
+        return nullptr;
+    }
+
+    jobject valueObject = env->CallObjectMethod(fieldObject, getMethod, targetObject);
+    env->DeleteLocalRef(fieldObject);
+    if (env->ExceptionCheck())
+    {
+        clearPendingJniException(env);
+        return nullptr;
+    }
+
+    return valueObject;
+}
+
+bool getFloatFieldByName(JNIEnv* env, jobject targetObject, const char* fieldName, float* valueOut)
+{
+    if (valueOut == nullptr)
+        return false;
+
+    jobject fieldObject = getDeclaredFieldObject(env, targetObject, fieldName);
+    if (fieldObject == nullptr)
+        return false;
+
+    jclass fieldClass = env->FindClass("java/lang/reflect/Field");
+    if (fieldClass == nullptr)
+    {
+        env->DeleteLocalRef(fieldObject);
+        return false;
+    }
+
+    jmethodID getFloatMethod = env->GetMethodID(fieldClass, "getFloat", "(Ljava/lang/Object;)F");
+    env->DeleteLocalRef(fieldClass);
+    if (getFloatMethod == nullptr)
+    {
+        env->DeleteLocalRef(fieldObject);
+        return false;
+    }
+
+    *valueOut = env->CallFloatMethod(fieldObject, getFloatMethod, targetObject);
+    env->DeleteLocalRef(fieldObject);
+    if (env->ExceptionCheck())
+    {
+        clearPendingJniException(env);
+        return false;
+    }
+
+    return true;
+}
+
+bool getBooleanFieldByName(JNIEnv* env, jobject targetObject, const char* fieldName, bool* valueOut)
+{
+    if (valueOut == nullptr)
+        return false;
+
+    jobject fieldObject = getDeclaredFieldObject(env, targetObject, fieldName);
+    if (fieldObject == nullptr)
+        return false;
+
+    jclass fieldClass = env->FindClass("java/lang/reflect/Field");
+    if (fieldClass == nullptr)
+    {
+        env->DeleteLocalRef(fieldObject);
+        return false;
+    }
+
+    jmethodID getBooleanMethod = env->GetMethodID(fieldClass, "getBoolean", "(Ljava/lang/Object;)Z");
+    env->DeleteLocalRef(fieldClass);
+    if (getBooleanMethod == nullptr)
+    {
+        env->DeleteLocalRef(fieldObject);
+        return false;
+    }
+
+    *valueOut = env->CallBooleanMethod(fieldObject, getBooleanMethod, targetObject);
+    env->DeleteLocalRef(fieldObject);
+    if (env->ExceptionCheck())
+    {
+        clearPendingJniException(env);
+        return false;
+    }
+
+    return true;
+}
+
+bool getIntFieldByName(JNIEnv* env, jobject targetObject, const char* fieldName, int* valueOut)
+{
+    if (valueOut == nullptr)
+        return false;
+
+    jobject fieldObject = getDeclaredFieldObject(env, targetObject, fieldName);
+    if (fieldObject == nullptr)
+        return false;
+
+    jclass fieldClass = env->FindClass("java/lang/reflect/Field");
+    if (fieldClass == nullptr)
+    {
+        env->DeleteLocalRef(fieldObject);
+        return false;
+    }
+
+    jmethodID getIntMethod = env->GetMethodID(fieldClass, "getInt", "(Ljava/lang/Object;)I");
+    env->DeleteLocalRef(fieldClass);
+    if (getIntMethod == nullptr)
+    {
+        env->DeleteLocalRef(fieldObject);
+        return false;
+    }
+
+    *valueOut = env->CallIntMethod(fieldObject, getIntMethod, targetObject);
+    env->DeleteLocalRef(fieldObject);
     if (env->ExceptionCheck())
     {
         clearPendingJniException(env);
@@ -619,13 +871,27 @@ bool mapVulkanPresentationConfig(JNIEnv* env, jobject configObject, MelonDSAndro
 
 static const int64_t FRAME_DURATION_60FPS_NS = 16666666;
 static const int64_t FRAME_DURATION_1000FPS_NS = 1000000; // 1ms. Used as frame time when fast-forward is enabled
+
 ThreadSafePerformanceHintSession* performanceHintSession = nullptr;
-std::mutex performanceHintSessionMutex;
+
+static std::mutex performanceHintSessionLock;
+static std::vector<pid_t> performanceHintWorkers;
+
+int sanitizeFrameskipMode(int mode)
+{
+    return mode < 0 ? 0 : (mode > 2 ? 2 : mode);
+}
+
+int sanitizeFrameskipManualValue(int value)
+{
+    return value < 0 ? 0 : (value > 4 ? 4 : value);
+}
 
 float sanitizeFrameLimitSpeedMultiplier(float multiplier)
 {
-    if (multiplier < 0.25f)
-        return 0.25f;
+    if (MelonDSAndroid::Multiplayer::Active()) return 1.0f;
+    if (multiplier < 0.10f)
+        return 0.10f;
     if (multiplier > 1.0f)
         return 1.0f;
     return multiplier;
@@ -633,70 +899,273 @@ float sanitizeFrameLimitSpeedMultiplier(float multiplier)
 
 int targetFpsForFrameLimit()
 {
-    return static_cast<int>(60.0f * sanitizeFrameLimitSpeedMultiplier(frameLimitSpeedMultiplier));
+    return static_cast<int>(60.0f * sanitizeFrameLimitSpeedMultiplier(
+        frameLimitSpeedMultiplier.load(std::memory_order_acquire)));
 }
 
 int64_t frameDurationForFrameLimit()
 {
-    return static_cast<int64_t>(FRAME_DURATION_60FPS_NS / sanitizeFrameLimitSpeedMultiplier(frameLimitSpeedMultiplier));
+    return static_cast<int64_t>(FRAME_DURATION_60FPS_NS / sanitizeFrameLimitSpeedMultiplier(
+        frameLimitSpeedMultiplier.load(std::memory_order_acquire)));
+}
+
+double audioOutputSpeedHintForMultiplier(float multiplier)
+{
+    constexpr double ndsFramesPerSecond = 59.8260982880808;
+    const double value = static_cast<double>(multiplier);
+    if (!std::isfinite(value) || value <= 0.0)
+        return 0.0;
+    return value * 60.0 / ndsFramesPerSecond;
+}
+
+double currentAudioOutputSpeedHint()
+{
+    const float multiplier = isFastForwardEnabled.load(std::memory_order_acquire)
+        ? fastForwardSpeedMultiplier.load(std::memory_order_acquire)
+        : frameLimitSpeedMultiplier.load(std::memory_order_acquire);
+    return audioOutputSpeedHintForMultiplier(multiplier);
+}
+
+void publishCurrentAudioOutputSpeedHint()
+{
+    MelonDSAndroid::setAudioOutputSpeedHint(currentAudioOutputSpeedHint());
+}
+
+int64_t currentPerformanceHintTargetNs()
+{
+    if (isFastForwardEnabled.load(std::memory_order_acquire)) {
+        const float multiplier = fastForwardSpeedMultiplier.load(std::memory_order_acquire);
+        if (multiplier > 0)
+            return static_cast<int64_t>(FRAME_DURATION_60FPS_NS / multiplier);
+        return FRAME_DURATION_1000FPS_NS;
+    }
+    return frameDurationForFrameLimit();
 }
 
 void updatePerformanceHintTarget()
 {
-    std::lock_guard<std::mutex> lock(performanceHintSessionMutex);
+    std::lock_guard<std::mutex> lock(performanceHintSessionLock);
     if (performanceHintSession == nullptr)
         return;
+    performanceHintSession->updateTargetWorkDuration(currentPerformanceHintTargetNs());
+}
 
-    if (isFastForwardEnabled) {
-        if (fastForwardSpeedMultiplier > 0) {
-            performanceHintSession->updateTargetWorkDuration(static_cast<int64_t>(FRAME_DURATION_60FPS_NS / fastForwardSpeedMultiplier));
-        } else {
-            performanceHintSession->updateTargetWorkDuration(FRAME_DURATION_1000FPS_NS);
-        }
+static void registrarHiloEnHints()
+{
+    std::lock_guard<std::mutex> lock(performanceHintSessionLock);
+    if (performanceHintSession == nullptr)
+        return;
+    performanceHintSession->registerThread(gettid(), currentPerformanceHintTargetNs());
+}
+
+namespace MelonDSAndroid { extern void (*hookRegistrarHiloHints)(); }
+
+void MelonDSAndroid::setPerformanceHintWorkerActive(bool active)
+{
+    std::lock_guard<std::mutex> lock(performanceHintSessionLock);
+    const pid_t thread = gettid();
+    const auto found = std::find(performanceHintWorkers.begin(), performanceHintWorkers.end(), thread);
+    if (active) {
+        if (found != performanceHintWorkers.end()) return;
+        performanceHintWorkers.push_back(thread);
+        if (performanceHintSession != nullptr)
+            performanceHintSession->registerThread(thread, currentPerformanceHintTargetNs());
     } else {
-        performanceHintSession->updateTargetWorkDuration(frameDurationForFrameLimit());
+        if (found == performanceHintWorkers.end()) return;
+        performanceHintWorkers.erase(found);
+        if (performanceHintSession != nullptr)
+            performanceHintSession->unregisterThread(thread, currentPerformanceHintTargetNs());
     }
 }
+
+static JavaVM* g_decryptorJavaVM = nullptr;
+static jobject g_decryptorCallback = nullptr;
+static std::mutex g_decryptorCallbackMutex;
+std::mutex g_decryptorOperationMutex;
+
+static void jniDecryptProgressCallback(uint32_t current, uint32_t total)
+{
+    JavaVM* vm = nullptr;
+    jobject globalCallback = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_decryptorCallbackMutex);
+        vm = g_decryptorJavaVM;
+        globalCallback = g_decryptorCallback;
+    }
+    if (!vm || !globalCallback) return;
+
+    JNIEnv* env = nullptr;
+    bool attached = false;
+    int status = vm->GetEnv((void**)&env, JNI_VERSION_1_6);
+    if (status == JNI_EDETACHED)
+    {
+        if (vm->AttachCurrentThread(&env, nullptr) != JNI_OK)
+            return;
+        attached = true;
+    }
+
+    jobject localCallback = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_decryptorCallbackMutex);
+        if (env && g_decryptorCallback)
+            localCallback = env->NewLocalRef(g_decryptorCallback);
+    }
+
+    if (env && localCallback)
+    {
+        jclass cls = env->GetObjectClass(localCallback);
+        if (cls)
+        {
+            jmethodID mid = env->GetMethodID(cls, "onProgress", "(II)V");
+            if (mid)
+            {
+                env->CallVoidMethod(localCallback, mid, (jint)current, (jint)total);
+            }
+            env->DeleteLocalRef(cls);
+        }
+        if (env->ExceptionCheck())
+        {
+            env->ExceptionClear();
+        }
+        env->DeleteLocalRef(localCallback);
+    }
+
+    if (attached)
+        vm->DetachCurrentThread();
+}
+
 
 extern "C"
 {
 JNIEXPORT void JNICALL
-Java_me_magnum_melonds_MelonEmulator_setupEmulator(JNIEnv* env, jobject thiz, jobject emulatorConfiguration, jobject cameraManager, jobject screenshotBuffer)
+Java_me_magnum_melonds_MelonEmulator_setupEmulatorInternal(JNIEnv* env, jobject thiz, jobject emulatorConfiguration, jobject cameraManager, jobject screenshotBuffer)
 {
+    std::lock_guard<std::mutex> lifecycleLock(emulatorLifecycleMutex);
     MelonDSAndroid::EmulatorConfiguration finalEmulatorConfiguration = MelonDSAndroidConfiguration::buildEmulatorConfiguration(env, emulatorConfiguration);
-    fastForwardSpeedMultiplier = finalEmulatorConfiguration.fastForwardSpeedMultiplier;
-    frameLimitSpeedMultiplier = sanitizeFrameLimitSpeedMultiplier(finalEmulatorConfiguration.frameLimitSpeedMultiplier);
-
-    if (globalCameraManager != nullptr)
-    {
-        env->DeleteGlobalRef(globalCameraManager);
-        globalCameraManager = nullptr;
-    }
-    if (androidCameraHandler != nullptr)
-    {
-        delete androidCameraHandler;
-        androidCameraHandler = nullptr;
-    }
-
-    globalCameraManager = cameraManager != nullptr ? env->NewGlobalRef(cameraManager) : nullptr;
+    if (env->ExceptionCheck())
+        return;
+    fastForwardSpeedMultiplier.store(
+        finalEmulatorConfiguration.fastForwardSpeedMultiplier,
+        std::memory_order_release);
+    frameLimitSpeedMultiplier.store(
+        sanitizeFrameLimitSpeedMultiplier(finalEmulatorConfiguration.frameLimitSpeedMultiplier),
+        std::memory_order_release);
+    frameskipMode.store(sanitizeFrameskipMode(finalEmulatorConfiguration.frameskipMode),
+                        std::memory_order_release);
+    frameskipManualValue.store(sanitizeFrameskipManualValue(finalEmulatorConfiguration.frameskipManualValue),
+                               std::memory_order_release);
+    vulkanDrsEnabled.store(finalEmulatorConfiguration.vulkanDrsEnabled, std::memory_order_release);
+    MelonDSAndroid::setMuteOnFastForward(finalEmulatorConfiguration.audioSettings.muteOnFastForward);
+    globalCameraManager = env->NewGlobalRef(cameraManager);
 
     auto androidEventMessenger = std::make_shared<AndroidMelonEventMessenger>();
     androidCameraHandler = new MelonDSAndroidCameraHandler(jniEnvHandler, globalCameraManager);
-    u32* screenshotBufferPointer = screenshotBuffer != nullptr ? (u32*) env->GetDirectBufferAddress(screenshotBuffer) : nullptr;
+    u32* screenshotBufferPointer = (u32*) env->GetDirectBufferAddress(screenshotBuffer);
 
     MelonDSAndroid::setConfiguration(std::move(finalEmulatorConfiguration));
     MelonDSAndroid::setup(androidCameraHandler, std::move(androidEventMessenger), screenshotBufferPointer, 0);
+    pthread_mutex_lock(&emuThreadMutex);
     paused = false;
+    pthread_mutex_unlock(&emuThreadMutex);
+    emulatorResourcesActive = true;
+}
+
+JNIEXPORT jstring JNICALL
+Java_me_magnum_melonds_MelonEmulator_startAudioOutputPcmCapture(
+    JNIEnv* env,
+    jobject thiz,
+    jint durationMs)
+{
+    try
+    {
+        const std::string result = MelonDSAndroid::startAudioOutputPcmCapture(
+            static_cast<std::uint32_t>(durationMs));
+        jstring javaResult = env->NewStringUTF(result.c_str());
+        if (env->ExceptionCheck())
+            return nullptr;
+        return javaResult;
+    }
+    catch (...)
+    {
+        constexpr const char* error =
+            "{\"success\":0,\"operation\":\"start\",\"detail\":\"native_exception\"}";
+        jstring javaResult = env->NewStringUTF(error);
+        if (env->ExceptionCheck())
+            return nullptr;
+        return javaResult;
+    }
+}
+
+JNIEXPORT jstring JNICALL
+Java_me_magnum_melonds_MelonEmulator_dumpAudioOutputPcmCapture(
+    JNIEnv* env,
+    jobject thiz,
+    jstring finalDirectory)
+{
+    if (finalDirectory == nullptr)
+    {
+        constexpr const char* error =
+            "{\"success\":0,\"operation\":\"dump\",\"detail\":\"missing_output_directory\"}";
+        jstring javaResult = env->NewStringUTF(error);
+        if (env->ExceptionCheck())
+            return nullptr;
+        return javaResult;
+    }
+
+    const char* finalDirectoryChars = env->GetStringUTFChars(finalDirectory, nullptr);
+    const bool getCharsFailed = env->ExceptionCheck();
+    if (getCharsFailed)
+    {
+
+        if (finalDirectoryChars != nullptr)
+            env->ReleaseStringUTFChars(finalDirectory, finalDirectoryChars);
+        return nullptr;
+    }
+    if (finalDirectoryChars == nullptr)
+        return nullptr;
+
+    std::string nativeFinalDirectory;
+    try
+    {
+        nativeFinalDirectory = finalDirectoryChars;
+    }
+    catch (...)
+    {
+        env->ReleaseStringUTFChars(finalDirectory, finalDirectoryChars);
+        constexpr const char* error =
+            "{\"success\":0,\"operation\":\"dump\",\"detail\":\"path_allocation_failed\"}";
+        jstring javaResult = env->NewStringUTF(error);
+        if (env->ExceptionCheck())
+            return nullptr;
+        return javaResult;
+    }
+    env->ReleaseStringUTFChars(finalDirectory, finalDirectoryChars);
+    if (env->ExceptionCheck())
+        return nullptr;
+
+    try
+    {
+        const std::string result =
+            MelonDSAndroid::dumpAudioOutputPcmCapture(nativeFinalDirectory);
+        jstring javaResult = env->NewStringUTF(result.c_str());
+        if (env->ExceptionCheck())
+            return nullptr;
+        return javaResult;
+    }
+    catch (...)
+    {
+        constexpr const char* error =
+            "{\"success\":0,\"operation\":\"dump\",\"detail\":\"native_exception\"}";
+        jstring javaResult = env->NewStringUTF(error);
+        if (env->ExceptionCheck())
+            return nullptr;
+        return javaResult;
+    }
 }
 
 JNIEXPORT void JNICALL
 Java_me_magnum_melonds_MelonEmulator_setupCheats(JNIEnv* env, jobject thiz, jobjectArray cheats)
 {
-    if (cheats == nullptr) {
-        MelonDSAndroid::setCodeList(std::list<MelonDSAndroid::Cheat>());
-        return;
-    }
-
     jsize cheatCount = env->GetArrayLength(cheats);
     if (cheatCount < 1) {
         MelonDSAndroid::setCodeList(std::list<MelonDSAndroid::Cheat>());
@@ -704,36 +1173,15 @@ Java_me_magnum_melonds_MelonEmulator_setupCheats(JNIEnv* env, jobject thiz, jobj
     }
 
     jobject firstCheat = env->GetObjectArrayElement(cheats, 0);
-    if (firstCheat == nullptr) {
-        MelonDSAndroid::setCodeList(std::list<MelonDSAndroid::Cheat>());
-        return;
-    }
     jclass cheatClass = env->GetObjectClass(firstCheat);
     env->DeleteLocalRef(firstCheat);
-    if (cheatClass == nullptr) {
-        clearPendingJniException(env);
-        return;
-    }
     jfieldID codeField = env->GetFieldID(cheatClass, "code", "Ljava/lang/String;");
-    env->DeleteLocalRef(cheatClass);
-    if (codeField == nullptr) {
-        clearPendingJniException(env);
-        return;
-    }
 
     std::list<MelonDSAndroid::Cheat> internalCheats;
 
     for (int i = 0; i < cheatCount; ++i) {
         jobject cheat = env->GetObjectArrayElement(cheats, i);
-        if (cheat == nullptr)
-            continue;
         jstring code = (jstring) env->GetObjectField(cheat, codeField);
-        if (code == nullptr)
-        {
-            if (env->ExceptionCheck()) env->ExceptionClear();
-            env->DeleteLocalRef(cheat);
-            continue;
-        }
         const char* codeStringPtr = env->GetStringUTFChars(code, nullptr);
         if (codeStringPtr == nullptr)
         {
@@ -742,11 +1190,9 @@ Java_me_magnum_melonds_MelonEmulator_setupCheats(JNIEnv* env, jobject thiz, jobj
             continue;
         }
         std::string codeString = codeStringPtr;
-        while (!codeString.empty() &&
-               (codeString.back() == ' ' || codeString.back() == '\t' ||
-                codeString.back() == '\r' || codeString.back() == '\n'))
-        {
-            codeString.pop_back();
+        for (char& ch : codeString) {
+            if (ch == '\n' || ch == '\r' || ch == '\t')
+                ch = ' ';
         }
         // Since each part of a cheat code has 8 characters (4 bytes), we can add 1 to the length (to ensure that each part has a matching space separator) and divide by 9
         // (part length + space separator) to calculate the total number of parts in the cheat
@@ -781,17 +1227,14 @@ Java_me_magnum_melonds_MelonEmulator_setupCheats(JNIEnv* env, jobject thiz, jobj
             start = end + 1;
         }
 
-        if (!isBad && start < codeString.size()) {
+        if (!isBad && end != start) {
             char* endPointer;
-            std::string sectionString = codeString.substr(start);
+            std::string sectionString = codeString.substr(start, end - start);
             if (sectionString.size() != 8) {
                 isBad = true;
             } else {
                 unsigned long section = strtoul(sectionString.c_str(), &endPointer, 16);
-                if (*endPointer == 0)
-                    internalCheat.code.push_back((u32) section);
-                else
-                    isBad = true;
+                internalCheat.code.push_back((u32) section);
             }
         }
 
@@ -961,6 +1404,12 @@ Java_me_magnum_melonds_MelonEmulator_getRuntimeAchievementBuckets(JNIEnv* env, j
 
     env->DeleteLocalRef(runtimeBucketEntryClass);
     return bucketEntries;
+}
+
+JNIEXPORT jint JNICALL
+Java_me_magnum_melonds_MelonEmulator_getRetroAchievementsSetupFailureReason(JNIEnv*, jobject)
+{
+    return MelonDSAndroid::getRetroAchievementsSetupFailureReason();
 }
 
 JNIEXPORT jlongArray JNICALL
@@ -1143,33 +1592,11 @@ Java_me_magnum_melonds_MelonEmulator_setRetroAchievementsSubmissionTransportSusp
     );
 }
 
-JNIEXPORT void JNICALL
-Java_me_magnum_melonds_MelonEmulator_setRetroAchievementsHardcoreEnabled(
-    JNIEnv* env,
-    jobject thiz,
-    jboolean enabled)
-{
-    (void)env;
-    (void)thiz;
-    MelonDSAndroid::setRetroAchievementsHardcoreEnabled(
-        enabled == JNI_TRUE
-    );
-}
-
 JNIEXPORT jint JNICALL
 Java_me_magnum_melonds_MelonEmulator_loadRomInternal(JNIEnv* env, jobject thiz, jstring romPath, jstring sramPath, jint gbaSlotType, jstring gbaRomPath, jstring gbaSramPath)
 {
-    if (romPath == nullptr || sramPath == nullptr)
-        return 2;
-
-    const char* rom = env->GetStringUTFChars(romPath, nullptr);
-    const char* sram = env->GetStringUTFChars(sramPath, nullptr);
-    if (rom == nullptr || sram == nullptr)
-    {
-        if (rom != nullptr) env->ReleaseStringUTFChars(romPath, rom);
-        if (sram != nullptr) env->ReleaseStringUTFChars(sramPath, sram);
-        return 2;
-    }
+    const char* rom = romPath == nullptr ? nullptr : env->GetStringUTFChars(romPath, nullptr);
+    const char* sram = sramPath == nullptr ? nullptr : env->GetStringUTFChars(sramPath, nullptr);
     const char* gbaRom = gbaRomPath == nullptr ? nullptr : env->GetStringUTFChars(gbaRomPath, nullptr);
     const char* gbaSram = gbaSramPath == nullptr ? nullptr : env->GetStringUTFChars(gbaSramPath, nullptr);
 
@@ -1177,8 +1604,8 @@ Java_me_magnum_melonds_MelonEmulator_loadRomInternal(JNIEnv* env, jobject thiz, 
     int result = MelonDSAndroid::loadRom(rom, sram, gbaSlotConfig);
     delete gbaSlotConfig;
 
-    env->ReleaseStringUTFChars(romPath, rom);
-    env->ReleaseStringUTFChars(sramPath, sram);
+    if (romPath && rom) env->ReleaseStringUTFChars(romPath, rom);
+    if (sramPath && sram) env->ReleaseStringUTFChars(sramPath, sram);
     if (gbaRomPath && gbaRom) env->ReleaseStringUTFChars(gbaRomPath, gbaRom);
     if (gbaSramPath && gbaSram) env->ReleaseStringUTFChars(gbaSramPath, gbaSram);
 
@@ -1191,57 +1618,42 @@ Java_me_magnum_melonds_MelonEmulator_bootFirmwareInternal(JNIEnv* env, jobject t
 }
 
 JNIEXPORT void JNICALL
-Java_me_magnum_melonds_MelonEmulator_startBootDiagnosticCapture(JNIEnv* env, jobject thiz) {
-    melonDS::Platform::StartBootDiagnosticCapture();
-}
-
-JNIEXPORT jstring JNICALL
-Java_me_magnum_melonds_MelonEmulator_stopAndGetBootDiagnostic(JNIEnv* env, jobject thiz) {
-    std::string diag = melonDS::Platform::StopAndGetBootDiagnostic();
-    return env->NewStringUTF(diag.c_str());
-}
-
-JNIEXPORT jstring JNICALL
-Java_me_magnum_melonds_MelonEmulator_getDetailedEmulationDiagnostic(JNIEnv* env, jobject thiz) {
-    std::string diag = MelonDSAndroid::getDetailedEmulationDiagnostic();
-    return env->NewStringUTF(diag.c_str());
-}
-
-JNIEXPORT void JNICALL
 Java_me_magnum_melonds_MelonEmulator_startEmulation(JNIEnv* env, jobject thiz, jboolean startPaused)
 {
-    if (started)
-    {
-        pthread_mutex_lock(&emuThreadMutex);
-        stop = true;
-        paused = false;
-        frameStepRequested = false;
-        started = false;
-        pthread_cond_broadcast(&emuThreadCond);
-        pthread_mutex_unlock(&emuThreadMutex);
-
-        pthread_join(emuThread, NULL);
-    }
+    std::lock_guard<std::mutex> lifecycleLock(emulatorLifecycleMutex);
+    if (!emulatorResourcesActive)
+        return;
 
     pthread_mutex_lock(&emuThreadMutex);
+    if (started.load(std::memory_order_acquire))
+    {
+        pthread_mutex_unlock(&emuThreadMutex);
+        return;
+    }
     stop = false;
-    frameStepRequested = false;
+    debugFrameStepsRemaining = 0;
     isThreadReallyPaused = false;
     limitFps = true;
     targetFps = targetFpsForFrameLimit();
-    isFastForwardEnabled = false;
+    isFastForwardEnabled.store(false, std::memory_order_release);
+    MelonDSAndroid::setFastForwardActive(false);
     paused = startPaused == JNI_TRUE;
 
-    if (pthread_create(&emuThread, NULL, emulate, NULL) == 0)
+    started = true;
+    const int createResult = pthread_create(&emuThread, NULL, emulate, NULL);
+    if (createResult != 0)
     {
-        pthread_setname_np(emuThread, "EmulatorThread");
-        started = true;
-    }
-    else
-    {
-        melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "Failed to create EmulatorThread");
         started = false;
+        stop = true;
+        pthread_mutex_unlock(&emuThreadMutex);
+        __android_log_print(
+            ANDROID_LOG_ERROR,
+            "melonDS",
+            "Failed to create EmulatorThread: errno=%d",
+            createResult);
+        return;
     }
+    pthread_setname_np(emuThread, "EmulatorThread");
     pthread_mutex_unlock(&emuThreadMutex);
 }
 
@@ -1387,7 +1799,6 @@ Java_me_magnum_melonds_MelonEmulator_consumeShaderDiagnostics(JNIEnv* env, jobje
         return nullptr;
 
     jobjectArray result = env->NewObjectArray(static_cast<jsize>(entries.size()), stringClass, nullptr);
-    env->DeleteLocalRef(stringClass);
     if (result == nullptr)
         return nullptr;
 
@@ -1432,9 +1843,6 @@ Java_me_magnum_melonds_MelonEmulator_releaseOpenGlRetroArchFilter(JNIEnv* env, j
 JNIEXPORT void JNICALL
 Java_me_magnum_melonds_MelonEmulator_presentFrame(JNIEnv* env, jobject thiz, jlong deadlineNs, jobject renderFrameCallback)
 {
-    if (renderFrameCallback == nullptr)
-        return;
-
     jmethodID renderMethod = getOrInitFrameRenderMethodId(env, renderFrameCallback);
     if (renderMethod == nullptr)
         return;
@@ -1453,11 +1861,10 @@ Java_me_magnum_melonds_MelonEmulator_presentFrame(JNIEnv* env, jobject thiz, jlo
     Frame* presentationFrame = MelonDSAndroid::getPresentationFrame(deadlineTime);
     EGLDisplay currentDisplay = eglGetCurrentDisplay();
 
-    if (presentationFrame != nullptr && presentationFrame->presentFence != EGL_NO_SYNC_KHR)
+    if (presentationFrame != nullptr && presentationFrame->presentFence)
     {
-        if (currentDisplay != EGL_NO_DISPLAY)
-            eglDestroySyncKHR(currentDisplay, presentationFrame->presentFence);
-        presentationFrame->presentFence = EGL_NO_SYNC_KHR;
+        eglDestroySyncKHR(currentDisplay, presentationFrame->presentFence);
+        presentationFrame->presentFence = 0;
     }
 
     if (presentationFrame != nullptr)
@@ -1471,12 +1878,10 @@ Java_me_magnum_melonds_MelonEmulator_presentFrame(JNIEnv* env, jobject thiz, jlo
                 static_cast<unsigned>(MelonDSAndroid::getCurrentRenderer())
             );
             env->CallVoidMethod(renderFrameCallback, renderMethod, false, 0);
-            if (env->ExceptionCheck())
-                env->ExceptionClear();
             return;
         }
 
-        if (currentDisplay != EGL_NO_DISPLAY && presentationFrame->renderFence != EGL_NO_SYNC_KHR)
+        if (presentationFrame->renderFence)
             eglWaitSyncKHR(currentDisplay, presentationFrame->renderFence, 0);
 
         GLuint textureToPresent = presentationFrame->frameTexture;
@@ -1494,20 +1899,12 @@ Java_me_magnum_melonds_MelonEmulator_presentFrame(JNIEnv* env, jobject thiz, jlo
             true,
             static_cast<jint>(textureToPresent)
         );
-        if (env->ExceptionCheck())
-            env->ExceptionClear();
-
-        if (currentDisplay != EGL_NO_DISPLAY)
-        {
-            EGLSyncKHR presentFence = eglCreateSyncKHR(currentDisplay, EGL_SYNC_FENCE_KHR, nullptr);
-            presentationFrame->presentFence = (presentFence != EGL_NO_SYNC_KHR) ? presentFence : EGL_NO_SYNC_KHR;
-        }
+        EGLSyncKHR presentFence = eglCreateSyncKHR(currentDisplay, EGL_SYNC_FENCE_KHR, nullptr);
+        presentationFrame->presentFence = presentFence;
     }
     else
     {
         env->CallVoidMethod(renderFrameCallback, renderMethod, false, 0);
-        if (env->ExceptionCheck())
-            env->ExceptionClear();
     }
 }
 
@@ -1595,9 +1992,16 @@ Java_me_magnum_melonds_MelonEmulator_detachVulkanSurface(JNIEnv* env, jobject th
     MelonDSAndroid::detachVulkanSurface(surfaceId);
 }
 
-JNIEXPORT void JNICALL
-Java_me_magnum_melonds_MelonEmulator_presentVulkanFrame(JNIEnv* env, jobject thiz, jlong deadlineNs, jlong budgetDeadlineNs)
+JNIEXPORT jint JNICALL
+Java_me_magnum_melonds_MelonEmulator_presentVulkanFrameNative(
+    JNIEnv* env,
+    jobject thiz,
+    jlong deadlineNs,
+    jlong budgetDeadlineNs,
+    jlong expectedWaitEpoch)
 {
+
+    static thread_local melonDS::ThreadLifecycleScope hints(MelonDSAndroid::setPerformanceHintWorkerActive);
     const auto toDeadlineTime = [](jlong value) -> std::optional<std::chrono::time_point<std::chrono::steady_clock>> {
         if (value <= 0)
             return std::nullopt;
@@ -1609,7 +2013,49 @@ Java_me_magnum_melonds_MelonEmulator_presentVulkanFrame(JNIEnv* env, jobject thi
     const auto deadlineTime = toDeadlineTime(deadlineNs);
     const auto budgetDeadlineTime = toDeadlineTime(budgetDeadlineNs);
 
-    MelonDSAndroid::presentVulkanFrame(deadlineTime, budgetDeadlineTime);
+    return static_cast<jint>(
+        MelonDSAndroid::presentVulkanFrame(
+            deadlineTime,
+            budgetDeadlineTime,
+            static_cast<u64>(expectedWaitEpoch)));
+}
+
+JNIEXPORT jboolean JNICALL
+Java_me_magnum_melonds_MelonEmulator_isFastForwardEnabled(JNIEnv*, jobject)
+{
+    return isFastForwardEnabled.load(std::memory_order_acquire) ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jlong JNICALL
+Java_me_magnum_melonds_MelonEmulator_captureVulkanPresentationWaitEpochNative(JNIEnv* env, jobject thiz)
+{
+    return static_cast<jlong>(
+        MelonDSAndroid::captureVulkanPresentationWaitEpoch());
+}
+
+JNIEXPORT jint JNICALL
+Java_me_magnum_melonds_MelonEmulator_waitForVulkanPresentationProductNative(
+    JNIEnv* env,
+    jobject thiz,
+    jlong expectedWaitEpoch,
+    jlong timeoutNs)
+{
+    const u64 nativeExpectedEpoch = expectedWaitEpoch > 0
+        ? static_cast<u64>(expectedWaitEpoch)
+        : 0;
+    const u64 nativeTimeoutNs = timeoutNs > 0
+        ? static_cast<u64>(timeoutNs)
+        : 0;
+    return static_cast<jint>(
+        MelonDSAndroid::waitForVulkanPresentationProduct(
+            nativeExpectedEpoch,
+            nativeTimeoutNs));
+}
+
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_cancelVulkanPresentationWaitsNative(JNIEnv* env, jobject thiz)
+{
+    MelonDSAndroid::cancelVulkanPresentationWaits();
 }
 
 JNIEXPORT jintArray JNICALL
@@ -1844,6 +2290,40 @@ Java_me_magnum_melonds_impl_emulator_debug_RendererDebugBridge_captureCurrentCom
 {
     (void)thiz;
     return MakeJavaIntArray(env, MelonDSAndroid::captureCurrentCompositedFrameForDebug());
+}
+
+JNIEXPORT jintArray JNICALL
+Java_me_magnum_melonds_impl_emulator_debug_RendererDebugBridge_captureFaithfulDiagnosticPayload(
+    JNIEnv* env, jobject thiz, jlong expectedFrameId)
+{
+    (void)thiz;
+
+    if (expectedFrameId <= 0 || env->ExceptionCheck())
+        return nullptr;
+    try
+    {
+        const auto words = MelonDSAndroid::captureFaithfulDiagnosticPayloadForDebug(
+            static_cast<u64>(expectedFrameId));
+        if (words.empty() || words.size() > static_cast<size_t>(std::numeric_limits<jsize>::max()))
+            return nullptr;
+        static_assert(sizeof(jint) == sizeof(u32));
+        jintArray result = env->NewIntArray(static_cast<jsize>(words.size()));
+        if (env->ExceptionCheck() || result == nullptr)
+            return nullptr;
+        env->SetIntArrayRegion(result, 0, static_cast<jsize>(words.size()),
+            reinterpret_cast<const jint*>(words.data()));
+        if (env->ExceptionCheck())
+        {
+            env->DeleteLocalRef(result);
+            return nullptr;
+        }
+        return result;
+    }
+    catch (...)
+    {
+
+        return nullptr;
+    }
 }
 
 JNIEXPORT jboolean JNICALL
@@ -2094,7 +2574,14 @@ Java_me_magnum_melonds_impl_emulator_debug_RendererDebugBridge_dumpCurrentRender
 JNIEXPORT jfloat JNICALL
 Java_me_magnum_melonds_MelonEmulator_getFPS(JNIEnv* env, jobject thiz)
 {
-    return fps;
+    return fps.load(std::memory_order_acquire);
+}
+
+JNIEXPORT jstring JNICALL
+Java_me_magnum_melonds_MelonEmulator_getVulkanFrameskipStats(JNIEnv* env, jobject thiz)
+{
+    const std::string text = MelonDSAndroid::getVulkanFrameskipStatsText();
+    return env->NewStringUTF(text.c_str());
 }
 
 JNIEXPORT jint JNICALL
@@ -2106,42 +2593,45 @@ Java_me_magnum_melonds_MelonEmulator_getCurrentRenderer(JNIEnv* env, jobject thi
 JNIEXPORT void JNICALL
 Java_me_magnum_melonds_MelonEmulator_pauseEmulation(JNIEnv* env, jobject thiz)
 {
-    if (!started)
-        return;
-
     pthread_mutex_lock(&emuThreadMutex);
-    if (!stop) {
-        frameStepRequested = false;
+    if (started.load(std::memory_order_acquire)
+        && !stop.load(std::memory_order_acquire)) {
+        debugFrameStepsRemaining = 0;
         paused = true;
+
+        MelonDSAndroid::pause();
     }
     pthread_mutex_unlock(&emuThreadMutex);
-
-    MelonDSAndroid::pause();
 }
 
 JNIEXPORT void JNICALL
 Java_me_magnum_melonds_MelonEmulator_resumeEmulation(JNIEnv* env, jobject thiz)
 {
-    if (!started)
-        return;
-
     pthread_mutex_lock(&emuThreadMutex);
-    if (!stop) {
-        frameStepRequested = false;
+    if (started.load(std::memory_order_acquire)
+        && !stop.load(std::memory_order_acquire)) {
+        debugFrameStepsRemaining = 0;
         paused = false;
+        MelonDSAndroid::resume();
         pthread_cond_broadcast(&emuThreadCond);
     }
     pthread_mutex_unlock(&emuThreadMutex);
-
-    MelonDSAndroid::resume();
 }
 
-JNIEXPORT jboolean JNICALL
-Java_me_magnum_melonds_MelonEmulator_debugStepFrame(JNIEnv* env, jobject thiz)
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_requestRtcSync(JNIEnv* env, jobject thiz)
 {
-    (void)env;
-    (void)thiz;
-    if (!rendererDebugControlsAvailable())
+    MelonDSAndroid::requestRtcSync();
+}
+
+static jboolean requestExactDebugFrames(jint frames, bool allowReleaseDiagnostics)
+{
+    if (frames < 1 || frames > 10000)
+        return JNI_FALSE;
+    (void)allowReleaseDiagnostics;
+
+    std::lock_guard<std::mutex> lifecycleLock(emulatorLifecycleMutex);
+    if (!emulatorResourcesActive)
         return JNI_FALSE;
 
     if (!started)
@@ -2153,21 +2643,23 @@ Java_me_magnum_melonds_MelonEmulator_debugStepFrame(JNIEnv* env, jobject thiz)
         pthread_mutex_unlock(&emuThreadMutex);
         return JNI_FALSE;
     }
-    frameStepRequested = false;
+    debugFrameStepsRemaining = 0;
     paused = true;
+    MelonDSAndroid::pause();
     pthread_mutex_unlock(&emuThreadMutex);
 
-    MelonDSAndroid::pause();
-
-    // Make sure the emulation thread is stopped before releasing one frame.
-    while (started.load(std::memory_order_acquire) && !stop.load(std::memory_order_acquire) && !isThreadReallyPaused.load(std::memory_order_acquire)) {
-        sched_yield();
-    }
+    if (!waitForEmulationThreadPaused())
+        return JNI_FALSE;
 
     pthread_mutex_lock(&emuThreadMutex);
     if (!stop)
     {
-        frameStepRequested = true;
+
+        if (allowReleaseDiagnostics)
+            MelonDSAndroid::resume();
+        else
+            MelonDSAndroid::resumeFramePublication();
+        debugFrameStepsRemaining = frames;
         paused = false;
         pthread_cond_broadcast(&emuThreadCond);
     }
@@ -2176,13 +2668,28 @@ Java_me_magnum_melonds_MelonEmulator_debugStepFrame(JNIEnv* env, jobject thiz)
     return JNI_TRUE;
 }
 
+JNIEXPORT jboolean JNICALL
+Java_me_magnum_melonds_MelonEmulator_debugStepFrame(JNIEnv*, jobject)
+{
+    return requestExactDebugFrames(1, false);
+}
+
+JNIEXPORT jboolean JNICALL
+Java_me_magnum_melonds_MelonEmulator_debugStepFrames(JNIEnv*, jobject, jint frames)
+{
+
+    return requestExactDebugFrames(frames, true);
+}
+
 JNIEXPORT void JNICALL
 Java_me_magnum_melonds_MelonEmulator_resetEmulation(JNIEnv* env, jobject thiz) {
-    if (!started)
+    std::lock_guard<std::mutex> lifecycleLock(emulatorLifecycleMutex);
+    if (!emulatorResourcesActive)
         return;
 
     pthread_mutex_lock(&emuThreadMutex);
-    if (!stop) {
+    if (started.load(std::memory_order_acquire)
+        && !stop.load(std::memory_order_acquire)) {
         if (paused) {
             pthread_mutex_unlock(&emuThreadMutex);
         } else {
@@ -2191,30 +2698,38 @@ Java_me_magnum_melonds_MelonEmulator_resetEmulation(JNIEnv* env, jobject thiz) {
         }
 
         // Make sure that the thread is really paused to avoid data corruption
-        while (started.load(std::memory_order_acquire) && !stop.load(std::memory_order_acquire) && !isThreadReallyPaused.load(std::memory_order_acquire)) {
-            sched_yield();
+        if (!waitForEmulationThreadPaused())
+            return;
+        {
+            std::lock_guard<std::mutex> coreLock(emulationCoreAccessMutex);
+            MelonDSAndroid::reset();
         }
-        MelonDSAndroid::reset();
-        Java_me_magnum_melonds_MelonEmulator_resumeEmulation(env, thiz);
+        if (started.load(std::memory_order_acquire)
+            && !stop.load(std::memory_order_acquire))
+            Java_me_magnum_melonds_MelonEmulator_resumeEmulation(env, thiz);
     } else {
         // If the emulation is stopping, just ignore it
         pthread_mutex_unlock(&emuThreadMutex);
     }
 }
 
-JNIEXPORT void JNICALL
-Java_me_magnum_melonds_MelonEmulator_flushPendingSaveStateWrites(JNIEnv* env, jobject thiz)
-{
-    (void)env;
-    (void)thiz;
-    MelonDSAndroid::flushPendingSaveStateWrites();
-}
-
 JNIEXPORT jboolean JNICALL
 Java_me_magnum_melonds_MelonEmulator_saveStateInternal(JNIEnv* env, jobject thiz, jstring path)
 {
+    std::lock_guard<std::mutex> lifecycleLock(emulatorLifecycleMutex);
+    if (!emulatorResourcesActive)
+        return JNI_FALSE;
+
+    Java_me_magnum_melonds_MelonEmulator_pauseEmulation(env, thiz);
+    if (!waitForEmulationThreadPaused())
+        return JNI_FALSE;
+
     const char* saveStatePath = path == nullptr ? nullptr : env->GetStringUTFChars(path, nullptr);
-    const bool result = MelonDSAndroid::saveState(saveStatePath);
+    bool result = false;
+    {
+        std::lock_guard<std::mutex> coreLock(emulationCoreAccessMutex);
+        result = MelonDSAndroid::saveState(saveStatePath);
+    }
     if (path != nullptr && saveStatePath != nullptr)
         env->ReleaseStringUTFChars(path, saveStatePath);
     return result;
@@ -2223,8 +2738,20 @@ Java_me_magnum_melonds_MelonEmulator_saveStateInternal(JNIEnv* env, jobject thiz
 JNIEXPORT jboolean JNICALL
 Java_me_magnum_melonds_MelonEmulator_loadStateInternal(JNIEnv* env, jobject thiz, jstring path)
 {
+    std::lock_guard<std::mutex> lifecycleLock(emulatorLifecycleMutex);
+    if (!emulatorResourcesActive)
+        return JNI_FALSE;
+
+    Java_me_magnum_melonds_MelonEmulator_pauseEmulation(env, thiz);
+    if (!waitForEmulationThreadPaused())
+        return JNI_FALSE;
+
     const char* saveStatePath = path == nullptr ? nullptr : env->GetStringUTFChars(path, nullptr);
-    const bool result = MelonDSAndroid::loadState(saveStatePath);
+    bool result = false;
+    {
+        std::lock_guard<std::mutex> coreLock(emulationCoreAccessMutex);
+        result = MelonDSAndroid::loadState(saveStatePath);
+    }
     if (path != nullptr && saveStatePath != nullptr)
         env->ReleaseStringUTFChars(path, saveStatePath);
     return result;
@@ -2232,13 +2759,15 @@ Java_me_magnum_melonds_MelonEmulator_loadStateInternal(JNIEnv* env, jobject thiz
 
 JNIEXPORT jboolean JNICALL
 Java_me_magnum_melonds_MelonEmulator_loadRewindState(JNIEnv* env, jobject thiz, jobject rewindSaveState) {
-    if (!started || rewindSaveState == nullptr)
+    std::lock_guard<std::mutex> lifecycleLock(emulatorLifecycleMutex);
+    if (!emulatorResourcesActive)
         return JNI_FALSE;
 
-    bool result = false;
+    bool result = true;
 
     pthread_mutex_lock(&emuThreadMutex);
-    if (!stop) {
+    if (started.load(std::memory_order_acquire)
+        && !stop.load(std::memory_order_acquire)) {
         bool wasPaused = paused;
         if (paused) {
             pthread_mutex_unlock(&emuThreadMutex);
@@ -2248,45 +2777,32 @@ Java_me_magnum_melonds_MelonEmulator_loadRewindState(JNIEnv* env, jobject thiz, 
         }
 
         jclass rewindSaveStateClass = env->FindClass("me/magnum/melonds/ui/emulator/rewind/model/RewindSaveState");
-        jfieldID bufferField = rewindSaveStateClass ? env->GetFieldID(rewindSaveStateClass, "buffer", "Ljava/nio/ByteBuffer;") : nullptr;
-        jfieldID bufferContentSizeField = rewindSaveStateClass ? env->GetFieldID(rewindSaveStateClass, "bufferContentSize", "J") : nullptr;
-        jfieldID screenshotBufferField = rewindSaveStateClass ? env->GetFieldID(rewindSaveStateClass, "screenshotBuffer", "Ljava/nio/ByteBuffer;") : nullptr;
-        jfieldID frameField = rewindSaveStateClass ? env->GetFieldID(rewindSaveStateClass, "frame", "I") : nullptr;
-        if (rewindSaveStateClass != nullptr) env->DeleteLocalRef(rewindSaveStateClass);
-
-        jobject buffer = bufferField ? env->GetObjectField(rewindSaveState, bufferField) : nullptr;
-        jlong bufferContentSize = bufferContentSizeField ? env->GetLongField(rewindSaveState, bufferContentSizeField) : 0;
-        jobject screenshotBuffer = screenshotBufferField ? env->GetObjectField(rewindSaveState, screenshotBufferField) : nullptr;
-        jint frame = frameField ? (int) env->GetIntField(rewindSaveState, frameField) : 0;
-        if (env->ExceptionCheck()) env->ExceptionClear();
+        jfieldID bufferField = env->GetFieldID(rewindSaveStateClass, "buffer", "Ljava/nio/ByteBuffer;");
+        jfieldID bufferContentSizeField = env->GetFieldID(rewindSaveStateClass, "bufferContentSize", "J");
+        jfieldID screenshotBufferField = env->GetFieldID(rewindSaveStateClass, "screenshotBuffer", "Ljava/nio/ByteBuffer;");
+        jfieldID frameField = env->GetFieldID(rewindSaveStateClass, "frame", "I");
+        jobject buffer = env->GetObjectField(rewindSaveState, bufferField);
+        jlong bufferContentSize = env->GetLongField(rewindSaveState, bufferContentSizeField);
+        jobject screenshotBuffer = env->GetObjectField(rewindSaveState, screenshotBufferField);
+        jint frame = (int) env->GetIntField(rewindSaveState, frameField);
 
         // Make sure that the thread is really paused to avoid data corruption
-        while (started.load(std::memory_order_acquire) && !stop.load(std::memory_order_acquire) && !isThreadReallyPaused.load(std::memory_order_acquire)) {
-            sched_yield();
-        }
+        if (!waitForEmulationThreadPaused())
+            return JNI_FALSE;
 
-        u8* bufferPtr = buffer ? (u8*) env->GetDirectBufferAddress(buffer) : nullptr;
-        jlong bufferCapacity = buffer ? env->GetDirectBufferCapacity(buffer) : -1;
-        u8* screenshotPtr = screenshotBuffer ? (u8*) env->GetDirectBufferAddress(screenshotBuffer) : nullptr;
-        jlong screenshotCapacity = screenshotBuffer ? env->GetDirectBufferCapacity(screenshotBuffer) : -1;
+        melonDS::RewindSaveState state = melonDS::RewindSaveState {
+            .buffer = (u8*) env->GetDirectBufferAddress(buffer),
+            .bufferSize = (u32) env->GetDirectBufferCapacity(buffer),
+            .bufferContentSize = (u32) bufferContentSize,
+            .screenshot = (u8*) env->GetDirectBufferAddress(screenshotBuffer),
+            .screenshotSize = (u32) env->GetDirectBufferCapacity(screenshotBuffer),
+            .frame = frame
+        };
 
-        if (bufferPtr != nullptr && bufferCapacity > 0 && bufferContentSize > 0 && bufferContentSize <= bufferCapacity &&
-            screenshotPtr != nullptr && screenshotCapacity >= 0)
         {
-            melonDS::RewindSaveState state = melonDS::RewindSaveState {
-                .buffer = bufferPtr,
-                .bufferSize = (u32) bufferCapacity,
-                .bufferContentSize = (u32) bufferContentSize,
-                .screenshot = screenshotPtr,
-                .screenshotSize = (u32) screenshotCapacity,
-                .frame = frame
-            };
-
+            std::lock_guard<std::mutex> coreLock(emulationCoreAccessMutex);
             result = MelonDSAndroid::loadRewindState(state);
         }
-
-        if (buffer != nullptr) env->DeleteLocalRef(buffer);
-        if (screenshotBuffer != nullptr) env->DeleteLocalRef(screenshotBuffer);
 
         // Resume emulation if it was running
         if (!wasPaused) {
@@ -2297,151 +2813,78 @@ Java_me_magnum_melonds_MelonEmulator_loadRewindState(JNIEnv* env, jobject thiz, 
         pthread_mutex_unlock(&emuThreadMutex);
     }
 
-    return result ? JNI_TRUE : JNI_FALSE;
+    return result;
 }
 
 JNIEXPORT jobject JNICALL
 Java_me_magnum_melonds_MelonEmulator_getRewindWindow(JNIEnv* env, jobject thiz) {
+    std::lock_guard<std::mutex> lifecycleLock(emulatorLifecycleMutex);
+    if (!emulatorResourcesActive)
+        return nullptr;
+
     auto currentRewindWindow = MelonDSAndroid::getRewindWindow();
 
-    jclass byteBufferClass = env->FindClass("java/nio/ByteBuffer");
-    jmethodID allocateDirectMethod = byteBufferClass ? env->GetStaticMethodID(byteBufferClass, "allocateDirect", "(I)Ljava/nio/ByteBuffer;") : nullptr;
-
     jclass rewindSaveStateClass = env->FindClass("me/magnum/melonds/ui/emulator/rewind/model/RewindSaveState");
-    jmethodID rewindSaveStateConstructor = rewindSaveStateClass ? env->GetMethodID(rewindSaveStateClass, "<init>", "(Ljava/nio/ByteBuffer;JLjava/nio/ByteBuffer;I)V") : nullptr;
+    jmethodID rewindSaveStateConstructor = env->GetMethodID(rewindSaveStateClass, "<init>", "(Ljava/nio/ByteBuffer;JLjava/nio/ByteBuffer;I)V");
 
     jclass listClass = env->FindClass("java/util/ArrayList");
-    jmethodID listConstructor = listClass ? env->GetMethodID(listClass, "<init>", "()V") : nullptr;
-    jmethodID listAddMethod = listClass ? env->GetMethodID(listClass, "add", "(ILjava/lang/Object;)V") : nullptr;
-    jobject rewindStateList = (listClass && listConstructor) ? env->NewObject(listClass, listConstructor) : nullptr;
-    if (listClass) env->DeleteLocalRef(listClass);
-
-    if (!byteBufferClass || !allocateDirectMethod || !rewindSaveStateClass || !rewindSaveStateConstructor || !rewindStateList || !listAddMethod)
-    {
-        if (env->ExceptionCheck()) env->ExceptionClear();
-        if (byteBufferClass) env->DeleteLocalRef(byteBufferClass);
-        if (rewindSaveStateClass) env->DeleteLocalRef(rewindSaveStateClass);
-        if (rewindStateList) env->DeleteLocalRef(rewindStateList);
-        return nullptr;
-    }
+    jmethodID listConstructor = env->GetMethodID(listClass, "<init>", "()V");
+    jmethodID listAddMethod = env->GetMethodID(listClass, "add", "(ILjava/lang/Object;)V");
+    jobject rewindStateList = env->NewObject(listClass, listConstructor);
 
     int index = 0;
-    for (const auto& state : currentRewindWindow.rewindStates) {
-        if (state.buffer == nullptr || state.bufferSize == 0 || state.bufferContentSize == 0 ||
-            state.screenshot == nullptr || state.screenshotSize == 0)
-        {
-            continue;
-        }
-
-        const u32 copyBufferSize = std::min(state.bufferContentSize, state.bufferSize);
-        jobject stateBuffer = env->CallStaticObjectMethod(byteBufferClass, allocateDirectMethod, static_cast<jint>(copyBufferSize));
-        if (env->ExceptionCheck() || stateBuffer == nullptr)
-        {
-            if (env->ExceptionCheck()) env->ExceptionClear();
-            if (stateBuffer) env->DeleteLocalRef(stateBuffer);
-            continue;
-        }
-        void* stateBufferDst = env->GetDirectBufferAddress(stateBuffer);
-        if (stateBufferDst == nullptr)
-        {
-            env->DeleteLocalRef(stateBuffer);
-            continue;
-        }
-        std::memcpy(stateBufferDst, state.buffer, copyBufferSize);
-
-        jobject stateScreenshot = env->CallStaticObjectMethod(byteBufferClass, allocateDirectMethod, static_cast<jint>(state.screenshotSize));
-        if (env->ExceptionCheck() || stateScreenshot == nullptr)
-        {
-            if (env->ExceptionCheck()) env->ExceptionClear();
-            if (stateScreenshot) env->DeleteLocalRef(stateScreenshot);
-            env->DeleteLocalRef(stateBuffer);
-            continue;
-        }
-        void* stateScreenshotDst = env->GetDirectBufferAddress(stateScreenshot);
-        if (stateScreenshotDst == nullptr)
-        {
-            env->DeleteLocalRef(stateScreenshot);
-            env->DeleteLocalRef(stateBuffer);
-            continue;
-        }
-        std::memcpy(stateScreenshotDst, state.screenshot, state.screenshotSize);
-
-        jobject rewindSaveState = env->NewObject(
-            rewindSaveStateClass,
-            rewindSaveStateConstructor,
-            stateBuffer,
-            static_cast<jlong>(copyBufferSize),
-            stateScreenshot,
-            state.frame
-        );
-        if (env->ExceptionCheck() || rewindSaveState == nullptr)
-        {
-            if (env->ExceptionCheck()) env->ExceptionClear();
-            if (rewindSaveState) env->DeleteLocalRef(rewindSaveState);
-            env->DeleteLocalRef(stateScreenshot);
-            env->DeleteLocalRef(stateBuffer);
-            continue;
-        }
-
+    for (auto state : currentRewindWindow.rewindStates) {
+        jobject stateBuffer = env->NewDirectByteBuffer(state.buffer, state.bufferSize);
+        jobject stateScreenshot = env->NewDirectByteBuffer(state.screenshot, state.screenshotSize);
+        jobject rewindSaveState = env->NewObject(rewindSaveStateClass, rewindSaveStateConstructor, stateBuffer, (jlong) state.bufferContentSize, stateScreenshot, state.frame);
         env->CallVoidMethod(rewindStateList, listAddMethod, index++, rewindSaveState);
-        if (env->ExceptionCheck()) env->ExceptionClear();
-        env->DeleteLocalRef(rewindSaveState);
-        env->DeleteLocalRef(stateScreenshot);
-        env->DeleteLocalRef(stateBuffer);
     }
 
-    env->DeleteLocalRef(byteBufferClass);
-    env->DeleteLocalRef(rewindSaveStateClass);
-
     jclass rewindWindowClass = env->FindClass("me/magnum/melonds/ui/emulator/rewind/model/RewindWindow");
-    jmethodID rewindWindowConstructor = rewindWindowClass ? env->GetMethodID(rewindWindowClass, "<init>", "(ILjava/util/ArrayList;)V") : nullptr;
-    jobject rewindWindow = (rewindWindowClass && rewindWindowConstructor)
-        ? env->NewObject(rewindWindowClass, rewindWindowConstructor, currentRewindWindow.currentFrame, rewindStateList)
-        : nullptr;
-    if (env->ExceptionCheck()) env->ExceptionClear();
-    if (rewindWindowClass) env->DeleteLocalRef(rewindWindowClass);
-    env->DeleteLocalRef(rewindStateList);
+    jmethodID rewindWindowConstructor = env->GetMethodID(rewindWindowClass, "<init>", "(ILjava/util/ArrayList;)V");
+    jobject rewindWindow = env->NewObject(rewindWindowClass, rewindWindowConstructor, currentRewindWindow.currentFrame, rewindStateList);
     return rewindWindow;
 }
 
 JNIEXPORT void JNICALL
 Java_me_magnum_melonds_MelonEmulator_stopEmulation(JNIEnv* env, jobject thiz)
 {
-    if (started)
+    std::lock_guard<std::mutex> lifecycleLock(emulatorLifecycleMutex);
+    if (!emulatorResourcesActive)
+        return;
+
+    bool shouldJoin = false;
+    pthread_mutex_lock(&emuThreadMutex);
+    if (started.load(std::memory_order_acquire))
     {
-        pthread_mutex_lock(&emuThreadMutex);
         stop = true;
         paused = false;
-        frameStepRequested = false;
+        debugFrameStepsRemaining = 0;
         started = false;
         pthread_cond_broadcast(&emuThreadCond);
-        pthread_mutex_unlock(&emuThreadMutex);
-
+        shouldJoin = true;
+    }
+    pthread_mutex_unlock(&emuThreadMutex);
+    if (shouldJoin)
+    {
         pthread_join(emuThread, NULL);
     }
 
     MelonDSAndroid::cleanup();
 
-    if (globalCameraManager != nullptr)
+    env->DeleteGlobalRef(globalCameraManager);
+    if (frameRenderCallbackClass != nullptr)
     {
-        env->DeleteGlobalRef(globalCameraManager);
-        globalCameraManager = nullptr;
-    }
-    {
-        std::lock_guard<std::mutex> lock(frameRenderCallbackLock);
-        if (frameRenderCallbackClass != nullptr)
-        {
-            env->DeleteGlobalRef(frameRenderCallbackClass);
-            frameRenderCallbackClass = nullptr;
-            frameRenderMethodId = nullptr;
-        }
+        env->DeleteGlobalRef(frameRenderCallbackClass);
+        frameRenderCallbackClass = nullptr;
+        frameRenderMethodId = nullptr;
     }
 
-    if (androidCameraHandler != nullptr)
-    {
-        delete androidCameraHandler;
-        androidCameraHandler = nullptr;
-    }
+    globalCameraManager = nullptr;
+
+    delete androidCameraHandler;
+    androidCameraHandler = nullptr;
+    emulatorResourcesActive = false;
 }
 
 JNIEXPORT void JNICALL
@@ -2456,6 +2899,98 @@ Java_me_magnum_melonds_MelonEmulator_onScreenRelease(JNIEnv* env, jobject thiz)
     MelonDSAndroid::releaseScreen();
 }
 
+JNIEXPORT jstring JNICALL
+Java_me_magnum_melonds_MelonEmulator_armExactLiveGuide(
+    JNIEnv* env,
+    jobject thiz,
+    jlong anchorFrame,
+    jint x,
+    jint y)
+{
+    (void)thiz;
+    std::lock_guard<std::mutex> lifecycleLock(emulatorLifecycleMutex);
+    if (!emulatorResourcesActive)
+        return env->NewStringUTF("{\"state\":\"unavailable\"}");
+
+    try
+    {
+        std::string status;
+        {
+            PthreadMutexGuard emulationLock(emuThreadMutex);
+            if (started.load(std::memory_order_acquire)
+                && !stop.load(std::memory_order_acquire))
+            {
+                (void)MelonDSAndroid::armExactLiveGuide(
+                    static_cast<std::int64_t>(anchorFrame),
+                    static_cast<melonDS::u16>(std::clamp(x, 0, 255)),
+                    static_cast<melonDS::u16>(std::clamp(y, 0, 191)));
+            }
+            status = MelonDSAndroid::getExactLiveGuideStatusJson();
+        }
+        return env->NewStringUTF(status.c_str());
+    }
+    catch (...)
+    {
+        return env->NewStringUTF(
+            "{\"state\":\"error\",\"detail\":\"native_exception\"}");
+    }
+}
+
+JNIEXPORT jstring JNICALL
+Java_me_magnum_melonds_MelonEmulator_getExactLiveGuideStatus(
+    JNIEnv* env,
+    jobject thiz)
+{
+    (void)thiz;
+    std::lock_guard<std::mutex> lifecycleLock(emulatorLifecycleMutex);
+    if (!emulatorResourcesActive)
+        return env->NewStringUTF("{\"state\":\"unavailable\"}");
+
+    try
+    {
+        std::string status;
+        {
+            PthreadMutexGuard emulationLock(emuThreadMutex);
+            status = MelonDSAndroid::getExactLiveGuideStatusJson();
+        }
+        return env->NewStringUTF(status.c_str());
+    }
+    catch (...)
+    {
+        return env->NewStringUTF(
+            "{\"state\":\"error\",\"detail\":\"native_exception\"}");
+    }
+}
+
+JNIEXPORT jstring JNICALL
+Java_me_magnum_melonds_MelonEmulator_abortExactLiveGuide(
+    JNIEnv* env,
+    jobject thiz)
+{
+    (void)thiz;
+    std::lock_guard<std::mutex> lifecycleLock(emulatorLifecycleMutex);
+    if (!emulatorResourcesActive)
+        return env->NewStringUTF("{\"state\":\"unavailable\"}");
+
+    try
+    {
+        std::string status;
+        {
+            PthreadMutexGuard emulationLock(emuThreadMutex);
+            MelonDSAndroid::abortExactLiveGuide(
+                static_cast<std::uint32_t>(
+                    MelonDSAndroid::ExactLiveGuide::AbortReason::ExplicitCommand));
+            status = MelonDSAndroid::getExactLiveGuideStatusJson();
+        }
+        return env->NewStringUTF(status.c_str());
+    }
+    catch (...)
+    {
+        return env->NewStringUTF(
+            "{\"state\":\"error\",\"detail\":\"native_exception\"}");
+    }
+}
+
 JNIEXPORT void JNICALL
 Java_me_magnum_melonds_MelonEmulator_onKeyPress(JNIEnv* env, jobject thiz, jint key)
 {
@@ -2468,10 +3003,43 @@ Java_me_magnum_melonds_MelonEmulator_onKeyRelease(JNIEnv* env, jobject thiz, jin
     MelonDSAndroid::releaseKey(key);
 }
 
-JNIEXPORT jboolean JNICALL
+JNIEXPORT jintArray JNICALL
 Java_me_magnum_melonds_MelonEmulator_takeScreenshot(JNIEnv* env, jobject thiz)
 {
-    return MelonDSAndroid::takeScreenshot();
+    std::lock_guard<std::mutex> lifecycleLock(emulatorLifecycleMutex);
+    if (!emulatorResourcesActive)
+        return nullptr;
+    pthread_mutex_lock(&emuThreadMutex);
+    const bool canCapture = started.load(std::memory_order_acquire)
+        && !stop.load(std::memory_order_acquire) && !paused;
+    pthread_mutex_unlock(&emuThreadMutex);
+    if (!canCapture || !MelonDSAndroid::takeScreenshot())
+        return nullptr;
+    std::vector<u32> pixels;
+    try
+    {
+        std::lock_guard<std::mutex> coreLock(emulationCoreAccessMutex);
+        pixels = MelonDSAndroid::getScreenshotPixels();
+    }
+    catch (const std::bad_alloc&)
+    {
+        return nullptr;
+    }
+    if (pixels.size() != 256u * 384u)
+        return nullptr;
+    jintArray result = env->NewIntArray(static_cast<jsize>(pixels.size()));
+    if (env->ExceptionCheck() || result == nullptr)
+        return nullptr;
+    env->SetIntArrayRegion(result, 0, static_cast<jsize>(pixels.size()), reinterpret_cast<const jint*>(pixels.data()));
+    if (env->ExceptionCheck())
+        return nullptr;
+    return result;
+}
+
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_updateMotionData(JNIEnv*, jobject, jfloat ax, jfloat ay, jfloat az, jfloat rx, jfloat ry, jfloat rz)
+{
+    MelonDSAndroid::updateMotionData(ax, ay, az, rx, ry, rz);
 }
 
 JNIEXPORT void JNICALL
@@ -2483,45 +3051,66 @@ Java_me_magnum_melonds_MelonEmulator_setSlot2AnalogInput(JNIEnv* env, jobject th
 JNIEXPORT void JNICALL
 Java_me_magnum_melonds_MelonEmulator_setFastForwardEnabled(JNIEnv* env, jobject thiz, jboolean enabled)
 {
-    const bool wasFastForwardEnabled = isFastForwardEnabled;
-    isFastForwardEnabled = enabled;
-    MelonDSAndroid::setFastForwardActive(enabled);
-    if (enabled) {
-        limitFps = fastForwardSpeedMultiplier > 0;
-        targetFps = 60 * fastForwardSpeedMultiplier;
+    const bool fastForwardEnabled = enabled == JNI_TRUE && !MelonDSAndroid::Multiplayer::Active();
+    const bool wasFastForwardEnabled = isFastForwardEnabled.exchange(
+        fastForwardEnabled,
+        std::memory_order_acq_rel);
+    MelonDSAndroid::setFastForwardActive(fastForwardEnabled);
+    if (fastForwardEnabled) {
+        const float multiplier = fastForwardSpeedMultiplier.load(std::memory_order_acquire);
+        limitFps = multiplier > 0;
+        targetFps = static_cast<int>(60.0f * multiplier);
     } else {
         limitFps = true;
         targetFps = targetFpsForFrameLimit();
-        if (wasFastForwardEnabled)
-            MelonDSAndroid::requestVulkanFastForwardPresentationTransition();
     }
+    if (wasFastForwardEnabled != fastForwardEnabled)
+        MelonDSAndroid::requestVulkanFastForwardPresentationTransition();
 
+    publishCurrentAudioOutputSpeedHint();
     updatePerformanceHintTarget();
-}
-
-JNIEXPORT void JNICALL
-Java_me_magnum_melonds_MelonEmulator_setMuteOnFastForwardEnabled(JNIEnv* env, jobject thiz, jboolean enabled)
-{
-    (void)env;
-    (void)thiz;
-    MelonDSAndroid::setMuteOnFastForwardActive(enabled);
-}
-
-JNIEXPORT void JNICALL
-Java_me_magnum_melonds_MelonEmulator_setRewindActive(JNIEnv* env, jobject thiz, jboolean active)
-{
-    MelonDSAndroid::setRewindActive(active);
 }
 
 JNIEXPORT void JNICALL
 Java_me_magnum_melonds_MelonEmulator_setFrameLimitSpeedMultiplier(JNIEnv* env, jobject thiz, jfloat multiplier)
 {
-    frameLimitSpeedMultiplier = sanitizeFrameLimitSpeedMultiplier(multiplier);
-    if (!isFastForwardEnabled) {
+    const float sanitized = sanitizeFrameLimitSpeedMultiplier(multiplier);
+    frameLimitSpeedMultiplier.store(sanitized, std::memory_order_release);
+    if (sanitized < 1.0f && isFastForwardEnabled.load(std::memory_order_acquire)) {
+        isFastForwardEnabled.store(false, std::memory_order_release);
+        MelonDSAndroid::setFastForwardActive(false);
+    }
+    if (!isFastForwardEnabled.load(std::memory_order_acquire)) {
         limitFps = true;
         targetFps = targetFpsForFrameLimit();
     }
+    publishCurrentAudioOutputSpeedHint();
     updatePerformanceHintTarget();
+}
+
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_setFrameskipMode(JNIEnv* env, jobject thiz, jint mode, jint manualValue)
+{
+    frameskipMode.store(sanitizeFrameskipMode(mode), std::memory_order_release);
+    frameskipManualValue.store(sanitizeFrameskipManualValue(manualValue), std::memory_order_release);
+}
+
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_setVulkanDrsEnabled(JNIEnv* env, jobject thiz, jboolean enabled)
+{
+    vulkanDrsEnabled.store(enabled == JNI_TRUE, std::memory_order_release);
+}
+
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_setMuteOnFastForward(JNIEnv* env, jobject thiz, jboolean enabled)
+{
+    MelonDSAndroid::setMuteOnFastForward(enabled == JNI_TRUE);
+}
+
+JNIEXPORT jint JNICALL
+Java_me_magnum_melonds_MelonEmulator_getVulkanRenderedInternalResolution(JNIEnv* env, jobject thiz)
+{
+    return MelonDSAndroid::getVulkanRenderedInternalResolution();
 }
 
 JNIEXPORT void JNICALL
@@ -2537,252 +3126,98 @@ JNIEXPORT void JNICALL
 Java_me_magnum_melonds_MelonEmulator_updateEmulatorConfiguration(JNIEnv* env, jobject thiz, jobject emulatorConfiguration)
 {
     MelonDSAndroid::EmulatorConfiguration newConfiguration = MelonDSAndroidConfiguration::buildEmulatorConfiguration(env, emulatorConfiguration);
+    if (env->ExceptionCheck())
+        return;
 
-    fastForwardSpeedMultiplier = newConfiguration.fastForwardSpeedMultiplier;
-    frameLimitSpeedMultiplier = sanitizeFrameLimitSpeedMultiplier(newConfiguration.frameLimitSpeedMultiplier);
+    fastForwardSpeedMultiplier.store(
+        newConfiguration.fastForwardSpeedMultiplier,
+        std::memory_order_release);
+    frameLimitSpeedMultiplier.store(
+        sanitizeFrameLimitSpeedMultiplier(newConfiguration.frameLimitSpeedMultiplier),
+        std::memory_order_release);
+    frameskipMode.store(sanitizeFrameskipMode(newConfiguration.frameskipMode),
+                        std::memory_order_release);
+    frameskipManualValue.store(sanitizeFrameskipManualValue(newConfiguration.frameskipManualValue),
+                               std::memory_order_release);
+    vulkanDrsEnabled.store(newConfiguration.vulkanDrsEnabled, std::memory_order_release);
+    MelonDSAndroid::setMuteOnFastForward(newConfiguration.audioSettings.muteOnFastForward);
 
     MelonDSAndroid::updateEmulatorConfiguration(std::make_unique<MelonDSAndroid::EmulatorConfiguration>(std::move(newConfiguration)));
 
-    if (isFastForwardEnabled) {
-        limitFps = fastForwardSpeedMultiplier > 0;
-        targetFps = 60 * fastForwardSpeedMultiplier;
+    if (isFastForwardEnabled.load(std::memory_order_acquire)) {
+        const float multiplier = fastForwardSpeedMultiplier.load(std::memory_order_acquire);
+        limitFps = multiplier > 0;
+        targetFps = static_cast<int>(60.0f * multiplier);
     } else {
         limitFps = true;
         targetFps = targetFpsForFrameLimit();
     }
+    publishCurrentAudioOutputSpeedHint();
     updatePerformanceHintTarget();
 }
-}
 
-MelonDSAndroid::RomGbaSlotConfig* buildGbaSlotConfig(GbaSlotType slotType, const char* romPath, const char* savePath)
+
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_setupEmulator(JNIEnv* env, jobject thiz, jobject emulatorConfiguration, jobject cameraManager, jobject screenshotBuffer)
 {
-    if (slotType == GbaSlotType::GBA_ROM && romPath != nullptr)
-    {
-        MelonDSAndroid::RomGbaSlotConfigGbaRom* gbaSlotConfigGbaRom = new MelonDSAndroid::RomGbaSlotConfigGbaRom {
-            .romPath = std::string(romPath),
-            .savePath = savePath ? std::string(savePath) : "",
-        };
-        return (MelonDSAndroid::RomGbaSlotConfig*) gbaSlotConfigGbaRom;
-    }
-    else if (slotType == GbaSlotType::RUMBLE_PAK)
-    {
-        return (MelonDSAndroid::RomGbaSlotConfig*) new MelonDSAndroid::RomGbaSlotRumblePak;
-    }
-    else if (slotType == GbaSlotType::MEMORY_EXPANSION)
-    {
-        return (MelonDSAndroid::RomGbaSlotConfig*) new MelonDSAndroid::RomGbaSlotConfigMemoryExpansion;
-    }
-    else if (slotType == GbaSlotType::ANALOG_INPUT)
-    {
-        return (MelonDSAndroid::RomGbaSlotConfig*) new MelonDSAndroid::RomGbaSlotConfigAnalogInput;
-    }
-    else
-    {
-        return (MelonDSAndroid::RomGbaSlotConfig*) new MelonDSAndroid::RomGbaSlotConfigNone;
-    }
+    Java_me_magnum_melonds_MelonEmulator_setupEmulatorInternal(env, thiz, emulatorConfiguration, cameraManager, screenshotBuffer);
 }
 
-static inline int64_t getMonotonicNanos() {
-    timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return static_cast<int64_t>(ts.tv_sec) * 1000000000LL + static_cast<int64_t>(ts.tv_nsec);
-}
-
-double getCurrentMillis() {
-    return static_cast<double>(getMonotonicNanos()) / 1000000.0;
-}
-
-void* emulate(void*)
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_presentVulkanFrame(JNIEnv* env, jobject thiz, jlong deadlineNs, jlong budgetDeadlineNs)
 {
-    // Elevate emulation worker thread priority to high-performance class (-8)
-    (void)setpriority(PRIO_PROCESS, gettid(), -8);
-
-    int64_t nextFrameTimeNs = getMonotonicNanos();
-    int64_t lastMeasureFpsTimeNs = nextFrameTimeNs;
-    int observedFrames = 0;
-
-    MelonDSAndroid::start();
-
-    auto manager = PerformanceHintManagerFactory::create(jniEnvHandler);
-    {
-        std::lock_guard<std::mutex> lock(performanceHintSessionMutex);
-        performanceHintSession = new ThreadSafePerformanceHintSession(std::move(manager));
-        performanceHintSession->createSession(gettid(), FRAME_DURATION_60FPS_NS);
-    }
-    updatePerformanceHintTarget();
-
-    for (;;)
-    {
-        bool pauseAfterCurrentFrame = false;
-        pthread_mutex_lock(&emuThreadMutex);
-        if (paused) {
-            isThreadReallyPaused = true;
-            pthread_cond_broadcast(&emuThreadCond);
-            while (paused && !stop)
-                pthread_cond_wait(&emuThreadCond, &emuThreadMutex);
-
-            nextFrameTimeNs = getMonotonicNanos();
-            lastMeasureFpsTimeNs = nextFrameTimeNs;
-            observedFrames = 0;
-            isThreadReallyPaused = false;
-        }
-
-        if (stop) {
-            pthread_mutex_unlock(&emuThreadMutex);
-            break;
-        }
-
-        pauseAfterCurrentFrame = frameStepRequested;
-        frameStepRequested = false;
-        pthread_mutex_unlock(&emuThreadMutex);
-
-        auto frameStart = std::chrono::steady_clock::now();
-
-        u32 nLines = MelonDSAndroid::loop();
-
-        auto frameDuration = std::chrono::steady_clock::now() - frameStart;
-        {
-            std::lock_guard<std::mutex> lock(performanceHintSessionMutex);
-            if (performanceHintSession != nullptr)
-                performanceHintSession->reportActualWorkDuration(std::chrono::nanoseconds(frameDuration).count());
-        }
-
-        const int currentTargetFps = (targetFps.load(std::memory_order_relaxed) > 0) ? targetFps.load(std::memory_order_relaxed) : 60;
-        const double linesRatio = (nLines > 0 && nLines <= 263) ? (static_cast<double>(nLines) / 263.0) : 1.0;
-        const int64_t targetFrameDurationNs = static_cast<int64_t>((1000000000.0 / static_cast<double>(currentTargetFps)) * linesRatio);
-
-        if (limitFps.load(std::memory_order_relaxed) && targetFrameDurationNs > 0)
-        {
-            nextFrameTimeNs += targetFrameDurationNs;
-            int64_t nowNs = getMonotonicNanos();
-
-            // If behind schedule by more than 2 frames (due to loading/system hitch), resync target
-            if (nowNs > nextFrameTimeNs + (targetFrameDurationNs * 2))
-            {
-                nextFrameTimeNs = nowNs;
-            }
-            else if (nowNs < nextFrameTimeNs)
-            {
-                const int64_t sleepNs = nextFrameTimeNs - nowNs;
-                if (sleepNs > 50000LL)
-                {
-                    timespec targetTs = {
-                        .tv_sec = static_cast<time_t>(nextFrameTimeNs / 1000000000LL),
-                        .tv_nsec = static_cast<long>(nextFrameTimeNs % 1000000000LL),
-                    };
-                    while (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &targetTs, nullptr) == EINTR)
-                    {
-                        if (stop.load(std::memory_order_relaxed))
-                            break;
-                    }
-                }
-                if (getMonotonicNanos() < nextFrameTimeNs)
-                {
-                    std::this_thread::yield();
-                }
-            }
-        }
-        else
-        {
-            nextFrameTimeNs = getMonotonicNanos();
-        }
-
-        observedFrames++;
-        int64_t currentNowNs = getMonotonicNanos();
-        if (observedFrames >= 30) {
-            int64_t elapsedNs = currentNowNs - lastMeasureFpsTimeNs;
-            if (elapsedNs > 0) {
-                fps.store(static_cast<float>((static_cast<double>(observedFrames) * 1000000000.0) / static_cast<double>(elapsedNs)), std::memory_order_relaxed);
-            }
-            lastMeasureFpsTimeNs = currentNowNs;
-            observedFrames = 0;
-        }
-
-        if (pauseAfterCurrentFrame)
-        {
-            pthread_mutex_lock(&emuThreadMutex);
-            if (!stop)
-                paused = true;
-            pthread_mutex_unlock(&emuThreadMutex);
-            MelonDSAndroid::pause();
-        }
-    }
-
-    {
-        std::lock_guard<std::mutex> lock(performanceHintSessionMutex);
-        if (performanceHintSession != nullptr) {
-            performanceHintSession->destroySession();
-
-            delete performanceHintSession;
-            performanceHintSession = nullptr;
-        }
-    }
-
-    MelonDSAndroid::stop();
-    pthread_exit(NULL);
+    static_cast<void>(Java_me_magnum_melonds_MelonEmulator_presentVulkanFrameNative(env, thiz, deadlineNs, budgetDeadlineNs, 0));
 }
 
-// ========== ROM Decryptor JNI ==========
-
-#include "RomDecryptor.h"
-
-static JavaVM* g_decryptorJavaVM = nullptr;
-static jobject g_decryptorCallback = nullptr;
-static std::mutex g_decryptorCallbackMutex;
-static std::mutex g_decryptorOperationMutex;
-
-static void jniDecryptProgressCallback(uint32_t current, uint32_t total)
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_setMuteOnFastForwardEnabled(JNIEnv* env, jobject thiz, jboolean enabled)
 {
-    JavaVM* vm = nullptr;
-    jobject globalCallback = nullptr;
-    {
-        std::lock_guard<std::mutex> lock(g_decryptorCallbackMutex);
-        vm = g_decryptorJavaVM;
-        globalCallback = g_decryptorCallback;
-    }
-    if (!vm || !globalCallback) return;
-
-    JNIEnv* env = nullptr;
-    bool attached = false;
-    int status = vm->GetEnv((void**)&env, JNI_VERSION_1_6);
-    if (status == JNI_EDETACHED)
-    {
-        if (vm->AttachCurrentThread(&env, nullptr) != JNI_OK)
-            return;
-        attached = true;
-    }
-
-    jobject localCallback = nullptr;
-    {
-        std::lock_guard<std::mutex> lock(g_decryptorCallbackMutex);
-        if (env && g_decryptorCallback)
-            localCallback = env->NewLocalRef(g_decryptorCallback);
-    }
-
-    if (env && localCallback)
-    {
-        jclass cls = env->GetObjectClass(localCallback);
-        if (cls)
-        {
-            jmethodID mid = env->GetMethodID(cls, "onProgress", "(II)V");
-            if (mid)
-            {
-                env->CallVoidMethod(localCallback, mid, (jint)current, (jint)total);
-            }
-            env->DeleteLocalRef(cls);
-        }
-        if (env->ExceptionCheck())
-        {
-            env->ExceptionClear();
-        }
-        env->DeleteLocalRef(localCallback);
-    }
-
-    if (attached)
-        vm->DetachCurrentThread();
+    Java_me_magnum_melonds_MelonEmulator_setMuteOnFastForward(env, thiz, enabled);
 }
 
-extern "C" {
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_setRewindActive(JNIEnv*, jobject, jboolean active)
+{
+    MelonDSAndroid::setRewindActive(active == JNI_TRUE);
+}
+
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_flushPendingSaveStateWrites(JNIEnv*, jobject)
+{
+    MelonDSAndroid::flushPendingSaveStateWrites();
+}
+
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_flushSramSaves(JNIEnv*, jobject)
+{
+    MelonDSAndroid::flushSramSaves();
+}
+
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_setRetroAchievementsHardcoreEnabled(JNIEnv*, jobject, jboolean enabled)
+{
+    MelonDSAndroid::setRetroAchievementsHardcoreEnabled(enabled == JNI_TRUE);
+}
+
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_startBootDiagnosticCapture(JNIEnv*, jobject)
+{
+    melonDS::Platform::StartBootDiagnosticCapture();
+}
+
+JNIEXPORT jstring JNICALL
+Java_me_magnum_melonds_MelonEmulator_stopAndGetBootDiagnostic(JNIEnv* env, jobject)
+{
+    std::string diag = melonDS::Platform::StopAndGetBootDiagnostic();
+    return env->NewStringUTF(diag.c_str());
+}
+
+JNIEXPORT jstring JNICALL
+Java_me_magnum_melonds_MelonEmulator_getDetailedEmulationDiagnostic(JNIEnv* env, jobject)
+{
+    std::string diag = MelonDSAndroid::getDetailedEmulationDiagnostic();
+    return env->NewStringUTF(diag.c_str());
+}
 
 JNIEXPORT jint JNICALL
 Java_me_magnum_melonds_MelonRomDecryptor_checkEncryptionNative(JNIEnv* env, jobject thiz, jstring romPath)
@@ -2890,6 +3325,7 @@ Java_me_magnum_melonds_MelonEmulator_startLanClient(JNIEnv* env, jobject thiz, j
     const char* name = playerName ? env->GetStringUTFChars(playerName, nullptr) : "Player";
     const char* safeName = name ? name : "Player";
     const char* host = hostIp ? env->GetStringUTFChars(hostIp, nullptr) : "";
+    bool ok = false;
     {
         std::lock_guard<std::mutex> lock(MelonDSAndroid::mpInterfaceMutex);
         if (melonDS::MPInterface::GetType() != melonDS::MPInterface_LAN)
@@ -2898,12 +3334,10 @@ Java_me_magnum_melonds_MelonEmulator_startLanClient(JNIEnv* env, jobject thiz, j
         }
         auto& lan = static_cast<melonDS::LAN&>(melonDS::MPInterface::Get());
         lan.EndSession();
-    }
-    bool ok = false;
-    if (host != nullptr && host[0] != '\0' && melonDS::MPInterface::GetType() == melonDS::MPInterface_LAN)
-    {
-        auto& lan = static_cast<melonDS::LAN&>(melonDS::MPInterface::Get());
-        ok = lan.StartClient(safeName, host);
+        if (host != nullptr && host[0] != '\0')
+        {
+            ok = lan.StartClient(safeName, host);
+        }
     }
     if (playerName && name)
         env->ReleaseStringUTFChars(playerName, name);
@@ -3199,9 +3633,9 @@ public:
         if (!started.load(std::memory_order_acquire) || stop.load(std::memory_order_acquire))
             return;
 
-        wasPaused = paused.load(std::memory_order_acquire);
+        wasPaused = paused;
         if (!wasPaused)
-            paused.store(true, std::memory_order_release);
+            paused = true;
 
         while (started.load(std::memory_order_acquire)
             && !stop.load(std::memory_order_acquire)
@@ -3221,7 +3655,7 @@ public:
         {
             if (!wasPaused && started.load(std::memory_order_acquire) && !stop.load(std::memory_order_acquire))
             {
-                paused.store(false, std::memory_order_release);
+                paused = false;
                 pthread_cond_broadcast(&emuThreadCond);
             }
             pthread_mutex_unlock(&emuThreadMutex);
@@ -3352,4 +3786,426 @@ Java_me_magnum_melonds_MelonEmulator_setVulkanPipelineCacheFile(JNIEnv* env, jcl
     }
 }
 
+
+}
+
+MelonDSAndroid::RomGbaSlotConfig* buildGbaSlotConfig(GbaSlotType slotType, const char* romPath, const char* savePath)
+{
+    if (slotType == GbaSlotType::GBA_ROM && romPath != nullptr)
+    {
+        MelonDSAndroid::RomGbaSlotConfigGbaRom* gbaSlotConfigGbaRom = new MelonDSAndroid::RomGbaSlotConfigGbaRom {
+            .romPath = std::string(romPath),
+            .savePath = savePath ? std::string(savePath) : "",
+        };
+        return (MelonDSAndroid::RomGbaSlotConfig*) gbaSlotConfigGbaRom;
+    }
+    else if (slotType == GbaSlotType::RUMBLE_PAK)
+    {
+        return (MelonDSAndroid::RomGbaSlotConfig*) new MelonDSAndroid::RomGbaSlotRumblePak;
+    }
+    else if (slotType == GbaSlotType::MEMORY_EXPANSION)
+    {
+        return (MelonDSAndroid::RomGbaSlotConfig*) new MelonDSAndroid::RomGbaSlotConfigMemoryExpansion;
+    }
+    else if (slotType == GbaSlotType::MOTION_PAK_HOMEBREW || slotType == GbaSlotType::MOTION_PAK_RETAIL)
+    {
+        return new MelonDSAndroid::RomGbaSlotConfig{
+            slotType == GbaSlotType::MOTION_PAK_RETAIL ? MelonDSAndroid::MOTION_PAK_RETAIL : MelonDSAndroid::MOTION_PAK_HOMEBREW
+        };
+    }
+    else if (slotType == GbaSlotType::ANALOG_INPUT)
+    {
+        return (MelonDSAndroid::RomGbaSlotConfig*) new MelonDSAndroid::RomGbaSlotConfigAnalogInput;
+    }
+    else
+    {
+        return (MelonDSAndroid::RomGbaSlotConfig*) new MelonDSAndroid::RomGbaSlotConfigNone;
+    }
+}
+
+double getCurrentMillis() {
+    timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    return (now.tv_sec * 1000.0) + now.tv_nsec / 1000000.0;
+}
+
+namespace {
+
+class FrameTimingRecorder {
+public:
+    struct Sample {
+        int frame;
+        unsigned segment, lines;
+        int ir, targetFps;
+        unsigned flags;
+        uint64_t startNs, workNs, cpuNs, endNs, queueWaitNs;
+    };
+
+    FrameTimingRecorder() {
+        char value[PROP_VALUE_MAX]{};
+        if (__system_property_get("debug.melonds.frame_timing", value) <= 0)
+            return;
+        char* end = nullptr;
+        const long count = std::strtol(value, &end, 10);
+        if (end == value || *end != '\0' || count < 1 || count > 16000)
+            return;
+        try {
+            samples.reserve(static_cast<size_t>(count));
+            target = static_cast<size_t>(count);
+        } catch (const std::bad_alloc&) {
+            __android_log_print(ANDROID_LOG_WARN, "FrameTiming", "disabled: allocation failed");
+        }
+    }
+
+    bool active() const { return target != 0; }
+    void resumed() { ++segment; }
+    unsigned currentSegment() const { return segment; }
+    static uint64_t threadCpuNs() {
+        timespec now{};
+        if (clock_gettime(CLOCK_THREAD_CPUTIME_ID, &now) != 0)
+            return 0;
+        return static_cast<uint64_t>(now.tv_sec) * 1000000000ull + now.tv_nsec;
+    }
+    void add(const Sample& sample) {
+        samples.push_back(sample);
+        if (samples.size() != target)
+            return;
+
+        const std::string path = MelonDSAndroid::internalFilesDir + "/frame-timing-"
+            + std::to_string(getpid()) + "-" + std::to_string(samples.front().startNs) + ".csv";
+        const int fd = open(path.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
+        FILE* stream = fd >= 0 ? fdopen(fd, "w") : nullptr;
+        if (stream == nullptr) {
+            if (fd >= 0) close(fd);
+            __android_log_print(ANDROID_LOG_WARN, "FrameTiming", "failed: private file open");
+            target = 0;
+            return;
+        }
+        std::unique_ptr<FILE, decltype(&std::fclose)> file(stream, &std::fclose);
+        unsigned failures = std::fprintf(file.get(),
+            "frame,segment,lines,ir,targetFps,flags,startNs,workNs,cpuNs,endNs,queueWaitNs\n") < 0;
+        for (const Sample& row : samples) {
+            const int written = std::fprintf(file.get(),
+                "%d,%u,%u,%d,%d,%u,%llu,%llu,%llu,%llu,%llu\n",
+                row.frame, row.segment, row.lines, row.ir, row.targetFps, row.flags,
+                static_cast<unsigned long long>(row.startNs),
+                static_cast<unsigned long long>(row.workNs),
+                static_cast<unsigned long long>(row.cpuNs),
+                static_cast<unsigned long long>(row.endNs),
+                static_cast<unsigned long long>(row.queueWaitNs));
+            failures += written < 0;
+        }
+        failures += std::fflush(file.get()) != 0;
+        failures += std::fclose(file.release()) != 0;
+        __android_log_print(ANDROID_LOG_INFO, "FrameTiming",
+            "complete count=%zu writeFailures=%u file=%s", samples.size(), failures, path.c_str());
+        target = 0;
+    }
+private:
+    std::vector<Sample> samples;
+    size_t target = 0;
+    unsigned segment = 0;
+};
+}
+
+void* emulate(void*)
+{
+    MelonDSAndroid::EmulationThreadCpuPolicy cpuPolicy;
+    FrameTimingRecorder frameTiming;
+    double startTick = getCurrentMillis();
+    double lastTick = startTick;
+    double lastMeasureFpsTick = startTick;
+    double frameLimitError = 0.0;
+
+    bool frameskipSolicitado = false;
+
+    int frameskipInhibidoFotogramas = 2;
+
+    int frameskipCicloManual = 0;
+    bool frameskipSolicitadoEsteFrame = false;
+    bool frameskipConcedidoEsteFrame = false;
+
+    bool drsDeuda = false;
+    uint64_t observedBootstrapServiceGeneration =
+        retroAchievementsBootstrapServiceGeneration.load(std::memory_order_acquire);
+    publishCurrentAudioOutputSpeedHint();
+
+    pthread_mutex_lock(&emuThreadMutex);
+    MelonDSAndroid::setAudioOutputRunIntent(
+        !paused && !stop.load(std::memory_order_acquire));
+    pthread_mutex_unlock(&emuThreadMutex);
+
+    MelonDSAndroid::start();
+
+    auto manager = PerformanceHintManagerFactory::create(jniEnvHandler);
+    {
+        std::lock_guard<std::mutex> lock(performanceHintSessionLock);
+        performanceHintSession = new ThreadSafePerformanceHintSession(std::move(manager));
+        performanceHintSession->createSession(gettid(), FRAME_DURATION_60FPS_NS, performanceHintWorkers);
+        performanceHintSession->updateTargetWorkDuration(currentPerformanceHintTargetNs());
+        MelonDSAndroid::hookRegistrarHiloHints = registrarHiloEnHints;
+        __android_log_print(ANDROID_LOG_INFO, "melonDS",
+            "ADPF: sesion de hints %s (hilo de emulacion registrado)",
+            performanceHintSession->isActive() ? "ACTIVA" : "NO disponible");
+    }
+
+    for (;;)
+    {
+        bool pauseAfterCurrentFrame = false;
+        bool boundedFrameRun = false;
+        bool serviceRetroAchievementsWhilePaused = false;
+        bool resumedFromPause = false;
+        pthread_mutex_lock(&emuThreadMutex);
+        if (paused) {
+            cpuPolicy.setActive(false);
+            isThreadReallyPaused = true;
+            while (
+                paused && !stop &&
+                retroAchievementsBootstrapServiceGeneration.load(std::memory_order_acquire) ==
+                    observedBootstrapServiceGeneration
+            )
+                pthread_cond_wait(&emuThreadCond, &emuThreadMutex);
+
+            if (
+                paused && !stop &&
+                retroAchievementsBootstrapServiceGeneration.load(std::memory_order_acquire) !=
+                    observedBootstrapServiceGeneration
+            )
+            {
+                observedBootstrapServiceGeneration =
+                    retroAchievementsBootstrapServiceGeneration.load(std::memory_order_acquire);
+                serviceRetroAchievementsWhilePaused = true;
+            }
+
+            if (!serviceRetroAchievementsWhilePaused)
+            {
+                resumedFromPause = true;
+                isThreadReallyPaused = false;
+                frameskipSolicitado = false;
+                frameskipInhibidoFotogramas = 2;
+                frameskipCicloManual = 0;
+                drsDeuda = false;
+            }
+        }
+
+        if (stop) {
+            pthread_mutex_unlock(&emuThreadMutex);
+            break;
+        }
+
+        boundedFrameRun = debugFrameStepsRemaining > 0;
+        pthread_mutex_unlock(&emuThreadMutex);
+
+        if (serviceRetroAchievementsWhilePaused)
+        {
+
+            std::lock_guard<std::mutex> coreLock(emulationCoreAccessMutex);
+            MelonDSAndroid::serviceRetroAchievementsBootstrap();
+            continue;
+        }
+
+        if (resumedFromPause)
+        {
+            if (!boundedFrameRun)
+                MelonDSAndroid::reconcileAudioOutputRunStateOnce();
+            pthread_mutex_lock(&emuThreadMutex);
+            const bool resumeCanceled = paused || stop.load(std::memory_order_acquire);
+            pthread_mutex_unlock(&emuThreadMutex);
+            if (resumeCanceled)
+                continue;
+            frameTiming.resumed();
+            frameLimitError = 0;
+            lastTick = getCurrentMillis();
+        }
+
+        const bool multiplayerActive = MelonDSAndroid::Multiplayer::Active();
+        cpuPolicy.setActive(multiplayerActive);
+        const bool recordFrameTiming = frameTiming.active();
+        const uint64_t timingCpuStart = recordFrameTiming ? FrameTimingRecorder::threadCpuNs() : 0;
+        auto frameStart = std::chrono::steady_clock::now();
+        int timingFrame = -1;
+
+        bool wifiClient = false;
+        u32 nLines = 0;
+        u64 wmWaitUS = 0;
+        {
+            std::lock_guard<std::mutex> coreLock(emulationCoreAccessMutex);
+            frameskipSolicitadoEsteFrame = frameskipSolicitado;
+            u64 wmFrameDeadline = 0;
+            if (multiplayerActive && limitFps.load(std::memory_order_relaxed)
+                && !boundedFrameRun && !isFastForwardEnabled.load(std::memory_order_relaxed))
+            {
+                const auto budgetClock = std::chrono::steady_clock::now();
+                const double remainingMs = lastTick + frameLimitError
+                    + 1000.0 / targetFps.load(std::memory_order_relaxed) - getCurrentMillis();
+                if (remainingMs > 0.0)
+                    wmFrameDeadline = std::chrono::duration_cast<std::chrono::microseconds>(
+                        budgetClock.time_since_epoch()).count() + static_cast<u64>(remainingMs * 1000.0);
+            }
+            const u64 wmWaitBefore = multiplayerActive ? melonDS::WMService::ThreadWaitTimeUS() : 0;
+            nLines = MelonDSAndroid::loop(frameskipSolicitado,
+                                         frameskipMode.load(std::memory_order_acquire),
+                                         frameskipManualValue.load(std::memory_order_acquire),
+                                         vulkanDrsEnabled.load(std::memory_order_acquire),
+                                         drsDeuda, wmFrameDeadline);
+            if (multiplayerActive)
+                wmWaitUS = melonDS::WMService::ThreadWaitTimeUS() - wmWaitBefore;
+            wifiClient = MelonDSAndroid::isWifiClient();
+            drsDeuda = false;
+            frameskipConcedidoEsteFrame = MelonDSAndroid::frameskipConcedidoUltimoFrame();
+
+            if (recordFrameTiming && nLines > 0 && !MelonDSAndroid::isVulkanAsyncFrameTailEnabled())
+                timingFrame = MelonDSAndroid::getCurrentFrameIndexForDebug();
+            frameskipSolicitado = false;
+        }
+
+        if (boundedFrameRun && nLines > 0)
+        {
+            pthread_mutex_lock(&emuThreadMutex);
+            if (debugFrameStepsRemaining > 0)
+            {
+                --debugFrameStepsRemaining;
+                pauseAfterCurrentFrame = debugFrameStepsRemaining == 0;
+            }
+            pthread_mutex_unlock(&emuThreadMutex);
+        }
+
+        auto frameDuration = std::chrono::steady_clock::now() - frameStart;
+        const uint64_t timingCpuEnd = recordFrameTiming ? FrameTimingRecorder::threadCpuNs() : 0;
+        {
+            std::lock_guard<std::mutex> lock(performanceHintSessionLock);
+            if (performanceHintSession != nullptr)
+                performanceHintSession->reportActualWorkDuration(std::chrono::nanoseconds(frameDuration).count());
+        }
+        double currentTick = getCurrentMillis();
+        double delay = currentTick - lastTick;
+
+        // All times are in ms
+        double frameTimeStep = (double) nLines / ((float) targetFps * 263.0) * 1000.0;
+        if (frameTimeStep < 1)
+            frameTimeStep = 1;
+
+        if (limitFps && !wifiClient)
+        {
+
+            if (!isFastForwardEnabled.load(std::memory_order_acquire))
+            {
+                const double esperaCola =
+                    static_cast<double>(MelonDSAndroid::vulkanUltimaEsperaColaNs.load(std::memory_order_acquire)) / 1e6;
+                if (esperaCola > 0.0 && delay <= frameTimeStep * 1.05)
+                    delay -= std::min(esperaCola, frameTimeStep);
+            }
+            frameLimitError += frameTimeStep - delay;
+            if (frameLimitError < -frameTimeStep)
+                frameLimitError = -frameTimeStep;
+            if (frameLimitError > frameTimeStep)
+                frameLimitError = frameTimeStep;
+
+            if (MelonDSAndroid::areRendererDebugToolsEnabled())
+                MelonDSAndroid::drsErrorLimitadorC.store(
+                    static_cast<int>(std::lround(frameLimitError * 100.0)), std::memory_order_relaxed);
+
+            if (frameskipInhibidoFotogramas > 0 && nLines > 0)
+                frameskipInhibidoFotogramas--;
+
+            const int modoFrameskip = frameskipMode.load(std::memory_order_acquire);
+            const int manualN = frameskipManualValue.load(std::memory_order_acquire);
+            const bool ffActivo = isFastForwardEnabled.load(std::memory_order_acquire);
+            if (modoFrameskip == 1 && manualN > 0 && nLines > 0 && !ffActivo
+                && frameskipInhibidoFotogramas == 0)
+            {
+
+                if (!(frameskipSolicitadoEsteFrame && !frameskipConcedidoEsteFrame))
+                    frameskipCicloManual = (frameskipCicloManual + 1) % (manualN + 1);
+            }
+            else
+                frameskipCicloManual = 0;
+            drsDeuda = nLines > 0 && !ffActivo
+                && frameskipInhibidoFotogramas == 0
+                && frameLimitError <= -(frameTimeStep * 0.5);
+            if (modoFrameskip == 0)
+                frameskipSolicitado = false;
+            else if (modoFrameskip == 1)
+                frameskipSolicitado = frameskipCicloManual != 0;
+            else
+                frameskipSolicitado = nLines > 0
+                    && frameskipInhibidoFotogramas == 0
+                    && !ffActivo
+                    && (!wmWaitUS || std::chrono::duration<double, std::milli>(frameDuration).count()
+                                        - static_cast<double>(wmWaitUS) / 1000.0 > frameTimeStep)
+                    && frameLimitError <= -(frameTimeStep * 0.5);
+
+            if (round(frameLimitError) > 0.0)
+            {
+                timespec sleepTime = {
+                    .tv_sec = 0,
+                    .tv_nsec = (long) (frameLimitError * 1000000),
+                };
+                bool deferred = false;
+                if (multiplayerActive && !boundedFrameRun && !ffActivo)
+                {
+                    std::lock_guard<std::mutex> coreLock(emulationCoreAccessMutex);
+                    deferred = MelonDSAndroid::deferMultiplayerFrameWait(sleepTime.tv_nsec / 1000);
+                }
+                if (!deferred)
+                    clock_nanosleep(CLOCK_MONOTONIC, 0, &sleepTime, nullptr);
+                double timeAfterSleep = getCurrentMillis();
+                frameLimitError -= timeAfterSleep - currentTick;
+                currentTick = timeAfterSleep;
+            }
+
+            lastTick = currentTick;
+        } else {
+            frameLimitError = 0;
+            lastTick = getCurrentMillis();
+        }
+
+        if (recordFrameTiming && nLines > 0) {
+            const unsigned timingFlags = (frameskipSolicitadoEsteFrame ? 1u : 0u)
+                | (frameskipConcedidoEsteFrame ? 2u : 0u)
+                | (isFastForwardEnabled.load(std::memory_order_relaxed) ? 4u : 0u)
+                | (vulkanDrsEnabled.load(std::memory_order_relaxed) ? 8u : 0u)
+                | (limitFps.load(std::memory_order_relaxed) && !wifiClient ? 16u : 0u)
+                | (static_cast<unsigned>(frameskipMode.load(std::memory_order_relaxed)) << 8u);
+            frameTiming.add({timingFrame, frameTiming.currentSegment(), nLines,
+                MelonDSAndroid::getVulkanRenderedInternalResolution(),
+                targetFps.load(std::memory_order_relaxed), timingFlags,
+                static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    frameStart.time_since_epoch()).count()),
+                static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(frameDuration).count()),
+                timingCpuEnd >= timingCpuStart ? timingCpuEnd - timingCpuStart : 0,
+                static_cast<uint64_t>(currentTick * 1000000.0),
+                MelonDSAndroid::vulkanUltimaEsperaColaNs.load(std::memory_order_relaxed)});
+        }
+
+        observedFrames++;
+        if (observedFrames >= 30) {
+            fps = (observedFrames * 1000.0) / (lastTick - lastMeasureFpsTick);
+            lastMeasureFpsTick = lastTick;
+            observedFrames = 0;
+        }
+
+        if (pauseAfterCurrentFrame)
+        {
+            pthread_mutex_lock(&emuThreadMutex);
+            if (!stop)
+                paused = true;
+            pthread_mutex_unlock(&emuThreadMutex);
+            MelonDSAndroid::pauseAfterCurrentFramePublication();
+        }
+    }
+
+    cpuPolicy.setActive(false);
+    {
+        std::lock_guard<std::mutex> lock(performanceHintSessionLock);
+        MelonDSAndroid::hookRegistrarHiloHints = nullptr;
+        if (performanceHintSession != nullptr) {
+            performanceHintSession->destroySession();
+            delete performanceHintSession;
+            performanceHintSession = nullptr;
+        }
+    }
+
+    MelonDSAndroid::stop();
+    return nullptr;
 }

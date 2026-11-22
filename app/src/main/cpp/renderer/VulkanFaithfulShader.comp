@@ -1,0 +1,3060 @@
+#version 450
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(binding = 0, rgba8) uniform image2D outImage;
+
+layout(std430, binding = 1) readonly buffer RegsBuffer {
+    uint regs[];
+
+};
+
+layout(std430, binding = 2) readonly buffer AtlasBuffer {
+    uint atlas[];
+};
+
+layout(std430, binding = 3) readonly buffer Tres_d {
+    uint d3d[];
+};
+
+layout(push_constant) uniform Empuje {
+    uint modoSalida;
+
+    uint escala;
+
+    uint mezcla;
+
+} pc;
+
+layout(constant_id = 0) const uint kSpecializedOutputMode = 0xFFFFFFFFu;
+
+layout(constant_id = 1) const uint kSpecializedCaptureRecipeEncoding =
+    0xFFFFFFFFu;
+
+layout(constant_id = 2) const uint kSpecializedFinalInvocationMode =
+    0xFFFFFFFFu;
+
+layout(constant_id = 3) const uint kSpecializedFinalNativeSubtileSize = 4u;
+
+uint outputMode()
+{
+    return kSpecializedOutputMode != 0xFFFFFFFFu
+        ? kSpecializedOutputMode : pc.modoSalida;
+}
+
+uint nativeFallbackColor(uint index)
+{
+    uint color = d3d[index];
+    if ((pc.escala & 0x10000000u) == 0u)
+        return color;
+    return ((color & 0x003F3F3Fu) << 2u)
+        | ((color & 0x1F000000u) << 3u);
+}
+
+layout(binding = 4, rgba8) uniform readonly image2D img3dEscala;
+
+layout(binding = 8) uniform sampler2D tex3dEscala;
+
+layout(binding = 7, rgba8) uniform image2D imgCapHighres;
+layout(binding = 9, rgba8) uniform image2D imgCapHighres1;
+layout(binding = 10, rgba8) uniform image2D imgCapHighresPrev;
+layout(binding = 11, rgba8) uniform image2D imgCapHighresPrev2;
+
+layout(std430, binding = 5) buffer ObjLineaBuf {
+    uint objLinea[];
+};
+
+shared uint objCandidateFlags[128];
+shared uint objCandidateList[128];
+shared uint objCandidateCount;
+
+layout(std430, binding = 6) buffer FielB1Buf {
+    uint fielB1[];
+};
+
+layout(std430, binding = 12) buffer CaptureSealBuf {
+
+    uvec4 capSeal[16];
+};
+
+layout(std430, binding = 13) readonly buffer FaithfulCausalBuf {
+    uint causal[];
+};
+
+layout(binding = 14) uniform sampler2D tex3dCausal;
+
+layout(std430, binding = 15) readonly buffer NativeProjectionBuf {
+    uint nativeProjection[];
+};
+
+shared uint materialSealGroupMismatches;
+shared uint materialSealGroupSourceMismatches;
+shared uint causalCaptureSetCertifiedGroup;
+
+shared uint captureRecipeGroupExact;
+shared uvec4 captureRecipeGroupProductKey;
+shared uvec4 captureRecipeGroupRenderKey;
+shared uvec4 captureRecipeGroupMetadata;
+shared uvec4 captureRecipeGroupRoute;
+shared uvec4 captureRecipeGroupLineRenderKey;
+
+const uint kCausalAbiVersion          = 6u;
+const uint kCausalHeaderRoutesValid   = 1u << 0u;
+const uint kCausalHeaderFullValid     = 1u << 1u;
+const uint kCausalHeaderAllNative     = 1u << 2u;
+const uint kCausalHeaderWords         = 16u;
+const uint kCausalPhysicalScreens     = 2u;
+const uint kCausalScreenWidth         = 256u;
+const uint kCausalScreenHeight        = 192u;
+const uint kCausalRouteLineCount      = 384u;
+const uint kCausalVisiblePixelCount   = 98304u;
+const uint kCausalProductCapacity     = 1024u;
+const uint kCausalRouteOffsetWords    = 16u;
+const uint kCausalLineageRowOffsetWords = 3088u;
+const uint kCausalLineageOffsetWords  = 4624u;
+const uint kCausalProductOffsetWords  = 397840u;
+const uint kCausalBoundLiveOffsetWords = 406032u;
+const uint kCausalCaptureRecipeHeaderOffsetWords = 406040u;
+const uint kCausalCaptureRecipeLineOffsetWords = 406056u;
+const uint kCausalCaptureRecipePixelOffsetWords = 407592u;
+const uint kCausalCaptureMaterialOffsetWords = 997416u;
+const uint kCausalCaptureBackgroundOffsetWords = 1021992u;
+const uint kCausalTotalWords          = 1218600u;
+
+bool causalRouteHeaderValid()
+{
+
+    return (causal[0u] & kCausalHeaderRoutesValid) != 0u
+        && (causal[0u] & ~(kCausalHeaderRoutesValid
+            | kCausalHeaderFullValid
+            | kCausalHeaderAllNative)) == 0u
+        && causal[1u] == kCausalAbiVersion
+        && (causal[2u] | causal[3u]) != 0u
+        && (causal[5u] | causal[6u]) != 0u
+        && causal[7u] == kCausalRouteLineCount
+        && causal[8u] == kCausalVisiblePixelCount
+        && causal[9u] == kCausalRouteOffsetWords
+        && causal[10u] == kCausalLineageOffsetWords
+        && causal[11u] == kCausalProductOffsetWords
+        && causal[12u] == kCausalTotalWords;
+}
+
+bool causalHeaderValid()
+{
+    uint productCount = causal[4u];
+    bool fullLineage = (causal[0u] & kCausalHeaderFullValid) != 0u;
+    bool allNative = (causal[0u] & kCausalHeaderAllNative) != 0u;
+    return causalRouteHeaderValid()
+        && fullLineage != allNative
+        && (fullLineage
+            ? productCount >= 2u && productCount <= kCausalProductCapacity
+            : productCount == 0u);
+}
+
+bool causalLoadRouteLive(uint physicalScreen, uint physicalLine,
+                         out uvec4 routeLive, out uvec4 liveRenderKey)
+{
+    routeLive = uvec4(0u);
+    liveRenderKey = uvec4(0u);
+    if (!causalRouteHeaderValid()
+        || physicalScreen >= kCausalPhysicalScreens
+        || physicalLine >= kCausalScreenHeight)
+        return false;
+
+    uint lineIndex = physicalScreen * kCausalScreenHeight + physicalLine;
+    uint word = kCausalRouteOffsetWords + lineIndex * 8u;
+    routeLive = uvec4(causal[word + 0u], causal[word + 1u],
+                      causal[word + 2u], causal[word + 3u]);
+    liveRenderKey = uvec4(causal[word + 4u], causal[word + 5u],
+                          causal[word + 6u], causal[word + 7u]);
+    return true;
+}
+
+bool causalLoadVisiblePixel(uint physicalScreen, uint physicalLine,
+                            uint physicalX, out uvec4 lineage)
+{
+    lineage = uvec4(0u);
+    if (!causalHeaderValid()
+        || physicalScreen >= kCausalPhysicalScreens
+        || physicalLine >= kCausalScreenHeight
+        || physicalX >= kCausalScreenWidth)
+        return false;
+
+    if ((causal[0u] & kCausalHeaderAllNative) != 0u)
+        return true;
+
+    uint lineIndex = physicalScreen * kCausalScreenHeight + physicalLine;
+    uint rowWord = kCausalLineageRowOffsetWords + lineIndex * 4u;
+    uint rowKind = causal[rowWord + 0u];
+    uint rowOperand = causal[rowWord + 1u];
+    uint rowControl = causal[rowWord + 2u];
+    uint rowReserved = causal[rowWord + 3u];
+    if (rowReserved != 0u)
+        return false;
+    if (rowKind == 1u)
+        return rowOperand == 0u && rowControl == 0u;
+    if (rowKind == 2u)
+    {
+        uint sourceXBase = (rowOperand >> 16u) & 0xFFu;
+        uint sourceX = sourceXBase + physicalX;
+        if (sourceX > 0xFFu)
+            return false;
+        lineage = uvec4(
+            (rowOperand & 0xFF00FFFFu) | (sourceX << 16u),
+            0u, rowControl, 0u);
+        return true;
+    }
+    if (rowKind == 3u)
+    {
+        lineage = uvec4(1u, 0u, 4u, 0u);
+        return true;
+    }
+    if (rowKind != 4u)
+        return false;
+    if (rowOperand != 0u || rowControl != 0u)
+        return false;
+
+    uint pixel = lineIndex * kCausalScreenWidth + physicalX;
+    uint word = kCausalLineageOffsetWords + pixel * 4u;
+    lineage = uvec4(causal[word + 0u], causal[word + 1u],
+                    causal[word + 2u], causal[word + 3u]);
+    return true;
+}
+
+bool causalLoadProduct(uint handle, out uvec4 identity,
+                       out uvec4 metadata)
+{
+    identity = uvec4(0u);
+    metadata = uvec4(0u);
+    if (!causalHeaderValid()
+        || (causal[0u] & kCausalHeaderFullValid) == 0u
+        || handle >= causal[4u]
+        || handle >= kCausalProductCapacity)
+        return false;
+
+    uint word = kCausalProductOffsetWords + handle * 8u;
+    identity = uvec4(causal[word + 0u], causal[word + 1u],
+                     causal[word + 2u], causal[word + 3u]);
+    metadata = uvec4(causal[word + 4u], causal[word + 5u],
+                     causal[word + 6u], causal[word + 7u]);
+    return true;
+}
+
+bool causalLoadBoundLive(out uvec4 identity, out uvec4 metadata)
+{
+    identity = uvec4(0u);
+    metadata = uvec4(0u);
+    if (!causalHeaderValid())
+        return false;
+
+    uint word = kCausalBoundLiveOffsetWords;
+    uint valid = causal[word + 0u];
+    uint flags = causal[word + 1u];
+    identity = uvec4(causal[word + 2u], causal[word + 3u],
+                     causal[word + 4u], causal[word + 5u]);
+    metadata = uvec4(flags, causal[word + 6u], 0u, 0u);
+    return valid == 1u
+        && (flags & 1u) != 0u
+        && (identity.x | identity.y) != 0u
+        && (identity.z | identity.w) != 0u;
+}
+
+bool causalCaptureRecipeHeader(out uvec4 productKey,
+                               out uvec4 renderKey,
+                               out uvec4 metadata)
+{
+    productKey = uvec4(0u);
+    renderKey = uvec4(0u);
+    metadata = uvec4(0u);
+    uint word = kCausalCaptureRecipeHeaderOffsetWords;
+    uint valid = causal[word + 0u];
+    uint version = causal[word + 1u];
+    productKey = uvec4(causal[word + 2u], causal[word + 3u],
+                       causal[word + 4u], causal[word + 5u]);
+    uint captureCnt = causal[word + 6u];
+    uint dimensions = causal[word + 7u];
+    uint lineOffset = causal[word + 8u];
+    uint pixelOffset = causal[word + 9u];
+    uint lineCount = causal[word + 10u];
+    uint flags = causal[word + 11u];
+    renderKey = uvec4(causal[word + 12u], causal[word + 13u],
+                      causal[word + 14u], causal[word + 15u]);
+    metadata = uvec4(captureCnt, dimensions, lineCount, flags);
+    bool hasSourceARenderKey = (flags & (1u << 7u)) != 0u;
+    bool sourceAOnly = (flags & (1u << 8u)) != 0u;
+    bool specializedEncodingValid =
+        kSpecializedCaptureRecipeEncoding == 0xFFFFFFFFu
+        || (kSpecializedCaptureRecipeEncoding <= 1u
+            && sourceAOnly
+                == (kSpecializedCaptureRecipeEncoding == 1u));
+    bool renderKeyPresent = (renderKey.x | renderKey.y) != 0u
+        && (renderKey.z | renderKey.w) != 0u;
+    uint captureMode = (captureCnt >> 29u) & 0x3u;
+    uint effectiveEva = min(captureCnt & 0x1Fu, 16u);
+    uint effectiveEvb = min((captureCnt >> 8u) & 0x1Fu, 16u);
+    bool sourceAOnlyFormula = captureMode == 0u
+        || (captureMode >= 2u
+            && effectiveEva != 0u && effectiveEvb == 0u);
+    return valid == 1u
+        && ((version == 2u && !sourceAOnly)
+            || (version == 3u && sourceAOnly))
+        && (productKey.x | productKey.y) != 0u
+        && (productKey.z | productKey.w) != 0u
+        && dimensions == (256u | (192u << 16u))
+        && lineOffset == kCausalCaptureRecipeLineOffsetWords
+        && pixelOffset == kCausalCaptureRecipePixelOffsetWords
+        && lineCount == 192u
+
+        && (flags & 0x7Fu) == 0x7Fu
+        && (flags & ~0x3FFu) == 0u
+        && specializedEncodingValid
+        && (!sourceAOnly || sourceAOnlyFormula)
+        && renderKeyPresent == hasSourceARenderKey;
+}
+
+bool causalLoadCaptureRecipeLineValidated(uint line,
+                                          uvec4 headerRenderKey,
+                                          uvec4 metadata,
+                                          out uvec4 route,
+                                          out uvec4 renderKey)
+{
+    route = uvec4(0u);
+    renderKey = uvec4(0u);
+    if (line >= 192u)
+        return false;
+    uint word = kCausalCaptureRecipeLineOffsetWords + line * 8u;
+    route = uvec4(causal[word + 0u], causal[word + 1u],
+                  causal[word + 6u], causal[word + 7u]);
+    renderKey = uvec4(causal[word + 2u], causal[word + 3u],
+                      causal[word + 4u], causal[word + 5u]);
+    bool sourceAUses3d = (route.x & (1u << 22u)) != 0u;
+    bool sourceAOnly = (metadata.w & (1u << 8u)) != 0u;
+    bool lineKeyPresent = (renderKey.x | renderKey.y) != 0u
+        && (renderKey.z | renderKey.w) != 0u;
+    uint captureCnt = metadata.x;
+    uint expectedCaptureMode = (captureCnt >> 29u) & 0x3u;
+    uint expectedEva = min(captureCnt & 0x1Fu, 16u);
+    uint expectedEvb = min((captureCnt >> 8u) & 0x1Fu, 16u);
+    uint expectedCaptureParameters = expectedCaptureMode
+        | (expectedEva << 8u) | (expectedEvb << 16u) | (0xFFu << 24u);
+    uint sourceAKind = (route.x >> 8u) & 0xFu;
+    const uint sourceAOnlyLineMask = 1u | (0xFu << 8u) | (1u << 22u);
+    bool sourceAOnlyLine = !sourceAOnly
+        || (sourceAKind >= 1u && sourceAKind <= 2u
+            && (route.x & ~sourceAOnlyLineMask) == 0u
+            && route.z == expectedCaptureParameters
+            && route.w == 0u);
+    return (route.x & 1u) != 0u
+        && lineKeyPresent == sourceAUses3d
+        && (!sourceAUses3d || all(equal(renderKey, headerRenderKey)))
+        && sourceAOnlyLine;
+}
+
+bool causalLoadCaptureRecipeLine(uint line, out uvec4 route,
+                                 out uvec4 renderKey)
+{
+    uvec4 productKey;
+    uvec4 headerRenderKey;
+    uvec4 metadata;
+    return causalCaptureRecipeHeader(
+            productKey, headerRenderKey, metadata)
+        && causalLoadCaptureRecipeLineValidated(
+            line, headerRenderKey, metadata, route, renderKey);
+}
+
+bool captureRecipeUsesSourceAOnly(uint flags)
+{
+    return kSpecializedCaptureRecipeEncoding == 1u
+        || (kSpecializedCaptureRecipeEncoding == 0xFFFFFFFFu
+            && (flags & (1u << 8u)) != 0u);
+}
+
+bool causalLoadCapturePixelRecipe(uint x, uint line,
+                                  bool sourceAOnly,
+                                  out uvec4 recipeA,
+                                  out uvec4 recipeB,
+                                  out uvec4 recipeC)
+{
+    recipeA = uvec4(0u);
+    recipeB = uvec4(0u);
+    recipeC = uvec4(0u);
+    if (x >= 256u || line >= 192u)
+        return false;
+    uint pixel = line * 256u + x;
+    uint wordsPerPixel = sourceAOnly ? 4u : 12u;
+    uint word = kCausalCaptureRecipePixelOffsetWords
+        + pixel * wordsPerPixel;
+    if (word + wordsPerPixel > kCausalCaptureMaterialOffsetWords)
+        return false;
+    recipeA = uvec4(causal[word + 0u], causal[word + 1u],
+                    causal[word + 2u], causal[word + 3u]);
+    if (sourceAOnly)
+    {
+
+        recipeC.y = 1u << 24u;
+        return true;
+    }
+    recipeB = uvec4(causal[word + 4u], causal[word + 5u],
+                    causal[word + 6u], causal[word + 7u]);
+    recipeC = uvec4(causal[word + 8u], causal[word + 9u],
+                    causal[word + 10u], causal[word + 11u]);
+    return true;
+}
+
+bool causalLoadCaptureMaterial(uint x, uint line, out uint packed)
+{
+    packed = 0u;
+    if (x >= 256u || line >= 192u)
+        return false;
+    uint pixel = line * 256u + x;
+    uint word = kCausalCaptureMaterialOffsetWords + pixel / 2u;
+    if (word >= kCausalTotalWords)
+        return false;
+    uint pair = causal[word];
+    packed = (pixel & 1u) == 0u ? (pair & 0xFFFFu) : (pair >> 16u);
+    return true;
+}
+
+const uint kAtlasABG       = 0x000000u;
+const uint kAtlasBBG       = 0x080000u;
+const uint kAtlasABGExtPal = 0x100000u;
+const uint kAtlasBBGExtPal = 0x108000u;
+const uint kAtlasPalette   = 0x114000u;
+const uint kAtlasAOBJ      = 0x0A0000u;
+const uint kAtlasBOBJ      = 0x0E0000u;
+const uint kAtlasAOBJExtPal = 0x110000u;
+const uint kAtlasBOBJExtPal = 0x112000u;
+const uint kAtlasOAM       = 0x114800u;
+const uint kAtlasBancos    = 0x115000u;
+
+const uint kAtlasLineas    = 0x195000u;
+const uint kAtlasLine3D    = 0x23D000u;
+
+const uint kAtlasCapStash  = 0x1F5000u;
+
+const uint kAtlasModo2     = 0x225000u;
+
+uint gRegBase = 0u;
+uint gAtlasBase = 0u;
+uint leerByte(uint off)  { off += gAtlasBase; return (atlas[off >> 2] >> ((off & 3u) * 8u)) & 0xFFu; }
+uint leerU16(uint off)   { return leerByte(off) | (leerByte(off + 1u) << 8u); }
+
+uint reg(uint eng, uint linea, uint w) { return regs[gRegBase + (eng * 192u + linea) * 32u + w]; }
+
+ivec3 c555a666(uint c)
+{
+    return ivec3((c & 0x1Fu) << 1, (c & 0x3E0u) >> 4, (c & 0x7C00u) >> 9);
+}
+
+int clamp6(int v) { return clamp(v, 0, 63); }
+
+int a8(int v6)
+{
+    int base = clamp6(v6) << 2;
+    return base | (base >> 6);
+}
+
+bool h5SlotCertificada(uint slot,
+                       uint epochLo, uint epochHi,
+                       uint productLo, uint productHi)
+{
+    return (epochLo | epochHi) != 0u
+        && (productLo | productHi) != 0u
+        && slot < 4u
+        && capSeal[slot].x == productLo
+        && capSeal[slot].y == productHi
+        && capSeal[slot].z == 0u
+        && capSeal[slot].w == 256u * 192u
+        && capSeal[12u + slot].x == epochLo
+        && capSeal[12u + slot].y == epochHi
+        && capSeal[12u + slot].z == productLo
+        && capSeal[12u + slot].w == productHi;
+}
+
+uint causalRequiredCaptureHandle(uint index)
+{
+    uint packed = index < 2u ? causal[14u] : causal[15u];
+    return (index & 1u) == 0u ? (packed & 0xFFFFu) : (packed >> 16u);
+}
+
+bool causalRequiredCaptureSetCertified()
+{
+    if (!causalHeaderValid())
+        return false;
+
+    uint publication = causal[13u];
+    uint requiredCount = publication & 0x7FFFFFFFu;
+    if ((publication & 0x80000000u) == 0u || requiredCount > 4u)
+        return false;
+
+    for (uint index = 0u; index < requiredCount; index++)
+    {
+        uint handle = causalRequiredCaptureHandle(index);
+        if (handle <= 1u)
+            return false;
+        for (uint previous = 0u; previous < index; previous++)
+        {
+            if (causalRequiredCaptureHandle(previous) == handle)
+                return false;
+        }
+
+        uvec4 identity;
+        uvec4 metadata;
+        if (!causalLoadProduct(handle, identity, metadata)
+            || (metadata.y & 0xFFu) != 2u
+            || identity.x != causal[5u]
+            || identity.y != causal[6u])
+        {
+            return false;
+        }
+
+        uint encodedSlot = metadata.z;
+        if (encodedSlot < 1u || encodedSlot > 4u
+            || !h5SlotCertificada(
+                encodedSlot - 1u,
+                identity.x, identity.y, identity.z, identity.w))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool causalRequiredCaptureSetContains(uint handle)
+{
+    uint requiredCount = causal[13u] & 0x7FFFFFFFu;
+    for (uint index = 0u; index < requiredCount && index < 4u; index++)
+    {
+        if (causalRequiredCaptureHandle(index) == handle)
+            return true;
+    }
+    return false;
+}
+
+vec4 h5LeeSlot(uint slot, ivec2 p)
+{
+    return slot == 3u
+        ? imageLoad(imgCapHighresPrev2, p)
+        : (slot == 2u
+            ? imageLoad(imgCapHighresPrev, p)
+            : (slot == 1u
+                ? imageLoad(imgCapHighres1, p)
+                : imageLoad(imgCapHighres, p)));
+}
+
+void h5StoreSlot(uint slot, ivec2 p, vec4 color)
+{
+    if (slot == 3u)
+        imageStore(imgCapHighresPrev2, p, color);
+    else if (slot == 2u)
+        imageStore(imgCapHighresPrev, p, color);
+    else if (slot == 1u)
+        imageStore(imgCapHighres1, p, color);
+    else
+        imageStore(imgCapHighres, p, color);
+}
+
+void aplicaPostEffectCausal(inout ivec3 color, uint postEffect, int evy)
+{
+    if (postEffect == 1u && evy > 0)
+    {
+        color.r = clamp6(color.r + (((63 - color.r) * evy) >> 4));
+        color.g = clamp6(color.g + (((63 - color.g) * evy) >> 4));
+        color.b = clamp6(color.b + (((63 - color.b) * evy) >> 4));
+    }
+    else if (postEffect == 2u && evy > 0)
+    {
+        color.r = clamp6(color.r - (((color.r * evy) + 0xF) >> 4));
+        color.g = clamp6(color.g - (((color.g * evy) + 0xF) >> 4));
+        color.b = clamp6(color.b - (((color.b * evy) + 0xF) >> 4));
+    }
+}
+
+bool ventanaActiva(uint estado2b, uint x1, uint x2, uint x)
+{
+    if ((estado2b & 1u) == 0u) return false;
+    bool hayOn = (x1 <= x);
+    bool hayOff = (x2 <= x);
+    bool bitH;
+    if (!hayOn && !hayOff) bitH = (estado2b & 2u) != 0u;
+    else if (hayOn && !hayOff) bitH = true;
+    else if (!hayOn) bitH = false;
+    else bitH = (x1 > x2);
+    return bitH;
+}
+
+bool objPuedeTocarBloque(uint eng, uint linea, uint bloqueX0, uint o)
+{
+    uint dispcnt = reg(eng, linea, 0u);
+    if ((dispcnt & 0x1000u) == 0u)
+        return false;
+
+    uint oamBase = kAtlasOAM + eng * 0x400u;
+    uint a01 = leerU16(oamBase + o * 8u);
+    bool afin = (a01 & 0x100u) != 0u;
+    if (!afin && (a01 & 0x200u) != 0u)
+        return false;
+
+    uint a1 = leerU16(oamBase + o * 8u + 2u);
+    uint forma = (a01 >> 14u) & 0x3u;
+    uint tam = (a1 >> 14u) & 0x3u;
+    uint wpx = 8u;
+    uint hpx = 8u;
+    if (forma == 0u)
+    {
+        wpx = 8u << tam;
+        hpx = wpx;
+    }
+    else if (forma == 1u)
+    {
+        wpx = (tam == 0u) ? 16u : (tam == 1u) ? 32u
+            : (tam == 2u) ? 32u : 64u;
+        hpx = (tam == 0u) ? 8u : (tam == 1u) ? 8u
+            : (tam == 2u) ? 16u : 32u;
+    }
+    else
+    {
+        hpx = (tam == 0u) ? 16u : (tam == 1u) ? 32u
+            : (tam == 2u) ? 32u : 64u;
+        wpx = (tam == 0u) ? 8u : (tam == 1u) ? 8u
+            : (tam == 2u) ? 16u : 32u;
+    }
+
+    uint bw = wpx;
+    uint bh = hpx;
+    if (afin && (a01 & 0x200u) != 0u)
+    {
+        bw <<= 1u;
+        bh <<= 1u;
+    }
+    uint dy = (linea - (a01 & 0xFFu)) & 0xFFu;
+    if (dy >= bh)
+        return false;
+
+    int ox = int(a1 & 0x1FFu);
+    if (ox >= 256)
+        ox -= 512;
+    int bloqueIni = int(bloqueX0);
+    int bloqueFin = min(bloqueIni + 64, 256);
+    return ox < bloqueFin && ox + int(bw) > bloqueIni;
+}
+
+uint evaluarObjPixel(uint eng, uint linea, uint x)
+{
+    uint dispcnt = reg(eng, linea, 0u);
+    bool objVentana = false;
+    if ((dispcnt & 0x8000u) != 0u && (dispcnt & 0x1000u) != 0u)
+    {
+        uint oamBaseW = kAtlasOAM + eng * 0x400u;
+        uint atlasOW = (eng == 0u) ? kAtlasAOBJ : kAtlasBOBJ;
+        uint maskOW = (eng == 0u) ? 0x3FFFFu : 0x1FFFFu;
+        bool mapa1DW = (dispcnt & 0x10u) != 0u;
+        uint fronteraW = 5u + ((dispcnt >> 20u) & 0x3u);
+        for (uint candidato = 0u;
+             candidato < objCandidateCount && !objVentana;
+             candidato++)
+        {
+            uint o = objCandidateList[candidato];
+            uint a01 = leerU16(oamBaseW + o * 8u);
+            if (((a01 >> 10u) & 0x3u) != 2u) continue;
+            uint a1 = leerU16(oamBaseW + o * 8u + 2u);
+            uint a2 = leerU16(oamBaseW + o * 8u + 4u);
+            bool afinW = (a01 & 0x100u) != 0u;
+            if (!afinW && (a01 & 0x200u) != 0u) continue;
+            uint forma = (a01 >> 14u) & 0x3u;
+            uint tam = (a1 >> 14u) & 0x3u;
+            uint wpx = 8u, hpx = 8u;
+            if (forma == 0u) { wpx = 8u << tam; hpx = wpx; }
+            else if (forma == 1u) {
+                wpx = (tam == 0u) ? 16u : (tam == 1u) ? 32u : (tam == 2u) ? 32u : 64u;
+                hpx = (tam == 0u) ? 8u  : (tam == 1u) ? 8u  : (tam == 2u) ? 16u : 32u;
+            } else {
+                hpx = (tam == 0u) ? 16u : (tam == 1u) ? 32u : (tam == 2u) ? 32u : 64u;
+                wpx = (tam == 0u) ? 8u  : (tam == 1u) ? 8u  : (tam == 2u) ? 16u : 32u;
+            }
+            uint bw = wpx, bh = hpx;
+            if (afinW && (a01 & 0x200u) != 0u) { bw <<= 1u; bh <<= 1u; }
+            uint dy = (linea - (a01 & 0xFFu)) & 0xFFu;
+            if (dy >= bh) continue;
+            int ox = int(a1 & 0x1FFu); if (ox >= 256) ox -= 512;
+            int dxi = int(x) - ox;
+            if (dxi < 0 || dxi >= int(bw)) continue;
+            uint dx = uint(dxi);
+            if (afinW)
+            {
+                uint grupo = (a1 >> 9u) & 0x1Fu;
+                uint pbase = oamBaseW + (grupo * 16u + 3u) * 2u;
+                int pA = int(leerU16(pbase) << 16) >> 16;
+                int pB = int(leerU16(pbase + 8u) << 16) >> 16;
+                int pC = int(leerU16(pbase + 16u) << 16) >> 16;
+                int pD = int(leerU16(pbase + 24u) << 16) >> 16;
+                int cx = int(bw >> 1u); int cy = int(bh >> 1u);
+                int rX = (dxi - cx) * pA + (int(dy) - cy) * pB + int(wpx << 7u);
+                int rY = (dxi - cx) * pC + (int(dy) - cy) * pD + int(hpx << 7u);
+                if (uint(rX) >= (wpx << 8u) || uint(rY) >= (hpx << 8u)) continue;
+                dx = uint(rX) >> 8u; dy = uint(rY) >> 8u;
+            }
+            else
+            {
+                if ((a1 & 0x1000u) != 0u) dx = wpx - 1u - dx;
+                if ((a1 & 0x2000u) != 0u) dy = hpx - 1u - dy;
+            }
+            uint tileW = a2 & 0x3FFu;
+            bool bpp8W = (a01 & 0x2000u) != 0u;
+            uint dirW; uint idxW;
+            if (bpp8W)
+            {
+                if (mapa1DW)
+                    dirW = (tileW << fronteraW) + (dy >> 3u) * (wpx << 3u) + ((dy & 7u) << 3u) + (dx >> 3u) * 64u + (dx & 7u);
+                else
+                    dirW = ((tileW & 0x3FEu) << 5u) + (dy >> 3u) * 1024u + ((dy & 7u) << 3u) + (dx >> 3u) * 64u + (dx & 7u);
+                idxW = leerByte(atlasOW + (dirW & maskOW));
+            }
+            else
+            {
+                if (mapa1DW)
+                    dirW = (tileW << fronteraW) + (dy >> 3u) * (wpx << 2u) + ((dy & 7u) << 2u) + (dx >> 3u) * 32u + ((dx & 7u) >> 1u);
+                else
+                    dirW = (tileW << 5u) + (dy >> 3u) * 1024u + ((dy & 7u) << 2u) + (dx >> 3u) * 32u + ((dx & 7u) >> 1u);
+                uint b8W = leerByte(atlasOW + (dirW & maskOW));
+                idxW = ((dx & 1u) != 0u) ? (b8W >> 4u) : (b8W & 0xFu);
+            }
+            if (idxW != 0u) objVentana = true;
+        }
+    }
+
+    bool objHay = false; uint objPrio = 3u; ivec3 objColor = ivec3(0);
+    bool objSemi = false; bool objBitmap = false; uint objAlpha = 0u;
+    bool objCaptura = false;
+    if ((dispcnt & 0x1000u) != 0u)
+    {
+        uint oamBase = kAtlasOAM + eng * 0x400u;
+        uint atlasOBJ = (eng == 0u) ? kAtlasAOBJ : kAtlasBOBJ;
+        uint maskOBJ = (eng == 0u) ? 0x3FFFFu : 0x1FFFFu;
+        uint palOBJ = kAtlasPalette + eng * 0x400u + 0x200u;
+        uint extPalOBJ = (eng == 0u) ? kAtlasAOBJExtPal : kAtlasBOBJExtPal;
+        bool mapa1D = (dispcnt & 0x10u) != 0u;
+        uint frontera = 5u + ((dispcnt >> 20u) & 0x3u);
+        for (uint candidato = 0u;
+             candidato < objCandidateCount && !objHay;
+             candidato++)
+        {
+            uint o = objCandidateList[candidato];
+            uint a01 = leerU16(oamBase + o * 8u);
+            uint a1 = leerU16(oamBase + o * 8u + 2u);
+            uint a2 = leerU16(oamBase + o * 8u + 4u);
+            uint modoObj = (a01 >> 10u) & 0x3u;
+            bool afin = (a01 & 0x100u) != 0u;
+            if (!afin && (a01 & 0x200u) != 0u) continue;
+            if (modoObj == 2u) continue;
+            if (afin && (a01 & 0x1000u) != 0u) continue;
+            uint forma = (a01 >> 14u) & 0x3u;
+            uint tam = (a1 >> 14u) & 0x3u;
+            uint wpx = 8u, hpx = 8u;
+            if (forma == 0u) { wpx = 8u << tam; hpx = wpx; }
+            else if (forma == 1u) {
+                wpx = (tam == 0u) ? 16u : (tam == 1u) ? 32u : (tam == 2u) ? 32u : 64u;
+                hpx = (tam == 0u) ? 8u  : (tam == 1u) ? 8u  : (tam == 2u) ? 16u : 32u;
+            } else {
+                hpx = (tam == 0u) ? 16u : (tam == 1u) ? 32u : (tam == 2u) ? 32u : 64u;
+                wpx = (tam == 0u) ? 8u  : (tam == 1u) ? 8u  : (tam == 2u) ? 16u : 32u;
+            }
+            uint bw = wpx; uint bh = hpx;
+            if (afin && (a01 & 0x200u) != 0u) { bw <<= 1u; bh <<= 1u; }
+            uint oy = a01 & 0xFFu;
+            uint dy = (linea - oy) & 0xFFu;
+            if (dy >= bh) continue;
+            int ox = int(a1 & 0x1FFu); if (ox >= 256) ox -= 512;
+            int dxi = int(x) - ox;
+            if (dxi < 0 || dxi >= int(bw)) continue;
+            uint dx = uint(dxi);
+            if (afin)
+            {
+
+                uint grupo = (a1 >> 9u) & 0x1Fu;
+                uint pbase = oamBase + (grupo * 16u + 3u) * 2u;
+                int pA = int(leerU16(pbase) << 16) >> 16;
+                int pB = int(leerU16(pbase + 8u) << 16) >> 16;
+                int pC = int(leerU16(pbase + 16u) << 16) >> 16;
+                int pD = int(leerU16(pbase + 24u) << 16) >> 16;
+                int cx = int(bw >> 1u); int cy = int(bh >> 1u);
+                int rX = (dxi - cx) * pA + (int(dy) - cy) * pB + int(wpx << 7u);
+                int rY = (dxi - cx) * pC + (int(dy) - cy) * pD + int(hpx << 7u);
+                if (uint(rX) >= (wpx << 8u) || uint(rY) >= (hpx << 8u)) continue;
+                dx = uint(rX) >> 8u;
+                dy = uint(rY) >> 8u;
+            }
+            else
+            {
+                if ((a1 & 0x1000u) != 0u) dx = wpx - 1u - dx;
+                if ((a1 & 0x2000u) != 0u) dy = hpx - 1u - dy;
+            }
+            uint tile = a2 & 0x3FFu;
+            uint prio = (a2 >> 10u) & 0x3u;
+            bool bpp8 = (a01 & 0x2000u) != 0u;
+            if (modoObj == 3u)
+            {
+                uint alfa = (a2 >> 12u) & 0xFu;
+                if (alfa == 0u) continue;
+                uint dir3; uint paso;
+                if ((dispcnt & 0x40u) != 0u)
+                {
+                    if ((dispcnt & 0x20u) != 0u) continue;
+                    dir3 = tile << (7u + ((dispcnt >> 22u) & 0x1u));
+                    paso = wpx * 2u;
+                }
+                else if ((dispcnt & 0x20u) != 0u)
+                {
+                    dir3 = ((tile & 0x1Fu) << 4u) + ((tile & 0x3E0u) << 7u);
+                    paso = 512u;
+                }
+                else
+                {
+                    dir3 = ((tile & 0x0Fu) << 4u) + ((tile & 0x3F0u) << 7u);
+                    paso = 256u;
+                }
+                uint dirObj = (dir3 + dy * paso + dx * 2u) & maskOBJ;
+                uint c16o = leerU16(atlasOBJ + dirObj);
+                if ((c16o & 0x8000u) == 0u) continue;
+                objColor = c555a666(c16o);
+                objPrio = prio; objHay = true;
+                objBitmap = true; objSemi = false; objAlpha = alfa + 1u;
+
+                if (eng == 1u)
+                {
+                    uint capIniO = regs[2u * 192u * 32u + 7u];
+                    if (capIniO != 0xFFFFFFFFu
+                        && dirObj == (((capIniO & 0x3FFFFFFFu)
+                                       + (linea * 256u + x) * 2u)
+                                      & maskOBJ))
+                        objCaptura = true;
+                }
+                continue;
+            }
+            uint dir;
+            if (bpp8)
+            {
+                if (mapa1D)
+                    dir = (tile << frontera) + (dy >> 3u) * (wpx << 3u) + ((dy & 7u) << 3u) + (dx >> 3u) * 64u + (dx & 7u);
+                else
+                    dir = ((tile & 0x3FEu) << 5u) + (dy >> 3u) * 1024u + ((dy & 7u) << 3u) + (dx >> 3u) * 64u + (dx & 7u);
+                uint idx = leerByte(atlasOBJ + (dir & maskOBJ));
+                if (idx == 0u) continue;
+                uint off = ((dispcnt & 0x80000000u) != 0u)
+                    ? extPalOBJ + ((a2 >> 12u) * 0x200u) + idx * 2u
+                    : palOBJ + idx * 2u;
+                objColor = c555a666(leerU16(off));
+            }
+            else
+            {
+                if (mapa1D)
+                    dir = (tile << frontera) + (dy >> 3u) * (wpx << 2u) + ((dy & 7u) << 2u) + (dx >> 3u) * 32u + ((dx & 7u) >> 1u);
+                else
+                    dir = (tile << 5u) + (dy >> 3u) * 1024u + ((dy & 7u) << 2u) + (dx >> 3u) * 32u + ((dx & 7u) >> 1u);
+                uint b8 = leerByte(atlasOBJ + (dir & maskOBJ));
+                uint idx = ((dx & 1u) != 0u) ? (b8 >> 4u) : (b8 & 0xFu);
+                if (idx == 0u) continue;
+                objColor = c555a666(leerU16(palOBJ + ((a2 >> 12u) * 16u + idx) * 2u));
+            }
+            objPrio = prio; objHay = true;
+            objSemi = (modoObj == 1u); objBitmap = false;
+        }
+    }
+
+    uint paquete = uint(objColor.r & 0x3F) | (uint(objColor.g & 0x3F) << 6u)
+                 | (uint(objColor.b & 0x3F) << 12u) | (objPrio << 18u);
+    if (objCaptura) paquete |= (1u << 29u);
+    if (objHay) paquete |= (1u << 20u);
+    if (objSemi) paquete |= (1u << 21u);
+    if (objBitmap) paquete |= (1u << 22u);
+    paquete |= (objAlpha & 0x1Fu) << 23u;
+    if (objVentana) paquete |= (1u << 28u);
+    return paquete;
+}
+
+vec4 leeCap(uint par, ivec2 p)
+{
+    return (par != 0u) ? imageLoad(imgCapHighres1, p)
+                       : imageLoad(imgCapHighres, p);
+}
+
+vec4 lee3d(ivec2 p)
+{
+    if ((pc.escala & 0x2000u) != 0u)
+        return texelFetch(tex3dEscala, p, 0);
+    return imageLoad(img3dEscala, p);
+}
+
+void leer3dEscala(uint xs, uint fi, uint ratio3d, out uint a5, out ivec3 c3)
+{
+
+    if (outputMode() == 4u && (pc.mezcla & 0x80000000u) != 0u
+        && ratio3d > 1u)
+    {
+        uint sampleOffset = ratio3d / 2u;
+        vec4 t3 = lee3d(ivec2(int(xs * ratio3d + sampleOffset),
+                              int(fi * ratio3d + sampleOffset)));
+        uint a83 = uint(t3.a * 255.0 + 0.5);
+        a5 = a83 >> 3u;
+        c3 = ivec3(int(uint(t3.r * 255.0 + 0.5) >> 2u),
+                   int(uint(t3.g * 255.0 + 0.5) >> 2u),
+                   int(uint(t3.b * 255.0 + 0.5) >> 2u));
+        return;
+    }
+    if (ratio3d <= 1u || (pc.escala & 0x1000u) == 0u)
+    {
+        vec4 t3 = lee3d(ivec2(int(xs * ratio3d), int(fi * ratio3d)));
+        uint a83 = uint(t3.a * 255.0 + 0.5);
+        a5 = a83 >> 3u;
+        c3 = ivec3(int(uint(t3.r * 255.0 + 0.5) >> 2u),
+                   int(uint(t3.g * 255.0 + 0.5) >> 2u),
+                   int(uint(t3.b * 255.0 + 0.5) >> 2u));
+        return;
+    }
+    uint sumA = 0u;
+    uvec3 sumC = uvec3(0u);
+    for (uint j = 0u; j < ratio3d; j++)
+        for (uint i = 0u; i < ratio3d; i++)
+        {
+            vec4 t3 = lee3d(ivec2(int(xs * ratio3d + i), int(fi * ratio3d + j)));
+            uint a8 = uint(t3.a * 255.0 + 0.5);
+            sumA += a8;
+            sumC += uvec3(uint(t3.r * 255.0 + 0.5),
+                          uint(t3.g * 255.0 + 0.5),
+                          uint(t3.b * 255.0 + 0.5)) * a8;
+        }
+    uint n = ratio3d * ratio3d;
+    a5 = ((sumA + n / 2u) / n) >> 3u;
+    if (sumA == 0u) { c3 = ivec3(0); return; }
+    uvec3 c8 = (sumC + uvec3(sumA / 2u)) / sumA;
+    c3 = ivec3(int(c8.r >> 2u), int(c8.g >> 2u), int(c8.b >> 2u));
+}
+
+bool leer3dCausal(ivec2 base, uint ratio3d, ivec2 dimensions,
+                  out uint a5, out ivec3 c3)
+{
+    a5 = 0u;
+    c3 = ivec3(0);
+    if (ratio3d == 0u
+        || dimensions.x <= 0 || dimensions.y <= 0
+        || any(notEqual(textureSize(tex3dCausal, 0), dimensions))
+        || base.x < 0 || base.y < 0
+        || base.x + int(ratio3d) > dimensions.x
+        || base.y + int(ratio3d) > dimensions.y)
+    {
+        return false;
+    }
+
+    if (ratio3d <= 1u || (pc.escala & 0x1000u) == 0u)
+    {
+        vec4 t3 = texelFetch(tex3dCausal, base, 0);
+        uint a83 = uint(t3.a * 255.0 + 0.5);
+        a5 = a83 >> 3u;
+        c3 = ivec3(int(uint(t3.r * 255.0 + 0.5) >> 2u),
+                   int(uint(t3.g * 255.0 + 0.5) >> 2u),
+                   int(uint(t3.b * 255.0 + 0.5) >> 2u));
+        return true;
+    }
+
+    uint sumA = 0u;
+    uvec3 sumC = uvec3(0u);
+    for (uint j = 0u; j < ratio3d; j++)
+        for (uint i = 0u; i < ratio3d; i++)
+        {
+            vec4 t3 = texelFetch(
+                tex3dCausal, base + ivec2(int(i), int(j)), 0);
+            uint a8 = uint(t3.a * 255.0 + 0.5);
+            sumA += a8;
+            sumC += uvec3(uint(t3.r * 255.0 + 0.5),
+                          uint(t3.g * 255.0 + 0.5),
+                          uint(t3.b * 255.0 + 0.5)) * a8;
+        }
+    uint n = ratio3d * ratio3d;
+    a5 = ((sumA + n / 2u) / n) >> 3u;
+    if (sumA == 0u)
+        return true;
+    uvec3 c8 = (sumC + uvec3(sumA / 2u)) / sumA;
+    c3 = ivec3(int(c8.r >> 2u), int(c8.g >> 2u), int(c8.b >> 2u));
+    return true;
+}
+
+uint recipeBlend4(uint val1, uint val2, uint eva, uint evb)
+{
+    uint r = (((val1 & 0x00003Fu) * eva)
+            + ((val2 & 0x00003Fu) * evb) + 0x000008u) >> 4u;
+    uint g = ((((val1 & 0x003F00u) * eva)
+            + ((val2 & 0x003F00u) * evb) + 0x000800u) >> 4u)
+            & 0x007F00u;
+    uint b = ((((val1 & 0x3F0000u) * eva)
+            + ((val2 & 0x3F0000u) * evb) + 0x080000u) >> 4u)
+            & 0x7F0000u;
+    return min(r, 0x3Fu) | min(g, 0x3F00u) | min(b, 0x3F0000u)
+        | 0xFF000000u;
+}
+
+uint recipeBlend5(uint val1, uint val2)
+{
+    uint eva = ((val1 >> 24u) & 0x1Fu) + 1u;
+    uint evb = 32u - eva;
+    if (eva == 32u)
+        return val1;
+    uint r = (((val1 & 0x00003Fu) * eva)
+            + ((val2 & 0x00003Fu) * evb) + 0x000010u) >> 5u;
+    uint g = ((((val1 & 0x003F00u) * eva)
+            + ((val2 & 0x003F00u) * evb) + 0x001000u) >> 5u)
+            & 0x007F00u;
+    uint b = ((((val1 & 0x3F0000u) * eva)
+            + ((val2 & 0x3F0000u) * evb) + 0x100000u) >> 5u)
+            & 0x7F0000u;
+    return min(r, 0x3Fu) | min(g, 0x3F00u) | min(b, 0x3F0000u)
+        | 0xFF000000u;
+}
+
+uint recipeBrightnessUp(uint val, uint factor, uint bias)
+{
+    uint rb = val & 0x3F003Fu;
+    uint g = val & 0x003F00u;
+    rb += (((0x3F003Fu - rb) * factor + bias * 0x010001u) >> 4u)
+        & 0x3F003Fu;
+    g += (((0x003F00u - g) * factor + bias * 0x000100u) >> 4u)
+        & 0x003F00u;
+    return rb | g | 0xFF000000u;
+}
+
+uint recipeBrightnessDown(uint val, uint factor, uint bias)
+{
+    uint rb = val & 0x3F003Fu;
+    uint g = val & 0x003F00u;
+    rb -= (((rb * factor + bias * 0x010001u) >> 4u) & 0x3F003Fu);
+    g -= (((g * factor + bias * 0x000100u) >> 4u) & 0x003F00u);
+    return rb | g | 0xFF000000u;
+}
+
+uint resolveCaptureRecipe(uvec4 recipe, uint sourceAKind, uint d3d)
+{
+    if (sourceAKind == 2u)
+        return d3d;
+    if (sourceAKind != 1u)
+        return recipe.x;
+
+    uint comp = (recipe.z >> 24u) & 0xFu;
+    bool has3d = (d3d >> 24u) != 0u;
+    if (comp == 4u)
+        return has3d ? recipeBlend5(d3d, recipe.x) : recipe.y;
+    if (comp == 1u)
+        return has3d
+            ? recipeBlend4(recipe.x, d3d,
+                (recipe.z >> 8u) & 0x1Fu,
+                (recipe.z >> 16u) & 0x1Fu)
+            : recipe.y;
+    if (comp <= 3u)
+    {
+        if (!has3d)
+            return recipe.y;
+        if (comp == 2u)
+            return recipeBrightnessUp(d3d,
+                (recipe.z >> 8u) & 0x1Fu, 0x8u);
+        if (comp == 3u)
+            return recipeBrightnessDown(d3d,
+                (recipe.z >> 8u) & 0x1Fu, 0x7u);
+        return d3d;
+    }
+    return recipe.x;
+}
+
+uint recipePackRgb555(uint val)
+{
+    return ((val >> 1u) & 0x1Fu)
+        | (((val >> 9u) & 0x1Fu) << 5u)
+        | (((val >> 17u) & 0x1Fu) << 10u)
+        | ((val >> 24u) != 0u ? 0x8000u : 0u);
+}
+
+vec4 recipeImageColor(uint val)
+{
+    uint packed = recipePackRgb555(val);
+    uint r6 = (packed & 0x1Fu) << 1u;
+    uint g6 = ((packed >> 5u) & 0x1Fu) << 1u;
+    uint b6 = ((packed >> 10u) & 0x1Fu) << 1u;
+    return vec4(float(a8(int(b6))) / 255.0,
+                float(a8(int(g6))) / 255.0,
+                float(a8(int(r6))) / 255.0,
+                (packed & 0x8000u) != 0u ? 1.0 : 0.0);
+}
+
+vec4 recipeImageColorPacked(uint packed)
+{
+    uint r6 = (packed & 0x1Fu) << 1u;
+    uint g6 = ((packed >> 5u) & 0x1Fu) << 1u;
+    uint b6 = ((packed >> 10u) & 0x1Fu) << 1u;
+    return vec4(float(a8(int(b6))) / 255.0,
+                float(a8(int(g6))) / 255.0,
+                float(a8(int(r6))) / 255.0,
+                (packed & 0x8000u) != 0u ? 1.0 : 0.0);
+}
+
+uint h5ImagePackRgb555(vec4 color)
+{
+    vec4 clamped = clamp(color, vec4(0.0), vec4(1.0));
+    uint b8 = uint(clamped.r * 255.0 + 0.5);
+    uint g8 = uint(clamped.g * 255.0 + 0.5);
+    uint r8 = uint(clamped.b * 255.0 + 0.5);
+    return (r8 >> 3u) | ((g8 >> 3u) << 5u)
+        | ((b8 >> 3u) << 10u)
+        | (clamped.a >= 0.5 ? 0x8000u : 0u);
+}
+
+uint captureBlendRgb555(uint sourceA, uint sourceB, uint eva, uint evb)
+{
+    eva = min(eva, 16u);
+    evb = min(evb, 16u);
+    uint alphaA = sourceA >> 15u;
+    uint alphaB = sourceB >> 15u;
+    uint r = ((((sourceA & 0x1Fu) * alphaA * eva)
+             + ((sourceB & 0x1Fu) * alphaB * evb) + 8u) >> 4u);
+    uint g = (((((sourceA >> 5u) & 0x1Fu) * alphaA * eva)
+             + (((sourceB >> 5u) & 0x1Fu) * alphaB * evb) + 8u) >> 4u);
+    uint b = (((((sourceA >> 10u) & 0x1Fu) * alphaA * eva)
+             + (((sourceB >> 10u) & 0x1Fu) * alphaB * evb) + 8u) >> 4u);
+    uint alpha = ((eva > 0u ? alphaA : 0u)
+                | (evb > 0u ? alphaB : 0u)) << 15u;
+    return min(r, 0x1Fu) | (min(g, 0x1Fu) << 5u)
+        | (min(b, 0x1Fu) << 10u) | alpha;
+}
+
+bool sampleCaptureRecipeSourceB(uint outputX, uint outputY,
+                                uint outputScale, bool nativeCenter,
+                                uvec4 recipeB, uvec4 recipeC,
+                                out uint packed)
+{
+    packed = recipeC.y & 0xFFFFu;
+    uint kind = (recipeC.y >> 16u) & 0xFFu;
+    bool exact = (recipeC.y & (1u << 24u)) != 0u;
+    if (!exact)
+        return false;
+    if (kind == 0u)
+    {
+        packed = 0u;
+        return true;
+    }
+    if (kind == 1u)
+        return true;
+    if (kind != 2u || recipeC.z == 0u || recipeC.z > 4u)
+        return false;
+    uint slot = recipeC.z - 1u;
+    if (!h5SlotCertificada(
+            slot, recipeB.x, recipeB.y, recipeB.z, recipeB.w))
+        return false;
+    uint sourceX = recipeC.x & 0xFFFFu;
+    uint sourceY = recipeC.x >> 16u;
+    if (sourceX >= 256u || sourceY >= 192u || outputScale == 0u)
+        return false;
+    uint subX = nativeCenter ? outputScale / 2u
+        : outputX % outputScale;
+    uint subY = nativeCenter ? outputScale / 2u
+        : outputY % outputScale;
+    ivec2 source = ivec2(int(sourceX * outputScale + subX),
+                         int(sourceY * outputScale + subY));
+    packed = h5ImagePackRgb555(h5LeeSlot(slot, source));
+    return true;
+}
+
+bool loadCaptureBackground(uint x, uint y, uvec4 productKey, uint flags,
+                           out uvec4 operand)
+{
+    operand = uvec4(0u);
+    if ((flags & (1u << 9u)) == 0u)
+        return true;
+    if (x >= 256u || y >= 192u)
+        return false;
+    uint word = kCausalCaptureBackgroundOffsetWords + (y * 256u + x) * 4u;
+    operand = uvec4(causal[word], causal[word + 1u],
+                     causal[word + 2u], causal[word + 3u]);
+    if ((operand.x | operand.y) == 0u)
+        return all(equal(operand, uvec4(0u)));
+    return operand.w >= 1u && operand.w <= 4u
+        && (operand.z & 0xFFFFu) < 256u && (operand.z >> 16u) < 192u
+        && h5SlotCertificada(operand.w - 1u,
+            productKey.x, productKey.y, operand.x, operand.y);
+}
+
+bool sampleCaptureBackground(uint outputX, uint outputY, uint outputScale,
+                             uvec4 productKey, uint flags,
+                             inout uvec4 recipe)
+{
+    uvec4 operand;
+    if (!loadCaptureBackground(outputX / outputScale, outputY / outputScale,
+                               productKey, flags, operand))
+        return false;
+    if ((operand.x | operand.y) == 0u)
+        return true;
+    ivec2 source = ivec2(
+        int((operand.z & 0xFFFFu) * outputScale + outputX % outputScale),
+        int((operand.z >> 16u) * outputScale + outputY % outputScale));
+    uint packed = h5ImagePackRgb555(h5LeeSlot(operand.w - 1u, source));
+    uint rgb666 = ((packed & 0x1Fu) << 1u)
+        | (((packed >> 5u) & 0x1Fu) << 9u)
+        | (((packed >> 10u) & 0x1Fu) << 17u);
+    recipe.x = (recipe.x & 0xFF000000u) | rgb666;
+    recipe.y = (recipe.y & 0xFF000000u) | rgb666;
+    return true;
+}
+
+uint resolveCaptureProductPacked(uvec4 recipeA, uint sourceAKind,
+                                 uint d3d, uint sourceB,
+                                 uint captureParameters)
+{
+    uint captureMode = captureParameters & 0xFFu;
+    uint eva = (captureParameters >> 8u) & 0xFFu;
+    uint evb = (captureParameters >> 16u) & 0xFFu;
+    uint sourceA = recipePackRgb555(
+        resolveCaptureRecipe(recipeA, sourceAKind, d3d));
+    if (captureMode == 0u)
+        return sourceA;
+    if (captureMode == 1u)
+        return sourceB;
+    return captureBlendRgb555(sourceA, sourceB, eva, evb);
+}
+
+uint packCaptureLineExport(vec4 color)
+{
+    vec4 clamped = clamp(color, vec4(0.0), vec4(1.0));
+    uint r8 = uint(clamped.r * 255.0 + 0.5);
+    uint g8 = uint(clamped.g * 255.0 + 0.5);
+    uint b8 = uint(clamped.b * 255.0 + 0.5);
+    uint a8v = uint(clamped.a * 255.0 + 0.5);
+    return (r8 >> 2u) | ((g8 >> 2u) << 8u)
+        | ((b8 >> 2u) << 16u) | ((a8v >> 3u) << 24u);
+}
+
+bool sampleCaptureRecipe3d(uint outputX, uint outputY, uint outputScale,
+                           uvec4 route, bool nativeCenter, out uint d3d)
+{
+    d3d = 0u;
+    if ((route.x & (1u << 22u)) == 0u)
+        return true;
+    uint rawX = route.y & 0x1FFu;
+    int signedX = rawX >= 0x100u ? int(rawX) - 0x200 : int(rawX);
+    uint sourceY = route.y >> 16u;
+    uint nativeX = outputX / outputScale;
+    uint nativeY = outputY / outputScale;
+    int sourceNativeX = int(nativeX) + signedX;
+    if (sourceNativeX < 0 || sourceNativeX >= 256 || sourceY >= 192u)
+        return true;
+
+    ivec2 dimensions = textureSize(tex3dEscala, 0);
+    if (dimensions.x <= 0 || dimensions.y <= 0
+        || (dimensions.x % 256) != 0 || (dimensions.y % 192) != 0)
+        return false;
+    uint ratioX = uint(dimensions.x) / 256u;
+    uint ratioY = uint(dimensions.y) / 192u;
+    if (ratioX == 0u || ratioX != ratioY)
+        return false;
+
+    uint subX = nativeCenter ? ratioX / 2u
+        : ((outputX % outputScale) * ratioX) / outputScale;
+    uint subY = nativeCenter ? ratioY / 2u
+        : ((outputY % outputScale) * ratioY) / outputScale;
+    ivec2 source = ivec2(sourceNativeX * int(ratioX) + int(subX),
+                         int(sourceY * ratioY + subY));
+    if (any(lessThan(source, ivec2(0)))
+        || any(greaterThanEqual(source, dimensions)))
+        return false;
+    d3d = packCaptureLineExport(texelFetch(tex3dEscala, source, 0));
+    return true;
+}
+
+bool sampleCaptureRecipeNativeProjection(
+    uint outputX, uint outputY, uvec4 route, out uint d3d)
+{
+    d3d = 0u;
+    if ((route.x & (1u << 22u)) == 0u)
+        return true;
+    uint rawX = route.y & 0x1FFu;
+    int signedX = rawX >= 0x100u ? int(rawX) - 0x200 : int(rawX);
+    uint sourceY = route.y >> 16u;
+    int sourceX = int(outputX) + signedX;
+    if (sourceX < 0 || sourceX >= 256 || sourceY >= 192u)
+        return true;
+    d3d = nativeProjection[sourceY * 256u + uint(sourceX)];
+    return true;
+}
+
+uint causalBuildLiveLineDescriptor(uint physicalScreen, uint physicalLine,
+                                   uint outputScale, uint expectedRatio,
+                                   bool visibleAllNative)
+{
+    uvec4 routeLive;
+    uvec4 lineRenderKey;
+    bool routeLoaded = causalLoadRouteLive(
+        physicalScreen, physicalLine, routeLive, lineRenderKey);
+    uint engine = (routeLive.x >> 8u) & 0xFFu;
+    bool routeExact = routeLoaded
+        && (routeLive.x & 0xFFu) == 0x03u
+        && engine < 2u
+        && ((routeLive.x >> 16u) & 0xFFu) == physicalScreen;
+    uint descriptor = routeExact
+        ? ((1u << 31u) | (engine << 30u)) : 0u;
+
+    uvec4 boundRenderKey;
+    uvec4 boundMetadata;
+    if (!routeExact || engine != 0u
+        || !causalLoadBoundLive(boundRenderKey, boundMetadata))
+        return descriptor;
+
+    uint liveFlags = routeLive.y;
+    bool liveDirect = (liveFlags & 0x0Fu) == 0x0Fu
+        && (liveFlags & 0x10u) == 0u
+        && ((liveFlags >> 8u) & 0xFFu) == 0u
+        && ((liveFlags >> 16u) & 0xFFu) == physicalScreen;
+    bool exactKey = all(equal(lineRenderKey, boundRenderKey));
+    uint width = boundMetadata.y & 0xFFFFu;
+    uint height = boundMetadata.y >> 16u;
+    uint renderScale = width / 256u;
+    bool validDimensions = width >= 256u * outputScale
+        && (width % 256u) == 0u
+        && renderScale >= outputScale
+        && (renderScale % outputScale) == 0u
+        && height == 192u * renderScale;
+    int sourceXBase = int(routeLive.w & 0xFFFFu);
+    if ((sourceXBase & 0x8000) != 0)
+        sourceXBase -= 0x10000;
+    uint sourceY = routeLive.w >> 16u;
+    uint renderRatio = validDimensions ? renderScale / outputScale : 0u;
+    bool validBoundImage = validDimensions
+        && all(equal(textureSize(tex3dCausal, 0),
+                     ivec2(int(width), int(height))));
+    bool validCoordinates = sourceXBase >= -256 && sourceXBase <= 255
+        && sourceY < 192u && renderRatio >= 1u && renderRatio <= 0xFFu
+        && renderRatio == expectedRatio;
+    if (liveDirect && exactKey && validBoundImage && validCoordinates)
+    {
+        descriptor |= (1u << 29u)
+            | (visibleAllNative ? (1u << 28u) : 0u)
+            | (uint(sourceXBase) & 0x1FFu)
+            | (sourceY << 9u)
+            | (renderRatio << 17u);
+    }
+    return descriptor;
+}
+
+const uint kB1Blend2dOver3d = 1u << 22u;
+const uint kB1Needs3d = (1u << 18u) | kB1Blend2dOver3d;
+const uint kB1Precomposed3d = 1u << 23u;
+const uint kB1Captured3dBackground = 1u << 24u;
+
+ivec3 composePrecomposed3d(uint operand, ivec3 color3d, uint alpha3d)
+{
+    ivec3 color2d = ivec3(int(operand & 0x3Fu),
+        int((operand >> 6u) & 0x3Fu), int((operand >> 12u) & 0x3Fu));
+    uint mode = (operand >> 28u) & 7u;
+    int eva = int((operand >> 18u) & 0x1Fu);
+    int evb = int((operand >> 23u) & 0x1Fu);
+    if (mode == 5u)
+    {
+        int alpha = int(alpha3d + 1u);
+        return min(ivec3(63),
+            (color3d * alpha + color2d * (32 - alpha) + 16) >> 5);
+    }
+    if (mode == 2u)
+        return min(ivec3(63), (color2d * eva + color3d * evb + 8) >> 4);
+    if (mode == 3u)
+        return color3d + (((ivec3(63) - color3d) * eva + 8) >> 4);
+    if (mode == 4u)
+        return color3d - ((color3d * eva + 7) >> 4);
+    return color3d;
+}
+
+
+ivec3 blend2dOver3d(uint foreground, ivec3 background)
+{
+    ivec3 top = ivec3(int(foreground & 0x3Fu),
+        int((foreground >> 6u) & 0x3Fu),
+        int((foreground >> 12u) & 0x3Fu));
+    int eva = int((foreground >> 18u) & 0x1Fu);
+    int evb = int((foreground >> 23u) & 0x1Fu);
+    return min(ivec3(63), (top * eva + background * evb + 8) >> 4);
+}
+
+ivec3 resolveCaptured3dBackground(inout uint operand, uint outputScale,
+                                  uint subX, uint subY)
+{
+    uint sourceX = operand & 0xFFu;
+    uint sourceY = (operand >> 8u) & 0xFFu;
+    uint slot = (operand >> 16u) & 0x3u;
+    vec4 captured = h5LeeSlot(slot, ivec2(
+        int(sourceX * outputScale + subX),
+        int(sourceY * outputScale + subY)));
+    ivec3 color = ivec3(int(uint(captured.b * 255.0 + 0.5) >> 2u),
+                        int(uint(captured.g * 255.0 + 0.5) >> 2u),
+                        int(uint(captured.r * 255.0 + 0.5) >> 2u));
+    operand = (operand & ~0x3FFFFu) | uint(color.r)
+        | (uint(color.g) << 6u) | (uint(color.b) << 12u);
+    return color;
+}
+
+struct FinalCellState
+{
+    uint nativeX;
+    uint line;
+    uint descriptor;
+    uint w0;
+    uint w1;
+    uint displayMode;
+    uint row3d;
+    int brightnessMode;
+    int brightnessFactor;
+    uint forceBlank;
+};
+
+FinalCellState makeFinalCellState(
+    uint nativeX, uint line, uint descriptor, uint w0, uint w1,
+    uint displayMode, uint row3d, int brightnessMode,
+    int brightnessFactor, bool forceBlank)
+{
+    FinalCellState state;
+    state.nativeX = nativeX;
+    state.line = line;
+    state.descriptor = descriptor;
+    state.w0 = w0;
+    state.w1 = w1;
+    state.displayMode = displayMode;
+    state.row3d = row3d;
+    state.brightnessMode = brightnessMode;
+    state.brightnessFactor = brightnessFactor;
+    state.forceBlank = forceBlank ? 1u : 0u;
+    return state;
+}
+
+FinalCellState loadFinalCellState(
+    uint nativeX, uint line, uint engine, uint descriptor)
+{
+    uint dispcnt = reg(engine, line, 0u);
+    uint w18 = reg(engine, line, 18u);
+    uint w22 = reg(engine, line, 22u);
+    uint masterBrightness = (w22 >> 16u) & 0xFFFFu;
+    int brightnessMode = int((masterBrightness >> 14u) & 0x3u);
+    int brightnessFactor = min(16, int(masterBrightness & 0x1Fu));
+    uint index = ((engine * 192u + line) * 256u + nativeX) * 2u;
+    uint row3d = reg(engine, line, 26u);
+    if (row3d > 191u)
+        row3d = line;
+    return makeFinalCellState(
+        nativeX, line, descriptor, fielB1[index], fielB1[index + 1u],
+        (dispcnt >> 16u) & 0x3u, row3d,
+        brightnessMode, brightnessFactor, (w18 & 0x100u) != 0u);
+}
+
+void storeFinalSubpixel(
+    FinalCellState state, uint outputScale, uint subX, uint subY,
+    uint outputX, uint outputY)
+{
+    uint w0 = state.w0;
+    uint w1 = state.w1;
+    uint descriptorCompacto = state.descriptor;
+    bool forceblank = state.forceBlank != 0u;
+    ivec3 baseB1 = ivec3(int(w0 & 0x3Fu), int((w0 >> 6u) & 0x3Fu),
+                         int((w0 >> 12u) & 0x3Fu));
+    ivec3 colorF = baseB1;
+    if ((w0 & kB1Captured3dBackground) != 0u)
+        colorF = resolveCaptured3dBackground(w1, outputScale, subX, subY);
+    bool brilloB2 = true;
+    uint carrilSonda = 0u;
+    bool capa3dResuelta = false;
+    uint a5Resuelto = 0u;
+    ivec3 c3Resuelto = ivec3(0);
+    if ((w0 & (1u << 20u)) != 0u)
+    {
+        uint sourceX = w1 & 0xFFu;
+        uint sourceY = (w1 >> 8u) & 0xFFu;
+        uint slot = (w1 >> 16u) & 0x3u;
+        uint postEffect = (w1 >> 18u) & 0x3u;
+        int causalEvy = min(16, int((w1 >> 20u) & 0x1Fu));
+        ivec2 pCap = ivec2(
+            int(sourceX * outputScale + subX),
+            int(sourceY * outputScale + subY));
+        vec4 tcap = h5LeeSlot(slot, pCap);
+        colorF = ivec3(
+            int(uint(tcap.b * 255.0 + 0.5) >> 2u),
+            int(uint(tcap.g * 255.0 + 0.5) >> 2u),
+            int(uint(tcap.r * 255.0 + 0.5) >> 2u));
+        aplicaPostEffectCausal(colorF, postEffect, causalEvy);
+        brilloB2 = false;
+        capa3dResuelta = true;
+        carrilSonda = 1u;
+    }
+    if (!capa3dResuelta
+        && (descriptorCompacto & (1u << 29u)) != 0u
+        && (w0 & kB1Needs3d) != 0u)
+    {
+        int sourceXBase = int(descriptorCompacto & 0x1FFu);
+        if ((sourceXBase & 0x100) != 0)
+            sourceXBase -= 0x200;
+        int sourceY = int((descriptorCompacto >> 9u) & 0xFFu);
+        uint causalRatio = (descriptorCompacto >> 17u) & 0xFFu;
+        ivec2 sampleBase = ivec2(
+            (sourceXBase * int(outputScale) + int(outputX))
+                * int(causalRatio),
+            (sourceY * int(outputScale) + int(subY))
+                * int(causalRatio));
+        bool liveHighresExacto = !forceblank && leer3dCausal(
+            sampleBase, causalRatio,
+            ivec2(int(256u * outputScale * causalRatio),
+                  int(192u * outputScale * causalRatio)),
+            a5Resuelto, c3Resuelto);
+        capa3dResuelta = liveHighresExacto;
+    }
+    if (!capa3dResuelta && (w0 & kB1Needs3d) != 0u)
+    {
+        uint native3d = nativeFallbackColor(state.row3d * 256u + state.nativeX);
+        a5Resuelto = ((native3d >> 24u) & 0xFFu) >> 3u;
+        c3Resuelto = ivec3(int((native3d & 0xFFu) >> 2u),
+                           int(((native3d >> 8u) & 0xFFu) >> 2u),
+                           int(((native3d >> 16u) & 0xFFu) >> 2u));
+        capa3dResuelta = true;
+    }
+    if (capa3dResuelta && carrilSonda != 1u)
+    {
+        carrilSonda = (a5Resuelto != 0u) ? 2u : 3u;
+        if (a5Resuelto != 0u)
+        {
+            if ((w0 & kB1Precomposed3d) != 0u)
+                colorF = composePrecomposed3d(w1, c3Resuelto, a5Resuelto);
+            else if ((w0 & kB1Blend2dOver3d) != 0u)
+                colorF = blend2dOver3d(w1, c3Resuelto);
+            else if ((w0 & (1u << 19u)) != 0u && (a5Resuelto + 1u) < 32u)
+            {
+                ivec3 abajo = ivec3(
+                    int(w1 & 0x3Fu), int((w1 >> 6u) & 0x3Fu),
+                    int((w1 >> 12u) & 0x3Fu));
+                int eva5 = int(a5Resuelto + 1u);
+                int evb5 = 32 - eva5;
+                colorF = ivec3(
+                    min(63, (c3Resuelto.r * eva5
+                        + abajo.r * evb5 + 16) >> 5),
+                    min(63, (c3Resuelto.g * eva5
+                        + abajo.g * evb5 + 16) >> 5),
+                    min(63, (c3Resuelto.b * eva5
+                        + abajo.b * evb5 + 16) >> 5));
+            }
+            else
+                colorF = c3Resuelto;
+        }
+    }
+    if (!forceblank && state.displayMode != 0u && brilloB2)
+    {
+        if (state.brightnessMode == 1 && state.brightnessFactor > 0)
+        {
+            colorF.r = clamp6(colorF.r
+                + (((63 - colorF.r) * state.brightnessFactor) >> 4));
+            colorF.g = clamp6(colorF.g
+                + (((63 - colorF.g) * state.brightnessFactor) >> 4));
+            colorF.b = clamp6(colorF.b
+                + (((63 - colorF.b) * state.brightnessFactor) >> 4));
+        }
+        else if (state.brightnessMode == 2 && state.brightnessFactor > 0)
+        {
+            colorF.r = clamp6(colorF.r
+                - (((colorF.r * state.brightnessFactor) + 0xF) >> 4));
+            colorF.g = clamp6(colorF.g
+                - (((colorF.g * state.brightnessFactor) + 0xF) >> 4));
+            colorF.b = clamp6(colorF.b
+                - (((colorF.b * state.brightnessFactor) + 0xF) >> 4));
+        }
+    }
+    if (((pc.escala >> 14u) & 3u) == 2u)
+        colorF = carrilSonda == 0u ? ivec3(0, 63, 0)
+               : carrilSonda == 1u ? ivec3(63, 0, 63)
+               : carrilSonda == 2u ? ivec3(63, 0, 0)
+               : ivec3(0, 0, 63);
+    imageStore(outImage, ivec2(int(outputX), int(outputY)),
+        vec4(float(a8(colorF.b)) / 255.0, float(a8(colorF.g)) / 255.0,
+             float(a8(colorF.r)) / 255.0, 1.0));
+}
+
+void runFinalNativeCell()
+{
+    uint outputScale = max(pc.escala & 0xFFu, 1u);
+    uint subtilesPerAxis =
+        (outputScale + kSpecializedFinalNativeSubtileSize - 1u)
+        / kSpecializedFinalNativeSubtileSize;
+    uint nativeX = gl_GlobalInvocationID.x / subtilesPerAxis;
+    uint nativeRow = gl_GlobalInvocationID.y;
+    uint subtileX = gl_GlobalInvocationID.x % subtilesPerAxis;
+    uint subtileY = gl_GlobalInvocationID.z;
+    if (nativeX >= 256u || nativeRow >= 386u || outputScale <= 1u
+        || subtileY >= subtilesPerAxis)
+        return;
+
+    uint subXBegin = subtileX * kSpecializedFinalNativeSubtileSize;
+    uint subYBegin = subtileY * kSpecializedFinalNativeSubtileSize;
+    uint subXEnd = min(
+        subXBegin + kSpecializedFinalNativeSubtileSize, outputScale);
+    uint subYEnd = min(
+        subYBegin + kSpecializedFinalNativeSubtileSize, outputScale);
+    uint outputYBase = nativeRow * outputScale;
+    if (nativeRow >= 192u && nativeRow < 194u)
+    {
+#define STORE_FINAL_BLACK(DX, DY) \
+        if (subXBegin + DX < subXEnd && subYBegin + DY < subYEnd) \
+            imageStore(outImage, \
+                ivec2(int(nativeX * outputScale + subXBegin + DX), \
+                      int(outputYBase + subYBegin + DY)), \
+                vec4(0.0, 0.0, 0.0, 1.0));
+        if (kSpecializedFinalNativeSubtileSize == 2u)
+        {
+            STORE_FINAL_BLACK(0u, 0u) STORE_FINAL_BLACK(1u, 0u)
+            STORE_FINAL_BLACK(0u, 1u) STORE_FINAL_BLACK(1u, 1u)
+        }
+        else
+        {
+            STORE_FINAL_BLACK(0u, 0u) STORE_FINAL_BLACK(1u, 0u)
+            STORE_FINAL_BLACK(2u, 0u) STORE_FINAL_BLACK(3u, 0u)
+            STORE_FINAL_BLACK(0u, 1u) STORE_FINAL_BLACK(1u, 1u)
+            STORE_FINAL_BLACK(2u, 1u) STORE_FINAL_BLACK(3u, 1u)
+            STORE_FINAL_BLACK(0u, 2u) STORE_FINAL_BLACK(1u, 2u)
+            STORE_FINAL_BLACK(2u, 2u) STORE_FINAL_BLACK(3u, 2u)
+            STORE_FINAL_BLACK(0u, 3u) STORE_FINAL_BLACK(1u, 3u)
+            STORE_FINAL_BLACK(2u, 3u) STORE_FINAL_BLACK(3u, 3u)
+        }
+#undef STORE_FINAL_BLACK
+        return;
+    }
+
+    uint physicalScreen = nativeRow < 192u ? 0u : 1u;
+    uint line = nativeRow < 192u ? nativeRow : nativeRow - 194u;
+    uint descriptor = objLinea[physicalScreen * 192u + line];
+    if ((descriptor & (1u << 31u)) == 0u)
+        return;
+    uint engine = (descriptor >> 30u) & 1u;
+    FinalCellState state = loadFinalCellState(
+        nativeX, line, engine, descriptor);
+    uint outputXBase = nativeX * outputScale;
+#define STORE_FINAL_SUBPIXEL(DX, DY) \
+    if (subXBegin + DX < subXEnd && subYBegin + DY < subYEnd) \
+        storeFinalSubpixel( \
+            state, outputScale, subXBegin + DX, subYBegin + DY, \
+            outputXBase + subXBegin + DX, outputYBase + subYBegin + DY);
+    if (kSpecializedFinalNativeSubtileSize == 2u)
+    {
+        STORE_FINAL_SUBPIXEL(0u, 0u) STORE_FINAL_SUBPIXEL(1u, 0u)
+        STORE_FINAL_SUBPIXEL(0u, 1u) STORE_FINAL_SUBPIXEL(1u, 1u)
+    }
+    else
+    {
+        STORE_FINAL_SUBPIXEL(0u, 0u) STORE_FINAL_SUBPIXEL(1u, 0u)
+        STORE_FINAL_SUBPIXEL(2u, 0u) STORE_FINAL_SUBPIXEL(3u, 0u)
+        STORE_FINAL_SUBPIXEL(0u, 1u) STORE_FINAL_SUBPIXEL(1u, 1u)
+        STORE_FINAL_SUBPIXEL(2u, 1u) STORE_FINAL_SUBPIXEL(3u, 1u)
+        STORE_FINAL_SUBPIXEL(0u, 2u) STORE_FINAL_SUBPIXEL(1u, 2u)
+        STORE_FINAL_SUBPIXEL(2u, 2u) STORE_FINAL_SUBPIXEL(3u, 2u)
+        STORE_FINAL_SUBPIXEL(0u, 3u) STORE_FINAL_SUBPIXEL(1u, 3u)
+        STORE_FINAL_SUBPIXEL(2u, 3u) STORE_FINAL_SUBPIXEL(3u, 3u)
+    }
+#undef STORE_FINAL_SUBPIXEL
+}
+
+void main()
+{
+    uint xSalida = gl_GlobalInvocationID.x;
+    uint filaSalida = gl_GlobalInvocationID.y;
+
+    if (outputMode() == 4u || outputMode() == 5u
+        || (outputMode() == 2u && pc.mezcla != 0u))
+    {
+        gRegBase = 2u * 192u * 32u + 16u;
+        gAtlasBase = 0x26D000u;
+    }
+    if (outputMode() == 1u && kSpecializedFinalInvocationMode == 1u)
+    {
+        runFinalNativeCell();
+        return;
+    }
+
+    if (outputMode() == 4u)
+    {
+        uint outputScale = max(pc.escala & 0xFFu, 1u);
+        if (xSalida >= 256u * outputScale
+            || filaSalida >= 192u * outputScale)
+            return;
+        uint nativeX = xSalida / outputScale;
+        uint captureLine = filaSalida / outputScale;
+        if (gl_LocalInvocationID.x == 0u)
+        {
+            captureRecipeGroupProductKey = uvec4(0u);
+            captureRecipeGroupRenderKey = uvec4(0u);
+            captureRecipeGroupMetadata = uvec4(0u);
+            captureRecipeGroupRoute = uvec4(0u);
+            captureRecipeGroupLineRenderKey = uvec4(0u);
+            bool groupExact = causalCaptureRecipeHeader(
+                    captureRecipeGroupProductKey,
+                    captureRecipeGroupRenderKey,
+                    captureRecipeGroupMetadata)
+                && causalLoadCaptureRecipeLineValidated(
+                    captureLine,
+                    captureRecipeGroupRenderKey,
+                    captureRecipeGroupMetadata,
+                    captureRecipeGroupRoute,
+                    captureRecipeGroupLineRenderKey);
+            captureRecipeGroupExact = groupExact ? 1u : 0u;
+        }
+        barrier();
+
+        uvec4 headerMetadata = captureRecipeGroupMetadata;
+        uvec4 route = captureRecipeGroupRoute;
+        uvec4 recipeA = uvec4(0u);
+        uvec4 recipeB = uvec4(0u);
+        uvec4 recipeC = uvec4(0u);
+        bool sourceAOnly = captureRecipeUsesSourceAOnly(headerMetadata.w);
+        bool exact = captureRecipeGroupExact != 0u
+            && causalLoadCapturePixelRecipe(
+                nativeX, captureLine,
+                sourceAOnly,
+                recipeA, recipeB, recipeC);
+        uint d3d = 0u;
+        exact = exact && sampleCaptureRecipe3d(
+            xSalida, filaSalida, outputScale, route, false, d3d);
+        uint sourceB = 0u;
+        exact = exact && sampleCaptureRecipeSourceB(
+            xSalida, filaSalida, outputScale, false,
+            recipeB, recipeC, sourceB);
+        exact = exact && sampleCaptureBackground(
+            xSalida, filaSalida, outputScale,
+            captureRecipeGroupProductKey, headerMetadata.w, recipeA);
+        if (!exact)
+            return;
+        uint sourceAKind = (route.x >> 8u) & 0xFu;
+        vec4 captureColor = recipeImageColorPacked(
+            resolveCaptureProductPacked(
+                recipeA, sourceAKind, d3d, sourceB, route.z));
+        uint slot = (pc.escala >> 25u) & 3u;
+        h5StoreSlot(slot, ivec2(int(xSalida), int(filaSalida)), captureColor);
+        return;
+    }
+
+    if (outputMode() == 5u)
+    {
+        uint slot = (pc.escala >> 25u) & 3u;
+        uint materialParity = (pc.escala >> 27u) & 1u;
+        uint outputScale = max(pc.escala & 0xFFu, 1u);
+        bool sourceSealDiagnostic =
+            (pc.mezcla & 0x80000000u) != 0u;
+        if (gl_LocalInvocationID.x == 0u)
+        {
+            materialSealGroupMismatches = 0u;
+            materialSealGroupSourceMismatches = 0u;
+        }
+        barrier();
+
+        if (gl_LocalInvocationID.x == 0u)
+        {
+            captureRecipeGroupProductKey = uvec4(0u);
+            captureRecipeGroupRenderKey = uvec4(0u);
+            captureRecipeGroupMetadata = uvec4(0u);
+            captureRecipeGroupRoute = uvec4(0u);
+            captureRecipeGroupLineRenderKey = uvec4(0u);
+            bool groupExact = causalCaptureRecipeHeader(
+                    captureRecipeGroupProductKey,
+                    captureRecipeGroupRenderKey,
+                    captureRecipeGroupMetadata)
+                && causalLoadCaptureRecipeLineValidated(
+                    filaSalida,
+                    captureRecipeGroupRenderKey,
+                    captureRecipeGroupMetadata,
+                    captureRecipeGroupRoute,
+                    captureRecipeGroupLineRenderKey);
+            captureRecipeGroupExact = groupExact ? 1u : 0u;
+        }
+        barrier();
+
+        uvec4 productKey = captureRecipeGroupProductKey;
+        uvec4 headerMetadata = captureRecipeGroupMetadata;
+        uvec4 route = captureRecipeGroupRoute;
+        uvec4 recipeA = uvec4(0u);
+        uvec4 recipeB = uvec4(0u);
+        uvec4 recipeC = uvec4(0u);
+        bool sourceAOnly = captureRecipeUsesSourceAOnly(headerMetadata.w);
+        bool recipeExact = captureRecipeGroupExact != 0u
+            && causalLoadCapturePixelRecipe(
+                xSalida, filaSalida,
+                sourceAOnly,
+                recipeA, recipeB, recipeC);
+        uvec4 backgroundOperand;
+        recipeExact = recipeExact && loadCaptureBackground(
+            xSalida, filaSalida, productKey, headerMetadata.w,
+            backgroundOperand);
+        uint sourceAKind = (route.x >> 8u) & 0xFu;
+        uint nativeSourceB = recipeC.y & 0xFFFFu;
+        uint native3d = (route.x & (1u << 22u)) != 0u
+            ? recipeA.w : 0u;
+        uint observado = recipeExact
+            ? resolveCaptureProductPacked(
+                recipeA, sourceAKind, native3d,
+                nativeSourceB, route.z)
+            : 0xFFFFFFFFu;
+        uint esperado = 0u;
+        bool materialAvailable =
+            causalLoadCaptureMaterial(xSalida, filaSalida, esperado);
+        recipeExact = recipeExact && materialAvailable;
+        if (!recipeExact)
+            observado = 0xFFFFFFFFu;
+        if (observado != esperado)
+            atomicAdd(materialSealGroupMismatches, 1u);
+
+        uint projected3d = 0u;
+        bool sourceAExact = true;
+        uint projectedSourceB = nativeSourceB;
+        bool sourceBExact = true;
+        if (sourceSealDiagnostic)
+        {
+            sourceAExact = recipeExact
+                && sampleCaptureRecipeNativeProjection(
+                    xSalida, filaSalida, route, projected3d);
+            if ((route.x & (1u << 22u)) != 0u
+                && (!sourceAExact || projected3d != recipeA.w))
+                sourceAExact = false;
+            if (((recipeC.y >> 16u) & 0xFFu) == 2u)
+            {
+                sourceBExact = recipeExact && sampleCaptureRecipeSourceB(
+                    xSalida, filaSalida, outputScale, true,
+                    recipeB, recipeC, projectedSourceB)
+                    && projectedSourceB == nativeSourceB;
+            }
+            if (!sourceAExact || !sourceBExact)
+            {
+                atomicAdd(materialSealGroupSourceMismatches, 1u);
+                uint firstIndex = filaSalida * 256u + xSalida;
+                uint previous = atomicCompSwap(
+                    capSeal[8u + slot].x, 0xFFFFFFFFu, firstIndex);
+                if (previous == 0xFFFFFFFFu)
+                {
+                    capSeal[8u + slot].y = projected3d;
+                    capSeal[8u + slot].z = recipeA.w;
+                    capSeal[8u + slot].w = route.x
+                        | (sourceAExact ? 0u : 0x80000000u)
+                        | (sourceBExact ? 0u : 0x40000000u);
+                }
+            }
+        }
+        barrier();
+        if (gl_LocalInvocationID.x == 0u)
+        {
+            if (materialSealGroupMismatches != 0u)
+                atomicAdd(capSeal[slot].z,
+                          materialSealGroupMismatches);
+            atomicAdd(capSeal[slot].w, 64u);
+            atomicAdd(capSeal[4u + slot].x,
+                      materialSealGroupMismatches);
+            atomicAdd(capSeal[4u + slot].y,
+                      materialSealGroupSourceMismatches);
+            atomicAdd(capSeal[4u + slot].z, 64u);
+            if (sourceSealDiagnostic)
+                atomicAdd(capSeal[4u + slot].w, 64u);
+        }
+        return;
+    }
+
+    if (outputMode() == 2u)
+    {
+
+        uint engObj = filaSalida / 192u;
+        uint lineaObj = filaSalida % 192u;
+        uint bloqueX0 = gl_WorkGroupID.x * 64u;
+        for (uint o = gl_LocalInvocationID.x; o < 128u; o += 64u)
+            objCandidateFlags[o] = objPuedeTocarBloque(
+                engObj, lineaObj, bloqueX0, o) ? 1u : 0u;
+        barrier();
+        if (gl_LocalInvocationID.x == 0u)
+        {
+            uint cantidad = 0u;
+            for (uint o = 0u; o < 128u; o++)
+            {
+                if (objCandidateFlags[o] != 0u)
+                    objCandidateList[cantidad++] = o;
+            }
+            objCandidateCount = cantidad;
+        }
+        barrier();
+        if (xSalida >= 256u || filaSalida >= 384u) return;
+        objLinea[filaSalida * 256u + xSalida] =
+            evaluarObjPixel(engObj, lineaObj, xSalida);
+        return;
+    }
+
+    if (outputMode() == 6u)
+    {
+        uint escCompacta = max(pc.escala & 0xFFu, 1u);
+        uint ratioCompacto = max((pc.escala >> 16u) & 0xFFu, 1u);
+
+        if ((pc.mezcla & 1u) != 0u)
+        {
+            if (filaSalida != 0u || xSalida >= 384u)
+                return;
+            uint pantallaNativa = xSalida / 192u;
+            uint lineaNativa = xSalida % 192u;
+            bool allNativeExact = causalHeaderValid()
+                && (causal[0u] & kCausalHeaderAllNative) != 0u;
+            objLinea[xSalida] = allNativeExact
+                ? causalBuildLiveLineDescriptor(
+                    pantallaNativa, lineaNativa, escCompacta,
+                    ratioCompacto, true)
+                : 0u;
+            return;
+        }
+
+        if (filaSalida >= 384u) return;
+        uint pantallaCompacta = filaSalida / 192u;
+        uint lineaCompacta = filaSalida % 192u;
+        uint carrilCompacto = gl_LocalInvocationID.x;
+
+        uint rowWordCompacto = kCausalLineageRowOffsetWords
+            + (pantallaCompacta * 192u + lineaCompacta) * 4u;
+        uint rowKindCompacto = causal[rowWordCompacto + 0u];
+        uint rowOperandCompacto = causal[rowWordCompacto + 1u];
+        uint rowControlCompacto = causal[rowWordCompacto + 2u];
+        uint rowReservedCompacto = causal[rowWordCompacto + 3u];
+        bool rowNativeExacto = rowKindCompacto == 1u
+            && rowOperandCompacto == 0u
+            && rowControlCompacto == 0u
+            && rowReservedCompacto == 0u;
+
+        uvec4 rutaCompacta;
+        uvec4 claveLineaCompacta;
+        bool rutaCargada = causalLoadRouteLive(
+            pantallaCompacta, lineaCompacta,
+            rutaCompacta, claveLineaCompacta);
+        uint engCompacto = (rutaCompacta.x >> 8u) & 0xFFu;
+        bool rutaExacta = rutaCargada
+            && (rutaCompacta.x & 0xFFu) == 0x03u
+            && engCompacto < 2u
+            && ((rutaCompacta.x >> 16u) & 0xFFu) == pantallaCompacta;
+
+        if (carrilCompacto == 0u)
+            causalCaptureSetCertifiedGroup = causalHeaderValid()
+                && causalRequiredCaptureSetCertified() ? 1u : 0u;
+        barrier();
+        bool conjuntoCapturaCertificado =
+            causalCaptureSetCertifiedGroup != 0u;
+
+        if (carrilCompacto == 0u)
+        {
+            objLinea[pantallaCompacta * 192u + lineaCompacta] =
+                causalBuildLiveLineDescriptor(
+                    pantallaCompacta, lineaCompacta, escCompacta,
+                    ratioCompacto, rowNativeExacto);
+        }
+
+        if (!rutaExacta)
+            return;
+
+        if (rowNativeExacto || rowKindCompacto == 3u
+            || (rowKindCompacto != 2u && rowKindCompacto != 4u))
+            return;
+
+        for (uint xCompacto = carrilCompacto;
+             xCompacto < 256u; xCompacto += 64u)
+        {
+            uint idxCompacto = ((engCompacto * 192u + lineaCompacta) * 256u
+                               + xCompacto) * 2u;
+            uint w0Compacto = fielB1[idxCompacto];
+            uint w1Compacto = fielB1[idxCompacto + 1u];
+            uvec4 lineageCompacta = uvec4(0u);
+            bool lineageCargada = causalHeaderValid()
+                && causalLoadVisiblePixel(pantallaCompacta, lineaCompacta,
+                                          xCompacto, lineageCompacta);
+            bool nativeCanonico = lineageCargada
+                && all(equal(lineageCompacta, uvec4(0u)));
+            if (nativeCanonico && (w0Compacto & kB1Needs3d) != 0u)
+            {
+
+                w0Compacto |= 1u << 21u;
+            }
+            else if (conjuntoCapturaCertificado && lineageCargada)
+            {
+                uint operandA = lineageCompacta.x;
+                uint control = lineageCompacta.z;
+                uint handle = operandA & 0xFFFFu;
+                uint sourceX = (operandA >> 16u) & 0xFFu;
+                uint sourceY = (operandA >> 24u) & 0xFFu;
+                uint compositeOp = control & 0x7u;
+                uint postEffect = (control >> 3u) & 0x3u;
+                bool exacto = (control & (1u << 6u)) != 0u;
+                const uint supportedReplaceMask = 0x7u
+                    | (0x3u << 3u) | (1u << 6u) | (0x1Fu << 18u);
+                bool replaceSoportado = (compositeOp == 1u || compositeOp == 5u)
+                    && exacto
+                    && handle >= 2u && postEffect <= 2u
+                    && lineageCompacta.y == 0u && lineageCompacta.w == 0u
+                    && (control & ~supportedReplaceMask) == 0u;
+                uvec4 productIdentity;
+                uvec4 productMetadata;
+                if (replaceSoportado
+                    && causalRequiredCaptureSetContains(handle)
+                    && causalLoadProduct(handle, productIdentity,
+                                         productMetadata))
+                {
+                    uint width = productMetadata.x & 0xFFFFu;
+                    uint height = productMetadata.x >> 16u;
+                    uint productKind = productMetadata.y & 0xFFu;
+                    uint encodedSlot = productMetadata.z;
+                    bool productoExacto = productKind == 2u
+                        && productIdentity.x == causal[5u]
+                        && productIdentity.y == causal[6u]
+                        && width > 0u && width <= 256u
+                        && height > 0u && height <= 192u
+                        && sourceX < width && sourceY < height
+                        && encodedSlot >= 1u && encodedSlot <= 4u;
+                    uint slot = productoExacto ? encodedSlot - 1u : 4u;
+                    if (productoExacto && h5SlotCertificada(
+                            slot, productIdentity.x, productIdentity.y,
+                            productIdentity.z, productIdentity.w))
+                    {
+                        if (compositeOp == 5u)
+                        {
+                            if ((w0Compacto & kB1Needs3d) != 0u)
+                            {
+                                w0Compacto |= kB1Captured3dBackground;
+                                w1Compacto = (w1Compacto & ~0x3FFFFu)
+                                    | sourceX | (sourceY << 8u) | (slot << 16u);
+                            }
+                        }
+                        else
+                        {
+                            uint evy = (control >> 18u) & 0x1Fu;
+                            w0Compacto |= 1u << 20u;
+                            w1Compacto = sourceX | (sourceY << 8u)
+                                | (slot << 16u) | (postEffect << 18u)
+                                | (evy << 20u);
+                        }
+                    }
+                }
+            }
+            fielB1[idxCompacto] = w0Compacto;
+            fielB1[idxCompacto + 1u] = w1Compacto;
+        }
+        return;
+    }
+
+    uint esc = (outputMode() == 1u || outputMode() == 4u)
+        ? max(pc.escala & 0xFFu, 1u) : 1u;
+
+    uint ratio3d = max((pc.escala >> 16u) & 0xFFu, 1u);
+    if (xSalida >= 256u * esc || filaSalida >= 386u * esc) return;
+
+    uint x = xSalida / esc;
+    uint fila = filaSalida;
+    uint eng = (filaSalida < 192u) ? 0u : 1u;
+    uint linea = 0u;
+    uint pantalla = 0u;
+    uint filaInterna = 0u;
+    uint descriptorCompacto = 0u;
+    if (outputMode() == 1u)
+    {
+
+        if (filaSalida >= 192u * esc && filaSalida < 194u * esc)
+        {
+            imageStore(outImage, ivec2(int(xSalida), int(filaSalida)), vec4(0.0, 0.0, 0.0, 1.0));
+            return;
+        }
+        pantalla = (filaSalida < 192u * esc) ? 0u : 1u;
+        filaInterna = (filaSalida < 192u * esc) ? filaSalida : (filaSalida - 194u * esc);
+        linea = filaInterna / esc;
+        if (esc > 1u)
+        {
+            descriptorCompacto = objLinea[pantalla * 192u + linea];
+            if ((descriptorCompacto & (1u << 31u)) == 0u)
+                return;
+            eng = (descriptorCompacto >> 30u) & 1u;
+        }
+        else
+        {
+            uvec4 routeLive;
+            uvec4 liveRenderKey;
+            if (!causalLoadRouteLive(
+                    pantalla, linea, routeLive, liveRenderKey))
+                return;
+            uint routeFlags = routeLive.x;
+            uint routeEngine = (routeFlags >> 8u) & 0xFFu;
+            uint routeScreen = (routeFlags >> 16u) & 0xFFu;
+            if ((routeFlags & 0xFFu) != 0x03u
+                || routeEngine >= 2u
+                || routeScreen != pantalla)
+                return;
+            eng = routeEngine;
+        }
+    }
+    else if (outputMode() == 4u)
+    {
+
+        if (filaSalida >= 192u * esc) return;
+        eng = 0u;
+        filaInterna = filaSalida;
+        linea = filaInterna / esc;
+    }
+    else
+    {
+        if (filaSalida >= 384u) return;
+        eng = filaSalida / 192u;
+        linea = filaSalida % 192u;
+    }
+
+    uint dispcnt = reg(eng, linea, 0u);
+    uint w18 = reg(eng, linea, 18u);
+    uint w22 = reg(eng, linea, 22u);
+    uint mb = (w22 >> 16u) & 0xFFFFu;
+    int brMode = int((mb >> 14u) & 0x3u);
+    int brFactor = min(16, int(mb & 0x1Fu));
+
+    uint modoDisplay = (dispcnt >> 16u) & 0x3u;
+    bool forceblank = (w18 & 0x100u) != 0u;
+
+    if (((pc.escala >> 14u) & 3u) == 3u && outputMode() == 3u)
+    {
+
+        ivec3 mapa = ivec3(0);
+        if ((w18 & (1u << 12u)) != 0u)
+        {
+            mapa = ivec3(10, 10, 10);
+            uint vS = atlas[(gAtlasBase >> 2u) + (kAtlasLineas >> 2u)
+                            + (eng * 192u + linea) * 256u + x];
+            if ((w18 & (1u << 13u)) != 0u) mapa.r = 63;
+            if ((vS & (1u << 26u)) != 0u) mapa.g = 63;
+            uint parS = (w18 >> 14u) & 1u;
+            bool freS = (parS != 0u) ? (pc.escala & 0x8000000u) != 0u
+                                     : (pc.escala & 0x4000000u) != 0u;
+            if (freS) mapa.b = 63;
+        }
+        uint idxSonda = ((eng * 192u + linea) * 256u + x) * 2u;
+        fielB1[idxSonda] = uint(mapa.r) | (uint(mapa.g) << 6u)
+                         | (uint(mapa.b) << 12u);
+        fielB1[idxSonda + 1u] = 0u;
+        return;
+    }
+
+    if (outputMode() == 1u && esc > 1u)
+    {
+        uint idxN = ((eng * 192u + linea) * 256u + x) * 2u;
+        uint w0 = fielB1[idxN];
+        uint w1 = fielB1[idxN + 1u];
+        uint carrilSonda = 0u;
+        ivec3 baseB1 = ivec3(int(w0 & 0x3Fu), int((w0 >> 6u) & 0x3Fu),
+                             int((w0 >> 12u) & 0x3Fu));
+        ivec3 colorF = baseB1;
+        if ((w0 & kB1Captured3dBackground) != 0u)
+            colorF = resolveCaptured3dBackground(w1, esc,
+                xSalida - x * esc, filaInterna - linea * esc);
+        bool brilloB2 = true;
+
+        uint fila3d = reg(eng, linea, 26u);
+        if (fila3d > 191u) fila3d = linea;
+
+        bool capa3dResuelta = false;
+        uint a5Resuelto = 0u;
+        ivec3 c3Resuelto = ivec3(0);
+        if ((w0 & (1u << 20u)) != 0u)
+        {
+            uint sourceX = w1 & 0xFFu;
+            uint sourceY = (w1 >> 8u) & 0xFFu;
+            uint slot = (w1 >> 16u) & 0x3u;
+            uint postEffect = (w1 >> 18u) & 0x3u;
+            int causalEvy = min(16, int((w1 >> 20u) & 0x1Fu));
+            ivec2 pCap = ivec2(
+                int(sourceX * esc + (xSalida - x * esc)),
+                int(sourceY * esc + (filaInterna - linea * esc)));
+            vec4 tcap = h5LeeSlot(slot, pCap);
+
+            colorF = ivec3(
+                int(uint(tcap.b * 255.0 + 0.5) >> 2u),
+                int(uint(tcap.g * 255.0 + 0.5) >> 2u),
+                int(uint(tcap.r * 255.0 + 0.5) >> 2u));
+            aplicaPostEffectCausal(colorF, postEffect, causalEvy);
+            brilloB2 = false;
+            capa3dResuelta = true;
+            carrilSonda = 1u;
+        }
+        if (!capa3dResuelta
+            && (descriptorCompacto & (1u << 29u)) != 0u
+            && (w0 & kB1Needs3d) != 0u)
+        {
+            int sourceXBase = int(descriptorCompacto & 0x1FFu);
+            if ((sourceXBase & 0x100) != 0)
+                sourceXBase -= 0x200;
+            int sourceY = int((descriptorCompacto >> 9u) & 0xFFu);
+            uint causalRatio = (descriptorCompacto >> 17u) & 0xFFu;
+            int subY = int(filaInterna - linea * esc);
+            ivec2 sampleBase = ivec2(
+                (sourceXBase * int(esc) + int(xSalida))
+                    * int(causalRatio),
+                (sourceY * int(esc) + subY)
+                    * int(causalRatio));
+            bool liveHighresExacto = !forceblank && leer3dCausal(
+                sampleBase, causalRatio,
+                ivec2(int(256u * esc * causalRatio),
+                      int(192u * esc * causalRatio)),
+                a5Resuelto, c3Resuelto);
+
+            capa3dResuelta = liveHighresExacto;
+        }
+        if (!capa3dResuelta && (w0 & kB1Needs3d) != 0u)
+        {
+            uint native3d = nativeFallbackColor(fila3d * 256u + x);
+            a5Resuelto = ((native3d >> 24u) & 0xFFu) >> 3u;
+            c3Resuelto = ivec3(int((native3d & 0xFFu) >> 2u),
+                               int(((native3d >> 8u) & 0xFFu) >> 2u),
+                               int(((native3d >> 16u) & 0xFFu) >> 2u));
+            capa3dResuelta = true;
+        }
+        if (capa3dResuelta && carrilSonda != 1u)
+        {
+            carrilSonda = (a5Resuelto != 0u) ? 2u : 3u;
+            if (a5Resuelto != 0u)
+            {
+                if ((w0 & kB1Precomposed3d) != 0u)
+                    colorF = composePrecomposed3d(w1, c3Resuelto, a5Resuelto);
+                else if ((w0 & kB1Blend2dOver3d) != 0u)
+                    colorF = blend2dOver3d(w1, c3Resuelto);
+                else if ((w0 & (1u << 19u)) != 0u
+                    && (a5Resuelto + 1u) < 32u)
+                {
+                    ivec3 abajo = ivec3(
+                        int(w1 & 0x3Fu), int((w1 >> 6u) & 0x3Fu),
+                        int((w1 >> 12u) & 0x3Fu));
+                    int eva5 = int(a5Resuelto + 1u);
+                    int evb5 = 32 - eva5;
+                    colorF = ivec3(
+                        min(63, (c3Resuelto.r * eva5
+                            + abajo.r * evb5 + 16) >> 5),
+                        min(63, (c3Resuelto.g * eva5
+                            + abajo.g * evb5 + 16) >> 5),
+                        min(63, (c3Resuelto.b * eva5
+                            + abajo.b * evb5 + 16) >> 5));
+                }
+                else
+                    colorF = c3Resuelto;
+            }
+        }
+        if (!forceblank && modoDisplay != 0u && brilloB2)
+        {
+            if (brMode == 1 && brFactor > 0)
+            {
+                colorF.r = clamp6(colorF.r + (((63 - colorF.r) * brFactor) >> 4));
+                colorF.g = clamp6(colorF.g + (((63 - colorF.g) * brFactor) >> 4));
+                colorF.b = clamp6(colorF.b + (((63 - colorF.b) * brFactor) >> 4));
+            }
+            else if (brMode == 2 && brFactor > 0)
+            {
+                colorF.r = clamp6(colorF.r - (((colorF.r * brFactor) + 0xF) >> 4));
+                colorF.g = clamp6(colorF.g - (((colorF.g * brFactor) + 0xF) >> 4));
+                colorF.b = clamp6(colorF.b - (((colorF.b * brFactor) + 0xF) >> 4));
+            }
+        }
+
+        if (((pc.escala >> 14u) & 3u) == 2u)
+            colorF = carrilSonda == 0u ? ivec3(0, 63, 0)
+                   : carrilSonda == 1u ? ivec3(63, 0, 63)
+                   : carrilSonda == 2u ? ivec3(63, 0, 0)
+                   : ivec3(0, 0, 63);
+        imageStore(outImage, ivec2(int(xSalida), int(filaSalida)),
+            vec4(float(a8(colorF.b)) / 255.0, float(a8(colorF.g)) / 255.0,
+                 float(a8(colorF.r)) / 255.0, 1.0));
+        return;
+    }
+
+    ivec3 color = ivec3(0);
+    bool componer = false;
+
+    uint fielB1Flags = 0u;
+    ivec3 topCrudoB1 = ivec3(0);
+    uint mezcla2dSobre3dB1 = 0u;
+    uint precomposed3dB1 = 0u;
+
+    uint capPixB1 = 0u;
+    uint bgCapturaB1 = 0xFFu;
+    bool capPixCausalB1 = false;
+
+    if (outputMode() == 4u)
+    {
+
+        if (forceblank) color = ivec3(63, 63, 63);
+        else componer = true;
+    }
+    else if (forceblank || modoDisplay == 0u)
+    {
+        color = ivec3(63, 63, 63);
+    }
+    else if (modoDisplay == 1u)
+    {
+        if ((w18 & (1u << 12u)) != 0u)
+        {
+
+            uint vPre = atlas[(gAtlasBase >> 2u) + (kAtlasLineas >> 2u)
+                              + (eng * 192u + linea) * 256u + x];
+            color = ivec3(int(vPre & 0x3Fu), int((vPre >> 8u) & 0x3Fu),
+                          int((vPre >> 16u) & 0x3Fu));
+
+            uint operand3d = eng == 0u
+                ? atlas[(gAtlasBase >> 2u) + (kAtlasLine3D >> 2u)
+                        + linea * 256u + x] : 0u;
+            uint precomposedMode = (operand3d >> 28u) & 7u;
+            if (precomposedMode >= 1u && precomposedMode <= 5u)
+            {
+                if (outputMode() == 3u)
+                {
+                    fielB1Flags |= (1u << 18u) | kB1Precomposed3d;
+                    precomposed3dB1 = operand3d;
+                }
+                else
+                {
+                    uint sourceY = reg(eng, linea, 26u);
+                    if (sourceY > 191u) sourceY = linea;
+                    uint pixel3d = nativeFallbackColor(sourceY * 256u + x);
+                    uint alpha3d = (pixel3d >> 27u) & 0x1Fu;
+                    if (alpha3d != 0u)
+                    {
+                        ivec3 color3d = ivec3(int((pixel3d & 0xFFu) >> 2u),
+                            int(((pixel3d >> 8u) & 0xFFu) >> 2u),
+                            int(((pixel3d >> 16u) & 0xFFu) >> 2u));
+                        color = composePrecomposed3d(operand3d, color3d, alpha3d);
+                    }
+                }
+            }
+            else if ((vPre & (1u << 27u)) != 0u
+                && regs[2u * 192u * 32u + 9u] != 0u)
+            {
+                if (outputMode() == 3u)
+                {
+                    fielB1Flags |= (1u << 18u) | (1u << 19u);
+                    topCrudoB1 = color;
+                }
+                else
+                {
+                    uint f3p = reg(eng, linea, 26u);
+                    if (f3p > 191u) f3p = linea;
+                    uint v3p = nativeFallbackColor(f3p * 256u + x);
+                    uint a5p = ((v3p >> 24u) & 0xFFu) >> 3u;
+                    if (a5p != 0u && (a5p + 1u) < 32u)
+                    {
+                        ivec3 c3p = ivec3(int((v3p & 0xFFu) >> 2u),
+                                          int(((v3p >> 8u) & 0xFFu) >> 2u),
+                                          int(((v3p >> 16u) & 0xFFu) >> 2u));
+                        int ev = int(a5p + 1u);
+                        color = ivec3(
+                            min(63, (c3p.r * ev + color.r * (32 - ev) + 16) >> 5),
+                            min(63, (c3p.g * ev + color.g * (32 - ev) + 16) >> 5),
+                            min(63, (c3p.b * ev + color.b * (32 - ev) + 16) >> 5));
+                    }
+                    else if (a5p != 0u)
+                    {
+                        color = ivec3(int((v3p & 0xFFu) >> 2u),
+                                      int(((v3p >> 8u) & 0xFFu) >> 2u),
+                                      int(((v3p >> 16u) & 0xFFu) >> 2u));
+                    }
+                }
+            }
+            if ((vPre & (1u << 26u)) != 0u
+                && outputMode() == 3u && (pc.escala & 0x800u) != 0u)
+            {
+
+                uint prueba = reg(eng, linea, 30u);
+                uint selector = reg(eng, linea, 31u);
+                if ((prueba & 0x80000000u) != 0u
+                    && selector >= 1u && selector <= 4u)
+                {
+                    int sourceX = int(x) + int(reg(eng, linea, 29u));
+                    uint sourceY = prueba & 0xFFu;
+                    if (sourceX >= 0 && sourceX < 256 && sourceY < 192u)
+                    {
+                        uint slot = selector - 1u;
+                        uint slotBits = slot << 17u;
+                        fielB1Flags |= (1u << 20u) | (1u << 21u);
+                        capPixB1 = (sourceY * 256u + uint(sourceX))
+                                 | 0x10000u | slotBits;
+                    }
+                }
+            }
+            if (outputMode() == 3u) {                                   }
+            else if (brMode == 1 && brFactor > 0)
+            {
+                color.r = clamp6(color.r + (((63 - color.r) * brFactor) >> 4));
+                color.g = clamp6(color.g + (((63 - color.g) * brFactor) >> 4));
+                color.b = clamp6(color.b + (((63 - color.b) * brFactor) >> 4));
+            }
+            else if (brMode == 2 && brFactor > 0)
+            {
+                color.r = clamp6(color.r - (((color.r * brFactor) + 0xF) >> 4));
+                color.g = clamp6(color.g - (((color.g * brFactor) + 0xF) >> 4));
+                color.b = clamp6(color.b - (((color.b * brFactor) + 0xF) >> 4));
+            }
+        }
+        else
+            componer = true;
+    }
+    else if (modoDisplay == 2u)
+    {
+
+        uint c16v = leerU16(kAtlasModo2 + (linea * 256u + x) * 2u);
+        color = c555a666(c16v);
+
+        uint productoPixel = atlas[(gAtlasBase >> 2u) + (kAtlasLineas >> 2u)
+                                    + (eng * 192u + linea) * 256u + x];
+        if (outputMode() == 3u && (pc.escala & 0x800u) != 0u
+            && (productoPixel & (1u << 26u)) != 0u)
+        {
+            uint prueba = reg(eng, linea, 30u);
+            uint selector = reg(eng, linea, 31u);
+            if ((prueba & 0x80000000u) != 0u
+                && selector >= 1u && selector <= 4u)
+            {
+                int sourceX = int(x) + int(reg(eng, linea, 29u));
+                uint sourceY = prueba & 0xFFu;
+                if (sourceX >= 0 && sourceX < 256 && sourceY < 192u)
+                {
+                    uint slot = selector - 1u;
+                    uint slotBits = slot << 17u;
+                    fielB1Flags |= (1u << 20u) | (1u << 21u);
+                    capPixB1 = (sourceY * 256u + uint(sourceX))
+                             | 0x10000u | slotBits;
+                }
+            }
+        }
+
+        if (outputMode() == 3u) {                                   }
+        else if (brMode == 1 && brFactor > 0)
+        {
+            color.r = clamp6(color.r + (((63 - color.r) * brFactor) >> 4));
+            color.g = clamp6(color.g + (((63 - color.g) * brFactor) >> 4));
+            color.b = clamp6(color.b + (((63 - color.b) * brFactor) >> 4));
+        }
+        else if (brMode == 2 && brFactor > 0)
+        {
+            color.r = clamp6(color.r - (((color.r * brFactor) + 0xF) >> 4));
+            color.g = clamp6(color.g - (((color.g * brFactor) + 0xF) >> 4));
+            color.b = clamp6(color.b - (((color.b * brFactor) + 0xF) >> 4));
+        }
+    }
+
+    if (componer)
+    {
+
+        uint paqueteObj = objLinea[(eng * 192u + linea) * 256u + x];
+        bool objVentana = (paqueteObj & (1u << 28u)) != 0u;
+
+        uint winmask = 0xFFu;
+        if ((dispcnt & 0xE000u) != 0u)
+        {
+            uint w15 = reg(eng, linea, 15u);
+            uint w16 = reg(eng, linea, 16u);
+            uint w17 = reg(eng, linea, 17u);
+            winmask = (w17 >> 16u) & 0xFFu;
+            if ((dispcnt & 0x8000u) != 0u && objVentana)
+                winmask = (w17 >> 24u) & 0xFFu;
+            if ((dispcnt & 0x4000u) != 0u
+                && ventanaActiva((w18 >> 2u) & 0x3u, w16 & 0xFFu, (w16 >> 8u) & 0xFFu, x))
+                winmask = (w17 >> 8u) & 0xFFu;
+            if ((dispcnt & 0x2000u) != 0u
+                && ventanaActiva(w18 & 0x3u, w15 & 0xFFu, (w15 >> 8u) & 0xFFu, x))
+                winmask = w17 & 0xFFu;
+        }
+
+        uint bgmode = dispcnt & 0x7u;
+        uint palBase = kAtlasPalette + eng * 0x400u;
+
+        color = c555a666(leerU16(palBase));
+
+        uint atlasBG = (eng == 0u) ? kAtlasABG : kAtlasBBG;
+        uint maskBG  = (eng == 0u) ? 0x7FFFFu : 0x1FFFFu;
+        uint extPalBase = (eng == 0u) ? kAtlasABGExtPal : kAtlasBBGExtPal;
+        bool extpal = (dispcnt & 0x40000000u) != 0u;
+
+        bool objHay = (paqueteObj & (1u << 20u)) != 0u
+                      && (dispcnt & 0x1000u) != 0u
+                      && (winmask & 0x10u) != 0u;
+        uint objPrio = (paqueteObj >> 18u) & 0x3u;
+        ivec3 objColor = ivec3(int(paqueteObj & 0x3Fu),
+                               int((paqueteObj >> 6u) & 0x3Fu),
+                               int((paqueteObj >> 12u) & 0x3Fu));
+        bool objSemi = (paqueteObj & (1u << 21u)) != 0u;
+        bool objBitmap = (paqueteObj & (1u << 22u)) != 0u;
+        uint objAlpha = (paqueteObj >> 23u) & 0x1Fu;
+        uint alfa3d = 0u;
+
+        uint mejorClave = 0xFFFFu;
+        uint segundaClave = 0xFFFFu;
+        uint clave3dB1 = 0xFFFFu;
+        ivec3 color2 = color;
+        uint capaTop = 5u;
+        uint capa2 = 5u;
+
+        for (uint bg = 0u; bg < 4u; bg++)
+        {
+            if ((dispcnt & (0x100u << bg)) == 0u) continue;
+            if ((winmask & (1u << bg)) == 0u) continue;
+
+            uint tipo = 0u;
+            if (bg == 0u && eng == 0u && (dispcnt & 0x8u) != 0u)
+            {
+
+                uint bgcnt3 = reg(eng, linea, 1u) & 0xFFFFu;
+                uint prio3 = bgcnt3 & 0x3u;
+                uint clave3 = prio3 * 8u + 1u;
+
+                if (outputMode() == 3u)
+                {
+                    if (clave3 < clave3dB1) clave3dB1 = clave3;
+                    continue;
+                }
+                if (clave3 >= segundaClave) continue;
+                uint a5;
+                ivec3 c3;
+
+                uint fila3c = reg(eng, linea, 26u);
+                if (fila3c > 191u) fila3c = linea;
+                const bool materialProjection = outputMode() == 4u
+                    && (pc.mezcla & 0x80000000u) != 0u;
+                if ((esc == 1u && !materialProjection)
+                    || (pc.escala & 0x100u) != 0u)
+                {
+                    uint v = nativeFallbackColor(fila3c * 256u + x);
+                    a5 = ((v >> 24u) & 0xFFu) >> 3u;
+                    c3 = ivec3(int((v & 0xFFu) >> 2u),
+                               int(((v >> 8u) & 0xFFu) >> 2u),
+                               int(((v >> 16u) & 0xFFu) >> 2u));
+                }
+                else
+                {
+
+                    leer3dEscala(xSalida,
+                                 fila3c * esc + (filaInterna - linea * esc),
+                                 ratio3d, a5, c3);
+                }
+                if (a5 == 0u) continue;
+                if (clave3 < mejorClave)
+                {
+                    segundaClave = mejorClave; color2 = color; capa2 = capaTop;
+                    mejorClave = clave3; color = c3; capaTop = 6u;
+                    alfa3d = a5;
+                }
+                else
+                {
+                    segundaClave = clave3; color2 = c3; capa2 = 6u;
+                }
+                continue;
+            }
+            if (bg == 0u) { if (bgmode > 5u) continue; }
+            else if (bg == 1u) { if (bgmode > 5u) continue; }
+            else if (bg == 2u) {
+                if (bgmode == 2u || bgmode == 4u) tipo = 1u;
+                else if (bgmode == 5u) tipo = 2u;
+                else if (bgmode == 6u) tipo = 3u;
+                else if (bgmode > 5u) continue;
+            } else {
+                if (bgmode == 1u || bgmode == 2u) tipo = 1u;
+                else if (bgmode >= 3u && bgmode <= 5u) tipo = 2u;
+                else if (bgmode != 0u) continue;
+            }
+
+            uint bgcnt = reg(eng, linea, 1u + (bg >> 1u));
+            bgcnt = (bg & 1u) != 0u ? (bgcnt >> 16u) : (bgcnt & 0xFFFFu);
+            uint mosX = 0u; uint mosY = 0u;
+            if ((bgcnt & 0x0040u) != 0u)
+            {
+                uint w19 = reg(eng, linea, 19u);
+                uint w20 = reg(eng, linea, 20u);
+                mosX = x % ((w19 & 0xFFu) + 1u);
+                mosY = w20 & 0xFFu;
+            }
+
+            uint prio = bgcnt & 0x3u;
+            uint clave = prio * 8u + 1u + bg;
+            if (clave >= segundaClave) continue;
+
+            if (tipo != 0u)
+            {
+
+                uint i2 = bg - 2u;
+                int rotA = int(reg(eng, linea, 11u + i2 * 2u) << 16) >> 16;
+                int rotB = int(reg(eng, linea, 11u + i2 * 2u)) >> 16;
+                int rotC = int(reg(eng, linea, 12u + i2 * 2u) << 16) >> 16;
+                int rotD = int(reg(eng, linea, 12u + i2 * 2u)) >> 16;
+                int xm = int(x) - int(mosX);
+                int finalX = int(reg(eng, linea, 7u + i2 * 2u))
+                           - int(mosY) * rotB + rotA * xm;
+                int finalY = int(reg(eng, linea, 8u + i2 * 2u))
+                           - int(mosY) * rotD + rotC * xm;
+                uint indice = 0u; uint colorOff = 0u; bool directo = false; uint c16 = 0u;
+                uint tileset, tilemap;
+                if (eng == 1u)
+                {
+                    tileset = (bgcnt & 0x003Cu) << 12;
+                    tilemap = (bgcnt & 0x1F00u) << 3;
+                }
+                else
+                {
+                    tileset = ((dispcnt & 0x07000000u) >> 8) + ((bgcnt & 0x003Cu) << 12);
+                    tilemap = ((dispcnt & 0x38000000u) >> 11) + ((bgcnt & 0x1F00u) << 3);
+                }
+                if (tipo == 3u)
+                {
+
+                    uint sel = bgcnt & 0xC000u;
+                    uint xmaskL = (sel == 0x4000u) ? 0x3FFFFu : 0x1FFFFu;
+                    uint ymaskL = (sel == 0u) ? 0x3FFFFu
+                                : (sel == 0x4000u) ? 0x1FFFFu
+                                : (sel == 0x8000u) ? 0x0FFFFu : 0x1FFFFu;
+                    uint yshiftL = (sel == 0x4000u) ? 10u : 9u;
+                    uint ofxL = ((bgcnt & 0x2000u) != 0u) ? 0u : ~xmaskL;
+                    uint ofyL = ((bgcnt & 0x2000u) != 0u) ? 0u : ~ymaskL;
+                    if ((uint(finalX) & ofxL) != 0u || (uint(finalY) & ofyL) != 0u) continue;
+                    uint idxL = leerByte(atlasBG + (((((uint(finalY) & ymaskL) >> 8u) << yshiftL)
+                        + ((uint(finalX) & xmaskL) >> 8u)) & maskBG));
+                    if (idxL == 0u) continue;
+                    colorOff = palBase + idxL * 2u;
+                }
+                else if (tipo == 1u || (tipo == 2u && (bgcnt & 0x80u) == 0u))
+                {
+
+                    uint coordmask = (bgcnt & 0xC000u) == 0u ? 0x07800u
+                                   : (bgcnt & 0xC000u) == 0x4000u ? 0x0F800u
+                                   : (bgcnt & 0xC000u) == 0x8000u ? 0x1F800u : 0x3F800u;
+                    uint yshift = (bgcnt & 0xC000u) == 0u ? 7u
+                                : (bgcnt & 0xC000u) == 0x4000u ? 8u
+                                : (bgcnt & 0xC000u) == 0x8000u ? 9u : 10u;
+                    uint overflow = ((bgcnt & 0x2000u) != 0u) ? 0u : ~(coordmask | 0x7FFu);
+                    if (((uint(finalX) | uint(finalY)) & overflow) != 0u) continue;
+                    yshift -= 3u;
+                    if (tipo == 1u)
+                    {
+                        uint tile8 = leerByte(atlasBG + ((tilemap
+                            + ((uint(finalY) & coordmask) >> 11u << yshift)
+                            + ((uint(finalX) & coordmask) >> 11u)) & maskBG));
+                        indice = leerByte(atlasBG + ((tileset + (tile8 << 6u)
+                            + (((uint(finalY) >> 8u) & 0x7u) << 3u)
+                            + ((uint(finalX) >> 8u) & 0x7u)) & maskBG));
+                        if (indice == 0u) continue;
+                        colorOff = palBase + indice * 2u;
+                    }
+                    else
+                    {
+                        uint tile = leerU16(atlasBG + ((tilemap
+                            + ((((uint(finalY) & coordmask) >> 11u << yshift)
+                                + ((uint(finalX) & coordmask) >> 11u)) << 1u)) & maskBG));
+                        uint tx = (uint(finalX) >> 8u) & 0x7u;
+                        uint ty = (uint(finalY) >> 8u) & 0x7u;
+                        if ((tile & 0x0400u) != 0u) tx = 7u - tx;
+                        if ((tile & 0x0800u) != 0u) ty = 7u - ty;
+                        indice = leerByte(atlasBG + ((tileset + ((tile & 0x3FFu) << 6u)
+                            + (ty << 3u) + tx) & maskBG));
+                        if (indice == 0u) continue;
+                        colorOff = extpal
+                            ? extPalBase + bg * 0x2000u + (tile >> 12u) * 0x200u + indice * 2u
+                            : palBase + indice * 2u;
+                    }
+                }
+                else
+                {
+
+                    uint xm = (bgcnt & 0xC000u) == 0u ? 0x07FFFu
+                            : (bgcnt & 0xC000u) == 0x4000u ? 0x0FFFFu : 0x1FFFFu;
+                    uint ym = (bgcnt & 0xC000u) == 0u ? 0x07FFFu
+                            : (bgcnt & 0xC000u) == 0x4000u ? 0x0FFFFu
+                            : (bgcnt & 0xC000u) == 0x8000u ? 0x0FFFFu : 0x1FFFFu;
+                    uint ysh = (bgcnt & 0xC000u) == 0u ? 7u
+                             : (bgcnt & 0xC000u) == 0x4000u ? 8u : 9u;
+                    uint mapa = (bgcnt & 0x1F00u) << 6u;
+                    uint ofx = ((bgcnt & 0x2000u) != 0u) ? 0u : ~xm;
+                    uint ofy = ((bgcnt & 0x2000u) != 0u) ? 0u : ~ym;
+                    if ((uint(finalX) & ofx) != 0u || (uint(finalY) & ofy) != 0u) continue;
+                    if ((bgcnt & 0x0004u) != 0u)
+                    {
+                        uint dirCap = (mapa
+                            + ((((uint(finalY) & ym) >> 8u) << ysh)
+                               + ((uint(finalX) & xm) >> 8u)) * 2u) & maskBG;
+                        c16 = leerU16(atlasBG + dirCap);
+                        if ((c16 & 0x8000u) == 0u) continue;
+                        directo = true;
+
+                        if ((pc.escala & 0x800u) != 0u
+                            && outputMode() == 3u)
+                        {
+                            uint productoPixel = atlas[(gAtlasBase >> 2u)
+                                + (kAtlasLineas >> 2u)
+                                + (eng * 192u + linea) * 256u + x];
+                            uint prueba = reg(eng, linea, 30u);
+                            uint selector = reg(eng, linea, 31u);
+                            if ((productoPixel & (1u << 26u)) != 0u
+                                && (prueba & 0x80000000u) != 0u
+                                && selector >= 1u && selector <= 4u)
+                            {
+                                int sourceX = int(x)
+                                    + int(reg(eng, linea, 29u));
+                                uint sourceY = prueba & 0xFFu;
+                                if (sourceX >= 0 && sourceX < 256
+                                    && sourceY < 192u)
+                                {
+                                    uint slot = selector - 1u;
+                                    uint slotBits = slot << 17u;
+                                    capPixB1 = sourceY * 256u + uint(sourceX)
+                                             | 0x10000u | slotBits;
+                                    bgCapturaB1 = bg;
+                                    capPixCausalB1 = true;
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        indice = leerByte(atlasBG + ((mapa
+                            + (((uint(finalY) & ym) >> 8u) << ysh)
+                            + ((uint(finalX) & xm) >> 8u)) & maskBG));
+                        if (indice == 0u) continue;
+                        colorOff = palBase + indice * 2u;
+                    }
+                }
+                ivec3 c = directo ? c555a666(c16) : c555a666(leerU16(colorOff));
+                if (clave < mejorClave)
+                {
+                    segundaClave = mejorClave; color2 = color; capa2 = capaTop;
+                    mejorClave = clave; color = c; capaTop = bg;
+                }
+                else if (clave < segundaClave)
+                {
+                    segundaClave = clave; color2 = c; capa2 = bg;
+                }
+                continue;
+            }
+
+            uint w = reg(eng, linea, 3u + bg);
+            uint xoff = (w & 0xFFFFu) + x - mosX;
+            uint yoff = ((w >> 16u) & 0xFFFFu) + linea - mosY;
+
+            uint widexmask = ((bgcnt & 0x4000u) != 0u) ? 0x100u : 0u;
+            uint tileset, tilemap;
+            if (eng == 1u)
+            {
+                tileset = (bgcnt & 0x003Cu) << 12;
+                tilemap = (bgcnt & 0x1F00u) << 3;
+            }
+            else
+            {
+                tileset = ((dispcnt & 0x07000000u) >> 8) + ((bgcnt & 0x003Cu) << 12);
+                tilemap = ((dispcnt & 0x38000000u) >> 11) + ((bgcnt & 0x1F00u) << 3);
+            }
+            if ((bgcnt & 0x8000u) != 0u)
+            {
+                tilemap += (yoff & 0x1F8u) << 3;
+                if ((bgcnt & 0x4000u) != 0u)
+                    tilemap += (yoff & 0x100u) << 3;
+            }
+            else
+                tilemap += (yoff & 0xF8u) << 3;
+
+            uint tile = leerU16(atlasBG
+                + ((tilemap + ((xoff & 0xF8u) >> 2) + ((xoff & widexmask) << 3)) & maskBG));
+            uint tilex = ((tile & 0x0400u) != 0u) ? (7u - (xoff & 0x7u)) : (xoff & 0x7u);
+            uint tiley = ((tile & 0x0800u) != 0u) ? (7u - (yoff & 0x7u)) : (yoff & 0x7u);
+
+            uint indice;
+            uint colorOff;
+            if ((bgcnt & 0x0080u) != 0u)
+            {
+
+                uint pix = tileset + ((tile & 0x03FFu) << 6) + (tiley << 3) + tilex;
+                indice = leerByte(atlasBG + (pix & maskBG));
+                if (indice == 0u) continue;
+                if (extpal)
+                {
+                    uint slot = (bg < 2u && (bgcnt & 0x2000u) != 0u) ? (2u + bg) : bg;
+                    colorOff = extPalBase + slot * 0x2000u + (tile >> 12u) * 0x200u + indice * 2u;
+                }
+                else
+                    colorOff = palBase + indice * 2u;
+            }
+            else
+            {
+
+                uint pix = tileset + ((tile & 0x03FFu) << 5) + (tiley << 2) + (tilex >> 1u);
+                uint b8 = leerByte(atlasBG + (pix & maskBG));
+                indice = ((tilex & 1u) != 0u) ? (b8 >> 4u) : (b8 & 0xFu);
+                if (indice == 0u) continue;
+                colorOff = palBase + (((tile & 0xF000u) >> 8) + indice) * 2u;
+            }
+
+            {
+                ivec3 c = c555a666(leerU16(colorOff));
+                if (clave < mejorClave)
+                {
+                    segundaClave = mejorClave; color2 = color; capa2 = capaTop;
+                    mejorClave = clave; color = c; capaTop = bg;
+                }
+                else if (clave < segundaClave)
+                {
+                    segundaClave = clave; color2 = c; capa2 = bg;
+                }
+            }
+        }
+
+        if (objHay)
+        {
+            uint claveObj = objPrio * 8u;
+            if (claveObj < mejorClave)
+            {
+                segundaClave = mejorClave; color2 = color; capa2 = capaTop;
+                mejorClave = claveObj; color = objColor; capaTop = 4u;
+
+                if ((paqueteObj & (1u << 29u)) != 0u
+                    && (pc.escala & 0x800u) != 0u && outputMode() == 3u)
+                {
+                    uint productoPixel = atlas[(gAtlasBase >> 2u)
+                        + (kAtlasLineas >> 2u)
+                        + (eng * 192u + linea) * 256u + x];
+                    uint prueba = reg(eng, linea, 30u);
+                    uint selector = reg(eng, linea, 31u);
+                    if ((productoPixel & (1u << 26u)) != 0u
+                        && (prueba & 0x80000000u) != 0u
+                        && selector >= 1u && selector <= 4u)
+                    {
+                        int sourceX = int(x) + int(reg(eng, linea, 29u));
+                        uint sourceY = prueba & 0xFFu;
+                        if (sourceX >= 0 && sourceX < 256
+                            && sourceY < 192u)
+                        {
+                            uint slot = selector - 1u;
+                            uint slotBits = slot << 17u;
+                            capPixB1 = sourceY * 256u + uint(sourceX)
+                                     | 0x10000u | slotBits;
+                            bgCapturaB1 = 4u;
+                            capPixCausalB1 = true;
+                        }
+                    }
+                }
+            }
+            else if (claveObj < segundaClave)
+            {
+                segundaClave = claveObj; color2 = objColor; capa2 = 4u;
+            }
+        }
+
+        if (outputMode() == 3u)
+        {
+            topCrudoB1 = color;
+
+            if (capPixCausalB1 && (capPixB1 & 0x10000u) != 0u
+                && capaTop == bgCapturaB1)
+                fielB1Flags |= 1u << 20u;
+            if (clave3dB1 < mejorClave)
+            {
+                fielB1Flags |= 1u << 18u;
+                uint bldcntB1 = reg(eng, linea, 21u) & 0xFFFFu;
+                uint target2B1 = (capaTop == 4u) ? 0x1000u
+                               : (capaTop == 5u) ? 0x2000u
+                               : (0x100u << capaTop);
+                if ((bldcntB1 & target2B1) != 0u)
+                    fielB1Flags |= (1u << 19u);
+                else if ((bldcntB1 & 1u) != 0u
+                    && (winmask & 0x20u) != 0u)
+                {
+                    uint efecto3dB1 = (bldcntB1 >> 6u) & 3u;
+                    uint evy3dB1 = min(16u, reg(eng, linea, 22u) & 0x1Fu);
+                    if (efecto3dB1 >= 2u && evy3dB1 > 0u)
+                    {
+                        fielB1Flags |= kB1Precomposed3d;
+                        precomposed3dB1 = ((efecto3dB1 + 1u) << 28u)
+                            | (evy3dB1 << 18u);
+                    }
+                }
+            }
+            else if (clave3dB1 < segundaClave)
+            {
+
+                uint bldcntB1 = reg(eng, linea, 21u) & 0xFFFFu;
+                bool objForzado = capaTop == 4u && (objSemi || objBitmap);
+                bool mezclaNormal = ((bldcntB1 >> 6u) & 3u) == 1u
+                    && (bldcntB1 & (1u << capaTop)) != 0u
+                    && (winmask & 0x20u) != 0u;
+                if ((bldcntB1 & 0x100u) != 0u
+                    && (objForzado || mezclaNormal))
+                {
+                    uint eva = min(16u, (reg(eng, linea, 21u) >> 16u) & 0xFFu);
+                    uint evb = min(16u, (reg(eng, linea, 21u) >> 24u) & 0xFFu);
+                    if (objForzado && objBitmap)
+                    {
+                        eva = objAlpha;
+                        evb = 16u - objAlpha;
+                    }
+                    fielB1Flags |= kB1Blend2dOver3d;
+                    mezcla2dSobre3dB1 = (eva << 18u) | (evb << 23u);
+                }
+            }
+        }
+
+        {
+            uint bldcnt = reg(eng, linea, 21u) & 0xFFFFu;
+            uint efecto = (bldcnt >> 6u) & 0x3u;
+            uint eva = min(16u, (reg(eng, linea, 21u) >> 16u) & 0xFFu);
+            uint evb = min(16u, (reg(eng, linea, 21u) >> 24u) & 0xFFu);
+            uint evy = min(16u, reg(eng, linea, 22u) & 0x1Fu);
+
+            uint target2 = (capa2 == 4u) ? 0x1000u
+                         : (capa2 == 5u) ? 0x2000u
+                         : (capa2 == 6u) ? 0x0100u : (0x100u << capa2);
+
+            if (capaTop == 6u && (bldcnt & target2) != 0u)
+            {
+
+                uint eva5 = alfa3d + 1u;
+                if (eva5 < 32u)
+                {
+                    uint evb5 = 32u - eva5;
+                    color.r = min(63, (color.r * int(eva5) + color2.r * int(evb5) + 16) >> 5);
+                    color.g = min(63, (color.g * int(eva5) + color2.g * int(evb5) + 16) >> 5);
+                    color.b = min(63, (color.b * int(eva5) + color2.b * int(evb5) + 16) >> 5);
+                }
+            }
+            else if (capaTop == 4u && (objSemi || objBitmap) && (bldcnt & target2) != 0u)
+            {
+                uint evaS = objBitmap ? objAlpha : eva;
+                uint evbS = objBitmap ? (16u - objAlpha) : evb;
+                color.r = min(63, (color.r * int(evaS) + color2.r * int(evbS) + 8) >> 4);
+                color.g = min(63, (color.g * int(evaS) + color2.g * int(evbS) + 8) >> 4);
+                color.b = min(63, (color.b * int(evaS) + color2.b * int(evbS) + 8) >> 4);
+            }
+            else
+            {
+            bool topEs1a = (bldcnt & (1u << capaTop)) != 0u
+                && (winmask & 0x20u) != 0u;
+            bool segEs2a = (bldcnt & target2) != 0u;
+            if (efecto == 1u && topEs1a && segEs2a)
+            {
+                color.r = min(63, (color.r * int(eva) + color2.r * int(evb) + 8) >> 4);
+                color.g = min(63, (color.g * int(eva) + color2.g * int(evb) + 8) >> 4);
+                color.b = min(63, (color.b * int(eva) + color2.b * int(evb) + 8) >> 4);
+            }
+            else if (efecto == 2u && topEs1a && evy > 0u)
+            {
+                color.r += ((63 - color.r) * int(evy)) >> 4;
+                color.g += ((63 - color.g) * int(evy)) >> 4;
+                color.b += ((63 - color.b) * int(evy)) >> 4;
+            }
+            else if (efecto == 3u && topEs1a && evy > 0u)
+            {
+                color.r -= (color.r * int(evy)) >> 4;
+                color.g -= (color.g * int(evy)) >> 4;
+                color.b -= (color.b * int(evy)) >> 4;
+            }
+            }
+        }
+
+        if (outputMode() == 3u || outputMode() == 4u)
+        {                                                                }
+        else if (brMode == 1 && brFactor > 0)
+        {
+            color.r = clamp6(color.r + (((63 - color.r) * brFactor) >> 4));
+            color.g = clamp6(color.g + (((63 - color.g) * brFactor) >> 4));
+            color.b = clamp6(color.b + (((63 - color.b) * brFactor) >> 4));
+        }
+        else if (brMode == 2 && brFactor > 0)
+        {
+            color.r = clamp6(color.r - (((color.r * brFactor) + 0xF) >> 4));
+            color.g = clamp6(color.g - (((color.g * brFactor) + 0xF) >> 4));
+            color.b = clamp6(color.b - (((color.b * brFactor) + 0xF) >> 4));
+        }
+    }
+
+    if (outputMode() == 4u)
+    {
+        vec4 vCap;
+        if ((pc.mezcla & 1u) != 0u)
+        {
+
+            uint eva = (pc.mezcla >> 1u) & 0x1Fu;
+            uint evb = (pc.mezcla >> 6u) & 0x1Fu;
+            uint bancoB = (pc.mezcla >> 11u) & 0x3u;
+            int rA5 = color.r >> 1; int gA5 = color.g >> 1; int bA5 = color.b >> 1;
+            int rB5; int gB5; int bB5; int aB;
+            if ((pc.mezcla & (1u << 13u)) != 0u)
+            {
+                vec4 tb = leeCap(bancoB & 1u,
+                                 ivec2(int(xSalida), int(filaSalida)));
+
+                rB5 = int(uint(tb.b * 255.0 + 0.5) >> 3u);
+                gB5 = int(uint(tb.g * 255.0 + 0.5) >> 3u);
+                bB5 = int(uint(tb.r * 255.0 + 0.5) >> 3u);
+                aB = (tb.a >= 0.5) ? 1 : 0;
+            }
+            else
+            {
+                uint c16b = leerU16(kAtlasBancos + bancoB * 0x20000u
+                                    + (linea * 256u + x) * 2u);
+                rB5 = int(c16b & 0x1Fu);
+                gB5 = int((c16b >> 5u) & 0x1Fu);
+                bB5 = int((c16b >> 10u) & 0x1Fu);
+                aB = int(c16b >> 15u);
+            }
+            int rD5 = min(31, (rA5 * int(eva) + rB5 * aB * int(evb) + 8) >> 4);
+            int gD5 = min(31, (gA5 * int(eva) + gB5 * aB * int(evb) + 8) >> 4);
+            int bD5 = min(31, (bA5 * int(eva) + bB5 * aB * int(evb) + 8) >> 4);
+            int aD = ((eva > 0u) ? 1 : 0) | ((evb > 0u) ? aB : 0);
+            vCap = vec4(float(a8(bD5 << 1)) / 255.0,
+                        float(a8(gD5 << 1)) / 255.0,
+                        float(a8(rD5 << 1)) / 255.0,
+                        float(aD));
+        }
+        else
+        {
+
+            int r5 = color.r >> 1;
+            int g5 = color.g >> 1;
+            int b5 = color.b >> 1;
+            vCap = vec4(float(a8(b5 << 1)) / 255.0,
+                        float(a8(g5 << 1)) / 255.0,
+                        float(a8(r5 << 1)) / 255.0, 1.0);
+        }
+
+        if (((pc.escala >> 14u) & 3u) == 1u)
+        {
+            uint f3s = reg(0u, linea, 26u); if (f3s > 191u) f3s = linea;
+            uint a5s; ivec3 c3s;
+            leer3dEscala(xSalida, f3s * esc + (filaInterna - linea * esc),
+                         ratio3d, a5s, c3s);
+            vCap = (a5s != 0u)
+                ? vec4(float(a8(c3s.b)) / 255.0, float(a8(c3s.g)) / 255.0,
+                       float(a8(c3s.r)) / 255.0, 1.0)
+                : vec4(1.0, 0.0, 0.0, 1.0);
+        }
+        if ((pc.mezcla & 0x80000000u) != 0u)
+            imageStore(outImage,
+                       ivec2(int(xSalida), int(filaSalida)), vCap);
+        else if ((pc.escala & 0x2000000u) != 0u)
+            imageStore(imgCapHighres1,
+                       ivec2(int(xSalida), int(filaSalida)), vCap);
+        else
+            imageStore(imgCapHighres,
+                       ivec2(int(xSalida), int(filaSalida)), vCap);
+        return;
+    }
+
+    if (outputMode() == 3u)
+    {
+
+        fielB1Flags &= ~((1u << 20u) | (1u << 21u));
+        uint idxS = ((eng * 192u + linea) * 256u + x) * 2u;
+        fielB1[idxS] = uint(color.r & 0x3F) | (uint(color.g & 0x3F) << 6u)
+                     | (uint(color.b & 0x3F) << 12u) | fielB1Flags;
+
+        fielB1[idxS + 1u] = uint(topCrudoB1.r & 0x3F)
+                          | (uint(topCrudoB1.g & 0x3F) << 6u)
+                          | (uint(topCrudoB1.b & 0x3F) << 12u)
+                          | mezcla2dSobre3dB1;
+        if ((fielB1Flags & kB1Precomposed3d) != 0u)
+            fielB1[idxS + 1u] = precomposed3dB1;
+        return;
+    }
+
+    if (((pc.escala >> 14u) & 3u) == 3u)
+        color = ivec3(63, 0, 0);
+    imageStore(outImage, ivec2(int(xSalida), int(filaSalida)),
+        vec4(float(a8(color.b)) / 255.0,
+             float(a8(color.g)) / 255.0,
+             float(a8(color.r)) / 255.0,
+             1.0));
+}

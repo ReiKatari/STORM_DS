@@ -8,7 +8,7 @@
 #include <vulkan/vulkan.h>
 
 #include "GPU3D_Texcache.h"
-#include "VulkanPipelineProfile.h"
+#include "VulkanPipelinePolicy.h"
 
 namespace melonDS
 {
@@ -18,12 +18,8 @@ class TexcacheVulkanLoader
 public:
     using TextureHandle = u64;
 
-    explicit TexcacheVulkanLoader(
-        VulkanPipelineProfile pipelineProfile = VulkanPipelineProfile::Compatibility);
+    TexcacheVulkanLoader();
     ~TexcacheVulkanLoader();
-
-    bool SetPipelineProfile(VulkanPipelineProfile pipelineProfile);
-    [[nodiscard]] VulkanPipelineProfile GetPipelineProfile() const noexcept;
 
     TextureHandle GenerateTexture(u32 width, u32 height, u32 layers);
     void UploadTexture(TextureHandle handle, u32 width, u32 height, u32 layer, void* data);
@@ -36,6 +32,9 @@ public:
 private:
     struct TextureArray
     {
+        static constexpr u8 Opaque = 1u;
+        static constexpr u8 CpuMirrorReady = 2u;
+
         u32 Width = 0;
         u32 Height = 0;
         u32 Layers = 0;
@@ -49,8 +48,8 @@ private:
         VkBuffer StagingBuffer = VK_NULL_HANDLE;
         VkDeviceMemory StagingMemory = VK_NULL_HANDLE;
         VkDeviceSize StagingSize = 0;
-        std::vector<u8> LayerOpaque;
-        std::vector<u32> LayerPixels;
+        std::vector<u8> LayerFlags;
+        std::unique_ptr<u32[]> LayerPixels;
     };
 
     struct SharedState
@@ -60,16 +59,14 @@ private:
             VkBuffer StagingBuffer = VK_NULL_HANDLE;
             VkDeviceMemory StagingMemory = VK_NULL_HANDLE;
             VkDeviceSize StagingSize = 0;
-            void* mappedPtr = nullptr;
             VkCommandBuffer CommandBuffer = VK_NULL_HANDLE;
             VkFence Fence = VK_NULL_HANDLE;
             bool InFlight = false;
         };
 
-        static constexpr size_t UploadSlotCount = 24;
+        static constexpr size_t UploadSlotCount = 8;
 
         TextureHandle NextHandle = 1;
-        VulkanPipelineProfile PipelineProfile = VulkanPipelineProfile::Compatibility;
         std::unordered_map<TextureHandle, TextureArray> TextureArrays;
         std::array<UploadSlot, UploadSlotCount> UploadSlots{};
         size_t NextUploadSlot = 0;

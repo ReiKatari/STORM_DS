@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <optional>
 
 namespace melonDS
@@ -114,27 +116,20 @@ u32 BuildAcceleratedRenderKey(const Polygon& polygon) noexcept
     return renderKey;
 }
 
-namespace
-{
-// 4-bit fixed-point target coordinates reach (256 * 16) * 16 = 65536 at the right edge
-// of a 16x target, so 0xFFFF would saturate there. Keep generous headroom.
-constexpr s32 kMaxAcceleratedFixedCoord = 0x000FFFFF;
-}
-
 s32 ResolveAcceleratedVertexFixedX(const Vertex& vertex, int scale, bool useHiresCoordinates) noexcept
 {
     const int safeScale = std::max(scale, 1);
     if (useHiresCoordinates)
-        return std::clamp(vertex.HiresPosition[0] * safeScale, 0, kMaxAcceleratedFixedCoord);
-    return std::clamp(vertex.FinalPosition[0] << 4, 0, kMaxAcceleratedFixedCoord);
+        return std::clamp(vertex.HiresPosition[0] * safeScale, 0, 0xFFFF);
+    return std::clamp((vertex.FinalPosition[0] << 4) * safeScale, 0, 0xFFFF);
 }
 
 s32 ResolveAcceleratedVertexFixedY(const Vertex& vertex, int scale, bool useHiresCoordinates) noexcept
 {
     const int safeScale = std::max(scale, 1);
     if (useHiresCoordinates)
-        return std::clamp(vertex.HiresPosition[1] * safeScale, 0, kMaxAcceleratedFixedCoord);
-    return std::clamp(vertex.FinalPosition[1] << 4, 0, kMaxAcceleratedFixedCoord);
+        return std::clamp(vertex.HiresPosition[1] * safeScale, 0, 0xFFFF);
+    return std::clamp((vertex.FinalPosition[1] << 4) * safeScale, 0, 0xFFFF);
 }
 
 AcceleratedCoverageFixState ResolveAcceleratedCoverageFix(
@@ -293,23 +288,6 @@ void BuildAcceleratedScene(
     const int safeScale = std::max(config.Scale, 1);
     const float maxTargetX = static_cast<float>(std::max(config.MaxFixedX, 0)) * (1.0f / 16.0f);
     const float maxTargetY = static_cast<float>(std::max(config.MaxFixedY, 0)) * (1.0f / 16.0f);
-    // OpenGL parity: the GL renderer feeds integer target-pixel positions
-    // ((HiresPosition * scale) >> 4, which equals FinalPosition at 1x) to the
-    // rasterizer across all scales.
-    const bool snapToTargetPixels =
-        config.SnapToTargetPixels && config.UseHiresCoordinates;
-    const auto snapHiresToTargetPixel = [safeScale](s32 hiresCoord) -> s32 {
-        return (hiresCoord * safeScale) >> 4;
-    };
-    // Snapped vertices may legitimately sit on the far edge (x == 256 * scale), so allow
-    // the exact target extent instead of the "last 1/16th pixel" limit used by the
-    // subpixel path.
-    const float vertexMaxX = snapToTargetPixels
-        ? static_cast<float>((std::max(config.MaxFixedX, 0) + 1) >> 4)
-        : maxTargetX;
-    const float vertexMaxY = snapToTargetPixels
-        ? static_cast<float>((std::max(config.MaxFixedY, 0) + 1) >> 4)
-        : maxTargetY;
 
     const auto packGlColor = [](u16 r, u16 g, u16 b, u16 a) -> u32 {
         return (static_cast<u32>(std::min<u16>(255u, r >> 1u)))
@@ -332,8 +310,8 @@ void BuildAcceleratedScene(
                                        bool preserveSignedScreenCoords = false,
                                        std::optional<u32> glColorOverride = std::nullopt) -> u16 {
         AcceleratedSceneVertex sceneVertex{};
-        sceneVertex.XFixed = static_cast<u32>(std::clamp<s32>(xFixed, 0, kMaxAcceleratedFixedCoord));
-        sceneVertex.YFixed = static_cast<u32>(std::clamp<s32>(yFixed, 0, kMaxAcceleratedFixedCoord));
+        sceneVertex.XFixed = static_cast<u32>(std::clamp<s32>(xFixed, 0, 0xFFFF));
+        sceneVertex.YFixed = static_cast<u32>(std::clamp<s32>(yFixed, 0, 0xFFFF));
         if (preserveSignedScreenCoords)
         {
             sceneVertex.X = static_cast<float>(xFixed) * (1.0f / 16.0f);
@@ -341,8 +319,8 @@ void BuildAcceleratedScene(
         }
         else
         {
-            sceneVertex.X = std::clamp(static_cast<float>(sceneVertex.XFixed) * (1.0f / 16.0f), 0.0f, vertexMaxX);
-            sceneVertex.Y = std::clamp(static_cast<float>(sceneVertex.YFixed) * (1.0f / 16.0f), 0.0f, vertexMaxY);
+            sceneVertex.X = std::clamp(static_cast<float>(sceneVertex.XFixed) * (1.0f / 16.0f), 0.0f, maxTargetX);
+            sceneVertex.Y = std::clamp(static_cast<float>(sceneVertex.YFixed) * (1.0f / 16.0f), 0.0f, maxTargetY);
         }
         sceneVertex.Z = zRaw;
         sceneVertex.W = std::max<u32>(1u, wRaw);
@@ -446,9 +424,43 @@ void BuildAcceleratedScene(
         return (polygonYTop & 0xFFFFu) | ((polygonYBot & 0xFFFFu) << 16u);
     };
 
+    std::vector<u16> polygonVertexIndices{};
     for (u32 polygonIndex = 0; polygonIndex < renderPolygonCount; polygonIndex++)
     {
         const Polygon* polygon = gpu3d.RenderPolygonRAM[polygonIndex];
+
+        {
+            static const char* sondaPolyEnv = getenv("MELON_SONDA_POLY");
+            static const char* sondaPolyNvEnv = getenv("MELON_SONDA_POLY_NV");
+            static int sondaPolyRestantes = sondaPolyEnv ? 2000 : 0;
+            static u32 sondaPolyFiltro = sondaPolyEnv ? (u32)strtoul(sondaPolyEnv, nullptr, 16) : 0u;
+            static u32 sondaPolyNv = sondaPolyNvEnv ? (u32)strtoul(sondaPolyNvEnv, nullptr, 10) : 0u;
+            if (sondaPolyEnv && sondaPolyRestantes > 0 && polygon != nullptr
+                && (sondaPolyNv == 0u || renderPolygonCount == sondaPolyNv)
+                && (sondaPolyFiltro == 0u || (polygon->TexParam & 0xFFFFu) == sondaPolyFiltro))
+            {
+                if (polygonIndex == 0)
+                    fprintf(stderr, "[polyf] numPolys=%u\n", renderPolygonCount);
+                sondaPolyRestantes--;
+                fprintf(stderr, "[poly] i=%u nv=%u deg=%d wbuf=%d tra=%d texp=%08X attr=%08X\n",
+                    polygonIndex, polygon->NumVertices, polygon->Degenerate ? 1 : 0,
+                    polygon->WBuffer ? 1 : 0, polygon->Translucent ? 1 : 0,
+                    polygon->TexParam, polygon->Attr);
+                for (u32 sv = 0; sv < polygon->NumVertices && sv < 10; sv++)
+                {
+                    const Vertex* vv = polygon->Vertices[sv];
+                    if (!vv) { fprintf(stderr, "  v%u NULL\n", sv); continue; }
+                    fprintf(stderr,
+                        "  v%u fin=(%d,%d) hi=(%d,%d) w=%d fz=%d fw=%d clip=%d tc=(%d,%d)\n",
+                        sv, vv->FinalPosition[0], vv->FinalPosition[1],
+                        vv->HiresPosition[0] >> 4, vv->HiresPosition[1] >> 4,
+                        vv->Position[3], polygon->FinalZ[sv], polygon->FinalW[sv],
+                        vv->Clipped ? 1 : 0,
+                        vv->TexCoords[0] >> 4, vv->TexCoords[1] >> 4);
+                }
+            }
+        }
+
         if (polygon == nullptr
             || polygon->Degenerate
             || (polygon->Type == 1 ? polygon->NumVertices < 2u : polygon->NumVertices < 3u))
@@ -459,11 +471,7 @@ void BuildAcceleratedScene(
         AcceleratedSceneDraw draw{};
         draw.SourcePolygon = polygon;
         draw.Meta = BuildAcceleratedPolygonMeta(*polygon);
-        // Snapped (OpenGL-parity) scenes never use the CoverageFix expansion: its pixel
-        // amounts are high-res pixels (not DS pixels) and the integer snap is already
-        // watertight exactly like the GL renderer.
-        if (!snapToTargetPixels)
-            draw.CoverageFixState = ResolveAcceleratedCoverageFix(*polygon, config.CoverageFix);
+        draw.CoverageFixState = ResolveAcceleratedCoverageFix(*polygon, config.CoverageFix);
         if (draw.CoverageFixState.Apply)
         {
             bool polygonTouchesClipEdge = false;
@@ -516,7 +524,7 @@ void BuildAcceleratedScene(
                 expandedY);
         }
 
-        std::vector<u16> polygonVertexIndices{};
+        polygonVertexIndices.clear();
         polygonVertexIndices.reserve(std::max<u32>(polygon->NumVertices + 1u, 3u));
 
         const auto resolveFixedCoords = [&](u32 vertexIndex) -> std::pair<s32, s32> {
@@ -529,12 +537,6 @@ void BuildAcceleratedScene(
                 {
                     xFixed = static_cast<s32>(expandedX[vertexIndex]);
                     yFixed = static_cast<s32>(expandedY[vertexIndex]);
-                }
-                else if (snapToTargetPixels)
-                {
-                    // Integer target pixel, kept in the 4-bit fixed format (fraction == 0).
-                    xFixed = snapHiresToTargetPixel(vertex->HiresPosition[0]) * 16;
-                    yFixed = snapHiresToTargetPixel(vertex->HiresPosition[1]) * 16;
                 }
                 else if (config.UseHiresCoordinates)
                 {
@@ -588,8 +590,6 @@ void BuildAcceleratedScene(
         {
             s64 centerXFixedSum = 0;
             s64 centerYFixedSum = 0;
-            s64 centerXHiresSum = 0;
-            s64 centerYHiresSum = 0;
             float centerZ = 0.0f;
             float centerReciprocalW = 0.0f;
             float centerRawR = 0.0f;
@@ -614,8 +614,6 @@ void BuildAcceleratedScene(
                 const auto [xFixed, yFixed] = resolveFixedCoords(vertexIndex);
                 centerXFixedSum += static_cast<s64>(xFixed);
                 centerYFixedSum += static_cast<s64>(yFixed);
-                centerXHiresSum += static_cast<s64>(vertex->HiresPosition[0]);
-                centerYHiresSum += static_cast<s64>(vertex->HiresPosition[1]);
 
                 const float fw = static_cast<float>(std::max<s32>(1, polygon->FinalW[vertexIndex]))
                     * static_cast<float>(polygon->NumVertices);
@@ -641,16 +639,8 @@ void BuildAcceleratedScene(
 
             if (validCenter && centerReciprocalW > 0.0f)
             {
-                s32 centerXFixed = static_cast<s32>(centerXFixedSum / static_cast<s64>(polygon->NumVertices));
-                s32 centerYFixed = static_cast<s32>(centerYFixedSum / static_cast<s64>(polygon->NumVertices));
-                if (snapToTargetPixels)
-                {
-                    // GPU3D_OpenGL.cpp BuildPolygons: cX = sum(Hires) / n; cX = (cX * scale) >> 4.
-                    const s32 centerXHires = static_cast<s32>(centerXHiresSum / static_cast<s64>(polygon->NumVertices));
-                    const s32 centerYHires = static_cast<s32>(centerYHiresSum / static_cast<s64>(polygon->NumVertices));
-                    centerXFixed = snapHiresToTargetPixel(centerXHires) * 16;
-                    centerYFixed = snapHiresToTargetPixel(centerYHires) * 16;
-                }
+                const s32 centerXFixed = static_cast<s32>(centerXFixedSum / static_cast<s64>(polygon->NumVertices));
+                const s32 centerYFixed = static_cast<s32>(centerYFixedSum / static_cast<s64>(polygon->NumVertices));
                 const float centerW = 1.0f / centerReciprocalW;
                 if (polygon->WBuffer)
                     centerZ *= centerW;

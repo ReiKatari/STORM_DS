@@ -20,9 +20,14 @@
 
 #include <cstddef>
 #include <memory>
+#include <type_traits>
+#include <unordered_map>
+#include <vector>
 
 #include "GPU2D.h"
 #include "GPU3D.h"
+#include "FaithfulVramCaptureTagResolver.h"
+#include "FaithfulFrameBuffer.h"
 
 namespace melonDS
 {
@@ -111,17 +116,530 @@ public:
         u32 CompModeCounts[8] {};
     };
 
+    enum class FaithfulCaptureSourceAKind : u8
+    {
+        None = 0,
+        GraphicsScreen = 1,
+        Direct3D = 2,
+    };
+
+    enum class FaithfulCaptureSourceBKind : u8
+    {
+        None = 0,
+        Vram = 1,
+        DisplayFifo = 2,
+        Unavailable = 3,
+    };
+
+    enum class FaithfulCaptureSourceBLineage : u8
+    {
+        NotApplicable = 0,
+        Untracked = 1,
+        UniformCaptureProduct = 2,
+        Ambiguous = 3,
+    };
+
+    enum class FaithfulCaptureSourceBPixelKind : u8
+    {
+        Zero = 0,
+        Native = 1,
+        CaptureProduct = 2,
+        Ambiguous = 3,
+    };
+
+    struct alignas(16) FaithfulCapturePixelRecipe
+    {
+        u32 Raw0 = 0;
+        u32 Raw1 = 0;
+        u32 Control = 0;
+        u32 Native3d = 0;
+        u64 SourceBProductEpoch = 0;
+        u64 SourceBProductId = 0;
+        u32 SourceBCoordinates = 0;
+        u32 SourceBValueKind = 0;
+        u32 SourceBSlot = 0;
+        u32 Reserved = 0;
+    };
+    static_assert(sizeof(FaithfulCapturePixelRecipe) == 48u);
+    static_assert(alignof(FaithfulCapturePixelRecipe) == 16u);
+    static_assert(std::is_trivially_copyable_v<FaithfulCapturePixelRecipe>);
+    static_assert(std::is_standard_layout_v<FaithfulCapturePixelRecipe>);
+
+    struct alignas(16) FaithfulCaptureSourceARecipe
+    {
+        u32 Raw0 = 0;
+        u32 Raw1 = 0;
+        u32 Control = 0;
+        u32 Native3d = 0;
+    };
+    static_assert(sizeof(FaithfulCaptureSourceARecipe) == 16u);
+    static_assert(alignof(FaithfulCaptureSourceARecipe) == 16u);
+    static_assert(std::is_trivially_copyable_v<FaithfulCaptureSourceARecipe>);
+    static_assert(std::is_standard_layout_v<FaithfulCaptureSourceARecipe>);
+
+    struct alignas(16) FaithfulCaptureBackgroundOperand
+    {
+        u64 ProductId = 0;
+        u32 Coordinates = 0;
+        u32 Slot = 0;
+    };
+    static_assert(sizeof(FaithfulCaptureBackgroundOperand) == 16u);
+    static_assert(std::is_trivially_copyable_v<FaithfulCaptureBackgroundOperand>);
+    static_assert(std::is_standard_layout_v<FaithfulCaptureBackgroundOperand>);
+
+    enum class FaithfulCaptureRecipeEncoding : u8
+    {
+        FullSourceAB = 0,
+        SourceAOnly = 1,
+    };
+
+    struct FaithfulCaptureProductLineCausalMetadata
+    {
+        u64 ProductEpoch = 0;
+        u64 ProductId = 0;
+        LiveRenderProductIdentity SourceARenderProduct {};
+        u64 SourceBCaptureProductEpoch = 0;
+        u64 SourceBCaptureProductId = 0;
+        u32 EffectiveDispCnt = 0;
+        u32 SourceBLineOffsetPixels = 0;
+        u16 SourceARenderXPos = 0xFFFFu;
+        u16 SourceARenderY = 0xFFFFu;
+        u16 SourceBCaptureSourceXBase = 0xFFFFu;
+        u16 SourceBCaptureSourceY = 0xFFFFu;
+        u16 CaptureLine = 0xFFFFu;
+        u8 CaptureMode = 0;
+        u8 Eva = 0;
+        u8 Evb = 0;
+        u8 SourceBBank = 0xFFu;
+        FaithfulCaptureSourceAKind SourceA = FaithfulCaptureSourceAKind::None;
+        FaithfulCaptureSourceBKind SourceB = FaithfulCaptureSourceBKind::None;
+        FaithfulCaptureSourceBLineage SourceBLineage =
+            FaithfulCaptureSourceBLineage::NotApplicable;
+        bool SourceB3dResolved = false;
+        bool SourceBUses3d = false;
+
+        bool SourceBHasCaptureProduct = false;
+        bool Exact = false;
+    };
+
+    struct FaithfulCaptureProductMetadata
+    {
+        u64 ProductId = 0;
+        u64 ProductEpoch = 0;
+        u32 CaptureCnt = 0;
+        u32 FrameSequence = 0;
+        u32 DestinationOffsetPixels = 0;
+        u16 Width = 0;
+        u16 Height = 0;
+        u8 DestinationBank = 0xFFu;
+        bool Valid = false;
+        bool MaterialComplete = false;
+        bool Complete = false;
+        bool Uses3d = false;
+        bool HighresEligible = false;
+        bool CausalMetadataComplete = false;
+        bool RecipeComplete = false;
+        CaptureSourceIdentity SourceIdentity {};
+    };
+
+    struct FaithfulCaptureProductParentKey
+    {
+        u64 Epoch = 0;
+        u64 Id = 0;
+
+        [[nodiscard]] constexpr bool operator==(
+            const FaithfulCaptureProductParentKey& other) const noexcept
+        {
+            return Epoch == other.Epoch && Id == other.Id;
+        }
+
+        [[nodiscard]] constexpr bool operator<(
+            const FaithfulCaptureProductParentKey& other) const noexcept
+        {
+            return Epoch < other.Epoch
+                || (Epoch == other.Epoch && Id < other.Id);
+        }
+    };
+
+    struct FaithfulCaptureProductRecord
+    {
+        FaithfulCaptureProductMetadata Metadata {};
+        FaithfulCaptureRecipeEncoding RecipeEncoding =
+            FaithfulCaptureRecipeEncoding::FullSourceAB;
+        std::array<u16, 192u * 256u> Material {};
+        std::array<FaithfulCaptureProductLineCausalMetadata, 192u>
+            CausalLines {};
+
+        std::vector<FaithfulCaptureSourceARecipe> SourceARecipe {};
+        std::vector<FaithfulCapturePixelRecipe> FullSourceABRecipe {};
+        std::vector<FaithfulCaptureBackgroundOperand> SourceABackground {};
+
+        std::vector<FaithfulCaptureProductParentKey> DirectCaptureParents {};
+    };
+    using FaithfulCaptureProductLease =
+        std::shared_ptr<const FaithfulCaptureProductRecord>;
+
+    struct FaithfulLiveRenderProductLineMetadata
+    {
+        LiveRenderProductIdentity Product {};
+        PhysicalScanoutRoute Route {};
+        s16 SourceXBase = 0;
+        u16 SourceY = 0;
+        u16 LogicalVCount = 0;
+        bool Direct3DEnabled = false;
+        bool ForceBlank = false;
+        bool Valid = false;
+    };
+
+    struct FaithfulPhysicalScanoutLineMetadata
+    {
+        PhysicalScanoutRoute Route {};
+        u16 LogicalVCount = 0;
+        bool Valid = false;
+    };
+
+    struct FaithfulCaptureKey
+    {
+        u64 Epoch = 0;
+        u64 Id = 0;
+
+        [[nodiscard]] constexpr bool Valid() const noexcept
+        {
+            return Epoch != 0u && Id != 0u;
+        }
+    };
+
+    enum class FaithfulVisibleProductKind : u8
+    {
+        Native = 0,
+        Ambiguous = 1,
+        Capture = 2,
+        LiveRender = 3,
+    };
+
+    enum class FaithfulVisibleCompositeOp : u8
+    {
+        Native = 0,
+        Replace = 1,
+        Blend5 = 2,
+        Blend16 = 3,
+        Ambiguous = 4,
+        Live3DOverCapture = 5,
+    };
+
+    enum class FaithfulVisiblePostEffect : u8
+    {
+        None = 0,
+        Brighten = 1,
+        Darken = 2,
+    };
+
+    using FaithfulVisibleProductHandle = u16;
+    static constexpr FaithfulVisibleProductHandle kFaithfulVisibleNativeHandle = 0u;
+    static constexpr FaithfulVisibleProductHandle kFaithfulVisibleAmbiguousHandle = 1u;
+    static constexpr size_t kFaithfulVisibleProductTableCapacity = 1024u;
+
+    struct alignas(16) FaithfulVisibleProductHandleEntry
+    {
+
+        u64 Epoch = 0;
+        u64 Id = 0;
+        u32 Dimensions = 0;
+        u32 KindFlags = 0;
+        u32 Reserved0 = 0;
+        u32 Reserved1 = 0;
+
+        [[nodiscard]] static constexpr u32 PackDimensions(
+            u16 width, u16 height) noexcept
+        {
+            return static_cast<u32>(width)
+                | (static_cast<u32>(height) << 16u);
+        }
+
+        [[nodiscard]] static constexpr u32 PackKindFlags(
+            FaithfulVisibleProductKind kind, u8 flags = 0u) noexcept
+        {
+            return (static_cast<u32>(kind) & 0xFFu)
+                | (static_cast<u32>(flags) << 8u);
+        }
+
+        [[nodiscard]] constexpr u16 Width() const noexcept
+        {
+            return static_cast<u16>(Dimensions & 0xFFFFu);
+        }
+
+        [[nodiscard]] constexpr u16 Height() const noexcept
+        {
+            return static_cast<u16>(Dimensions >> 16u);
+        }
+
+        [[nodiscard]] constexpr FaithfulVisibleProductKind Kind() const noexcept
+        {
+            return static_cast<FaithfulVisibleProductKind>(KindFlags & 0xFFu);
+        }
+
+        [[nodiscard]] constexpr u8 Flags() const noexcept
+        {
+            return static_cast<u8>((KindFlags >> 8u) & 0xFFu);
+        }
+    };
+
+    struct alignas(16) FaithfulVisiblePixelLineage
+    {
+
+        u32 OperandA = 0;
+        u32 OperandB = 0;
+        u32 Control = 0;
+        u32 NativeOperandRgb666 = 0;
+
+        [[nodiscard]] static constexpr u32 PackOperand(
+            FaithfulVisibleProductHandle handle, u8 sourceX, u8 sourceY) noexcept
+        {
+            return static_cast<u32>(handle)
+                | (static_cast<u32>(sourceX) << 16u)
+                | (static_cast<u32>(sourceY) << 24u);
+        }
+
+        [[nodiscard]] static constexpr FaithfulVisibleProductHandle
+        OperandHandle(u32 operand) noexcept
+        {
+            return static_cast<FaithfulVisibleProductHandle>(operand & 0xFFFFu);
+        }
+
+        [[nodiscard]] static constexpr u8 OperandSourceX(u32 operand) noexcept
+        {
+            return static_cast<u8>((operand >> 16u) & 0xFFu);
+        }
+
+        [[nodiscard]] static constexpr u8 OperandSourceY(u32 operand) noexcept
+        {
+            return static_cast<u8>((operand >> 24u) & 0xFFu);
+        }
+
+        [[nodiscard]] static constexpr u32 PackControl(
+            FaithfulVisibleCompositeOp op,
+            FaithfulVisiblePostEffect postEffect = FaithfulVisiblePostEffect::None,
+            bool nativeOperandIsB = false,
+            bool exact = false,
+            u8 eva = 0,
+            u8 evb = 0,
+            u8 evy = 0) noexcept
+        {
+            return (static_cast<u32>(op) & 0x7u)
+                | ((static_cast<u32>(postEffect) & 0x3u) << 3u)
+                | (nativeOperandIsB ? (1u << 5u) : 0u)
+                | (exact ? (1u << 6u) : 0u)
+                | ((static_cast<u32>(eva) & 0x1Fu) << 8u)
+                | ((static_cast<u32>(evb) & 0x1Fu) << 13u)
+                | ((static_cast<u32>(evy) & 0x1Fu) << 18u);
+        }
+    };
+
+    enum class FaithfulVisibleLineageRowKind : u32
+    {
+        Unclassified = 0u,
+        Native = 1u,
+        UniformReplace = 2u,
+        Ambiguous = 3u,
+        Dense = 4u,
+    };
+
+    struct alignas(16) FaithfulVisibleLineageRow
+    {
+        u32 Kind = static_cast<u32>(
+            FaithfulVisibleLineageRowKind::Unclassified);
+
+        u32 OperandA = 0u;
+        u32 Control = 0u;
+        u32 Reserved = 0u;
+
+        [[nodiscard]] constexpr FaithfulVisibleLineageRowKind RowKind()
+            const noexcept
+        {
+            return static_cast<FaithfulVisibleLineageRowKind>(Kind);
+        }
+    };
+
+    static_assert(sizeof(FaithfulCaptureKey) == 16u);
+    static_assert(sizeof(FaithfulVisibleProductHandleEntry) == 32u);
+    static_assert(alignof(FaithfulVisibleProductHandleEntry) == 16u);
+    static_assert(std::is_standard_layout_v<FaithfulVisibleProductHandleEntry>);
+    static_assert(std::is_trivially_copyable_v<FaithfulVisibleProductHandleEntry>);
+    static_assert(offsetof(FaithfulVisibleProductHandleEntry, Epoch) == 0u);
+    static_assert(offsetof(FaithfulVisibleProductHandleEntry, Id) == 8u);
+    static_assert(offsetof(FaithfulVisibleProductHandleEntry, Dimensions) == 16u);
+    static_assert(offsetof(FaithfulVisibleProductHandleEntry, KindFlags) == 20u);
+    static_assert(offsetof(FaithfulVisibleProductHandleEntry, Reserved0) == 24u);
+    static_assert(offsetof(FaithfulVisibleProductHandleEntry, Reserved1) == 28u);
+    static_assert(sizeof(FaithfulVisiblePixelLineage) == 16u);
+    static_assert(alignof(FaithfulVisiblePixelLineage) == 16u);
+    static_assert(std::is_standard_layout_v<FaithfulVisiblePixelLineage>);
+    static_assert(std::is_trivially_copyable_v<FaithfulVisiblePixelLineage>);
+    static_assert(sizeof(FaithfulVisibleLineageRow) == 16u);
+    static_assert(alignof(FaithfulVisibleLineageRow) == 16u);
+    static_assert(std::is_standard_layout_v<FaithfulVisibleLineageRow>);
+    static_assert(std::is_trivially_copyable_v<FaithfulVisibleLineageRow>);
+    static_assert((0x1234u | (0x56u << 16u) | (0x78u << 24u))
+        == 0x78561234u);
+
+    struct FaithfulCaptureLineProductMetadata
+    {
+        u64 ProductEpoch = 0;
+        u64 ProductId = 0;
+        s32 SourceXBase = 0;
+        u16 TaggedPixelCount = 0;
+        u8 SourceY = 0;
+        u8 StorageBank = 0xFFu;
+        bool ValidExact = false;
+        bool Conflict = false;
+    };
+
     SoftRenderer(melonDS::GPU& gpu);
     ~SoftRenderer() override;
 
     void DrawScanline(u32 line, Unit* unit) override;
     void DrawSprites(u32 line, Unit* unit) override;
     void VBlankEnd(Unit* unitA, Unit* unitB) override;
+    void ResetFrameskipState() noexcept override
+    {
+        FrameskipCapturaSuprimidaFrame = false;
+    }
     bool StructuredVulkan2DSourceACaptureHasDominant2DReplay() const noexcept override;
     [[nodiscard]] virtual const DebugCaptureStats& GetDebugCaptureStats() const noexcept { return LastDebugCaptureStats; }
     [[nodiscard]] virtual const u32* GetDebugCapture3dSource() const noexcept { return HasLastDebugCapture3dSource ? LastDebugCapture3dSource : nullptr; }
     [[nodiscard]] virtual u32 GetDebugFramesSinceLastCapture() const noexcept { return FramesSinceLastCapture; }
+
+    [[nodiscard]] bool FueCapturaSuprimidaEsteFotograma() const noexcept { return FrameskipCapturaSuprimidaFrame; }
+    [[nodiscard]] u64 GetFrameskipCapturasSuprimidas() const noexcept { return FrameskipCapturasSuprimidas; }
     [[nodiscard]] virtual const std::array<u8, 192>& GetDebugCaptureLineUses3dMask() const noexcept { return CaptureLineUses3d; }
+
+    static constexpr size_t kFaithfulRegsPerLine = 32;
+    static constexpr size_t kFaithfulRegWords =
+        2             * 192            * kFaithfulRegsPerLine;
+    [[nodiscard]] virtual bool UseFaithfulVulkan2D() const noexcept;
+
+    [[nodiscard]] virtual const u32* GetFaithfulLineRegs(unsigned engine) const noexcept;
+
+    [[nodiscard]] virtual const u32* GetFaithfulFrameMeta() const noexcept;
+
+    [[nodiscard]] virtual const u8* GetFaithfulPaletteLatch() const noexcept;
+    [[nodiscard]] virtual const u8* GetFaithfulOAMLatch() const noexcept;
+
+    [[nodiscard]] const u16* GetFaithfulCapEscrita(u32 par) const noexcept;
+    [[nodiscard]] u32 GetFaithfulCapEscritaSeq(u32 par) const noexcept;
+
+    [[nodiscard]] const u16* GetFaithfulModo2Linea() const noexcept;
+    [[nodiscard]] const u16* GetFaithfulPrevModo2Linea() const noexcept;
+
+    [[nodiscard]] virtual const u32* GetFaithfulPrevLineRegs(unsigned engine) const noexcept;
+    [[nodiscard]] virtual const u32* GetFaithfulPrevFrameMeta() const noexcept;
+    [[nodiscard]] virtual const u8* GetFaithfulPrevPaletteLatch() const noexcept;
+    [[nodiscard]] virtual const u8* GetFaithfulPrevOAMLatch() const noexcept;
+
+    [[nodiscard]] virtual const u32* GetFaithfulPrevLineaCompuesta() const noexcept;
+    [[nodiscard]] virtual const u32* GetFaithfulLineaCompuesta() const noexcept;
+    [[nodiscard]] const u32* GetFaithfulPrevLine3DOperands() const noexcept;
+    [[nodiscard]] const FaithfulCaptureProductMetadata&
+        GetFaithfulCaptureProduct() const noexcept;
+    [[nodiscard]] const FaithfulCaptureProductMetadata&
+        GetFaithfulPrevCaptureProduct() const noexcept;
+    [[nodiscard]] const FaithfulCaptureLineProductMetadata*
+        GetFaithfulCaptureLineProducts(unsigned engine) const noexcept;
+    [[nodiscard]] const FaithfulCaptureLineProductMetadata*
+        GetFaithfulPrevCaptureLineProducts(unsigned engine) const noexcept;
+
+    [[nodiscard]] const u32* GetFaithfulCaptureProductPixelMask(
+        unsigned engine) const noexcept;
+    [[nodiscard]] const u32* GetFaithfulPrevCaptureProductPixelMask(
+        unsigned engine) const noexcept;
+
+    [[nodiscard]] const u16* GetFaithfulCaptureProductMaterial(
+        u64 productEpoch, u64 productId) const noexcept;
+    [[nodiscard]] const u16* GetFaithfulPrevCaptureProductMaterial(
+        u64 productEpoch, u64 productId) const noexcept;
+    [[nodiscard]] const FaithfulCaptureProductLineCausalMetadata*
+        GetFaithfulCaptureProductCausalLines(
+            u64 productEpoch, u64 productId) const noexcept;
+    [[nodiscard]] const FaithfulCaptureProductLineCausalMetadata*
+        GetFaithfulPrevCaptureProductCausalLines(
+            u64 productEpoch, u64 productId) const noexcept;
+
+    [[nodiscard]] const FaithfulCapturePixelRecipe*
+        GetFaithfulCaptureProductRecipe(
+            u64 productEpoch, u64 productId) const noexcept;
+    [[nodiscard]] const FaithfulCapturePixelRecipe*
+        GetFaithfulPrevCaptureProductRecipe(
+            u64 productEpoch, u64 productId) const noexcept;
+    [[nodiscard]] FaithfulCaptureProductLease
+        AcquireFaithfulCaptureProduct(
+            u64 productEpoch, u64 productId) const noexcept;
+
+    [[nodiscard]] u64 SetFaithfulCertifiedCaptureTerminals(
+        u64 productEpoch, const FaithfulCaptureKey* keys,
+        size_t count) noexcept;
+
+    [[nodiscard]] u64 SetFaithfulCaptureNativeFrontiers(
+        u64 productEpoch, const FaithfulCaptureKey* keys,
+        size_t count) noexcept;
+    [[nodiscard]] const FaithfulCaptureKey*
+        GetFaithfulRequiredCaptureTerminals() const noexcept;
+    [[nodiscard]] u8 GetFaithfulRequiredCaptureTerminalCount() const noexcept;
+    [[nodiscard]] u64
+        GetFaithfulRequiredCaptureTerminalEpoch() const noexcept;
+    [[nodiscard]] u64
+        GetFaithfulRequiredCaptureTerminalGeneration() const noexcept;
+    [[nodiscard]] const FaithfulLiveRenderProductLineMetadata*
+        GetFaithfulLiveRenderProductLines(PhysicalScreen screen) const noexcept;
+    [[nodiscard]] const FaithfulLiveRenderProductLineMetadata*
+        GetFaithfulPrevLiveRenderProductLines(PhysicalScreen screen) const noexcept;
+    [[nodiscard]] const FaithfulPhysicalScanoutLineMetadata*
+        GetFaithfulPhysicalScanoutLines(PhysicalScreen screen) const noexcept;
+    [[nodiscard]] const FaithfulPhysicalScanoutLineMetadata*
+        GetFaithfulPrevPhysicalScanoutLines(PhysicalScreen screen) const noexcept;
+    [[nodiscard]] u64
+        GetFaithfulPrevPhysicalScanoutGeneration() const noexcept;
+
+    [[nodiscard]] const FaithfulVisiblePixelLineage*
+        GetFaithfulVisiblePixelLineage(PhysicalScreen screen) const noexcept;
+    [[nodiscard]] const FaithfulVisiblePixelLineage*
+        GetFaithfulPrevVisiblePixelLineage(PhysicalScreen screen) const noexcept;
+    [[nodiscard]] const FaithfulVisibleLineageRow*
+        GetFaithfulVisibleLineageRows(PhysicalScreen screen) const noexcept;
+    [[nodiscard]] const FaithfulVisibleLineageRow*
+        GetFaithfulPrevVisibleLineageRows(PhysicalScreen screen) const noexcept;
+    [[nodiscard]] const FaithfulVisiblePixelLineage*
+        GetFaithfulVisibleDensePixelLineage(
+            PhysicalScreen screen) const noexcept;
+    [[nodiscard]] const FaithfulVisiblePixelLineage*
+        GetFaithfulPrevVisibleDensePixelLineage(
+            PhysicalScreen screen) const noexcept;
+    [[nodiscard]] const FaithfulVisibleProductHandleEntry*
+        GetFaithfulVisibleProductTable() const noexcept;
+    [[nodiscard]] const FaithfulVisibleProductHandleEntry*
+        GetFaithfulPrevVisibleProductTable() const noexcept;
+    [[nodiscard]] u16 GetFaithfulVisibleProductCount() const noexcept;
+    [[nodiscard]] u16 GetFaithfulPrevVisibleProductCount() const noexcept;
+    [[nodiscard]] u64 GetFaithfulVisibleLineageGeneration() const noexcept;
+    [[nodiscard]] u64 GetFaithfulPrevVisibleLineageGeneration() const noexcept;
+    [[nodiscard]] bool IsFaithfulVisibleAllNative() const noexcept;
+    [[nodiscard]] bool IsFaithfulPrevVisibleAllNative() const noexcept;
+    [[nodiscard]] u32 GetFaithfulPrevSwapScanout() const noexcept { return FaithfulPrevSwapScanout; }
+
+    struct FaithfulDirtyMasks
+    {
+        u64 ABG[16];
+        u64 BBG[4];
+        u64 AOBJ[8];
+        u64 BOBJ[4];
+        u64 ABGExtPal[1];
+        u64 BBGExtPal[1];
+        u64 AOBJExtPal[1];
+        u64 BOBJExtPal[1];
+    };
+    [[nodiscard]] virtual const FaithfulDirtyMasks& GetFaithfulDirtyMasks() const noexcept;
+    virtual void ClearFaithfulDirty() noexcept;
+
+    void DeriveFaithfulPendingVramDirty() noexcept;
     [[nodiscard]] virtual const u32* GetStructuredVulkan2DPlane(bool topScreen, u32 plane) const noexcept;
     [[nodiscard]] virtual const u8* GetStructuredVulkan2DLinePayloadMask(bool topScreen) const noexcept;
     [[nodiscard]] virtual const u8* GetStructuredVulkan2DLine3DSlotMask(bool topScreen) const noexcept;
@@ -140,13 +658,13 @@ public:
         u32& outVramBank,
         CaptureSourceIdentity& outIdentity) const noexcept;
     virtual void BeginStructuredVulkan2DFrame() noexcept;
+    void PublishCompletedFaithfulFrame() noexcept;
     virtual void ClearStructuredVulkan2DState() noexcept;
     virtual void SeedStructuredVulkan2DCaptureBanksFromVram();
     virtual void SwapStructuredVulkan2DBuffers() noexcept;
 private:
     class IVulkan2DPipelineStrategy;
-    class CompatibilityVulkan2DPipelineStrategy;
-    class FastPathVulkan2DPipelineStrategy;
+    class ActiveVulkan2DPipelineStrategy;
 
     [[nodiscard]] IVulkan2DPipelineStrategy& activeVulkan2DPipelineStrategy() noexcept;
     void DrawScanlineActivePipeline(u32 line, Unit* unit);
@@ -165,6 +683,29 @@ private:
         bool DirectXY = false;
     };
 
+    struct FaithfulComposedCaptureTag
+    {
+        enum class AmbiguityReason : u8
+        {
+            None = 0,
+            UnsupportedSource = 1,
+            VramBgOr = 2,
+            VramObjOr = 3,
+            ColorEffect = 4,
+            MultiLayerComposition = 5,
+        };
+
+        u64 ProductEpoch = 0;
+        u64 ProductId = 0;
+        u16 SourceX = 0;
+        u16 SourceY = 0;
+        u8 StorageBank = 0xFFu;
+
+        bool Ambiguous = false;
+        AmbiguityReason Reason = AmbiguityReason::None;
+        bool Live3DBackground = false;
+    };
+
     static constexpr size_t kStructuredScreenWidth = 256;
     static constexpr size_t kStructuredScreenHeight = 192;
     static constexpr size_t kStructuredPixelCount = kStructuredScreenWidth * kStructuredScreenHeight;
@@ -172,8 +713,7 @@ private:
     static constexpr size_t kStructuredScreenCount = 2;
 
     melonDS::GPU& GPU;
-    std::unique_ptr<IVulkan2DPipelineStrategy> CompatibilityVulkan2DPipelineStrategyInstance;
-    std::unique_ptr<IVulkan2DPipelineStrategy> FastPathVulkan2DPipelineStrategyInstance;
+    std::unique_ptr<IVulkan2DPipelineStrategy> ActiveVulkan2DPipelineStrategyInstance;
     alignas(8) u32 BGOBJLine[256*3];
     u32* _3DLine;
 
@@ -185,8 +725,22 @@ private:
     std::array<bool, 2> OBJLineCaptureIdentityAvailable {};
     std::array<ObjCaptureIdentityTag, kStructuredPlaneCount * kStructuredScreenWidth>
         ComposedObjCaptureIdentity {};
+    std::array<FaithfulComposedCaptureTag,
+        kStructuredPlaneCount * kStructuredScreenWidth>
+        ComposedFaithfulCaptureTags {};
+    std::array<FaithfulComposedCaptureTag,
+        2 * kStructuredScreenWidth> OBJLineFaithfulCaptureTags {};
+
+    std::array<bool, 2> OBJLineFaithfulCaptureTagsAvailable {};
     bool TrackSpriteObjCaptureIdentity = false;
     bool TrackComposedObjCaptureIdentity = false;
+    bool TrackSpriteFaithfulCaptureProduct = false;
+    bool TrackFaithfulCaptureProduct = false;
+
+    u32 FaithfulUniformScanoutProbeAccepted = 0u;
+    u32 FaithfulUniformScanoutProbeRejected = 0u;
+    u32 FaithfulUniformScanoutProbeObjOnly = 0u;
+    u8 FaithfulUniformScanoutProbeFirstReject = 0u;
     u32 CurrentSpriteRenderLine = kStructuredScreenHeight;
 
     u32 NumSprites[2];
@@ -275,6 +829,41 @@ private:
         u32 originalVal2,
         u32 originalVal3) noexcept;
     void ShiftComposedObjCaptureIdentity(u32* dst) noexcept;
+    [[nodiscard]] bool FaithfulColorCompositePassesTopExactly(
+        u32 x, u32 val1, u32 val2) const noexcept;
+    void ResolveFaithfulCompositeTopTag(
+        u32 x, u32 val1, u32 val2) noexcept;
+    void ResolveFaithful3DBackgroundTag(u32 x, u32 val2, u32 val3) noexcept;
+    void MarkFaithfulCompositeTopAmbiguousIfCausal(
+        u32 x, u32 laneCount) noexcept;
+    void ExportFaithfulCaptureLineProduct(
+        unsigned engine, u32 line,
+        const FaithfulComposedCaptureTag* tags) noexcept;
+    void ExportFaithfulUniformCaptureLineProduct(
+        unsigned engine, u32 line,
+        u64 productEpoch, u64 productId,
+        u16 sourceXBase, u16 sourceY, u8 storageBank) noexcept;
+    void ClearFaithfulCaptureLineProduct(unsigned engine, u32 line) noexcept;
+    void BeginFaithfulCaptureProduct(
+        u32 captureCnt, u32 width, u32 height,
+        u32 destinationBank, u32 destinationOffset) noexcept;
+    void PrepareFaithfulCaptureProductLine(
+        u32 line, u32 width, u32 destinationBank,
+        u32 destinationOffset, u32 captureCnt,
+        const FaithfulCaptureProductLineCausalMetadata& causal) noexcept;
+    [[nodiscard]] static FaithfulCaptureRecipeEncoding
+        ClassifyFaithfulCaptureRecipeEncoding(u32 captureCnt) noexcept;
+    [[nodiscard]] bool PrepareFaithfulCaptureRecipeSlot(
+        FaithfulCaptureRecipeEncoding encoding) noexcept;
+    void StageFaithfulCaptureProductRecipeLine(
+        u32 line, u32 width, u32 destinationBank,
+        u32 destinationOffset, u32 captureCnt,
+        bool recipeExact) noexcept;
+    void StampFaithfulCaptureLine(
+        u32 line, u32 width, u32 destinationBank,
+        u32 destinationOffset, u32 captureCnt,
+        bool lineUses3d,
+        const CaptureSourceIdentity* sourceIdentity) noexcept;
     [[nodiscard]] bool TryGetEngineBDirectBitmapObjCaptureIdentity(
         u32 objByteAddress,
         u16 packedColor,
@@ -309,9 +898,6 @@ private:
         u32 width,
         u8* carriedOverlayProvenance = nullptr);
     void CopyStructuredVulkan2DCurrentLineToCapture(u32 line, u32 vramBank, u32 dstAddress, u32 width);
-    void CopyStructuredVulkan2DCaptureLineToCurrentScreenCompatibility(
-        u32 line,
-        u32 vramBank);
     void CopyStructuredVulkan2DCaptureLineToCurrentScreen(u32 line, u32 vramBank, const u32* packedLine);
     void FillStructuredVulkan2DVramDisplayLine(u32 line, const u16* vramLine);
     __attribute__((always_inline)) bool ReadStructuredVulkan2DCapture2DOverlayPixel(
@@ -388,13 +974,20 @@ private:
     void ApplySpriteMosaicX();
     template<DrawPixel drawPixel>
     void InterleaveSprites(u32 prio);
-    template<bool window> void DrawSprite_Rotscale(u32 num, u32 boundwidth, u32 boundheight, u32 width, u32 height, s32 xpos, s32 ypos);
-    template<bool window> void DrawSprite_Normal(u32 num, u32 width, u32 height, s32 xpos, s32 ypos);
+    template<bool window> void DrawSprite_Rotscale(
+        u32 num, u32 boundwidth, u32 boundheight,
+        u32 width, u32 height, s32 xpos, s32 ypos,
+        FaithfulVramCaptureTagAddressResolver& tagAddressResolver);
+    template<bool window> void DrawSprite_Normal(
+        u32 num, u32 width, u32 height, s32 xpos, s32 ypos,
+        FaithfulVramCaptureTagAddressResolver& tagAddressResolver);
 
     void DoCapture(u32 line, u32 width, u32 sourceLine);
 
     DebugCaptureStats LastDebugCaptureStats {};
     u32 FramesSinceLastCapture = 255;
+    bool FrameskipCapturaSuprimidaFrame = false;
+    u64 FrameskipCapturasSuprimidas = 0;
     bool HasLastDebugCapture3dSource = false;
     alignas(8) u32 LastDebugCapture3dSource[256 * 192] {};
     std::array<u8, 192> CaptureLineUses3d {};
@@ -414,6 +1007,184 @@ private:
         kStructuredScreenCount * kStructuredPlaneCount * kStructuredPixelCount;
     static constexpr size_t kStructuredLineMaskBytes =
         kStructuredScreenCount * kStructuredScreenHeight;
+
+    FaithfulFrameBuffer<u32, 2 * kStructuredScreenHeight,
+        kFaithfulRegsPerLine> FaithfulLineRegsStorage {};
+    std::array<u32, 16> FaithfulFrameMeta {};
+    u32 FaithfulFrameSeq = 0;
+
+    std::array<u8, 0x800> FaithfulPaletteLatch {};
+    std::array<u8, 0x800> FaithfulOAMLatch {};
+
+    std::array<u32, 16> FaithfulPrevFrameMeta {};
+    std::array<u8, 0x800> FaithfulPrevPaletteLatch {};
+    std::array<u8, 0x800> FaithfulPrevOAMLatch {};
+    FaithfulDirtyMasks FaithfulDirty {};
+    void CaptureFaithfulLineRegs(u32 line, int n3dline, bool forceblank) noexcept;
+    void CaptureFaithfulPhysicalScanoutLine(
+        u32 physicalLine, u32 logicalVCount) noexcept;
+    void PublishFaithfulPhysicalSnapshot() noexcept;
+    void PublishFaithfulRegisterSnapshot() noexcept;
+    void FinalizeFaithfulPhysicalScanoutLine(u32 physicalLine) noexcept;
+    void CaptureFaithfulLiveRenderProductLine(
+        u32 physicalLine, u32 logicalVCount,
+        int n3dline, bool forceblank) noexcept;
+    void ResetFaithfulVisibleProductTable(
+        std::array<FaithfulVisibleProductHandleEntry,
+            kFaithfulVisibleProductTableCapacity>& table,
+        u16& count) noexcept;
+    [[nodiscard]] FaithfulVisibleProductHandle
+        InternFaithfulVisibleCaptureProduct(
+            const FaithfulCaptureProductMetadata& product) noexcept;
+    void StageFaithfulVisibleCaptureLine(
+        u32 engine, u32 physicalLine, u32 logicalVCount,
+        const FaithfulComposedCaptureTag* tags,
+        const u32* visibleColors,
+        u32 masterBrightness) noexcept;
+    [[nodiscard]] bool StageFaithfulVisibleUniformCaptureLine(
+        u32 engine, u32 physicalLine, u32 logicalVCount,
+        u64 productEpoch, u64 productId,
+        u16 sourceXBase, u16 sourceY,
+        u32 masterBrightness) noexcept;
+    [[nodiscard]] bool TryStageFaithfulVisibleUniformScanoutLine(
+        u32 physicalLine, u32 logicalVCount,
+        u32 masterBrightness) noexcept;
+    void StageFaithfulVisibleNativeLine(
+        u32 engine, u32 physicalLine, u32 logicalVCount) noexcept;
+    void StageFaithfulVisibleAmbiguousLine(
+        u32 engine, u32 physicalLine, u32 logicalVCount) noexcept;
+    [[nodiscard]] u32 FaithfulMappedBgPhysicalBankMask(
+        u32 engine) const noexcept;
+    [[nodiscard]] u32 FaithfulMappedObjPhysicalBankMask(
+        u32 engine) const noexcept;
+    [[nodiscard]] FaithfulComposedCaptureTag
+        ResolveFaithfulObjCaptureTag(
+            FaithfulVramCaptureTagAddressResolver& tagAddressResolver,
+            u32 flatByteAddress) const noexcept;
+    void FinalizeFaithfulVisiblePixelLineage() noexcept;
+    void ExpandFaithfulVisibleLineageRows(
+        const FaithfulVisibleLineageRow* rows,
+        FaithfulVisiblePixelLineage* dense) const noexcept;
+    void ResetFaithfulCaptureProductRegistry(u64 epoch) noexcept;
+    void CollectUnreferencedFaithfulCaptureProducts() noexcept;
+    void PublishFaithfulCaptureProduct() noexcept;
+
+    FaithfulFrameBuffer<u32, 2 * 192, 256> FaithfulLineaCompuesta {};
+    FaithfulFrameBuffer<u32, 192, 256> FaithfulLine3DOperands {};
+    std::array<FaithfulCaptureLineProductMetadata, 2 * 192>
+        FaithfulCaptureLineProducts {};
+    std::array<FaithfulCaptureLineProductMetadata, 2 * 192>
+        FaithfulPrevCaptureLineProducts {};
+    FaithfulFrameBuffer<u32, 2 * 192, 256> FaithfulCaptureProductPixelMask {};
+    FaithfulFrameBuffer<u16, 192, 256> FaithfulCaptureProductMaterial {};
+    std::array<FaithfulCaptureProductLineCausalMetadata, 192>
+        FaithfulCaptureProductCausalLines {};
+    std::array<FaithfulCaptureProductLineCausalMetadata, 192>
+        FaithfulPrevCaptureProductCausalLines {};
+
+    struct FaithfulCaptureRecipeSlotStorage
+    {
+        FaithfulCaptureRecipeEncoding PayloadEncoding =
+            FaithfulCaptureRecipeEncoding::FullSourceAB;
+        std::vector<FaithfulCaptureSourceARecipe> SourceA {};
+        std::vector<FaithfulCapturePixelRecipe> FullSourceAB {};
+        std::vector<FaithfulCaptureBackgroundOperand> SourceABackground {};
+    };
+    std::array<FaithfulCaptureRecipeSlotStorage, 2>
+        FaithfulCaptureProductRecipeSlots {};
+    std::array<FaithfulCaptureSourceARecipe,
+        kStructuredScreenWidth> FaithfulPendingCaptureSourceALine {};
+    std::array<FaithfulCapturePixelRecipe,
+        kStructuredScreenWidth> FaithfulPendingCaptureFullSourceABLine {};
+    std::array<FaithfulCaptureBackgroundOperand,
+        kStructuredScreenWidth> FaithfulPendingCaptureBackgroundLine {};
+    bool FaithfulPendingCaptureBackgroundPresent = false;
+    FaithfulCaptureRecipeEncoding FaithfulPendingCaptureRecipeEncoding =
+        FaithfulCaptureRecipeEncoding::FullSourceAB;
+    u8 FaithfulCaptureProductRecipeSlot = 0u;
+    u8 FaithfulPrevCaptureProductRecipeSlot = 1u;
+    std::array<u8, kStructuredScreenHeight>
+        FaithfulCaptureProductRecipeLinesSeen {};
+    u16 FaithfulCaptureProductRecipeLineCount = 0u;
+    bool FaithfulCaptureProductRecipeTupleCoherent = false;
+    bool FaithfulPendingCaptureRecipeExact = false;
+    std::array<FaithfulLiveRenderProductLineMetadata, 2 * 192>
+        FaithfulLiveRenderProductLines {};
+    std::array<FaithfulLiveRenderProductLineMetadata, 2 * 192>
+        FaithfulPrevLiveRenderProductLines {};
+    std::array<FaithfulPhysicalScanoutLineMetadata, 2 * 192>
+        FaithfulPhysicalScanoutLines {};
+    std::array<FaithfulPhysicalScanoutLineMetadata, 2 * 192>
+        FaithfulPrevPhysicalScanoutLines {};
+
+    mutable std::array<FaithfulVisiblePixelLineage, 2 * kStructuredPixelCount>
+        FaithfulVisiblePixelLineageStorage {};
+    mutable std::array<FaithfulVisiblePixelLineage, 2 * kStructuredPixelCount>
+        FaithfulPrevVisiblePixelLineageStorage {};
+    std::array<FaithfulVisibleLineageRow, 2 * kStructuredScreenHeight>
+        FaithfulVisibleLineageRows {};
+    std::array<FaithfulVisibleLineageRow, 2 * kStructuredScreenHeight>
+        FaithfulPrevVisibleLineageRows {};
+    std::array<u8, 2 * kStructuredScreenHeight>
+        FaithfulVisibleLineageClassifiedStorage {};
+    std::array<u8, 2 * kStructuredScreenHeight>
+        FaithfulPrevVisibleLineageClassifiedStorage {};
+    std::array<FaithfulVisibleProductHandleEntry,
+        kFaithfulVisibleProductTableCapacity> FaithfulVisibleProductTable {};
+    std::array<FaithfulVisibleProductHandleEntry,
+        kFaithfulVisibleProductTableCapacity> FaithfulPrevVisibleProductTable {};
+    u16 FaithfulVisibleProductCount = 2u;
+    u16 FaithfulPrevVisibleProductCount = 2u;
+    u64 FaithfulVisibleLineageGeneration = 0u;
+    u64 FaithfulPrevVisibleLineageGeneration = 0u;
+    bool FaithfulVisibleAllNative = false;
+    bool FaithfulPrevVisibleAllNative = false;
+
+    u64 FaithfulPhysicalSidecarSeenEpoch = 0u;
+    bool FaithfulCompletedSnapshotPublished = false;
+    bool FaithfulPhysicalSidecarCurrentStarted = false;
+    bool FaithfulPhysicalRoutesCurrentComplete = false;
+    bool FaithfulPhysicalRoutesPrevReady = false;
+    u64 FaithfulPrevPhysicalScanoutGeneration = 0u;
+    bool FaithfulPhysicalSidecarCurrentComplete = false;
+    bool FaithfulPhysicalSidecarPrevReady = false;
+    FaithfulCaptureProductMetadata FaithfulCaptureProduct {};
+    FaithfulCaptureProductMetadata FaithfulPrevCaptureProduct {};
+
+    std::unordered_map<u64, FaithfulCaptureProductLease>
+        FaithfulCaptureProductRegistry {};
+    u64 FaithfulCaptureProductRegistryEpoch = 0u;
+    std::array<FaithfulCaptureKey, 4> FaithfulCertifiedCaptureTerminals {};
+    std::array<FaithfulCaptureKey, 4> FaithfulRequiredCaptureTerminals {};
+    u64 FaithfulCertifiedCaptureTerminalEpoch = 0u;
+    u64 FaithfulCertifiedCaptureTerminalGeneration = 0u;
+    u64 FaithfulRequiredCaptureTerminalEpoch = 0u;
+    u64 FaithfulRequiredCaptureTerminalGeneration = 0u;
+    u8 FaithfulCertifiedCaptureTerminalCount = 0u;
+    u8 FaithfulRequiredCaptureTerminalCount = 0u;
+    std::array<FaithfulCaptureKey, 4> FaithfulCaptureNativeFrontiers {};
+    u64 FaithfulCaptureNativeFrontierEpoch = 0u;
+    u64 FaithfulCaptureNativeFrontierGeneration = 0u;
+    u8 FaithfulCaptureNativeFrontierCount = 0u;
+
+    static constexpr u32 kFaithfulCaptureAncestryMax = 8u;
+    std::array<u8, 192> FaithfulCaptureProductLinesSeen {};
+    u16 FaithfulCaptureProductLineCount = 0;
+    bool FaithfulCaptureProductTupleCoherent = false;
+    bool FaithfulCaptureProductCausalCoherent = false;
+    bool FaithfulCaptureProductIdentityExact = false;
+    bool FaithfulCaptureProductDependenciesExact = false;
+    u64 FaithfulSeenCaptureProductEpoch = 0;
+
+    std::array<u16, 2 * 192 * 256> FaithfulCapEscrita {};
+    std::array<u32, 2> FaithfulCapEscritaSeq {};
+
+    FaithfulFrameBuffer<u16, 192, 256> FaithfulModo2Linea {};
+
+    u32 FaithfulSwapScanout = 0;
+    u32 FaithfulPrevSwapScanout = 0;
+
+    bool FaithfulComponerActivo[2] {};
     std::array<u32, 2 * kStructuredPlaneBufferWords> StructuredVulkan2DPlanesStorage {};
     std::array<u8, 2 * kStructuredLineMaskBytes> StructuredVulkan2DLineHasPayloadStorage {};
     std::array<u8, 2 * kStructuredLineMaskBytes> StructuredVulkan2DLineHas3DSlotStorage {};

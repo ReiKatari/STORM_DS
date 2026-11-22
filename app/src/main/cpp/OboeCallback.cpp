@@ -1,149 +1,164 @@
 #include "OboeCallback.h"
-#include <algorithm>
-#include <thread>
-#include "types.h"
-#include "Platform.h"
-#include "SPU.h"
 #include "MelonDS.h"
+#include "types.h"
+#include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <utility>
 
 using namespace melonDS;
 
-#define INTERNAL_FRAME_RATE 59.8260982880808f
-
-OboeCallback::OboeCallback(int volume, void (*onErrorCallback)(void), std::ostream* recordingStream) : _volume(std::clamp(volume, 0, 512)), onErrorCallback(onErrorCallback), _recordingStream(recordingStream) {
-    audioSampleFrac = 0;
+OboeCallback::OboeCallback(
+    int volume,
+    void (*onErrorCallback)(oboe::AudioStream*, std::uint64_t),
+    std::uint64_t streamGeneration,
+    std::shared_ptr<MelonDSAndroid::AudioOutputCapture> capture
+) : _volume(std::clamp(volume, 0, 256)),
+    onErrorCallback(onErrorCallback),
+    streamGeneration(streamGeneration),
+    audioOutputCapture(std::move(capture)) {
 }
 
 oboe::DataCallbackResult
 OboeCallback::onAudioReady(oboe::AudioStream *stream, void *audioData, int32_t numFrames) {
-    std::shared_ptr<MelonDSAndroid::MelonInstance> currentInstance;
-    {
-        std::lock_guard<std::mutex> lock(activeInstanceMutex);
-        currentInstance = activeInstance.lock();
-    }
-
-    if (!currentInstance || (MelonDSAndroid::isFastForwardActive() && MelonDSAndroid::isMuteOnFastForwardActive()) || MelonDSAndroid::isRewindActive())
-    {
-        if (currentInstance)
-        {
-            s16 dummy[4096];
-            int framesToRead = std::min<int>(numFrames, 2048);
-            if (framesToRead > 0)
-                currentInstance->readAudioOutput(dummy, framesToRead);
-        }
-        memset(audioData, 0, numFrames * sizeof(s16) * 2);
+    if (audioData == nullptr || numFrames <= 0)
         return oboe::DataCallbackResult::Continue;
-    }
 
-    int len = numFrames;
+    const bool captureRequested =
+        audioOutputCapture && audioOutputCapture->tryBeginCallback(streamGeneration);
+    const auto callbackStartNs = captureRequested
+        ? std::chrono::duration_cast<std::chrono::nanoseconds>(
+              std::chrono::steady_clock::now().time_since_epoch()).count()
+        : 0;
+    auto currentInstance = activeInstance.lock();
+    MelonDSAndroid::AudioOutputAdaptiveSnapshot before {};
+    MelonDSAndroid::AudioOutputAdaptiveSnapshot after {};
+    MelonDSAndroid::AudioOutputControllerSnapshot controller {};
+    melonDS::AudioOutputDrainObservation drain {};
+    int readFrames = 0;
 
-    double skew = std::clamp(60.0 / INTERNAL_FRAME_RATE, 0.985, 1.015);
-    currentInstance->setAudioOutputSkew(skew);
-
-    int len_in = getNumSamplesOut(len);
-    if (len_in > numFrames) len_in = numFrames;
-
-    int num_in = currentInstance->readAudioOutput((s16*) audioData, len_in);
-
-    if (num_in < 1)
+    if (!currentInstance)
     {
-        memset(audioData, 0, len * sizeof(s16) * 2);
-        return oboe::DataCallbackResult::Continue;
+        std::fill_n(static_cast<s16*>(audioData), numFrames * 2, 0);
+        drain.valid = true;
+        drain.requestedFrames = static_cast<std::uint32_t>(numFrames);
+        drain.returnedFrames = static_cast<std::uint32_t>(numFrames);
+        drain.inactiveZeroFrames = static_cast<std::uint32_t>(numFrames);
     }
-
-    if (num_in < len_in)
+    else
     {
-        s16* samples = (s16*) audioData;
-        s16 lastL = samples[(num_in - 1) * 2];
-        s16 lastR = samples[(num_in - 1) * 2 + 1];
-        s16 prevL = num_in > 1 ? samples[(num_in - 2) * 2] : lastL;
-        s16 prevR = num_in > 1 ? samples[(num_in - 2) * 2 + 1] : lastR;
-        s16 diffL = (lastL - prevL) / 2;
-        s16 diffR = (lastR - prevR) / 2;
-        int missingFrames = len_in - num_in;
-        for (int i = 0; i < missingFrames; i++)
+        if (captureRequested)
+            before = currentInstance->getAudioOutputAdaptiveSnapshot();
+        readFrames = currentInstance->readAudioOutputAdaptivo(
+            (s16*) audioData, numFrames, captureRequested ? &drain : nullptr);
+        if (captureRequested)
         {
-            float decay = 1.0f - (float)(i + 1) / (float)(missingFrames + 32);
-            samples[(num_in + i) * 2] = (s16)((lastL + diffL * (i % 2 == 0 ? 1 : -1)) * decay);
-            samples[(num_in + i) * 2 + 1] = (s16)((lastR + diffR * (i % 2 == 0 ? 1 : -1)) * decay);
+            after = currentInstance->getAudioOutputAdaptiveSnapshot();
+            controller = currentInstance->getAudioOutputControllerSnapshot();
         }
     }
 
-    const bool useBassBoost = __atomic_load_n(&bassBoostEnabled, __ATOMIC_RELAXED);
-    const int bassStrength = __atomic_load_n(&bassBoostStrength, __ATOMIC_RELAXED);
-    const bool useSpatialAudio = __atomic_load_n(&spatialAudioEnabled, __ATOMIC_RELAXED);
-    const bool useReverb = __atomic_load_n(&reverbEnabled, __ATOMIC_RELAXED);
-
-    // DSP Audio Processing Pipeline (Soft Limiter, Bass Boost, 3D Spatial, Reverb)
-    s16* samples = (s16*) audioData;
-    for (int i = 0; i < len_in; i++)
+    if (MelonDSAndroid::isRewindActive() ||
+        (MelonDSAndroid::isFastForwardActive() && MelonDSAndroid::isMuteOnFastForward()))
     {
-        s32 sampleL = (s32)samples[i * 2];
-        s32 sampleR = (s32)samples[i * 2 + 1];
+        std::fill_n(static_cast<s16*>(audioData), numFrames * 2, 0);
+    }
+    else if (currentInstance)
+    {
+        const bool useSoftLimit = softLimiterEnabled.load(std::memory_order_relaxed);
+        const bool useBassBoost = bassBoostEnabled.load(std::memory_order_relaxed);
+        const int bassStrength = bassBoostStrength.load(std::memory_order_relaxed);
+        const bool useSpatialAudio = spatialAudioEnabled.load(std::memory_order_relaxed);
+        const bool useReverb = reverbEnabled.load(std::memory_order_relaxed);
+        const bool needsDsp = (_volume < 256) || useSoftLimit || useBassBoost || useSpatialAudio || useReverb;
 
-        if (_volume != 256)
+        if (needsDsp)
         {
-            sampleL = (static_cast<melonDS::s32>(sampleL) * _volume) >> 8;
-            sampleR = (static_cast<melonDS::s32>(sampleR) * _volume) >> 8;
-        }
+            s16* samples = static_cast<s16*>(audioData);
+            for (int i = 0; i < numFrames; ++i)
+            {
+                s32 sampleL = static_cast<s32>(samples[i * 2]);
+                s32 sampleR = static_cast<s32>(samples[i * 2 + 1]);
 
-        // 1. Dynamic Bass Boost
-        if (useBassBoost)
-        {
-            float alpha = 0.08f;
-            bassFilterStateL += alpha * ((float)sampleL - bassFilterStateL);
-            bassFilterStateR += alpha * ((float)sampleR - bassFilterStateR);
-            float boostFactor = (float)bassStrength * 0.25f;
-            sampleL += (s32)(bassFilterStateL * boostFactor);
-            sampleR += (s32)(bassFilterStateR * boostFactor);
-        }
+                if (_volume != 256)
+                {
+                    sampleL = (sampleL * _volume) >> 8;
+                    sampleR = (sampleR * _volume) >> 8;
+                }
 
-        // 2. 3D Spatial Stereo Width Expansion
-        if (useSpatialAudio)
-        {
-            s32 mid = (sampleL + sampleR) / 2;
-            s32 side = (sampleL - sampleR) / 2;
-            side = (side * 14) / 10;
-            sampleL = mid + side;
-            sampleR = mid - side;
-        }
+                if (useBassBoost)
+                {
+                    constexpr float alpha = 0.08f;
+                    bassFilterStateL += alpha * (static_cast<float>(sampleL) - bassFilterStateL);
+                    bassFilterStateR += alpha * (static_cast<float>(sampleR) - bassFilterStateR);
+                    const float boostFactor = static_cast<float>(bassStrength) * 0.25f;
+                    sampleL += static_cast<s32>(bassFilterStateL * boostFactor);
+                    sampleR += static_cast<s32>(bassFilterStateR * boostFactor);
+                }
 
-        // 3. Acoustic Room Reverb
-        if (useReverb)
-        {
-            int delayTap = (reverbHead - 800 + 1024) % 1024;
-            float delayedL = reverbBufferL[delayTap];
-            float delayedR = reverbBufferR[delayTap];
-            reverbBufferL[reverbHead] = (float)sampleL + delayedL * 0.35f;
-            reverbBufferR[reverbHead] = (float)sampleR + delayedR * 0.35f;
-            reverbHead = (reverbHead + 1) % 1024;
-            sampleL += (s32)(delayedL * 0.25f);
-            sampleR += (s32)(delayedR * 0.25f);
-        }
+                if (useSpatialAudio)
+                {
+                    const s32 mid = (sampleL + sampleR) / 2;
+                    const s32 side = ((sampleL - sampleR) / 2 * 14) / 10;
+                    sampleL = mid + side;
+                    sampleR = mid - side;
+                }
 
-        // 4. Soft-Clipping Peak Limiter
-        samples[i * 2] = applySoftLimit(sampleL);
-        samples[i * 2 + 1] = applySoftLimit(sampleR);
+                if (useReverb)
+                {
+                    const int delayTap = (reverbHead - 800 + 1024) % 1024;
+                    const float delayedL = reverbBufferL[delayTap];
+                    const float delayedR = reverbBufferR[delayTap];
+                    reverbBufferL[reverbHead] = static_cast<float>(sampleL) + delayedL * 0.35f;
+                    reverbBufferR[reverbHead] = static_cast<float>(sampleR) + delayedR * 0.35f;
+                    reverbHead = (reverbHead + 1) % 1024;
+                    sampleL += static_cast<s32>(delayedL * 0.25f);
+                    sampleR += static_cast<s32>(delayedR * 0.25f);
+                }
+
+                samples[i * 2] = applySoftLimit(sampleL, useSoftLimit);
+                samples[i * 2 + 1] = applySoftLimit(sampleR, useSoftLimit);
+            }
+        }
     }
 
-    if (_recordingStream) [[unlikely]]
-        _recordingStream->write((char*) audioData, numFrames * sizeof(s16) * 2);
+    if (captureRequested) [[unlikely]]
+    {
+        const auto pcmReadyNs = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count();
+
+        const oboe::ResultWithValue<int32_t> xruns = stream->getXRunCount();
+        const std::int32_t xrunCount = xruns ? xruns.value() : -1;
+        audioOutputCapture->appendAndEndCallback(
+            static_cast<const std::int16_t*>(audioData),
+            numFrames,
+            readFrames,
+            streamGeneration,
+            _volume,
+            currentInstance != nullptr,
+            callbackStartNs,
+            pcmReadyNs,
+            before,
+            after,
+            controller,
+            drain,
+            xrunCount);
+    }
 
     return oboe::DataCallbackResult::Continue;
 }
 
-inline melonDS::s16 OboeCallback::applySoftLimit(melonDS::s32 sample)
+inline melonDS::s16 OboeCallback::applySoftLimit(melonDS::s32 sample, bool softLimiter)
 {
-    if (!__atomic_load_n(&softLimiterEnabled, __ATOMIC_RELAXED)) {
+    if (!softLimiter)
         return static_cast<melonDS::s16>(std::clamp<melonDS::s32>(sample, -32768, 32767));
-    }
     if (sample > 24576) {
-        float x = (float)(sample - 24576) / 8191.0f;
+        float x = static_cast<float>(sample - 24576) / 8191.0f;
         float y = x / (1.0f + x);
         melonDS::s32 out = static_cast<melonDS::s32>(24576.0f + y * 8191.0f);
         return static_cast<melonDS::s16>(std::clamp<melonDS::s32>(out, -32768, 32767));
     } else if (sample < -24576) {
-        float x = (float)(-sample - 24576) / 8192.0f;
+        float x = static_cast<float>(-sample - 24576) / 8192.0f;
         float y = x / (1.0f + x);
         melonDS::s32 out = static_cast<melonDS::s32>(-24576.0f - y * 8192.0f);
         return static_cast<melonDS::s16>(std::clamp<melonDS::s32>(out, -32768, 32767));
@@ -154,20 +169,6 @@ inline melonDS::s16 OboeCallback::applySoftLimit(melonDS::s32 sample)
 void OboeCallback::onErrorAfterClose(oboe::AudioStream* stream, oboe::Result result)
 {
     if (result == oboe::Result::ErrorDisconnected && onErrorCallback != nullptr) {
-        void (*cb)(void) = onErrorCallback;
-        std::thread([cb]() {
-            cb();
-        }).detach();
+        onErrorCallback(stream, streamGeneration);
     }
-}
-
-int OboeCallback::getNumSamplesOut(int len)
-{
-    // TODO: adjust to game speed
-    float f_len_in = len /* * (curFPS/60.0)*/;
-    f_len_in += audioSampleFrac;
-    int len_in = (int) floor(f_len_in);
-    audioSampleFrac = f_len_in - len_in;
-
-    return len_in;
 }

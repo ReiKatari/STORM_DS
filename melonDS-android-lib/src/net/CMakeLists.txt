@@ -1,6 +1,10 @@
 include(FixInterfaceIncludes)
 
-set(MELONDS_ENABLE_ENET_DEFAULT ON)
+if (ANDROID)
+    set(MELONDS_ENABLE_ENET_DEFAULT OFF)
+else()
+    set(MELONDS_ENABLE_ENET_DEFAULT ON)
+endif()
 
 option(MELONDS_ENABLE_ENET "Build ENet LAN/netplay support" ${MELONDS_ENABLE_ENET_DEFAULT})
 
@@ -14,8 +18,10 @@ set(NET_UTILS_SOURCES
 )
 
 if (MELONDS_ENABLE_ENET)
-    list(APPEND NET_UTILS_SOURCES
-        LAN.cpp)
+    list(APPEND NET_UTILS_SOURCES LAN.cpp)
+    if (NOT ANDROID)
+        list(APPEND NET_UTILS_SOURCES Netplay.cpp)
+    endif()
 endif()
 
 add_library(net-utils STATIC ${NET_UTILS_SOURCES})

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.18)
+cmake_minimum_required(VERSION 3.4.1)
 if (POLICY CMP0079)
     cmake_policy(SET CMP0079 NEW)
 endif()
@@ -51,15 +51,6 @@ set_target_properties(librashader PROPERTIES
 add_compile_definitions(MELONDS_HAS_LIBRASHADER=1)
 
 set(VULKAN_SHADER_SOURCES
-        "${CORE_LIB_DIR}/src/GPU3D_Vulkan_InterpSpansShader.comp"
-        "${CORE_LIB_DIR}/src/GPU3D_Vulkan_BinCombinedShader.comp"
-        "${CORE_LIB_DIR}/src/GPU3D_Vulkan_CalculateWorkOffsetsShader.comp"
-        "${CORE_LIB_DIR}/src/GPU3D_Vulkan_SortWorkShader.comp"
-        "${CORE_LIB_DIR}/src/GPU3D_Vulkan_TriRasterShader.comp"
-        "${CORE_LIB_DIR}/src/GPU3D_Vulkan_TriRasterBaseShader.comp"
-        "${CORE_LIB_DIR}/src/GPU3D_Vulkan_TriRasterCompatShader.comp"
-        "${CORE_LIB_DIR}/src/GPU3D_Vulkan_DepthBlendShader.comp"
-        "${CORE_LIB_DIR}/src/GPU3D_Vulkan_FinalPassShader.comp"
         "${CORE_LIB_DIR}/src/GPU3D_Vulkan_CaptureLineExportShader.comp"
         "${CORE_LIB_DIR}/src/GPU3D_Vulkan_GraphicsRasterShader.vert"
         "${CORE_LIB_DIR}/src/GPU3D_Vulkan_GraphicsRasterShader.frag"
@@ -69,36 +60,18 @@ set(VULKAN_SHADER_SOURCES
         "${CORE_LIB_DIR}/src/GPU3D_Vulkan_GraphicsEdgeShader.frag"
         "${CORE_LIB_DIR}/src/GPU3D_Vulkan_GraphicsEdgeFogShader.frag"
         "${CORE_LIB_DIR}/src/GPU3D_Vulkan_GraphicsFogShader.frag"
-        "${CORE_LIB_DIR}/src/compatibility/GPU3D_Vulkan_TriRasterBaseShader.comp"
-        "${CORE_LIB_DIR}/src/compatibility/GPU3D_Vulkan_CaptureLineExportShader.comp"
-        "${CORE_LIB_DIR}/src/compatibility/GPU3D_Vulkan_GraphicsRasterShader.frag"
-        "${CORE_LIB_DIR}/src/compatibility/GPU3D_Vulkan_GraphicsNoColorShader.frag"
-        "${CORE_LIB_DIR}/src/compatibility/GPU3D_Vulkan_GraphicsEdgeShader.frag"
-        "${CORE_LIB_DIR}/src/compatibility/GPU3D_Vulkan_GraphicsEdgeFogShader.frag"
-        "${CORE_LIB_DIR}/src/compatibility/GPU3D_Vulkan_GraphicsFogShader.frag"
-        "${ANDROID_CPP_DIR}/renderer/VulkanCompositorShader.comp"
-        "${ANDROID_CPP_DIR}/renderer/VulkanCompositorCompatibilityShader.comp"
-        "${ANDROID_CPP_DIR}/renderer/VulkanAccumulate3dShader.comp"
-        "${ANDROID_CPP_DIR}/renderer/VulkanAccumulate3dCompatibilityShader.comp"
-        "${ANDROID_CPP_DIR}/renderer/VulkanAccumulate3dScale8Shader.comp"
+        "${ANDROID_CPP_DIR}/renderer/VulkanFaithfulShader.comp"
+        "${ANDROID_CPP_DIR}/renderer/VulkanFaithfulObjScanlineShader.comp"
+        "${ANDROID_CPP_DIR}/renderer/VulkanRenderer3dNativeProjectionShader.comp"
         "${ANDROID_CPP_DIR}/renderer/VulkanSurfacePresenter.vert"
         "${ANDROID_CPP_DIR}/renderer/VulkanSurfacePresenter.frag"
-        "${ANDROID_CPP_DIR}/renderer/VulkanSurfacePresenterCompatibility.frag"
 )
 
 set(VULKAN_SHADER_HEADERS
-        "${CORE_LIB_DIR}/src/GPU3D_Vulkan_InterpSpansShaderData.h"
-        "${CORE_LIB_DIR}/src/GPU3D_Vulkan_BinCombinedShaderData.h"
-        "${CORE_LIB_DIR}/src/GPU3D_Vulkan_CalculateWorkOffsetsShaderData.h"
-        "${CORE_LIB_DIR}/src/GPU3D_Vulkan_SortWorkShaderData.h"
-        "${CORE_LIB_DIR}/src/GPU3D_Vulkan_TriRasterShaderData.h"
-        "${CORE_LIB_DIR}/src/GPU3D_Vulkan_TriRasterBaseShaderData.h"
-        "${CORE_LIB_DIR}/src/GPU3D_Vulkan_TriRasterCompatShaderData.h"
-        "${CORE_LIB_DIR}/src/GPU3D_Vulkan_DepthBlendShaderData.h"
-        "${CORE_LIB_DIR}/src/GPU3D_Vulkan_FinalPassShaderData.h"
         "${CORE_LIB_DIR}/src/GPU3D_Vulkan_CaptureLineExportShaderData.h"
         "${CORE_LIB_DIR}/src/GPU3D_Vulkan_GraphicsRasterShaderVertexData.h"
         "${CORE_LIB_DIR}/src/GPU3D_Vulkan_GraphicsRasterShaderFragmentData.h"
+        "${CORE_LIB_DIR}/src/GPU3D_Vulkan_GraphicsRasterDirectShaderFragmentData.h"
         "${CORE_LIB_DIR}/src/GPU3D_Vulkan_GraphicsRasterNoFragDepthShaderFragmentData.h"
         "${CORE_LIB_DIR}/src/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectShaderFragmentData.h"
         "${CORE_LIB_DIR}/src/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulateShaderFragmentData.h"
@@ -106,43 +79,29 @@ set(VULKAN_SHADER_HEADERS
         "${CORE_LIB_DIR}/src/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulatePlainShaderFragmentData.h"
         "${CORE_LIB_DIR}/src/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulateOpaqueAlphaToonShaderFragmentData.h"
         "${CORE_LIB_DIR}/src/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulateOpaqueAlphaPlainShaderFragmentData.h"
-        "${CORE_LIB_DIR}/src/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulateOpaqueAlphaPlainNoAttrShaderFragmentData.h"
-        "${CORE_LIB_DIR}/src/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulateOpaqueAlphaPlainColorOnlyShaderFragmentData.h"
+        "${CORE_LIB_DIR}/src/GPU3D_Vulkan_GraphicsRasterFragmentDepthDirectFastModulatePlainShaderFragmentData.h"
         "${CORE_LIB_DIR}/src/GPU3D_Vulkan_GraphicsNoColorShaderData.h"
         "${CORE_LIB_DIR}/src/GPU3D_Vulkan_GraphicsClearShaderData.h"
         "${CORE_LIB_DIR}/src/GPU3D_Vulkan_GraphicsFinalShaderVertexData.h"
         "${CORE_LIB_DIR}/src/GPU3D_Vulkan_GraphicsEdgeShaderData.h"
         "${CORE_LIB_DIR}/src/GPU3D_Vulkan_GraphicsEdgeFogShaderData.h"
         "${CORE_LIB_DIR}/src/GPU3D_Vulkan_GraphicsFogShaderData.h"
-        "${CORE_LIB_DIR}/src/compatibility/GPU3D_Vulkan_TriRasterBaseShaderData.h"
-        "${CORE_LIB_DIR}/src/compatibility/GPU3D_Vulkan_CaptureLineExportShaderData.h"
-        "${CORE_LIB_DIR}/src/compatibility/GPU3D_Vulkan_GraphicsRasterShaderFragmentData.h"
-        "${CORE_LIB_DIR}/src/compatibility/GPU3D_Vulkan_GraphicsRasterNoFragDepthShaderFragmentData.h"
-        "${CORE_LIB_DIR}/src/compatibility/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectShaderFragmentData.h"
-        "${CORE_LIB_DIR}/src/compatibility/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulateShaderFragmentData.h"
-        "${CORE_LIB_DIR}/src/compatibility/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulateToonShaderFragmentData.h"
-        "${CORE_LIB_DIR}/src/compatibility/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulatePlainShaderFragmentData.h"
-        "${CORE_LIB_DIR}/src/compatibility/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulateOpaqueAlphaToonShaderFragmentData.h"
-        "${CORE_LIB_DIR}/src/compatibility/GPU3D_Vulkan_GraphicsRasterNoFragDepthDirectFastModulateOpaqueAlphaPlainShaderFragmentData.h"
-        "${CORE_LIB_DIR}/src/compatibility/GPU3D_Vulkan_GraphicsNoColorShaderData.h"
-        "${CORE_LIB_DIR}/src/compatibility/GPU3D_Vulkan_GraphicsEdgeShaderData.h"
-        "${CORE_LIB_DIR}/src/compatibility/GPU3D_Vulkan_GraphicsEdgeFogShaderData.h"
-        "${CORE_LIB_DIR}/src/compatibility/GPU3D_Vulkan_GraphicsFogShaderData.h"
-        "${ANDROID_CPP_DIR}/renderer/VulkanCompositorShaderData.h"
-        "${ANDROID_CPP_DIR}/renderer/VulkanCompositorCompatibilityShaderData.h"
-        "${ANDROID_CPP_DIR}/renderer/VulkanAccumulate3dShaderData.h"
-        "${ANDROID_CPP_DIR}/renderer/VulkanAccumulate3dCompatibilityShaderData.h"
-        "${ANDROID_CPP_DIR}/renderer/VulkanAccumulate3dScale8ShaderData.h"
+        "${ANDROID_CPP_DIR}/renderer/VulkanFaithfulShaderData.h"
+        "${ANDROID_CPP_DIR}/renderer/VulkanFaithfulObjScanlineShaderData.h"
+        "${ANDROID_CPP_DIR}/renderer/VulkanRenderer3dNativeProjectionShaderData.h"
         "${ANDROID_CPP_DIR}/renderer/VulkanSurfacePresenterVertexShaderData.h"
         "${ANDROID_CPP_DIR}/renderer/VulkanSurfacePresenterFragmentShaderData.h"
-        "${ANDROID_CPP_DIR}/renderer/VulkanSurfacePresenterCompatibilityFragmentShaderData.h"
 )
 
-find_program(BASH_EXECUTABLE bash)
-if (BASH_EXECUTABLE AND NOT CMAKE_HOST_WIN32 AND NOT WIN32)
+if (CMAKE_HOST_WIN32)
+    find_program(MELON_GIT_BASH NAMES bash PATHS "C:/Program Files/Git/bin" "C:/Program Files/Git/usr/bin" NO_DEFAULT_PATH)
+else()
+    find_program(MELON_GIT_BASH bash)
+endif()
+if (MELON_GIT_BASH AND EXISTS "${VULKAN_SPIRV_REGEN_SCRIPT}")
     add_custom_command(
             OUTPUT ${VULKAN_SHADER_HEADERS}
-            COMMAND ${BASH_EXECUTABLE} "${VULKAN_SPIRV_REGEN_SCRIPT}"
+            COMMAND "${CMAKE_COMMAND}" -E env "ANDROID_NDK_HOME=${ANDROID_NDK}" "${MELON_GIT_BASH}" "${VULKAN_SPIRV_REGEN_SCRIPT}"
             DEPENDS "${VULKAN_SPIRV_REGEN_SCRIPT}" ${VULKAN_SHADER_SOURCES}
             WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
             COMMENT "Regenerating Vulkan SPIR-V headers"
@@ -156,6 +115,12 @@ endif()
 add_subdirectory("${CORE_LIB_DIR}" ./melonDS-android-lib)
 if (TARGET core)
     add_dependencies(core regenerate_vulkan_spirv_headers)
+
+    if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        target_compile_options(core PRIVATE
+                "$<$<AND:$<CONFIG:RelWithDebInfo>,$<COMPILE_LANGUAGE:CXX>>:-O3>"
+)
+    endif()
     target_compile_definitions(core PUBLIC VK_NO_PROTOTYPES)
     if (MELONDS_HAS_ADRENOTOOLS)
         target_compile_definitions(core PUBLIC MELONDS_HAS_ADRENOTOOLS=1)
@@ -169,9 +134,22 @@ add_subdirectory("${ANDROID_CPP_DIR}/oboe" ./oboe)
 add_subdirectory("${ANDROID_CPP_DIR}/faad2" ./faad2)
 add_subdirectory("${ANDROID_CPP_DIR}/rcheevos" ./rcheevos)
 add_subdirectory("${ANDROID_CPP_DIR}/enet" ./enet)
+
+set(ZSTD_BUILD_STATIC ON CACHE BOOL "" FORCE)
+set(ZSTD_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+set(ZSTD_BUILD_COMPRESSION OFF CACHE BOOL "" FORCE)
+set(ZSTD_BUILD_DECOMPRESSION ON CACHE BOOL "" FORCE)
+set(ZSTD_BUILD_DICTBUILDER OFF CACHE BOOL "" FORCE)
+set(ZSTD_BUILD_DEPRECATED OFF CACHE BOOL "" FORCE)
+set(ZSTD_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+set(ZSTD_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(ZSTD_BUILD_CONTRIB OFF CACHE BOOL "" FORCE)
+set(ZSTD_LEGACY_SUPPORT OFF CACHE BOOL "" FORCE)
+set(ZSTD_MULTITHREAD_SUPPORT OFF CACHE BOOL "" FORCE)
+add_subdirectory("${ANDROID_CPP_DIR}/zstd/build/cmake" ./zstd)
 target_include_directories(enet INTERFACE "${ANDROID_CPP_DIR}/enet/include")
-set(MELONDS_ENABLE_ENET ON CACHE BOOL "" FORCE)
 list(APPEND CMAKE_MODULE_PATH "${CORE_LIB_DIR}/cmake")
+set(MELONDS_ENABLE_ENET ON CACHE BOOL "Build ENet LAN/netplay support" FORCE)
 add_subdirectory("${CORE_LIB_DIR}/src/net" ./net-utils)
 
 add_library(
@@ -180,9 +158,15 @@ add_library(
         SHARED
 
         "${ANDROID_CPP_DIR}/AndroidMelonEventMessenger.cpp"
+        "${ANDROID_CPP_DIR}/AudioOutputCapture.cpp"
+        "${ANDROID_CPP_DIR}/CartLoader.cpp"
+        "${ANDROID_CPP_DIR}/ndz/NdzReader.cpp"
+        "${ANDROID_CPP_DIR}/ndz/NdzRomLoader.cpp"
+        "${ANDROID_CPP_DIR}/ndz/NdzJNI.cpp"
         "${ANDROID_CPP_DIR}/DSiSupport.cpp"
         "${ANDROID_CPP_DIR}/EmulatorArgsBuilder.cpp"
         "${ANDROID_CPP_DIR}/EmulatorMessageQueueJNI.cpp"
+        "${ANDROID_CPP_DIR}/EmulationThreadCpuPolicy.cpp"
         "${ANDROID_CPP_DIR}/JniEnvHandler.cpp"
         "${ANDROID_CPP_DIR}/MelonDS.cpp"
         "${ANDROID_CPP_DIR}/MelonDSAndroidCameraHandler.cpp"
@@ -192,6 +176,8 @@ add_library(
         "${ANDROID_CPP_DIR}/MelonDSAudio.cpp"
         "${ANDROID_CPP_DIR}/MelonDSNandJNI.cpp"
         "${ANDROID_CPP_DIR}/MelonInstance.cpp"
+        "${ANDROID_CPP_DIR}/MultiplayerSession.cpp"
+        "${ANDROID_CPP_DIR}/MultiplayerJNI.cpp"
         "${ANDROID_CPP_DIR}/MicInputOboeCallback.cpp"
         "${ANDROID_CPP_DIR}/NativeGlContext.cpp"
         "${ANDROID_CPP_DIR}/OboeCallback.cpp"
@@ -223,6 +209,11 @@ add_library(
 add_dependencies(melonDS-android-frontend regenerate_vulkan_spirv_headers)
 target_compile_definitions(melonDS-android-frontend PRIVATE VK_NO_PROTOTYPES)
 
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    target_link_options(melonDS-android-frontend PRIVATE
+            "$<$<CONFIG:RelWithDebInfo>:-Wl,--exclude-libs,libcore.a>")
+endif()
+
 target_include_directories(melonDS-android-frontend PUBLIC
         "${ANDROID_CPP_DIR}"
         "${ANDROID_CPP_DIR}/renderer"
@@ -232,6 +223,7 @@ target_include_directories(melonDS-android-frontend PUBLIC
         "${ANDROID_CPP_DIR}/oboe/include"
         "${ANDROID_CPP_DIR}/faad2/include"
         "${ANDROID_CPP_DIR}/rcheevos/include"
+        "${ANDROID_CPP_DIR}/zstd/lib"
         "${LIBRASHADER_INCLUDE_DIR}"
 )
 
@@ -250,6 +242,7 @@ target_link_libraries(melonDS-android-frontend
         oboe
         faad
         rcheevos
+        libzstd_static
         EGL
         GLESv3
         librashader

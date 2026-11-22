@@ -17,6 +17,7 @@
 */
 
 #include <stdio.h>
+#include <limits>
 #include "NDS.h"
 #include "DSi.h"
 #include "DMA.h"
@@ -145,6 +146,8 @@ void DMA::WriteCnt(u32 val)
 
         if ((StartMode & 0x7) == 0)
             Start();
+        else if (StartMode == 0x05 || StartMode == 0x12)
+            NDS.NDSCartSlot.CheckDMA(CPU);
         else if (StartMode == 0x07)
             NDS.GPU.GPU3D.CheckFIFODMA();
 
@@ -180,6 +183,7 @@ void DMA::Start()
 
     if ((Cnt & 0x00600000) == 0x00600000)
         CurDstAddr = DstAddr;
+
 
     //printf("ARM%d DMA%d %08X %02X %08X->%08X %d bytes %dbit\n", CPU?7:9, Num, Cnt, StartMode, CurSrcAddr, CurDstAddr, RemCount*((Cnt&0x04000000)?4:2), (Cnt&0x04000000)?32:16);
 
@@ -562,12 +566,38 @@ void DMA::Run9()
 
     if (!(Cnt & (1<<26)))
     {
+        const u32 batchStartCount = IterCount;
+        const bool lineageBatch = SrcAddrInc == 1 && DstAddrInc == 1
+            && IterCount <= std::numeric_limits<u32>::max() / 2u
+            && NDS.GPU.BeginFaithfulDmaLineageBatch(
+                0u, CurSrcAddr & ~1u, CurDstAddr & ~1u,
+                IterCount * 2u);
         while (IterCount > 0 && !Stall)
         {
             NDS.ARM9Timestamp += (UnitTimings9_16(burststart) << NDS.ARM9ClockShift);
             burststart = false;
 
-            NDS.ARM9Write16(CurDstAddr, NDS.ARM9Read16(CurSrcAddr));
+            if (lineageBatch || IsGXFIFODMA)
+            {
+                NDS.ARM9Write16(CurDstAddr, NDS.ARM9Read16(CurSrcAddr));
+            }
+            else if (NDS.GPU.HasFaithfulCapturePhysicalTags())
+            {
+                GPU::FaithfulVramCaptureTag sourceTag {};
+                u8 sourceBank = 0xFFu;
+                const bool sourceTagValid =
+                    NDS.GPU.GetFaithfulCaptureTagForCpuAddress(
+                        0u, CurSrcAddr & ~1u, sourceTag, sourceBank);
+                const u16 value = NDS.ARM9Read16(CurSrcAddr);
+                NDS.ARM9Write16(CurDstAddr, value);
+                if (sourceTagValid)
+                    NDS.GPU.PropagateFaithfulCaptureTagForDmaDestination(
+                        0u, CurDstAddr & ~1u, sourceTag);
+            }
+            else
+            {
+                NDS.ARM9Write16(CurDstAddr, NDS.ARM9Read16(CurSrcAddr));
+            }
 
             CurSrcAddr += SrcAddrInc<<1;
             CurDstAddr += DstAddrInc<<1;
@@ -576,15 +606,54 @@ void DMA::Run9()
 
             if (NDS.ARM9Timestamp >= NDS.ARM9Target) break;
         }
+        if (lineageBatch)
+            NDS.GPU.FinishFaithfulDmaLineageBatch(
+                (batchStartCount - IterCount) * 2u);
     }
     else
     {
+        const u32 batchStartCount = IterCount;
+        const bool lineageBatch = SrcAddrInc == 1 && DstAddrInc == 1
+            && IterCount <= std::numeric_limits<u32>::max() / 4u
+            && NDS.GPU.BeginFaithfulDmaLineageBatch(
+                0u, CurSrcAddr & ~3u, CurDstAddr & ~3u,
+                IterCount * 4u);
         while (IterCount > 0 && !Stall)
         {
             NDS.ARM9Timestamp += (UnitTimings9_32(burststart) << NDS.ARM9ClockShift);
             burststart = false;
 
-            NDS.ARM9Write32(CurDstAddr, NDS.ARM9Read32(CurSrcAddr));
+            if (IsGXFIFODMA)
+            {
+                NDS.GPU.GPU3D.Write32(CurDstAddr, NDS.ARM9Read32(CurSrcAddr));
+            }
+            else if (lineageBatch)
+            {
+                NDS.ARM9Write32(CurDstAddr, NDS.ARM9Read32(CurSrcAddr));
+            }
+            else if (NDS.GPU.HasFaithfulCapturePhysicalTags())
+            {
+                GPU::FaithfulVramCaptureTag sourceTags[2] {};
+                u8 sourceBanks[2] {0xFFu, 0xFFu};
+                const bool sourceTagsValid[2] = {
+                    NDS.GPU.GetFaithfulCaptureTagForCpuAddress(
+                        0u, CurSrcAddr & ~3u, sourceTags[0], sourceBanks[0]),
+                    NDS.GPU.GetFaithfulCaptureTagForCpuAddress(
+                        0u, (CurSrcAddr & ~3u) + 2u, sourceTags[1], sourceBanks[1]),
+                };
+                const u32 value = NDS.ARM9Read32(CurSrcAddr);
+                NDS.ARM9Write32(CurDstAddr, value);
+                for (u32 halfword = 0; halfword < 2u; halfword++)
+                {
+                    if (sourceTagsValid[halfword])
+                        NDS.GPU.PropagateFaithfulCaptureTagForDmaDestination(
+                            0u, (CurDstAddr & ~3u) + (halfword * 2u), sourceTags[halfword]);
+                }
+            }
+            else
+            {
+                NDS.ARM9Write32(CurDstAddr, NDS.ARM9Read32(CurSrcAddr));
+            }
 
             CurSrcAddr += SrcAddrInc<<2;
             CurDstAddr += DstAddrInc<<2;
@@ -593,6 +662,9 @@ void DMA::Run9()
 
             if (NDS.ARM9Timestamp >= NDS.ARM9Target) break;
         }
+        if (lineageBatch)
+            NDS.GPU.FinishFaithfulDmaLineageBatch(
+                (batchStartCount - IterCount) * 4u);
     }
 
     Executing = false;
@@ -621,6 +693,9 @@ void DMA::Run9()
     Running = 0;
     InProgress = false;
     NDS.ResumeCPU(0, 1<<Num);
+
+    if (StartMode == 0x05)
+        NDS.NDSCartSlot.CheckDMA(0);
 }
 
 void DMA::Run7()
@@ -635,12 +710,38 @@ void DMA::Run7()
 
     if (!(Cnt & (1<<26)))
     {
+        const u32 batchStartCount = IterCount;
+        const bool lineageBatch = SrcAddrInc == 1 && DstAddrInc == 1
+            && IterCount <= std::numeric_limits<u32>::max() / 2u
+            && NDS.GPU.BeginFaithfulDmaLineageBatch(
+                1u, CurSrcAddr & ~1u, CurDstAddr & ~1u,
+                IterCount * 2u);
         while (IterCount > 0 && !Stall)
         {
             NDS.ARM7Timestamp += UnitTimings7_16(burststart);
             burststart = false;
 
-            NDS.ARM7Write16(CurDstAddr, NDS.ARM7Read16(CurSrcAddr));
+            if (lineageBatch)
+            {
+                NDS.ARM7Write16(CurDstAddr, NDS.ARM7Read16(CurSrcAddr));
+            }
+            else if (NDS.GPU.HasFaithfulCapturePhysicalTags())
+            {
+                GPU::FaithfulVramCaptureTag sourceTag {};
+                u8 sourceBank = 0xFFu;
+                const bool sourceTagValid =
+                    NDS.GPU.GetFaithfulCaptureTagForCpuAddress(
+                        1u, CurSrcAddr & ~1u, sourceTag, sourceBank);
+                const u16 value = NDS.ARM7Read16(CurSrcAddr);
+                NDS.ARM7Write16(CurDstAddr, value);
+                if (sourceTagValid)
+                    NDS.GPU.PropagateFaithfulCaptureTagForDmaDestination(
+                        1u, CurDstAddr & ~1u, sourceTag);
+            }
+            else
+            {
+                NDS.ARM7Write16(CurDstAddr, NDS.ARM7Read16(CurSrcAddr));
+            }
 
             CurSrcAddr += SrcAddrInc<<1;
             CurDstAddr += DstAddrInc<<1;
@@ -649,15 +750,50 @@ void DMA::Run7()
 
             if (NDS.ARM7Timestamp >= NDS.ARM7Target) break;
         }
+        if (lineageBatch)
+            NDS.GPU.FinishFaithfulDmaLineageBatch(
+                (batchStartCount - IterCount) * 2u);
     }
     else
     {
+        const u32 batchStartCount = IterCount;
+        const bool lineageBatch = SrcAddrInc == 1 && DstAddrInc == 1
+            && IterCount <= std::numeric_limits<u32>::max() / 4u
+            && NDS.GPU.BeginFaithfulDmaLineageBatch(
+                1u, CurSrcAddr & ~3u, CurDstAddr & ~3u,
+                IterCount * 4u);
         while (IterCount > 0 && !Stall)
         {
             NDS.ARM7Timestamp += UnitTimings7_32(burststart);
             burststart = false;
 
-            NDS.ARM7Write32(CurDstAddr, NDS.ARM7Read32(CurSrcAddr));
+            if (lineageBatch)
+            {
+                NDS.ARM7Write32(CurDstAddr, NDS.ARM7Read32(CurSrcAddr));
+            }
+            else if (NDS.GPU.HasFaithfulCapturePhysicalTags())
+            {
+                GPU::FaithfulVramCaptureTag sourceTags[2] {};
+                u8 sourceBanks[2] {0xFFu, 0xFFu};
+                const bool sourceTagsValid[2] = {
+                    NDS.GPU.GetFaithfulCaptureTagForCpuAddress(
+                        1u, CurSrcAddr & ~3u, sourceTags[0], sourceBanks[0]),
+                    NDS.GPU.GetFaithfulCaptureTagForCpuAddress(
+                        1u, (CurSrcAddr & ~3u) + 2u, sourceTags[1], sourceBanks[1]),
+                };
+                const u32 value = NDS.ARM7Read32(CurSrcAddr);
+                NDS.ARM7Write32(CurDstAddr, value);
+                for (u32 halfword = 0; halfword < 2u; halfword++)
+                {
+                    if (sourceTagsValid[halfword])
+                        NDS.GPU.PropagateFaithfulCaptureTagForDmaDestination(
+                            1u, (CurDstAddr & ~3u) + (halfword * 2u), sourceTags[halfword]);
+                }
+            }
+            else
+            {
+                NDS.ARM7Write32(CurDstAddr, NDS.ARM7Read32(CurSrcAddr));
+            }
 
             CurSrcAddr += SrcAddrInc<<2;
             CurDstAddr += DstAddrInc<<2;
@@ -666,6 +802,9 @@ void DMA::Run7()
 
             if (NDS.ARM7Timestamp >= NDS.ARM7Target) break;
         }
+        if (lineageBatch)
+            NDS.GPU.FinishFaithfulDmaLineageBatch(
+                (batchStartCount - IterCount) * 4u);
     }
 
     Executing = false;
@@ -691,6 +830,9 @@ void DMA::Run7()
     Running = 0;
     InProgress = false;
     NDS.ResumeCPU(1, 1<<Num);
+
+    if (StartMode == 0x12)
+        NDS.NDSCartSlot.CheckDMA(1);
 }
 
 void DMA::Run()

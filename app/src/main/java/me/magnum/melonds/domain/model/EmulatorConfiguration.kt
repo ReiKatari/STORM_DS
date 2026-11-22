@@ -17,6 +17,9 @@ data class EmulatorConfiguration(
         val internalDirectory: String,
         val fastForwardSpeedMultiplier: Float,
         val frameLimitSpeedMultiplier: Float,
+        val frameskipMode: Int = 2,
+        val frameskipManualValue: Int = 1,
+        val vulkanDrsEnabled: Boolean = false,
         val rewindEnabled: Boolean,
         val rewindPeriodSeconds: Int,
         val rewindWindowSeconds: Int,
@@ -41,5 +44,10 @@ data class EmulatorConfiguration(
         val audioBassBoostStrength: Int = 5,
         val audioSpatialAudioEnabled: Boolean = false,
         val audioReverbEnabled: Boolean = false,
-        val wfcDnsServerIp: String = ""
+        val wfcDnsServerIp: String = "",
+        val muteOnFastForward: Boolean = false,
+        val lowLatencyEnabled: Boolean = false,
+        val rtcOffsetMinutes: Int = 0,
+        val wfcSettingsPath: String? = null,
+        val micGain: Int = 1
 )

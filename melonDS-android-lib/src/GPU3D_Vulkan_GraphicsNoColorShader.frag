@@ -12,10 +12,5 @@ void main()
     if (EDGE_MARK_PASS != 0u)
         oAttr = vec4(0.0, 1.0, 0.0, 1.0);
 
-    float depth = WRITE_FRAG_DEPTH != 0u ? fDepthPerspective : fDepthLinear;
-
-    if (WRITE_FRAG_DEPTH != 0u)
-        gl_FragDepth = depth;
-    else
-        gl_FragDepth = gl_FragCoord.z;
+    gl_FragDepth = WRITE_FRAG_DEPTH != 0u ? fDepthPerspective : gl_FragCoord.z;
 }

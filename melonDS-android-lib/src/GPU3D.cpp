@@ -162,15 +162,13 @@ void Vertex::DoSavestate(Savestate* file) noexcept
 
 void GPU3D::SetCurrentRenderer(std::unique_ptr<Renderer3D>&& renderer) noexcept
 {
-    if (CurrentRenderer)
-        CurrentRenderer->Stop(NDS.GPU);
     CurrentRenderer = std::move(renderer);
-    if (CurrentRenderer)
-        CurrentRenderer->Reset(NDS.GPU);
+    CurrentRenderer->Reset(NDS.GPU);
 }
 
 void GPU3D::ResetRenderingState() noexcept
 {
+    CurrentRenderer->FinishFramePreparation();
     RenderNumPolygons = 0;
 
     RenderDispCnt = 0;
@@ -192,6 +190,7 @@ void GPU3D::ResetRenderingState() noexcept
 
 void GPU3D::Reset() noexcept
 {
+    CurrentRenderer->FinishFramePreparation();
     CmdFIFO.Clear();
     CmdPIPE.Clear();
 
@@ -316,6 +315,7 @@ void GPU3D::Reset() noexcept
 
 void GPU3D::DoSavestate(Savestate* file) noexcept
 {
+    CurrentRenderer->FinishFramePreparation();
     file->Section("GP3D");
 
     SoftRenderer* softRenderer = dynamic_cast<SoftRenderer*>(CurrentRenderer.get());
@@ -413,7 +413,7 @@ void GPU3D::DoSavestate(Savestate* file) noexcept
     {
         u32 index = UINT32_MAX;
         file->Var32(&index);
-        LastStripPolygon = (index < 4096) ? &PolygonRAM[index] : nullptr;
+        LastStripPolygon = (index == UINT32_MAX) ? nullptr : &PolygonRAM[index];
     }
 
     file->Var32(&CurRAMBank);
@@ -450,7 +450,7 @@ void GPU3D::DoSavestate(Savestate* file) noexcept
             {
                 u32 index = UINT32_MAX;
                 file->Var32(&index);
-                poly->Vertices[j] = (index < 12288) ? &VertexRAM[index] : nullptr;
+                poly->Vertices[j] = index == UINT32_MAX ? nullptr : &VertexRAM[index];
             }
         }
 
@@ -488,15 +488,9 @@ void GPU3D::DoSavestate(Savestate* file) noexcept
         {
             poly->Degenerate = false;
 
-            if (poly->NumVertices > 10)
-            {
-                poly->NumVertices = 10;
-                poly->Degenerate = true;
-            }
-
             for (u32 j = 0; j < poly->NumVertices; j++)
             {
-                if (poly->Vertices[j] == nullptr || poly->Vertices[j]->Position[3] == 0)
+                if (poly->Vertices[j]->Position[3] == 0)
                     poly->Degenerate = true;
             }
 
@@ -538,7 +532,7 @@ void GPU3D::DoSavestate(Savestate* file) noexcept
             u32 index = UINT32_MAX;
             file->Var32(&index);
 
-            RenderPolygonRAM[i] = (index < 4096) ? &PolygonRAM[index] : nullptr;
+            RenderPolygonRAM[i] = index == UINT32_MAX ? nullptr : &PolygonRAM[index];
         }
     }
 
@@ -567,8 +561,8 @@ void GPU3D::DoSavestate(Savestate* file) noexcept
     file->Var32(&TexParam);
     file->Var32(&TexPalette);
     RenderFrameIdentical = false;
-    if (!file->Saving)
-        RenderScreenSwapAt3D = ((NDS.PowerControl9 & (1u << 15)) != 0);
+    if (!file->Saving && CurrentRenderer != nullptr)
+        CurrentRenderer->InvalidateRenderProductIdentities();
     if (softRenderer && softRenderer->IsThreaded())
     {
         softRenderer->EnableRenderThread();
@@ -716,11 +710,6 @@ void GPU3D::UpdateClipMatrix() noexcept
     ClipMatrixDirty = false;
 
     memcpy(ClipMatrix, ProjMatrix, 16*4);
-    if (Widescreen3D && ClipMatrix[11] != 0 && ClipMatrix[15] == 0 && ClipMatrix[1] == 0 && ClipMatrix[4] == 0)
-    {
-        // Scale 4:3 horizontal perspective FOV to 16:9 (aspect ratio * 3/4) while preserving 2D ortho matrices
-        ClipMatrix[0] = static_cast<s32>((static_cast<s64>(ClipMatrix[0]) * 3) / 4);
-    }
     MatrixMult4x4(ClipMatrix, PosMatrix);
 }
 
@@ -938,6 +927,27 @@ int ClipAgainstPlane(const GPU3D& gpu, Vertex* vertices, int nverts, int clipsta
 template<bool attribs>
 int ClipPolygon(GPU3D& gpu, Vertex* vertices, int nverts, int clipstart)
 {
+    bool inside = true;
+    for (int i = 0; i < nverts; i++)
+    {
+        const s32* position = vertices[i].Position;
+        const s32 w = position[3];
+        if (w < 0 || position[0] < -w || position[0] > w
+            || position[1] < -w || position[1] > w
+            || position[2] < -w || position[2] > w)
+        {
+            inside = false;
+            break;
+        }
+    }
+    if (inside)
+    {
+        for (int i = 0; i < nverts; i++)
+            for (int component = 0; component < 3; component++)
+                vertices[i].Color[component] |= 0xFFF;
+        return nverts;
+    }
+
     // clip.
     // for each vertex:
     // if it's outside, check if the previous and next vertices are inside
@@ -1160,16 +1170,14 @@ void GPU3D::SubmitPolygon() noexcept
         vtx->FinalPosition[1] = posY & 0xFF;
 
         // hi-res positions
-        // Clamp to valid [0, 0x1FFF] / [0, 0xFFF] subpixel range instead of bitwise wrapping
-        // so vertices slightly outside [-w, +w] after clipping or w > 0xFFFF do not wrap
-        // across the screen (fixes stretched cutscene geometry in Golden Sun: Dark Dawn).
+        // to consider: only do this when using the GL renderer? apply the aforementioned quirk to this?
         if (w != 0)
         {
-            s64 hiresX = ((((s64)(vtx->Position[0] + w) * Viewport[4]) << 4) / (((s64)w) << 1)) + (Viewport[0] << 4);
-            s64 hiresY = ((((s64)(-vtx->Position[1] + w) * Viewport[5]) << 4) / (((s64)w) << 1)) + (Viewport[3] << 4);
+            posX = ((((s64)(vtx->Position[0] + w) * Viewport[4]) << 4) / (((s64)w) << 1)) + (Viewport[0] << 4);
+            posY = ((((s64)(-vtx->Position[1] + w) * Viewport[5]) << 4) / (((s64)w) << 1)) + (Viewport[3] << 4);
 
-            vtx->HiresPosition[0] = (s16)std::clamp<s64>(hiresX, 0, 0x1FFF);
-            vtx->HiresPosition[1] = (s16)std::clamp<s64>(hiresY, 0, 0xFFF);
+            vtx->HiresPosition[0] = posX & 0x1FFF;
+            vtx->HiresPosition[1] = posY & 0xFFF;
         }
         else
         {
@@ -2483,6 +2491,7 @@ bool YSort(Polygon* a, Polygon* b)
 
 void GPU3D::VBlank() noexcept
 {
+    CurrentRenderer->FinishFramePreparation();
     if (GeometryEnabled)
     {
         if (RenderingEnabled)
@@ -2561,6 +2570,7 @@ void GPU3D::VBlank() noexcept
 
 void GPU3D::VCount215(GPU& gpu) noexcept
 {
+    CurrentRenderer->FinishFramePreparation();
     RenderScreenSwapAt3D = (NDS.PowerControl9 & (1u << 15)) != 0;
     CurrentRenderer->RenderFrame(gpu);
 }
@@ -2616,7 +2626,21 @@ bool GPU3D::GetLastServedCaptureSourceIdentity(
         outIdentity = {};
         return false;
     }
+    CurrentRenderer->FinishFramePreparation();
     return CurrentRenderer->GetLastServedCaptureSourceIdentity(outIdentity);
+}
+
+bool GPU3D::GetLiveRenderProductIdentity(
+    LiveRenderProductIdentity& outIdentity) const noexcept
+{
+    if (AbortFrame || CurrentRenderer == nullptr)
+    {
+        outIdentity = {};
+        return false;
+    }
+
+    CurrentRenderer->FinishFramePreparation();
+    return CurrentRenderer->GetLiveRenderProductIdentity(outIdentity);
 }
 
 bool GPU3D::IsRendererAccelerated() const noexcept
@@ -3036,7 +3060,11 @@ void GPU3D::Write32(u32 addr, u32 val) noexcept
 void GPU3D::Blit(const GPU& gpu) noexcept
 {
     if (CurrentRenderer)
+    {
         CurrentRenderer->Blit(gpu);
+        if (GeometryEnabled && RenderingEnabled)
+            CurrentRenderer->PrepareFrameGeometry(*this);
+    }
 }
 
 Renderer3D::Renderer3D(bool Accelerated)

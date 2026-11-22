@@ -1,31 +1,29 @@
-#ifndef MELONDS_ANDROID_MICINPUTOBOECALLBACK_H
-#define MELONDS_ANDROID_MICINPUTOBOECALLBACK_H
+#ifndef MELONDS_MICINPUTOBOECALLBACK_H
+#define MELONDS_MICINPUTOBOECALLBACK_H
 
 #include <oboe/Oboe.h>
 #include <atomic>
+#include <mutex>
 #include "types.h"
 
-using namespace melonDS;
-
 class MicInputOboeCallback : public oboe::AudioStreamCallback {
-
 public:
     static std::atomic<bool> agcEnabled;
     static std::atomic<float> noiseGateThreshold;
 
-    s16* buffer;
+    melonDS::s16* buffer;
     int bufferSize;
     int bufferOffset = 0;
     int bufferCount = 0;
-    float micSampleFrac = 0;
 
-    MicInputOboeCallback(int bufferSize, std::mutex& micBufferMutex) : MicInputOboeCallback(bufferSize, micBufferMutex, nullptr) { };
-    MicInputOboeCallback(int bufferSize, std::mutex& micBufferMutex, std::ostream* recordingStream);
+    MicInputOboeCallback(int bufferSize, std::mutex& micBufferMutex, int gain = 1, std::ostream* recordingStream = nullptr);
     ~MicInputOboeCallback();
+    void setGain(int gain);
     oboe::DataCallbackResult onAudioReady(oboe::AudioStream *stream, void *audioData, int32_t numFrames) override;
 
 private:
     std::mutex& micBufferMutex;
+    std::atomic<int> gain{1};
     std::ostream* _recordingStream;
 
     float prevX = 0.0f;
@@ -34,4 +32,4 @@ private:
     float currentGain = 1.0f;
 };
 
-#endif //MELONDS_ANDROID_MICINPUTOBOECALLBACK_H
+#endif //MELONDS_MICINPUTOBOECALLBACK_H

@@ -35,7 +35,8 @@ enum
 template <int outputFmt>
 void ConvertBitmapTexture(u32 width, u32 height, u32* output, u32 addr, GPU& gpu);
 template <int outputFmt>
-void ConvertCompressedTexture(u32 width, u32 height, u32* output, u32 addr, u32 addrAux, u32 palAddr, GPU& gpu);
+void ConvertCompressedTexture(u32 width, u32 height, u32* output, u32 addr, u32 addrAux,
+    u32 palAddr, GPU& gpu, u32& paletteStart, u32& paletteSize);
 template <int outputFmt, int X, int Y>
 void ConvertAXIYTexture(u32 width, u32 height, u32* output, u32 addr, u32 palAddr, GPU& gpu);
 template <int outputFmt, int colorBits>
@@ -86,10 +87,11 @@ public:
         u64 entriesCount = ((startBit + bitsCount + 0x3F) >> 6) - startEntry;
         for (u32 j = startEntry; j < startEntry + entriesCount; j++)
         {
-            if (GetRangedBitMask(j, startBit, bitsCount) & dirty[j & ((vramSize / VRAMDirtyGranularity)-1)])
+
+            if (GetRangedBitMask(j, startBit, bitsCount) & dirty[j & ((vramSize / VRAMDirtyGranularity / 64)-1)])
             {
-                if (MaskedHash(vram, vramSize, start, size) != oldHash)
-                    return true;
+
+                return MaskedHash(vram, vramSize, start, size) != oldHash;
             }
         }
 
@@ -230,10 +232,8 @@ public:
             entry.TextureRAMSize[0] = width*height/16*4;
             entry.TextureRAMStart[1] = slot1addr;
             entry.TextureRAMSize[1] = width*height/16*2;
-            entry.TexPalStart = palBase*16;
-            entry.TexPalSize = 0x10000;
-
-            ConvertCompressedTexture<outputFmt_RGB6A5>(width, height, DecodingBuffer, addr, slot1addr, entry.TexPalStart, gpu);
+            ConvertCompressedTexture<outputFmt_RGB6A5>(width, height, DecodingBuffer,
+                addr, slot1addr, palBase*16, gpu, entry.TexPalStart, entry.TexPalSize);
         }
         else
         {
@@ -269,6 +269,23 @@ public:
             case 4: ConvertNColorsTexture<outputFmt_RGB6A5, 8>(width, height, DecodingBuffer, addr, palAddr, color0Transparent, gpu); break;
             }
 
+        }
+
+        {
+            static const char* vt = std::getenv("MELON_VOLCAR_TEX");
+            if (vt != nullptr
+                && (texParam & ~0xC00F0000u)
+                       == (std::strtoul(vt, nullptr, 16) & ~0xC00F0000u))
+            {
+                if (FILE* fT = std::fopen("/tmp/tex-dec.bin", "wb"))
+                {
+                    std::fwrite(DecodingBuffer, 4, width * height, fT);
+                    std::fclose(fT);
+                }
+                std::fprintf(stderr, "[tex-dec] %08X %ux%u pal=%u vuelca\n",
+                             texParam, width, height,
+                             (unsigned)entry.TexPalStart);
+            }
         }
 
         for (int i = 0; i < 2; i++)

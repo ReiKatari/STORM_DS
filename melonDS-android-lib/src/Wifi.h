@@ -162,6 +162,8 @@ public:
     ~Wifi();
     void Reset();
     void DoSavestate(Savestate* file);
+    void SyncTransport();
+    bool IsClient() const;
 
     void SetPowerCnt(u32 val);
 
@@ -238,8 +240,14 @@ private:
     u16 MPClientMask, MPClientFail;
 
     u8 MPClientReplies[15*1024];
+    u64 PendingMPRepliesTimestamp = 0;
+    u16 PendingMPRepliesMask = 0;
 
     u16 MPLastSeqno;
+    alignas(4) u8 PendingMPAck[44]{};
+    u64 PendingMPAckTimestamp = 0;
+    bool HasPendingMPAck = false;
+    bool PendingMPAckConservative = false;
 
     int USUntilPowerOn;
 
@@ -277,6 +285,8 @@ private:
     void SendMPDefaultReply();
     void SendMPReply(u16 clienttime, u16 clientmask);
     void SendMPAck(u16 cmdcount, u16 clientfail);
+    void FlushMPAck();
+    void ReceiveMPReplies();
     bool ProcessTX(TXSlot* slot, int num);
 
     void IncrementRXAddr(u16& addr, u16 inc = 2);

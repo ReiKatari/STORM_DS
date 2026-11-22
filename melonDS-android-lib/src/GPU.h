@@ -19,10 +19,13 @@
 #ifndef GPU_H
 #define GPU_H
 
+#include <array>
 #include <memory>
+#include <unordered_map>
 
 #include "GPU2D.h"
 #include "GPU3D.h"
+#include "FaithfulVramCaptureTagResolver.h"
 #include "NonStupidBitfield.h"
 
 namespace melonDS
@@ -55,6 +58,41 @@ struct VRAMTrackingSet
 class GPU
 {
 public:
+    struct FaithfulVramCaptureTag
+    {
+        u64 ProductEpoch = 0;
+        u64 ProductId = 0;
+        u16 SourceX = 0;
+        u16 SourceY = 0;
+
+        [[nodiscard]] bool Valid() const noexcept
+        {
+            return ProductEpoch != 0 && ProductId != 0;
+        }
+    };
+
+    struct FaithfulVramCaptureSpan
+    {
+        u64 ProductEpoch = 0;
+        u64 ProductId = 0;
+        u16 SourceXBase = 0;
+        u16 SourceY = 0;
+        u8 StorageBank = 0xFFu;
+
+        [[nodiscard]] bool Valid() const noexcept
+        {
+            return ProductEpoch != 0u && ProductId != 0u
+                && StorageBank < 9u;
+        }
+    };
+
+    enum class FaithfulVramCaptureTagResolution : u8
+    {
+        Native = 0,
+        Exact = 1,
+        Ambiguous = 2,
+    };
+
     explicit GPU(melonDS::NDS& nds, std::unique_ptr<Renderer3D>&& renderer3d = nullptr, std::unique_ptr<GPU2D::Renderer2D>&& renderer2d = nullptr) noexcept;
     ~GPU() noexcept;
     void Reset() noexcept;
@@ -82,6 +120,93 @@ public:
     void MapVRAM_FG(u32 bank, u8 cnt) noexcept;
     void MapVRAM_H(u32 bank, u8 cnt) noexcept;
     void MapVRAM_I(u32 bank, u8 cnt) noexcept;
+
+    [[nodiscard]] u64 MintFaithfulCaptureProductId() noexcept;
+    void SetFaithfulVramCaptureTrackingEnabled(bool enabled) noexcept;
+    [[nodiscard]] bool IsFaithfulVramCaptureTrackingEnabled() const noexcept
+    {
+        return FaithfulVramCaptureTrackingEnabled;
+    }
+
+    [[nodiscard]] bool HasFaithfulCapturePhysicalTags() const noexcept
+    {
+        return FaithfulVramCaptureTrackingEnabled
+            && (FaithfulVramTotalValidTagCount != 0u
+                || FaithfulMainRamTaggedPageCount != 0u);
+    }
+    [[nodiscard]] bool HasFaithfulMainRamCaptureTags() const noexcept
+    {
+        return FaithfulVramCaptureTrackingEnabled
+            && FaithfulMainRamTaggedPageCount != 0u;
+    }
+    [[nodiscard]] u64 GetFaithfulCaptureProductEpoch() const noexcept
+    {
+        return FaithfulCaptureProductEpoch;
+    }
+
+    void InvalidateFaithfulCaptureLineage() noexcept;
+
+    [[nodiscard]] bool RefreshFaithfulCaptureProductPhysicalRefs() noexcept;
+    [[nodiscard]] u32 GetFaithfulCaptureProductPhysicalRefCount(
+        u64 productEpoch, u64 productId) const noexcept;
+    [[nodiscard]] bool GetFaithfulVramCaptureTag(
+        u32 bank, u32 halfwordOffset,
+        FaithfulVramCaptureTag& outTag) const noexcept;
+    void SetFaithfulVramCaptureTag(
+        u32 bank, u32 halfwordOffset,
+        const FaithfulVramCaptureTag& tag) noexcept;
+
+    void StampFaithfulVramCaptureTagLine(
+        u32 bank, u32 firstHalfwordOffset, u32 halfwordCount,
+        u64 productEpoch, u64 productId, u16 sourceY) noexcept;
+
+    [[nodiscard]] bool ResolveFaithfulVramCaptureUniformSpan(
+        u32 bank, u32 firstHalfwordOffset, u32 halfwordCount,
+        FaithfulVramCaptureSpan& outSpan) const noexcept;
+
+    [[nodiscard]] bool GetFaithfulCaptureTagForCpuAddress(
+        u32 cpu, u32 addr, FaithfulVramCaptureTag& outTag,
+        u8& outStorageBank) const noexcept;
+    void PropagateFaithfulCaptureTagForDmaDestination(
+        u32 cpu, u32 addr, const FaithfulVramCaptureTag& tag) noexcept;
+
+    [[nodiscard]] bool BeginFaithfulDmaLineageBatch(
+        u32 cpu, u32 sourceAddress, u32 destinationAddress,
+        u32 byteCount) noexcept;
+    void FinishFaithfulDmaLineageBatch(
+        u32 transferredByteCount) noexcept;
+
+    [[nodiscard]] bool ShouldDeferFaithfulDmaMainRamInvalidation(
+        u32 cpu, u32 addr, u32 byteCount) const noexcept;
+    void InvalidateFaithfulMainRamCaptureRangeForCpuAddress(
+        u32 cpu, u32 addr, u32 byteCount) noexcept;
+    [[nodiscard]] bool HasFaithfulVramCaptureTags(
+        u32 physicalBankMask) const noexcept;
+    [[nodiscard]] FaithfulVramCaptureTagResolution
+        ResolveFaithfulVramCaptureTagForBGAddress(
+            u32 engine, u32 flatByteAddress,
+            FaithfulVramCaptureTag& outTag,
+            u8& outStorageBank) const noexcept;
+    void PrepareFaithfulVramCaptureTagResolverForBG(
+        u32 engine,
+        FaithfulVramCaptureTagAddressResolver& resolver) const noexcept;
+    void PrepareFaithfulVramCaptureTagResolverForOBJ(
+        u32 engine,
+        FaithfulVramCaptureTagAddressResolver& resolver) const noexcept;
+
+    [[nodiscard]] bool ResolveFaithfulVramCaptureUniformMappedSpan(
+        const FaithfulVramCaptureTagAddressResolver& resolver,
+        u32 firstFlatByteAddress, u32 halfwordCount,
+        FaithfulVramCaptureSpan& outSpan) const noexcept;
+    [[nodiscard]] FaithfulVramCaptureTagResolution
+        ResolveFaithfulVramCaptureTagWithPreparedAddress(
+            FaithfulVramCaptureTagAddressResolver& resolver,
+            u32 flatByteAddress,
+            FaithfulVramCaptureTag& outTag,
+            u8& outStorageBank) const noexcept;
+    [[nodiscard]] bool GetFaithfulVramCaptureTagForBBGAddress(
+        u32 flatByteAddress, FaithfulVramCaptureTag& outTag,
+        u8& outStorageBank) const noexcept;
 
     template<typename T>
     T ReadVRAM_LCDC(u32 addr) const noexcept
@@ -210,8 +335,12 @@ public:
 
         if (VRAMMap_LCDC & (1<<bank))
         {
+            if (FaithfulVramValidTagCounts[bank] != 0u)
+                InvalidateFaithfulVramCaptureRange(bank, addr, sizeof(T));
             *(T*)&VRAM[bank][addr] = val;
             VRAMDirty[bank][addr / VRAMDirtyGranularity] = true;
+            if (bank < 4u)
+                VRAMDirty_LCDC[bank][addr / VRAMDirtyGranularity] = true;
         }
     }
 
@@ -243,36 +372,50 @@ public:
 
         if (mask & (1<<0))
         {
+            if (FaithfulVramValidTagCounts[0] != 0u)
+                InvalidateFaithfulVramCaptureRange(0, addr & 0x1FFFF, sizeof(T));
             VRAMDirty[0][(addr & 0x1FFFF) / VRAMDirtyGranularity] = true;
             *(T*)&VRAM_A[addr & 0x1FFFF] = val;
         }
         if (mask & (1<<1))
         {
+            if (FaithfulVramValidTagCounts[1] != 0u)
+                InvalidateFaithfulVramCaptureRange(1, addr & 0x1FFFF, sizeof(T));
             VRAMDirty[1][(addr & 0x1FFFF) / VRAMDirtyGranularity] = true;
             *(T*)&VRAM_B[addr & 0x1FFFF] = val;
         }
         if (mask & (1<<2))
         {
+            if (FaithfulVramValidTagCounts[2] != 0u)
+                InvalidateFaithfulVramCaptureRange(2, addr & 0x1FFFF, sizeof(T));
             VRAMDirty[2][(addr & 0x1FFFF) / VRAMDirtyGranularity] = true;
             *(T*)&VRAM_C[addr & 0x1FFFF] = val;
         }
         if (mask & (1<<3))
         {
+            if (FaithfulVramValidTagCounts[3] != 0u)
+                InvalidateFaithfulVramCaptureRange(3, addr & 0x1FFFF, sizeof(T));
             VRAMDirty[3][(addr & 0x1FFFF) / VRAMDirtyGranularity] = true;
             *(T*)&VRAM_D[addr & 0x1FFFF] = val;
         }
         if (mask & (1<<4))
         {
+            if (FaithfulVramValidTagCounts[4] != 0u)
+                InvalidateFaithfulVramCaptureRange(4, addr & 0xFFFF, sizeof(T));
             VRAMDirty[4][(addr & 0xFFFF) / VRAMDirtyGranularity] = true;
             *(T*)&VRAM_E[addr & 0xFFFF] = val;
         }
         if (mask & (1<<5))
         {
+            if (FaithfulVramValidTagCounts[5] != 0u)
+                InvalidateFaithfulVramCaptureRange(5, addr & 0x3FFF, sizeof(T));
             VRAMDirty[5][(addr & 0x3FFF) / VRAMDirtyGranularity] = true;
             *(T*)&VRAM_F[addr & 0x3FFF] = val;
         }
         if (mask & (1<<6))
         {
+            if (FaithfulVramValidTagCounts[6] != 0u)
+                InvalidateFaithfulVramCaptureRange(6, addr & 0x3FFF, sizeof(T));
             VRAMDirty[6][(addr & 0x3FFF) / VRAMDirtyGranularity] = true;
             *(T*)&VRAM_G[addr & 0x3FFF] = val;
         }
@@ -304,26 +447,36 @@ public:
 
         if (mask & (1<<0))
         {
+            if (FaithfulVramValidTagCounts[0] != 0u)
+                InvalidateFaithfulVramCaptureRange(0, addr & 0x1FFFF, sizeof(T));
             VRAMDirty[0][(addr & 0x1FFFF) / VRAMDirtyGranularity] = true;
             *(T*)&VRAM_A[addr & 0x1FFFF] = val;
         }
         if (mask & (1<<1))
         {
+            if (FaithfulVramValidTagCounts[1] != 0u)
+                InvalidateFaithfulVramCaptureRange(1, addr & 0x1FFFF, sizeof(T));
             VRAMDirty[1][(addr & 0x1FFFF) / VRAMDirtyGranularity] = true;
             *(T*)&VRAM_B[addr & 0x1FFFF] = val;
         }
         if (mask & (1<<4))
         {
+            if (FaithfulVramValidTagCounts[4] != 0u)
+                InvalidateFaithfulVramCaptureRange(4, addr & 0xFFFF, sizeof(T));
             VRAMDirty[4][(addr & 0xFFFF) / VRAMDirtyGranularity] = true;
             *(T*)&VRAM_E[addr & 0xFFFF] = val;
         }
         if (mask & (1<<5))
         {
+            if (FaithfulVramValidTagCounts[5] != 0u)
+                InvalidateFaithfulVramCaptureRange(5, addr & 0x3FFF, sizeof(T));
             VRAMDirty[5][(addr & 0x3FFF) / VRAMDirtyGranularity] = true;
             *(T*)&VRAM_F[addr & 0x3FFF] = val;
         }
         if (mask & (1<<6))
         {
+            if (FaithfulVramValidTagCounts[6] != 0u)
+                InvalidateFaithfulVramCaptureRange(6, addr & 0x3FFF, sizeof(T));
             VRAMDirty[6][(addr & 0x3FFF) / VRAMDirtyGranularity] = true;
             *(T*)&VRAM_G[addr & 0x3FFF] = val;
         }
@@ -353,16 +506,22 @@ public:
 
         if (mask & (1<<2))
         {
+            if (FaithfulVramValidTagCounts[2] != 0u)
+                InvalidateFaithfulVramCaptureRange(2, addr & 0x1FFFF, sizeof(T));
             VRAMDirty[2][(addr & 0x1FFFF) / VRAMDirtyGranularity] = true;
             *(T*)&VRAM_C[addr & 0x1FFFF] = val;
         }
         if (mask & (1<<7))
         {
+            if (FaithfulVramValidTagCounts[7] != 0u)
+                InvalidateFaithfulVramCaptureRange(7, addr & 0x7FFF, sizeof(T));
             VRAMDirty[7][(addr & 0x7FFF) / VRAMDirtyGranularity] = true;
             *(T*)&VRAM_H[addr & 0x7FFF] = val;
         }
         if (mask & (1<<8))
         {
+            if (FaithfulVramValidTagCounts[8] != 0u)
+                InvalidateFaithfulVramCaptureRange(8, addr & 0x3FFF, sizeof(T));
             VRAMDirty[8][(addr & 0x3FFF) / VRAMDirtyGranularity] = true;
             *(T*)&VRAM_I[addr & 0x3FFF] = val;
         }
@@ -391,11 +550,15 @@ public:
 
         if (mask & (1<<3))
         {
+            if (FaithfulVramValidTagCounts[3] != 0u)
+                InvalidateFaithfulVramCaptureRange(3, addr & 0x1FFFF, sizeof(T));
             VRAMDirty[3][(addr & 0x1FFFF) / VRAMDirtyGranularity] = true;
             *(T*)&VRAM_D[addr & 0x1FFFF] = val;
         }
         if (mask & (1<<8))
         {
+            if (FaithfulVramValidTagCounts[8] != 0u)
+                InvalidateFaithfulVramCaptureRange(8, addr & 0x3FFF, sizeof(T));
             VRAMDirty[8][(addr & 0x3FFF) / VRAMDirtyGranularity] = true;
             *(T*)&VRAM_I[addr & 0x3FFF] = val;
         }
@@ -418,8 +581,18 @@ public:
     {
         u32 mask = VRAMMap_ARM7[(addr >> 17) & 0x1];
 
-        if (mask & (1<<2)) *(T*)&VRAM_C[addr & 0x1FFFF] = val;
-        if (mask & (1<<3)) *(T*)&VRAM_D[addr & 0x1FFFF] = val;
+        if (mask & (1<<2))
+        {
+            if (FaithfulVramValidTagCounts[2] != 0u)
+                InvalidateFaithfulVramCaptureRange(2, addr & 0x1FFFF, sizeof(T));
+            *(T*)&VRAM_C[addr & 0x1FFFF] = val;
+        }
+        if (mask & (1<<3))
+        {
+            if (FaithfulVramValidTagCounts[3] != 0u)
+                InvalidateFaithfulVramCaptureRange(3, addr & 0x1FFFF, sizeof(T));
+            *(T*)&VRAM_D[addr & 0x1FFFF] = val;
+        }
     }
 
 
@@ -567,6 +740,8 @@ public:
     u32 VRAMMap_ABG[0x20] {};
     u32 VRAMMap_AOBJ[0x10] {};
     u32 VRAMMap_BBG[0x8] {};
+
+    u32 SwapSelladoBuffer[2] {};
     u32 VRAMMap_BOBJ[0x8] {};
     u32 VRAMMap_ABGExtPal[4] {};
     u32 VRAMMap_AOBJExtPal {};
@@ -582,8 +757,6 @@ public:
     u8* VRAMPtr_BOBJ[0x8] {};
 
     int FrontBuffer = 0;
-    bool FrontBufferScreenSwap[2] = {true, true};
-    bool GetFrontBufferScreenSwap(int buf) const noexcept { return FrontBufferScreenSwap[buf & 1]; }
     std::unique_ptr<u32[]> Framebuffer[2][2] {};
 
     GPU2D::Unit GPU2D_A;
@@ -591,6 +764,8 @@ public:
     melonDS::GPU3D GPU3D;
 
     NonStupidBitField<128*1024/VRAMDirtyGranularity> VRAMDirty[9] {};
+
+    NonStupidBitField<128*1024/VRAMDirtyGranularity> VRAMDirty_LCDC[4] {};
     VRAMTrackingSet<512*1024, 16*1024> VRAMDirty_ABG {};
     VRAMTrackingSet<256*1024, 16*1024> VRAMDirty_AOBJ {};
     VRAMTrackingSet<128*1024, 16*1024> VRAMDirty_BBG {};
@@ -617,7 +792,94 @@ public:
 
     alignas(u64) u8 VRAMFlat_Texture[512*1024] {};
     alignas(u64) u8 VRAMFlat_TexPal[128*1024] {};
+
+    u32 VRAMCacheEpoch = 0;
+
+    bool BancoFueTextura[4] = {false, false, false, false};
 private:
+    static constexpr u32 FaithfulVramSummaryPageHalfwords = 256u;
+
+    static constexpr u32 FaithfulMainRamPageShift = 12u;
+    static constexpr u32 FaithfulMainRamPageSize =
+        1u << FaithfulMainRamPageShift;
+    static constexpr u32 FaithfulMainRamHalfwordsPerPage =
+        FaithfulMainRamPageSize / 2u;
+    static constexpr u32 FaithfulMainRamMaxSize = 16u * 1024u * 1024u;
+    static constexpr u32 FaithfulMainRamMaxPageCount =
+        FaithfulMainRamMaxSize / FaithfulMainRamPageSize;
+
+    struct FaithfulMainRamCaptureTag
+    {
+        u64 ProductId = 0;
+        u16 SourceX = 0;
+        u16 SourceY = 0;
+
+        [[nodiscard]] bool Valid() const noexcept { return ProductId != 0; }
+    };
+
+    struct FaithfulMainRamCapturePage
+    {
+        std::array<FaithfulMainRamCaptureTag,
+            FaithfulMainRamHalfwordsPerPage> Tags {};
+        u32 ValidCount = 0;
+    };
+
+    enum class FaithfulDmaLineageStorageKind : u8
+    {
+        None = 0u,
+        Vram = 1u,
+        MainRam = 2u,
+    };
+    struct FaithfulDmaLineageStorage
+    {
+        FaithfulDmaLineageStorageKind Kind =
+            FaithfulDmaLineageStorageKind::None;
+        u8 Bank = 0xFFu;
+        u32 ByteOffset = 0u;
+    };
+
+    void ClearFaithfulCaptureTags() noexcept;
+    void InvalidateFaithfulVramCapturePageSummaries(
+        u32 bank, u32 firstHalfwordOffset,
+        u32 halfwordCount) noexcept;
+    void InvalidateFaithfulVramCaptureRange(
+        u32 bank, u32 byteOffset, u32 byteCount) noexcept;
+    [[nodiscard]] bool ShouldDeferFaithfulDmaVramInvalidation(
+        u32 bank, u32 byteOffset, u32 byteCount) const noexcept;
+    [[nodiscard]] bool ResolveFaithfulMainRamAddress(
+        u32 cpu, u32 addr, u32& outByteOffset) const noexcept;
+    [[nodiscard]] bool GetFaithfulMainRamCaptureTag(
+        u32 byteOffset, FaithfulVramCaptureTag& outTag) const noexcept;
+    void SetFaithfulMainRamCaptureTag(
+        u32 byteOffset, const FaithfulVramCaptureTag& tag) noexcept;
+    void InvalidateFaithfulMainRamCaptureRange(
+        u32 byteOffset, u32 byteCount) noexcept;
+    [[nodiscard]] bool ResolveFaithfulVramAddress(
+        u32 cpu, u32 addr, u8& outBank, u32& outByteOffset) const noexcept;
+    [[nodiscard]] bool ResolveFaithfulDmaLineageRange(
+        u32 cpu, u32 addr, u32 byteCount,
+        FaithfulDmaLineageStorage& outStorage) const noexcept;
+
+    std::unique_ptr<FaithfulVramCaptureTag[]> FaithfulVramCaptureTags[9] {};
+    std::unique_ptr<FaithfulVramCaptureSpan[]>
+        FaithfulVramCapturePageSummaries[9] {};
+    std::array<u32, 9> FaithfulVramValidTagCounts {};
+    u32 FaithfulVramTotalValidTagCount = 0u;
+    std::array<std::unique_ptr<FaithfulMainRamCapturePage>,
+        FaithfulMainRamMaxPageCount>
+        FaithfulMainRamCapturePages {};
+    u32 FaithfulMainRamTaggedPageCount = 0u;
+
+    std::unordered_map<u64, u32> FaithfulCaptureProductPhysicalRefs {};
+    bool FaithfulCaptureProductPhysicalRefsDirty = false;
+    u64 FaithfulCaptureProductCounter = 0;
+    u64 FaithfulCaptureProductEpoch = 0;
+    bool FaithfulVramCaptureTrackingEnabled = false;
+    FaithfulDmaLineageStorage FaithfulDmaLineageSource {};
+    FaithfulDmaLineageStorage FaithfulDmaLineageDestination {};
+    u32 FaithfulDmaLineageMaximumByteCount = 0u;
+    bool FaithfulDmaLineageBatchActive = false;
+
     void ResetVRAMCache() noexcept;
     void AssignFramebuffers() noexcept;
     void InitFramebuffers() noexcept;

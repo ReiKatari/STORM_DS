@@ -64,8 +64,11 @@ vec4 calculateFog(float depth)
 
     float density0 = unpackFogDensity(uint(densityid));
     float density1 = unpackFogDensity(uint(densityid + 1));
-    float density = mix(density0, density1, float(densityfrac) / 131072.0) * (1.0 / 128.0);
-    return vec4(density);
+    float density = mix(density0, density1, float(densityfrac) / 131072.0);
+
+    if (density >= 127.0)
+        density = 128.0;
+    return vec4(density * (1.0 / 128.0));
 }
 
 void main()
