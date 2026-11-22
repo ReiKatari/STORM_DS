@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version='1.0' encoding='utf-8'?>
 <resources>
     <string name="vulkan_driver_hub_title">Vulkan ドライバーハブ</string>
     <string name="vulkan_driver_tab_installed">インストール済み (%1$d)</string>
@@ -11,7 +11,7 @@
     <string name="vulkan_driver_system_tag">システム</string>
     <string name="vulkan_driver_blocked_title">カスタム Vulkan ドライバーはブロックされています</string>
     <string name="vulkan_driver_blocked_gpu_reason">検出された GPU: %1$s。カスタム Turnip / Adrenotools ドライバーは Qualcomm Adreno 6xx、7xx、8xx のみ対応しています。Android システムドライバーのみ使用可能です。</string>
-    <string name="vulkan_driver_blocked_legacy_reason">LEGACY ビルドでは Adrenotools 非対応のためカスタムドライバーは無効です。</string>
+    <string name="vulkan_driver_blocked_legacy_reason">LEGACY ビルドでは Adrenotools 非対応のためカスタムドライバーは無効です。通常の GitHub arm64 ビルドを使用してください。</string>
     <string name="vulkan_driver_blocked_abi_reason">カスタム Vulkan ドライバーには 64-bit arm64-v8a と Android 9 以降が必要です。</string>
     <string name="vulkan_driver_prefs_blocked_summary">%1$s ではブロック - システムドライバーのみ</string>
     <string name="vulkan_driver_prefs_blocked_legacy_summary">LEGACY ビルドではブロック - システムドライバーのみ</string>
@@ -34,13 +34,13 @@
     <string name="vulkan_driver_offline_fallback_badge">オフラインミラー</string>
     <string name="vulkan_driver_cache_badge">キャッシュ</string>
     <string name="vulkan_driver_search_hint">リポジトリ、ドライバー、バージョンを検索...</string>
-    <string name="vulkan_driver_cat_all">すべて (14)</string>
+    <string name="vulkan_driver_cat_all">すべて (%1$d)</string>
     <string name="vulkan_driver_cat_storm">STORM</string>
     <string name="vulkan_driver_cat_turnip">Turnip</string>
     <string name="vulkan_driver_cat_8xx">Adreno 8xx</string>
     <string name="vulkan_driver_cat_710">Adreno 710/720</string>
     <string name="vulkan_driver_refresh">リポジトリを更新</string>
-    <string name="vulkan_driver_loading_repos">14個の GitHub リポジトリを同期中...</string>
+    <string name="vulkan_driver_loading_repos">互換性のある Vulkan リポジトリを同期中...</string>
     <string name="vulkan_driver_no_matches">"%1$s" に一致する結果はありません</string>
     <string name="vulkan_driver_repo_releases_count">%1$d リリース</string>
     <string name="vulkan_driver_show_notes">リリースノート</string>
@@ -65,4 +65,13 @@
     <string name="vulkan_driver_adreno8xx_warn_message">%1$s は Adreno 830/840 (Gen8) 用ではない可能性があります。黒画面やクラッシュの原因になることがあります。インストールしますか？</string>
     <string name="vulkan_driver_install_anyway">そのままインストール</string>
     <string name="rom_config_vulkan_driver_blocked_value">システム (この GPU ではブロック)</string>
+    <string name="vulkan_driver_recommended_badge">推奨</string>
+    <string name="vulkan_driver_incompatible_gpu_badge">この GPU と非互換</string>
+    <string name="vulkan_driver_non_adreno_title">非 Adreno GPU モード (%1$s)</string>
+    <string name="vulkan_driver_non_adreno_mali_desc">Turnip は Qualcomm Adreno 専用のためリポジトリは非表示です。ARM Mali ではシステム GPU ドライバーを推奨します。Mesa PanVK には標準 /dev/mali0 ではなく Panfrost または Panthor カーネルが必要です。手動 ZIP インポートは利用可能です。</string>
+    <string name="vulkan_driver_non_adreno_other_desc">検出された GPU: %1$s。Adreno Turnip リポジトリは Qualcomm Adreno 6xx/7xx/8xx 専用のため除外されました。安定性のためシステム GPU ドライバーを推奨します。手動 ZIP インポートは利用可能です。</string>
+    <string name="vulkan_driver_non_adreno_panfrost_detected">Panfrost / Panthor カーネルを検出: 互換性のある PanVK ZIP パッケージを手動インポートできます。</string>
+    <string name="vulkan_driver_non_adreno_no_online_repos">この GPU に対応するオンライン Turnip リポジトリはありません。システムドライバーを使うか互換 ZIP を手動インポートしてください。</string>
+    <string name="vulkan_driver_imported_incompatible_notice">%1$s をインポートしましたが、%2$s と互換性がない可能性があります。問題が発生する場合はシステムドライバーに切り替えてください。</string>
+    <string name="video_prefs_recommended_system_driver">推奨: システム GPU ドライバー (手動 ZIP インポート対応)</string>
 </resources>

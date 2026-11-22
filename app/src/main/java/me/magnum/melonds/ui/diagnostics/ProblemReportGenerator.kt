@@ -126,7 +126,7 @@ object ProblemReportGenerator {
             writeTextEntry(zos, "logcat_tail.txt", captureLogcatTail())
 
             val rootStormDir = File(Environment.getExternalStorageDirectory(), "STORM DS")
-            val candidateFiles = listOf(
+            val candidateFiles = listOfNotNull(
                 "STORM_INFO.txt" to File(rootStormDir, "logs/STORM_INFO.txt"),
                 "STORM_INFO_legacy.txt" to File(rootStormDir, "logs/!STORM_INFO.txt"),
                 "STORM_INFO_root.txt" to File(rootStormDir, "STORM_INFO.txt"),
@@ -134,6 +134,9 @@ object ProblemReportGenerator {
                 "vulkan_debug_report_logs.json" to File(rootStormDir, "logs/vulkan_debug_report.json"),
                 "vulkan_debug_report_internal.json" to File(context.filesDir, "vulkan_debug_report.json"),
                 "STORM_DS.log" to File(rootStormDir, "logs/STORM_DS.log"),
+                context.getExternalFilesDir(null)?.let {
+                    "STORM_DS_fallback.log" to File(it, "logs/STORM_DS.log")
+                },
             )
 
             val addedEntryNames = mutableSetOf<String>()

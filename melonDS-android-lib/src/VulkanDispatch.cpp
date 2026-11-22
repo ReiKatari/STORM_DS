@@ -1,5 +1,7 @@
 #include "VulkanDispatch.h"
 
+#include <cctype>
+#include <cstdlib>
 #include <cstring>
 #include <dlfcn.h>
 #include <mutex>
@@ -971,11 +973,42 @@ bool Initialize()
 
     const bool requestedCustomDriver = gConfiguration.UseCustomDriver
         && !gConfiguration.CustomDriverDir.empty()
-        && !gConfiguration.CustomDriverName.empty()
-        && !gConfiguration.HookLibDir.empty();
+        && !gConfiguration.CustomDriverName.empty();
+
+    const auto containsCaseInsensitive = [](const std::string& haystack, const char* needle) -> bool {
+        if (needle == nullptr || needle[0] == '\0')
+            return false;
+        const size_t needleLen = std::strlen(needle);
+        if (haystack.size() < needleLen)
+            return false;
+        for (size_t i = 0; i + needleLen <= haystack.size(); i++)
+        {
+            bool match = true;
+            for (size_t j = 0; j < needleLen; j++)
+            {
+                if (std::tolower(static_cast<unsigned char>(haystack[i + j])) !=
+                    std::tolower(static_cast<unsigned char>(needle[j])))
+                {
+                    match = false;
+                    break;
+                }
+            }
+            if (match)
+                return true;
+        }
+        return false;
+    };
+
+    if (requestedCustomDriver
+        && (containsCaseInsensitive(gConfiguration.CustomDriverName, "panvk")
+            || containsCaseInsensitive(gConfiguration.CustomDriverName, "panfrost")))
+    {
+        setenv("PAN_I_WANT_A_BROKEN_VULKAN_DRIVER", "1", 0);
+        setenv("MESA_NO_ERROR", "1", 0);
+    }
 
 #if MELONDS_HAS_ADRENOTOOLS
-    if (requestedCustomDriver)
+    if (requestedCustomDriver && !gConfiguration.HookLibDir.empty())
     {
         gVulkanHandle = adrenotools_open_libvulkan(
             RTLD_NOW | RTLD_LOCAL,
@@ -992,7 +1025,7 @@ bool Initialize()
             gUsingCustomDriver = true;
             Platform::Log(
                 Platform::LogLevel::Warn,
-                "VulkanDriver: source=custom driver=%s result=opened",
+                "VulkanDriver: source=custom(adrenotools) driver=%s result=opened",
                 gConfiguration.DisplayName.empty() ? gConfiguration.CustomDriverName.c_str() : gConfiguration.DisplayName.c_str()
             );
         }
@@ -1000,22 +1033,55 @@ bool Initialize()
         {
             const char* error = dlerror();
             Platform::Log(
-                Platform::LogLevel::Error,
-                "VulkanDriver: custom driver load failed driver=%s error=%s; falling back to system",
+                Platform::LogLevel::Warn,
+                "VulkanDriver: adrenotools load failed driver=%s error=%s",
                 gConfiguration.CustomDriverName.c_str(),
                 error != nullptr ? error : "unknown"
             );
         }
     }
-#else
-    if (requestedCustomDriver)
-    {
-        Platform::Log(
-            Platform::LogLevel::Warn,
-            "VulkanDriver: custom driver requested but adrenotools is not available in this build/ABI; falling back to system"
-        );
-    }
 #endif
+
+    if (requestedCustomDriver && gVulkanHandle == nullptr)
+    {
+        const std::string fullCustomPath =
+            (gConfiguration.CustomDriverDir.back() == '/')
+                ? (gConfiguration.CustomDriverDir + gConfiguration.CustomDriverName)
+                : (gConfiguration.CustomDriverDir + "/" + gConfiguration.CustomDriverName);
+        void* directHandle = dlopen(fullCustomPath.c_str(), RTLD_NOW | RTLD_LOCAL);
+        if (directHandle != nullptr)
+        {
+            if (dlsym(directHandle, "vkGetInstanceProcAddr") != nullptr)
+            {
+                gVulkanHandle = directHandle;
+                gUsingCustomDriver = true;
+                Platform::Log(
+                    Platform::LogLevel::Warn,
+                    "VulkanDriver: source=custom(direct) driver=%s result=opened",
+                    gConfiguration.DisplayName.empty() ? gConfiguration.CustomDriverName.c_str() : gConfiguration.DisplayName.c_str()
+                );
+            }
+            else
+            {
+                dlclose(directHandle);
+                Platform::Log(
+                    Platform::LogLevel::Warn,
+                    "VulkanDriver: direct custom driver missing vkGetInstanceProcAddr driver=%s; falling back to system",
+                    gConfiguration.CustomDriverName.c_str()
+                );
+            }
+        }
+        else
+        {
+            const char* error = dlerror();
+            Platform::Log(
+                Platform::LogLevel::Warn,
+                "VulkanDriver: direct dlopen failed driver=%s error=%s; falling back to system",
+                gConfiguration.CustomDriverName.c_str(),
+                error != nullptr ? error : "unknown"
+            );
+        }
+    }
 
     if (gVulkanHandle == nullptr)
     {

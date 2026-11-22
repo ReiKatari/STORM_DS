@@ -14,6 +14,14 @@
         android:layout_height="match_parent"
         android:contentDescription="@null" />
 
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/layout_console_skin_preview"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clickable="false"
+        android:focusable="false"
+        android:visibility="gone" />
+
     <me.magnum.melonds.ui.layouteditor.LayoutEditorView
         android:id="@+id/view_layout_editor"
         android:layout_width="match_parent"

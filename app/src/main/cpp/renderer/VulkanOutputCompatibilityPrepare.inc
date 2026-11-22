@@ -17,6 +17,7 @@ bool VulkanOutput::prepareFrameForPresentationCompatibility(
         return false;
     }
 
+    std::lock_guard<std::recursive_mutex> resLock(resourcesLock);
     auto iterator = resources.find(frame);
     if (iterator == resources.end())
         return false;
@@ -30,10 +31,15 @@ bool VulkanOutput::prepareFrameForPresentationCompatibility(
     packedUploadCpuWindow.Add(PerfNowNs() - packedUploadStartNs);
     const bool currentBackendIsGraphics =
         renderer3D.GetActiveBackendMode() == melonDS::VulkanRenderer3D::BackendMode::GraphicsHardware;
-    const FrameResource* previousResource = nullptr;
-    if (lastPreparedFrame != nullptr && lastPreparedFrame != frame)
+    Frame* previousPreparedFrameSnapshot = nullptr;
     {
-        const auto previousIt = resources.find(lastPreparedFrame);
+        std::lock_guard<std::mutex> temporalLock(temporalReferenceLock);
+        previousPreparedFrameSnapshot = lastPreparedFrame;
+    }
+    const FrameResource* previousResource = nullptr;
+    if (previousPreparedFrameSnapshot != nullptr && previousPreparedFrameSnapshot != frame)
+    {
+        const auto previousIt = resources.find(previousPreparedFrameSnapshot);
         if (previousIt != resources.end())
             previousResource = &previousIt->second;
     }
@@ -104,10 +110,10 @@ bool VulkanOutput::prepareFrameForPresentationCompatibility(
     }
 
     bool hasStablePreviousPreparedFrame = false;
-    if (lastPreparedFrame != nullptr
-        && lastPreparedFrame != frame)
+    if (previousPreparedFrameSnapshot != nullptr
+        && previousPreparedFrameSnapshot != frame)
     {
-        const auto previousIt = resources.find(lastPreparedFrame);
+        const auto previousIt = resources.find(previousPreparedFrameSnapshot);
         if (previousIt != resources.end())
         {
             const FrameResource& previousResource = previousIt->second;
@@ -849,6 +855,7 @@ bool VulkanOutput::prepareFrameForPresentationCompatibility(
         }
     };
 
+    std::lock_guard<std::mutex> temporalLock(temporalReferenceLock);
     if (topNeedsAccumulatedHighres)
         latchPreviousLcdSource(lastTopRendererSourceFrame, true);
     if (bottomNeedsAccumulatedHighres)

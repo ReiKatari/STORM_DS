@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version='1.0' encoding='utf-8'?>
 <resources>
     <string-array name="video_vulkan_driver_mode_options">
         <item>Système</item>
@@ -15,7 +15,7 @@
     <string name="vulkan_driver_system_tag">Système</string>
     <string name="vulkan_driver_blocked_title">Pilotes Vulkan personnalisés bloqués</string>
     <string name="vulkan_driver_blocked_gpu_reason">GPU détecté : %1$s. Les pilotes Turnip et Adrenotools prennent uniquement en charge Qualcomm Adreno 6xx, 7xx et 8xx. Votre appareil utilise le pilote système Android.</string>
-    <string name="vulkan_driver_blocked_legacy_reason">Les pilotes personnalisés sont désactivés dans la version LEGACY sans Adrenotools.</string>
+    <string name="vulkan_driver_blocked_legacy_reason">Les pilotes personnalisés sont désactivés dans la version LEGACY sans Adrenotools. Installez la version standard GitHub arm64.</string>
     <string name="vulkan_driver_blocked_abi_reason">Les pilotes personnalisés nécessitent arm64-v8a 64 bits et Android 9 ou supérieur.</string>
     <string name="vulkan_driver_prefs_blocked_summary">Bloqué pour %1$s - pilote système uniquement</string>
     <string name="vulkan_driver_prefs_blocked_legacy_summary">Bloqué en version LEGACY - pilote système uniquement</string>
@@ -38,13 +38,13 @@
     <string name="vulkan_driver_offline_fallback_badge">Miroir hors ligne</string>
     <string name="vulkan_driver_cache_badge">En cache</string>
     <string name="vulkan_driver_search_hint">Rechercher dépôts, pilotes ou versions...</string>
-    <string name="vulkan_driver_cat_all">Tous (14)</string>
+    <string name="vulkan_driver_cat_all">Tous (%1$d)</string>
     <string name="vulkan_driver_cat_storm">STORM</string>
     <string name="vulkan_driver_cat_turnip">Turnip</string>
     <string name="vulkan_driver_cat_8xx">Adreno 8xx</string>
     <string name="vulkan_driver_cat_710">Adreno 710/720</string>
     <string name="vulkan_driver_refresh">Actualiser les dépôts</string>
-    <string name="vulkan_driver_loading_repos">Synchronisation de 14 dépôts GitHub...</string>
+    <string name="vulkan_driver_loading_repos">Synchronisation des dépôts Vulkan compatibles...</string>
     <string name="vulkan_driver_no_matches">Aucun résultat pour "%1$s"</string>
     <string name="vulkan_driver_repo_releases_count">%1$d versions</string>
     <string name="vulkan_driver_show_notes">Notes de version</string>
@@ -69,4 +69,13 @@
     <string name="vulkan_driver_adreno8xx_warn_message">%1$s ne semble pas cibler Adreno 830/840 (Gen8). Cela peut provoquer des plantages. Installer quand même ?</string>
     <string name="vulkan_driver_install_anyway">Installer quand même</string>
     <string name="rom_config_vulkan_driver_blocked_value">Système (bloqué pour ce GPU)</string>
+    <string name="vulkan_driver_recommended_badge">Recommandé</string>
+    <string name="vulkan_driver_incompatible_gpu_badge">Incompatible avec ce GPU</string>
+    <string name="vulkan_driver_non_adreno_title">Mode pilotes pour GPU (%1$s)</string>
+    <string name="vulkan_driver_non_adreno_mali_desc">Les dépôts Turnip sont masqués car Turnip nécessite Qualcomm Adreno. Pour ARM Mali, le pilote système est recommandé. Mesa PanVK exige un noyau Panfrost ou Panthor au lieu de /dev/mali0 standard. L\'importation ZIP manuelle est déverrouillée.</string>
+    <string name="vulkan_driver_non_adreno_other_desc">GPU détecté : %1$s. Les dépôts Adreno Turnip nécessitent Qualcomm Adreno 6xx/7xx/8xx et sont filtrés. Le pilote système est recommandé et l\'importation ZIP reste déverrouillée.</string>
+    <string name="vulkan_driver_non_adreno_panfrost_detected">Noyau Panfrost / Panthor détecté : vous pouvez importer manuellement des archives PanVK ZIP compatibles.</string>
+    <string name="vulkan_driver_non_adreno_no_online_repos">Aucun dépôt Turnip en ligne ne correspond à ce GPU. Utilisez le pilote système ou importez un fichier ZIP compatible.</string>
+    <string name="vulkan_driver_imported_incompatible_notice">%1$s importé, mais il semble incompatible avec %2$s. Passez au pilote système en cas de plantage.</string>
+    <string name="video_prefs_recommended_system_driver">Recommandé : pilote système GPU (import ZIP déverrouillé)</string>
 </resources>

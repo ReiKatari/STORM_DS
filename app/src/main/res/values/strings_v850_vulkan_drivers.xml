@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version='1.0' encoding='utf-8'?>
 <resources>
     <string name="vulkan_driver_hub_title">Vulkan driver hub</string>
     <string name="vulkan_driver_tab_installed">Installed (%1$d)</string>
@@ -11,7 +11,7 @@
     <string name="vulkan_driver_system_tag">System</string>
     <string name="vulkan_driver_blocked_title">Custom Vulkan drivers blocked</string>
     <string name="vulkan_driver_blocked_gpu_reason">Detected GPU: %1$s. Custom Turnip and Adrenotools Vulkan drivers only support Qualcomm Adreno 6xx, 7xx and 8xx graphics adapters. Your device is locked to the safe Android system driver.</string>
-    <string name="vulkan_driver_blocked_legacy_reason">Custom Vulkan drivers are disabled in the LEGACY build without Adrenotools support. Install the GitHub arm64 build on a Qualcomm Adreno device.</string>
+    <string name="vulkan_driver_blocked_legacy_reason">Custom Vulkan drivers are disabled in the LEGACY build without Adrenotools support. Install the standard GitHub arm64 build.</string>
     <string name="vulkan_driver_blocked_abi_reason">Custom Vulkan drivers require 64-bit arm64-v8a architecture and Android 9 or newer.</string>
     <string name="vulkan_driver_prefs_blocked_summary">Blocked for %1$s - system driver only</string>
     <string name="vulkan_driver_prefs_blocked_legacy_summary">Blocked in LEGACY build - system driver only</string>
@@ -34,13 +34,13 @@
     <string name="vulkan_driver_offline_fallback_badge">Offline mirror</string>
     <string name="vulkan_driver_cache_badge">Cached</string>
     <string name="vulkan_driver_search_hint">Search repositories, drivers or versions...</string>
-    <string name="vulkan_driver_cat_all">All (14)</string>
+    <string name="vulkan_driver_cat_all">All (%1$d)</string>
     <string name="vulkan_driver_cat_storm">STORM</string>
     <string name="vulkan_driver_cat_turnip">Turnip</string>
     <string name="vulkan_driver_cat_8xx">Adreno 8xx</string>
     <string name="vulkan_driver_cat_710">Adreno 710/720</string>
     <string name="vulkan_driver_refresh">Refresh repositories</string>
-    <string name="vulkan_driver_loading_repos">Syncing 14 GitHub repositories...</string>
+    <string name="vulkan_driver_loading_repos">Syncing compatible Vulkan repositories...</string>
     <string name="vulkan_driver_no_matches">No repositories match "%1$s"</string>
     <string name="vulkan_driver_repo_releases_count">%1$d releases</string>
     <string name="vulkan_driver_show_notes">Release notes</string>
@@ -65,4 +65,13 @@
     <string name="vulkan_driver_adreno8xx_warn_message">%1$s does not appear to target Adreno 830/840 (Gen8). Standard Turnip builds may crash or show black screen on this GPU. Install anyway?</string>
     <string name="vulkan_driver_install_anyway">Install anyway</string>
     <string name="rom_config_vulkan_driver_blocked_value">System (blocked for GPU)</string>
+    <string name="vulkan_driver_recommended_badge">Recommended</string>
+    <string name="vulkan_driver_incompatible_gpu_badge">Incompatible with this GPU</string>
+    <string name="vulkan_driver_non_adreno_title">Non-Adreno GPU driver mode (%1$s)</string>
+    <string name="vulkan_driver_non_adreno_mali_desc">Adreno Turnip repositories are hidden because Turnip only works on Qualcomm Adreno (/dev/kgsl-3d0). For ARM Mali / Immortalis, System GPU driver is recommended. Mesa PanVK requires mainline Panfrost or Panthor kernel drivers instead of stock /dev/mali0. Manual ZIP import remains unlocked for custom packages.</string>
+    <string name="vulkan_driver_non_adreno_other_desc">Detected GPU: %1$s. Adreno Turnip repositories require Qualcomm Adreno 6xx/7xx/8xx and are filtered out. System GPU driver is recommended for stability, and manual ZIP import remains unlocked.</string>
+    <string name="vulkan_driver_non_adreno_panfrost_detected">Panfrost / Panthor kernel detected: compatible PanVK ZIP packages can be imported manually.</string>
+    <string name="vulkan_driver_non_adreno_no_online_repos">No online Adreno Turnip repositories match this GPU. Use System GPU driver or import a compatible ZIP driver package manually.</string>
+    <string name="vulkan_driver_imported_incompatible_notice">Imported %1$s, but it appears incompatible with %2$s. Switch to System GPU driver if games crash or fail to start.</string>
+    <string name="video_prefs_recommended_system_driver">Recommended: System GPU driver (custom ZIP import unlocked)</string>
 </resources>

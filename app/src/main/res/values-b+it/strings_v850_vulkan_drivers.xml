@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version='1.0' encoding='utf-8'?>
 <resources>
     <string-array name="video_vulkan_driver_mode_options">
         <item>Sistema</item>
@@ -15,7 +15,7 @@
     <string name="vulkan_driver_system_tag">Sistema</string>
     <string name="vulkan_driver_blocked_title">Driver Vulkan personalizzati bloccati</string>
     <string name="vulkan_driver_blocked_gpu_reason">GPU rilevata: %1$s. I driver Turnip e Adrenotools supportano solo Qualcomm Adreno 6xx, 7xx e 8xx. Il dispositivo è limitato al driver di sistema Android.</string>
-    <string name="vulkan_driver_blocked_legacy_reason">I driver personalizzati sono disabilitati nella build LEGACY senza Adrenotools.</string>
+    <string name="vulkan_driver_blocked_legacy_reason">I driver personalizzati sono disabilitati nella build LEGACY senza Adrenotools. Installa la build standard GitHub arm64.</string>
     <string name="vulkan_driver_blocked_abi_reason">I driver personalizzati richiedono arm64-v8a a 64 bit e Android 9 o successivo.</string>
     <string name="vulkan_driver_prefs_blocked_summary">Bloccato per %1$s - solo driver di sistema</string>
     <string name="vulkan_driver_prefs_blocked_legacy_summary">Bloccato nella build LEGACY - solo driver di sistema</string>
@@ -38,13 +38,13 @@
     <string name="vulkan_driver_offline_fallback_badge">Mirror offline</string>
     <string name="vulkan_driver_cache_badge">In cache</string>
     <string name="vulkan_driver_search_hint">Cerca repository, driver o versioni...</string>
-    <string name="vulkan_driver_cat_all">Tutti (14)</string>
+    <string name="vulkan_driver_cat_all">Tutti (%1$d)</string>
     <string name="vulkan_driver_cat_storm">STORM</string>
     <string name="vulkan_driver_cat_turnip">Turnip</string>
     <string name="vulkan_driver_cat_8xx">Adreno 8xx</string>
     <string name="vulkan_driver_cat_710">Adreno 710/720</string>
     <string name="vulkan_driver_refresh">Aggiorna repository</string>
-    <string name="vulkan_driver_loading_repos">Sincronizzazione di 14 repository GitHub...</string>
+    <string name="vulkan_driver_loading_repos">Sincronizzazione dei repository Vulkan compatibili...</string>
     <string name="vulkan_driver_no_matches">Nessun risultato per "%1$s"</string>
     <string name="vulkan_driver_repo_releases_count">%1$d release</string>
     <string name="vulkan_driver_show_notes">Note di rilascio</string>
@@ -69,4 +69,13 @@
     <string name="vulkan_driver_adreno8xx_warn_message">%1$s non sembra compatibile con Adreno 830/840 (Gen8). Può causare crash o schermo nero. Installare comunque?</string>
     <string name="vulkan_driver_install_anyway">Installa comunque</string>
     <string name="rom_config_vulkan_driver_blocked_value">Sistema (bloccato per GPU)</string>
+    <string name="vulkan_driver_recommended_badge">Consigliato</string>
+    <string name="vulkan_driver_incompatible_gpu_badge">Incompatibile con questa GPU</string>
+    <string name="vulkan_driver_non_adreno_title">Modalità driver GPU (%1$s)</string>
+    <string name="vulkan_driver_non_adreno_mali_desc">I repository Turnip sono nascosti perché supportano solo Qualcomm Adreno. Per ARM Mali è consigliato il driver di sistema. Mesa PanVK richiede il kernel Panfrost o Panthor invece di /dev/mali0 stock. L\'importazione manuale da ZIP è sbloccata.</string>
+    <string name="vulkan_driver_non_adreno_other_desc">GPU rilevata: %1$s. I repository Turnip richiedono Qualcomm Adreno 6xx/7xx/8xx e sono filtrati. Si consiglia il driver di sistema; l\'importazione manuale ZIP è sbloccata.</string>
+    <string name="vulkan_driver_non_adreno_panfrost_detected">Kernel Panfrost / Panthor rilevato: puoi importare manualmente pacchetti ZIP PanVK compatibili.</string>
+    <string name="vulkan_driver_non_adreno_no_online_repos">Nessun repository Turnip online compatibile con questa GPU. Usa il driver di sistema o importa manualmente un pacchetto ZIP compatibile.</string>
+    <string name="vulkan_driver_imported_incompatible_notice">Importato %1$s, ma sembra incompatibile con %2$s. Passa al driver di sistema in caso di arresti anomali.</string>
+    <string name="video_prefs_recommended_system_driver">Consigliato: driver GPU di sistema (importazione ZIP sbloccata)</string>
 </resources>

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version='1.0' encoding='utf-8'?>
 <resources>
     <string-array name="video_vulkan_driver_mode_options">
         <item>系统</item>
@@ -15,7 +15,7 @@
     <string name="vulkan_driver_system_tag">系统</string>
     <string name="vulkan_driver_blocked_title">已屏蔽自定义 Vulkan 驱动</string>
     <string name="vulkan_driver_blocked_gpu_reason">检测到 GPU: %1$s。自定义 Turnip 与 Adrenotools 驱动仅支持高通 Adreno 6xx、7xx 与 8xx 图形处理器，当前设备已锁定为安全的 Android 系统驱动。</string>
-    <string name="vulkan_driver_blocked_legacy_reason">LEGACY 版本未包含 Adrenotools 支持，已禁用自定义驱动。请在高通 Adreno 设备上使用 GitHub arm64 版本。</string>
+    <string name="vulkan_driver_blocked_legacy_reason">LEGACY 版本未包含 Adrenotools 支持，已禁用自定义驱动。请安装标准 GitHub arm64 版本。</string>
     <string name="vulkan_driver_blocked_abi_reason">自定义 Vulkan 驱动需要 64 位 arm64-v8a 架构与 Android 9 或更高版本。</string>
     <string name="vulkan_driver_prefs_blocked_summary">已对 %1$s 屏蔽 - 仅使用系统驱动</string>
     <string name="vulkan_driver_prefs_blocked_legacy_summary">LEGACY 版已屏蔽 - 仅使用系统驱动</string>
@@ -38,13 +38,13 @@
     <string name="vulkan_driver_offline_fallback_badge">离线镜像</string>
     <string name="vulkan_driver_cache_badge">已缓存</string>
     <string name="vulkan_driver_search_hint">搜索仓库、驱动或版本...</string>
-    <string name="vulkan_driver_cat_all">全部 (14)</string>
+    <string name="vulkan_driver_cat_all">全部 (%1$d)</string>
     <string name="vulkan_driver_cat_storm">STORM</string>
     <string name="vulkan_driver_cat_turnip">Turnip</string>
     <string name="vulkan_driver_cat_8xx">Adreno 8xx</string>
     <string name="vulkan_driver_cat_710">Adreno 710/720</string>
     <string name="vulkan_driver_refresh">刷新仓库列表</string>
-    <string name="vulkan_driver_loading_repos">正在同步 14 个 GitHub 仓库...</string>
+    <string name="vulkan_driver_loading_repos">正在同步兼容的 Vulkan 仓库...</string>
     <string name="vulkan_driver_no_matches">未找到匹配 "%1$s" 的结果</string>
     <string name="vulkan_driver_repo_releases_count">%1$d 个版本</string>
     <string name="vulkan_driver_show_notes">更新说明</string>
@@ -69,4 +69,13 @@
     <string name="vulkan_driver_adreno8xx_warn_message">%1$s 未明确标注支持 Adreno 830/840 (Gen8)，普通 Turnip 可能黑屏或闪退。仍要安装吗？</string>
     <string name="vulkan_driver_install_anyway">仍然安装</string>
     <string name="rom_config_vulkan_driver_blocked_value">系统驱动（此 GPU 已禁用）</string>
+    <string name="vulkan_driver_recommended_badge">推荐</string>
+    <string name="vulkan_driver_incompatible_gpu_badge">与此 GPU 不兼容</string>
+    <string name="vulkan_driver_non_adreno_title">非 Adreno GPU 驱动模式 (%1$s)</string>
+    <string name="vulkan_driver_non_adreno_mali_desc">已隐藏 Turnip 仓库，因为 Turnip 仅支持 Qualcomm Adreno。对于 ARM Mali / Immortalis，建议使用系统 GPU 驱动。Mesa PanVK 需要主线 Panfrost 或 Panthor 内核驱动，无法用于原厂 /dev/mali0。手动 ZIP 导入已解锁。</string>
+    <string name="vulkan_driver_non_adreno_other_desc">检测到 GPU：%1$s。Adreno Turnip 仓库仅支持 Qualcomm Adreno 6xx/7xx/8xx，已自动过滤。为保证稳定性建议使用系统 GPU 驱动，手动 ZIP 导入已解锁。</string>
+    <string name="vulkan_driver_non_adreno_panfrost_detected">检测到 Panfrost / Panthor 内核：您可以手动导入兼容的 PanVK ZIP 驱动包。</string>
+    <string name="vulkan_driver_non_adreno_no_online_repos">没有适用于此 GPU 的在线 Turnip 仓库。请使用系统 GPU 驱动或手动导入兼容的 ZIP 驱动包。</string>
+    <string name="vulkan_driver_imported_incompatible_notice">已导入 %1$s，但它似乎与 %2$s 不兼容。如果游戏崩溃或黑屏，请切换回系统 GPU 驱动。</string>
+    <string name="video_prefs_recommended_system_driver">推荐：系统 GPU 驱动（已解锁手动 ZIP 导入）</string>
 </resources>

@@ -388,7 +388,14 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
         lifecycleScope.launch(Dispatchers.IO) {
             val shareUri = runCatching {
                 val rootLogsDir = java.io.File(android.os.Environment.getExternalStorageDirectory(), "STORM DS/logs")
-                val appLogFile = java.io.File(rootLogsDir, "STORM_DS.log")
+                val fallbackLogsDir = appContext.getExternalFilesDir(null)?.let { java.io.File(it, "logs") }
+                val primaryLogFile = java.io.File(rootLogsDir, "STORM_DS.log")
+                val fallbackLogFile = fallbackLogsDir?.let { java.io.File(it, "STORM_DS.log") }
+                val appLogFile = when {
+                    primaryLogFile.exists() && primaryLogFile.length() > 0 -> primaryLogFile
+                    fallbackLogFile != null && fallbackLogFile.exists() && fallbackLogFile.length() > 0 -> fallbackLogFile
+                    else -> primaryLogFile
+                }
                 val infoFile = java.io.File(rootLogsDir, me.magnum.melonds.impl.StormDeviceSystemInfoReporter.INFO_FILE_NAME)
 
                 // Ensure fresh STORM_INFO.txt always exists

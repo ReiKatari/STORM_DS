@@ -2910,11 +2910,13 @@ class EmulatorActivity : AppCompatActivity() {
     }
 
     private var instantiatedLayoutIsLandscape: Boolean? = null
+    private var instantiatedLayoutIsCustom: Boolean = false
 
     private fun setupSoftInput(layoutConfiguration: RuntimeInputLayoutConfiguration?) {
         if (layoutConfiguration != null) {
             lastKnownGoodTopRect = null
             lastKnownGoodBottomRect = null
+            instantiatedLayoutIsCustom = layoutConfiguration.isCustomLayout
             setLayoutOrientation(layoutConfiguration.layoutOrientation)
             with(binding.viewLayoutControls) {
                 instantiateLayout(layoutConfiguration, LayoutTarget.MAIN_SCREEN)
@@ -2946,6 +2948,7 @@ class EmulatorActivity : AppCompatActivity() {
             }
         } else {
             instantiatedLayoutIsLandscape = null
+            instantiatedLayoutIsCustom = false
             binding.viewLayoutControls.destroyLayout()
             presentation?.layoutView?.destroyLayout()
         }
@@ -3403,7 +3406,7 @@ class EmulatorActivity : AppCompatActivity() {
                     var rTop = rawTop ?: validLastTop ?: defLayout.first
                     var rBottom = rawBottom ?: validLastBottom ?: defLayout.second
 
-                    if (isConsoleSkinActive() && !isLandscape) {
+                    if (isConsoleSkinActive() && !isLandscape && (!instantiatedLayoutIsCustom || rawTop == null || rawBottom == null)) {
                         val density = resources.displayMetrics.density
                         val upperIsTop = rTop.y <= rBottom.y
                         val upper = if (upperIsTop) rTop else rBottom

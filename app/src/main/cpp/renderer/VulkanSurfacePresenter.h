@@ -272,6 +272,8 @@ private:
         VkCommandPool commandPool = VK_NULL_HANDLE;
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkFence inFlightFence = VK_NULL_HANDLE;
+        u64 inFlightPresentGeneration = 0;
+        u64 completedPresentGeneration = 0;
         VkSemaphore imageAvailableSemaphore = VK_NULL_HANDLE;
         VkSemaphore renderFinishedSemaphore = VK_NULL_HANDLE;
 
@@ -480,6 +482,7 @@ private:
     std::atomic<bool> useTimelineSemaphores{false};
     VkSemaphore timelineSemaphore = VK_NULL_HANDLE;
     u64 timelineValue = 0;
+    u64 fallbackPresentGeneration = 0;
     PFN_vkWaitSemaphoresKHR waitSemaphores = nullptr;
 
     VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version='1.0' encoding='utf-8'?>
 <resources>
     <string-array name="video_vulkan_driver_mode_options">
         <item>Sistem</item>
@@ -15,7 +15,7 @@
     <string name="vulkan_driver_system_tag">Sistem</string>
     <string name="vulkan_driver_blocked_title">Driver Vulkan kustom diblokir</string>
     <string name="vulkan_driver_blocked_gpu_reason">GPU terdeteksi: %1$s. Driver Turnip dan Adrenotools hanya mendukung Qualcomm Adreno 6xx, 7xx, dan 8xx. Perangkat dikunci ke driver sistem Android.</string>
-    <string name="vulkan_driver_blocked_legacy_reason">Driver kustom dinonaktifkan pada build LEGACY tanpa dukungan Adrenotools.</string>
+    <string name="vulkan_driver_blocked_legacy_reason">Driver kustom dinonaktifkan pada build LEGACY tanpa dukungan Adrenotools. Pasang build standar GitHub arm64.</string>
     <string name="vulkan_driver_blocked_abi_reason">Driver kustom memerlukan arsitektur arm64-v8a 64-bit dan Android 9 atau lebih baru.</string>
     <string name="vulkan_driver_prefs_blocked_summary">Diblokir untuk %1$s - hanya driver sistem</string>
     <string name="vulkan_driver_prefs_blocked_legacy_summary">Diblokir di build LEGACY - hanya driver sistem</string>
@@ -38,13 +38,13 @@
     <string name="vulkan_driver_offline_fallback_badge">Mirror offline</string>
     <string name="vulkan_driver_cache_badge">Cache</string>
     <string name="vulkan_driver_search_hint">Cari repositori, driver, atau versi...</string>
-    <string name="vulkan_driver_cat_all">Semua (14)</string>
+    <string name="vulkan_driver_cat_all">Semua (%1$d)</string>
     <string name="vulkan_driver_cat_storm">STORM</string>
     <string name="vulkan_driver_cat_turnip">Turnip</string>
     <string name="vulkan_driver_cat_8xx">Adreno 8xx</string>
     <string name="vulkan_driver_cat_710">Adreno 710/720</string>
     <string name="vulkan_driver_refresh">Muat ulang repositori</string>
-    <string name="vulkan_driver_loading_repos">Menyinkronkan 14 repositori GitHub...</string>
+    <string name="vulkan_driver_loading_repos">Menyinkronkan repositori Vulkan yang kompatibel...</string>
     <string name="vulkan_driver_no_matches">Tidak ada hasil untuk "%1$s"</string>
     <string name="vulkan_driver_repo_releases_count">%1$d rilis</string>
     <string name="vulkan_driver_show_notes">Catatan rilis</string>
@@ -69,4 +69,13 @@
     <string name="vulkan_driver_adreno8xx_warn_message">%1$s tidak ditandai kompatibel dengan Adreno 830/840 (Gen8). Dapat menyebabkan crash atau layar hitam. Tetap pasang?</string>
     <string name="vulkan_driver_install_anyway">Tetap pasang</string>
     <string name="rom_config_vulkan_driver_blocked_value">Sistem (diblokir untuk GPU)</string>
+    <string name="vulkan_driver_recommended_badge">Direkomendasikan</string>
+    <string name="vulkan_driver_incompatible_gpu_badge">Tidak kompatibel dengan GPU ini</string>
+    <string name="vulkan_driver_non_adreno_title">Mode driver GPU (%1$s)</string>
+    <string name="vulkan_driver_non_adreno_mali_desc">Repositori Turnip disembunyikan karena Turnip hanya mendukung Qualcomm Adreno. Untuk ARM Mali, driver GPU sistem direkomendasikan. Mesa PanVK membutuhkan kernel Panfrost atau Panthor alih-alih /dev/mali0 bawaan. Impor ZIP manual tetap dibuka.</string>
+    <string name="vulkan_driver_non_adreno_other_desc">GPU terdeteksi: %1$s. Repositori Adreno Turnip memerlukan Qualcomm Adreno 6xx/7xx/8xx dan telah disaring. Driver sistem direkomendasikan dan impor ZIP manual tetap dibuka.</string>
+    <string name="vulkan_driver_non_adreno_panfrost_detected">Kernel Panfrost / Panthor terdeteksi: paket ZIP PanVK yang kompatibel dapat diimpor secara manual.</string>
+    <string name="vulkan_driver_non_adreno_no_online_repos">Tidak ada repositori Turnip online yang cocok dengan GPU ini. Gunakan driver sistem atau impor paket ZIP yang kompatibel.</string>
+    <string name="vulkan_driver_imported_incompatible_notice">Berhasil mengimpor %1$s, namun tampak tidak kompatibel dengan %2$s. Beralih ke driver sistem jika game error.</string>
+    <string name="video_prefs_recommended_system_driver">Direkomendasikan: driver GPU sistem (impor ZIP dibuka)</string>
 </resources>

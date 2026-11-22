@@ -24,6 +24,14 @@ object AdrenoVulkanDriverSupport {
         UNSUPPORTED_GPU,
     }
 
+    enum class GpuVendorFamily(val displayName: String) {
+        ADRENO("Qualcomm Adreno"),
+        ARM_MALI("ARM Mali / Immortalis"),
+        SAMSUNG_XCLIPSE("Samsung Xclipse (RDNA)"),
+        POWERVR("Imagination PowerVR"),
+        OTHER("Other / Unknown GPU"),
+    }
+
     enum class AdrenoSubFamily {
         ADRENO_840_PLUS,
         ADRENO_8XX_ELITE,
@@ -50,10 +58,6 @@ object AdrenoVulkanDriverSupport {
             Build.SUPPORTED_64_BIT_ABIS.none { it.equals("arm64-v8a", ignoreCase = true) }
         ) {
             return SupportStatus.UNSUPPORTED_ANDROID_OR_ABI
-        }
-        val subFamily = getSubFamily()
-        if (subFamily == AdrenoSubFamily.NON_ADRENO || subFamily == AdrenoSubFamily.ADRENO_LEGACY_OR_UNKNOWN) {
-            return SupportStatus.UNSUPPORTED_GPU
         }
         return SupportStatus.SUPPORTED
     }
@@ -121,7 +125,14 @@ object AdrenoVulkanDriverSupport {
             hardware.contains("s5e") ||
             hardware.contains("tensor") ||
             hardware.contains("ranchu") ||
-            hardware.contains("goldfish")
+            hardware.contains("goldfish") ||
+            soc.startsWith("mt") ||
+            soc.contains("dimensity") ||
+            soc.contains("exynos") ||
+            soc.contains("tensor") ||
+            soc.contains("kirin") ||
+            File("/dev/mali0").exists() ||
+            File("/sys/class/misc/mali0").exists()
         ) {
             return false
         }
@@ -276,6 +287,120 @@ object AdrenoVulkanDriverSupport {
 
     fun isAdreno710Family(): Boolean {
         return getSubFamily() == AdrenoSubFamily.ADRENO_710_720
+    }
+
+    fun isAdrenoTurnipCapable(subFamily: AdrenoSubFamily = getSubFamily()): Boolean {
+        return subFamily != AdrenoSubFamily.NON_ADRENO &&
+            subFamily != AdrenoSubFamily.ADRENO_LEGACY_OR_UNKNOWN
+    }
+
+    fun hasPanfrostOrPanthorKernel(): Boolean {
+        if (File("/dev/panfrost").exists() ||
+            File("/dev/panthor").exists() ||
+            File("/sys/module/panfrost").exists() ||
+            File("/sys/module/panthor").exists()
+        ) {
+            return true
+        }
+        val drmDrivers = runCatching {
+            File("/sys/class/drm")
+                .listFiles()
+                ?.mapNotNull { entry ->
+                    runCatching { File(entry, "device/driver").canonicalFile.name.lowercase() }.getOrNull()
+                }
+                .orEmpty()
+        }.getOrDefault(emptyList())
+        return drmDrivers.any { it.contains("panfrost") || it.contains("panthor") }
+    }
+
+    fun getGpuVendorFamily(): GpuVendorFamily {
+        if (isAdrenoDevice()) {
+            return GpuVendorFamily.ADRENO
+        }
+        val hwInfo = getVulkanHardwareInfo()
+        when (hwInfo?.vendorId) {
+            VENDOR_ID_ARM_MALI -> return GpuVendorFamily.ARM_MALI
+            VENDOR_ID_AMD_XCLIPSE -> return GpuVendorFamily.SAMSUNG_XCLIPSE
+            VENDOR_ID_POWERVR -> return GpuVendorFamily.POWERVR
+        }
+        val vkName = hwInfo?.deviceName.orEmpty().lowercase()
+        val sysfs = readSysfsGpuModel().lowercase()
+        val soc = readSocModel().lowercase()
+        val hardware = Build.HARDWARE.lowercase()
+        val combined = "$vkName $sysfs $soc $hardware"
+        return when {
+            combined.contains("xclipse") || (hwInfo?.vendorId == null && (combined.contains("s5e") || combined.contains("exynos"))) ->
+                GpuVendorFamily.SAMSUNG_XCLIPSE
+            combined.contains("powervr") || combined.contains("rogue") || combined.contains("b-series") ->
+                GpuVendorFamily.POWERVR
+            combined.contains("mali") || combined.contains("immortalis") || hardware.startsWith("mt") ||
+                soc.startsWith("mt") || combined.contains("dimensity") || File("/dev/mali0").exists() ->
+                GpuVendorFamily.ARM_MALI
+            else -> GpuVendorFamily.OTHER
+        }
+    }
+
+    fun isDriverLikelyAdrenoTurnipPackage(
+        driverName: String,
+        description: String? = null,
+        version: String? = null,
+        sourceRepo: String? = null,
+    ): Boolean {
+        val combined = listOfNotNull(driverName, description, version, sourceRepo).joinToString(" ").lowercase()
+        return combined.contains("turnip") ||
+            combined.contains("freedreno") ||
+            combined.contains("adreno") ||
+            combined.contains("kimchi") ||
+            combined.contains("storm_driver") ||
+            combined.contains("storm driver") ||
+            combined.contains("mrpurple") ||
+            combined.contains("purple") ||
+            combined.contains("weab") ||
+            combined.contains("whitebelyash") ||
+            combined.contains("gamehub") ||
+            combined.contains("crueter") ||
+            combined.contains("vauzi") ||
+            combined.contains("balemuni") ||
+            combined.contains("gen8") ||
+            combined.contains("a7xx") ||
+            combined.contains("a6xx")
+    }
+
+    fun isDriverCompatibleWithCurrentGpu(
+        driverName: String,
+        description: String? = null,
+        version: String? = null,
+        sourceRepo: String? = null,
+        subFamily: AdrenoSubFamily = getSubFamily(),
+        vendorFamily: GpuVendorFamily = getGpuVendorFamily(),
+    ): Boolean {
+        val combined = listOfNotNull(driverName, description, version, sourceRepo).joinToString(" ").lowercase()
+        val isAdrenoPkg = isDriverLikelyAdrenoTurnipPackage(driverName, description, version, sourceRepo)
+        val isPanvkPkg = combined.contains("panvk") || combined.contains("panfrost") || combined.contains("panthor")
+
+        if (isAdrenoTurnipCapable(subFamily)) {
+            if (isPanvkPkg || combined.contains("mali") || combined.contains("xclipse") || combined.contains("powervr")) {
+                return false
+            }
+            if (subFamily == AdrenoSubFamily.ADRENO_840_PLUS || subFamily == AdrenoSubFamily.ADRENO_8XX_ELITE) {
+                return !isDriverPotentiallyIncompatibleWithAdreno8xx(driverName, description, version)
+            }
+            return true
+        }
+
+        if (isAdrenoPkg) {
+            return false
+        }
+        if (vendorFamily == GpuVendorFamily.ARM_MALI) {
+            if (isPanvkPkg) {
+                return hasPanfrostOrPanthorKernel()
+            }
+            return combined.contains("mali") || (!combined.contains("xclipse") && !combined.contains("powervr"))
+        }
+        if (isPanvkPkg) {
+            return false
+        }
+        return true
     }
 
     fun isDriverPotentiallyIncompatibleWithAdreno8xx(

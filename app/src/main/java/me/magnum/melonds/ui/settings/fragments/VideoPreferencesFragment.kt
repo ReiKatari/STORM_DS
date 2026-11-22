@@ -751,10 +751,10 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         val hasCustomActive = settingsRepository.getVulkanDriverMode() == VulkanDriverMode.CUSTOM &&
             !settingsRepository.getCustomVulkanDriverDisplayName().isNullOrBlank()
 
-        if (recommendedLabel != null && !hasCustomActive) {
-            managerPreference?.summary = getString(R.string.video_prefs_recommended_driver_available, recommendedLabel)
-        } else {
-            managerPreference?.summary = getString(R.string.video_vulkan_driver_manager_summary)
+        managerPreference?.summary = when {
+            hasCustomActive -> getString(R.string.video_vulkan_driver_manager_summary)
+            recommendedLabel != null -> getString(R.string.video_prefs_recommended_driver_available, recommendedLabel)
+            else -> getString(R.string.video_prefs_recommended_system_driver)
         }
     }
 

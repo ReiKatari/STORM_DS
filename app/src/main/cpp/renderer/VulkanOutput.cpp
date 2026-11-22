@@ -10826,7 +10826,7 @@ bool VulkanOutput::ensureRenderer3dSnapshot(FrameResource& resource, u32 width, 
     imageCreateInfo.arrayLayers = 1;
     imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-    imageCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
+    imageCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
     imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
@@ -10901,7 +10901,7 @@ bool VulkanOutput::ensureExactObjRenderer3dSnapshot(FrameResource& resource, u32
     imageCreateInfo.arrayLayers = 1;
     imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-    imageCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
+    imageCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
     imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
@@ -10994,7 +10994,7 @@ bool VulkanOutput::ensureExactTopDisplayedCaptureRenderer3dSnapshot(
     imageCreateInfo.arrayLayers = 1;
     imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-    imageCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
+    imageCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
     imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
@@ -12808,6 +12808,7 @@ bool VulkanOutput::dispatchCompositor(
     }
 
     const bool fastPathProfile = melonDS::UsesVulkanFastPath(pipelineProfile);
+    {
     const u64 lockStartNs = PerfNowNs();
     std::scoped_lock commandLock(commandPoolLock);
     composeLockCpuWindow.Add(PerfNowNs() - lockStartNs);
@@ -13309,8 +13310,8 @@ bool VulkanOutput::dispatchCompositor(
 
     VkImageMemoryBarrier outputReadableBarrier{};
     outputReadableBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    outputReadableBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-    outputReadableBarrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+    outputReadableBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+    outputReadableBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_MEMORY_READ_BIT;
     outputReadableBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
     outputReadableBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
     outputReadableBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -13324,8 +13325,8 @@ bool VulkanOutput::dispatchCompositor(
 
     vkCmdPipelineBarrier(
         resource.commandBuffer,
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
         0,
         0,
         nullptr,
@@ -13340,11 +13341,15 @@ bool VulkanOutput::dispatchCompositor(
     if (!submitFrameCommand(frame, resource, true))
         return false;
     composeSubmitCpuWindow.Add(PerfNowNs() - submitStartNs);
+    }
 
     resource.hasContent = true;
     markFramePreviousSourcesSubmitted(frame);
-    lastTopComposedFrame = frame;
-    lastBottomComposedFrame = frame;
+    {
+        std::lock_guard<std::mutex> temporalLock(temporalReferenceLock);
+        lastTopComposedFrame = frame;
+        lastBottomComposedFrame = frame;
+    }
     return true;
 }
 

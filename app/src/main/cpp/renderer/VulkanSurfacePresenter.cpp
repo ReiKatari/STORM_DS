@@ -580,6 +580,7 @@ void VulkanSurfacePresenter::shutdown()
     queueFamilyIndex = 0;
     useTimelineSemaphores.store(false, std::memory_order_release);
     timelineValue = 0;
+    fallbackPresentGeneration = 0;
     timelineSemaphore = VK_NULL_HANDLE;
     waitSemaphores = nullptr;
     resetQueryPool = nullptr;
@@ -1944,6 +1945,15 @@ bool VulkanSurfacePresenter::presentFrame(Frame* frame, VulkanOutput& output, co
             presentAccepted,
             surfaceLost);
         if (queueSubmitSucceeded
+            && !useTimelineSemaphores.load(std::memory_order_acquire)
+            && surfacePresentTimelineValue == 0)
+        {
+            const u64 fallbackGen = ++fallbackPresentGeneration;
+            surfaceState.inFlightPresentGeneration = fallbackGen;
+            if (frame != nullptr)
+                frame->presentTimelineValue = std::max(frame->presentTimelineValue, fallbackGen);
+        }
+        if (queueSubmitSucceeded
             && (bottomComp2OneShotStore
                 || bottomComp2OneShotConsume
                 || bottomClass4OneShotOverlaySource
@@ -2128,6 +2138,31 @@ bool VulkanSurfacePresenter::waitForFrameConsumption(Frame* frame, u64 timeoutNs
 
     if (!useTimelineSemaphores.load(std::memory_order_acquire) || waitSemaphores == nullptr || timelineSemaphore == VK_NULL_HANDLE)
     {
+        std::lock_guard<std::recursive_mutex> surfaceLock(surfaceMutex);
+        if (!initialized.load(std::memory_order_acquire) || deviceLost.load(std::memory_order_acquire))
+        {
+            frame->presentTimelineValue = 0;
+            return true;
+        }
+        const u64 requiredGen = frame->presentTimelineValue;
+        for (auto& [surfaceId, surfaceState] : surfaces)
+        {
+            (void)surfaceId;
+            if (surfaceState.inFlightPresentGeneration >= requiredGen
+                && surfaceState.completedPresentGeneration < requiredGen
+                && surfaceState.inFlightFence != VK_NULL_HANDLE)
+            {
+                const VkResult waitResult = waitForSurfaceIdle(surfaceState, timeoutNs);
+                if (waitResult == VK_ERROR_DEVICE_LOST)
+                {
+                    markDeviceLost("waitForFrameConsumption");
+                    frame->presentTimelineValue = 0;
+                    return true;
+                }
+                if (waitResult != VK_SUCCESS)
+                    return false;
+            }
+        }
         frame->presentTimelineValue = 0;
         return true;
     }
@@ -2326,6 +2361,7 @@ bool VulkanSurfacePresenter::createSurfaceStateResources(SurfaceState& surfaceSt
 
 void VulkanSurfacePresenter::destroySurfaceStateResources(SurfaceState& surfaceState)
 {
+    (void)waitForSurfaceIdle(surfaceState);
     destroyRetroArchResources(surfaceState);
     destroyBackgroundTexture(surfaceState);
     destroyVisibleCompositeResources(surfaceState);
@@ -3306,6 +3342,8 @@ bool VulkanSurfacePresenter::ensureSwapchain(
 
 void VulkanSurfacePresenter::destroySwapchain(SurfaceState& surfaceState)
 {
+    surfaceState.completedPresentGeneration =
+        std::max(surfaceState.completedPresentGeneration, surfaceState.inFlightPresentGeneration);
     for (VkFramebuffer framebuffer : surfaceState.framebuffers)
     {
         if (framebuffer != VK_NULL_HANDLE)
@@ -3490,16 +3528,45 @@ void VulkanSurfacePresenter::ensureSurfacePipelineCache()
     if (surfacePipelineCache != VK_NULL_HANDLE || device == VK_NULL_HANDLE)
         return;
 
+    u64 shaderHash = 14695981039346656037ull;
+    const auto mixShaderBlob = [&](const unsigned char* data, size_t len) {
+        shaderHash ^= static_cast<u64>(len);
+        shaderHash *= 1099511628211ull;
+        if (data != nullptr)
+        {
+            const size_t sampleBytes = std::min<size_t>(len, 256u);
+            for (size_t i = 0; i < sampleBytes; i++)
+            {
+                shaderHash ^= static_cast<u64>(data[i]);
+                shaderHash *= 1099511628211ull;
+            }
+            if (len > sampleBytes)
+            {
+                for (size_t i = len - sampleBytes; i < len; i++)
+                {
+                    shaderHash ^= static_cast<u64>(data[i]);
+                    shaderHash *= 1099511628211ull;
+                }
+            }
+        }
+    };
+    mixShaderBlob(melonDS_android_vulkan_surface_presenter_vert_spv, melonDS_android_vulkan_surface_presenter_vert_spv_len);
+    mixShaderBlob(
+        melonDS_android_vulkan_surface_presenter_compatibility_frag_spv,
+        melonDS_android_vulkan_surface_presenter_compatibility_frag_spv_len);
+    mixShaderBlob(melonDS_android_vulkan_surface_presenter_frag_spv, melonDS_android_vulkan_surface_presenter_frag_spv_len);
+
     VkPhysicalDeviceProperties deviceProperties{};
     vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
-    char cacheFileName[192]{};
+    char cacheFileName[224]{};
     std::snprintf(
         cacheFileName,
         sizeof(cacheFileName),
-        "vulkan_presenter_pipeline_cache_v7_%08x_%08x_%08x.bin",
+        "vulkan_presenter_pipeline_cache_v8_%08x_%08x_%08x_%016llx.bin",
         deviceProperties.vendorID,
         deviceProperties.deviceID,
-        deviceProperties.driverVersion
+        deviceProperties.driverVersion,
+        static_cast<unsigned long long>(shaderHash)
     );
     surfacePipelineCacheFile = cacheFileName;
 
@@ -3640,6 +3707,8 @@ VkResult VulkanSurfacePresenter::waitForSurfaceIdle(SurfaceState& surfaceState, 
     const VkResult waitResult = vkWaitForFences(device, 1, &surfaceState.inFlightFence, VK_TRUE, timeoutNs);
     if (waitResult == VK_SUCCESS)
     {
+        surfaceState.completedPresentGeneration =
+            std::max(surfaceState.completedPresentGeneration, surfaceState.inFlightPresentGeneration);
         waitCpuWindow.Add(PerfNowNs() - waitStartNs);
         consumeSurfaceGpuTiming(surfaceState);
     }

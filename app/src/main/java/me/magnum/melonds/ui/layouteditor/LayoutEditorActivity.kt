@@ -183,6 +183,7 @@ class LayoutEditorActivity : AppCompatActivity() {
         }
         container.addView(layoutEditorManager, RelativeLayout.LayoutParams.MATCH_PARENT, RelativeLayout.LayoutParams.MATCH_PARENT)
         setContentView(container)
+        setupFullscreen()
         ViewCompat.setOnApplyWindowInsetsListener(container) { _, windowInsets ->
             val insets = windowInsets.getInsets(WindowInsetsCompat.Type.displayCutout())
             val uiInsets = if (viewModel.shouldIgnoreDisplayCutoutInLayouts()) {
@@ -216,16 +217,19 @@ class LayoutEditorActivity : AppCompatActivity() {
             }
         }
 
-        val displayMetrics = resources.displayMetrics
-        val initialWidth = displayMetrics.widthPixels
-        val initialHeight = displayMetrics.heightPixels
+        val (initialWidth, initialHeight) = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            val bounds = windowManager.currentWindowMetrics.bounds
+            bounds.width() to bounds.height()
+        } else {
+            val displayMetrics = resources.displayMetrics
+            displayMetrics.widthPixels to displayMetrics.heightPixels
+        }
         if (initialWidth > 0 && initialHeight > 0) {
             viewModel.setCurrentUiSize(initialWidth, initialHeight)
         }
         viewModel.setUiInsets(Insets.Zero)
         viewModel.setScreenFolds(emptyList())
         updateDisplays()
-        setupFullscreen()
         updateOrientation(resources.configuration)
 
         lifecycleScope.launch {
@@ -327,6 +331,7 @@ class LayoutEditorActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        setupFullscreen()
         updateDisplays()
     }
 
@@ -433,6 +438,8 @@ class LayoutEditorActivity : AppCompatActivity() {
 
     private fun setupFullscreen() {
         window.applyImmersiveFullscreen()
+        window.statusBarColor = Color.TRANSPARENT
+        window.navigationBarColor = Color.TRANSPARENT
     }
 
     private fun saveLayoutAndExit() {

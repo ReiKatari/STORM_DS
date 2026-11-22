@@ -30,8 +30,8 @@ object StormDeviceSystemInfoReporter {
     fun isLoggingEnabled(context: Context): Boolean {
         return runCatching {
             val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
-            prefs.getBoolean("system_app_log_file_enabled", false)
-        }.getOrDefault(false)
+            prefs.getBoolean("system_app_log_file_enabled", true)
+        }.getOrDefault(true)
     }
 
     fun saveUnifiedReport(

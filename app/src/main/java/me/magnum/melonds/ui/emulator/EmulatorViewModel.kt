@@ -2913,6 +2913,7 @@ class EmulatorViewModel @Inject constructor(
                         isHapticFeedbackEnabled = config.isHapticFeedbackEnabled,
                         layoutOrientation = currentLayoutConfiguration.orientation,
                         layout = adjustedLayout,
+                        isCustomLayout = currentLayoutConfiguration.type == LayoutConfiguration.LayoutType.CUSTOM,
                     )
                 }
             }.collect(_runtimeLayout)

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version='1.0' encoding='utf-8'?>
 <resources>
     <string-array name="video_vulkan_driver_mode_options">
         <item>System</item>
@@ -15,7 +15,7 @@
     <string name="vulkan_driver_system_tag">System</string>
     <string name="vulkan_driver_blocked_title">Benutzerdefinierte Vulkan-Treiber blockiert</string>
     <string name="vulkan_driver_blocked_gpu_reason">Erkannte GPU: %1$s. Benutzerdefinierte Turnip- und Adrenotools-Treiber unterstützen nur Qualcomm Adreno 6xx, 7xx und 8xx. Ihr Gerät ist auf den sicheren Android-Systemtreiber beschränkt.</string>
-    <string name="vulkan_driver_blocked_legacy_reason">Benutzerdefinierte Vulkan-Treiber sind im LEGACY-Build ohne Adrenotools deaktiviert. Nutzen Sie den GitHub-arm64-Build auf einem Adreno-Gerät.</string>
+    <string name="vulkan_driver_blocked_legacy_reason">Benutzerdefinierte Vulkan-Treiber sind im LEGACY-Build ohne Adrenotools deaktiviert. Installieren Sie den Standard-GitHub-arm64-Build.</string>
     <string name="vulkan_driver_blocked_abi_reason">Benutzerdefinierte Vulkan-Treiber erfordern 64-Bit-arm64-v8a und Android 9 oder neuer.</string>
     <string name="vulkan_driver_prefs_blocked_summary">Blockiert für %1$s - nur Systemtreiber</string>
     <string name="vulkan_driver_prefs_blocked_legacy_summary">Im LEGACY-Build blockiert - nur Systemtreiber</string>
@@ -38,13 +38,13 @@
     <string name="vulkan_driver_offline_fallback_badge">Offline-Mirror</string>
     <string name="vulkan_driver_cache_badge">Zwischengespeichert</string>
     <string name="vulkan_driver_search_hint">Repositories, Treiber oder Versionen suchen...</string>
-    <string name="vulkan_driver_cat_all">Alle (14)</string>
+    <string name="vulkan_driver_cat_all">Alle (%1$d)</string>
     <string name="vulkan_driver_cat_storm">STORM</string>
     <string name="vulkan_driver_cat_turnip">Turnip</string>
     <string name="vulkan_driver_cat_8xx">Adreno 8xx</string>
     <string name="vulkan_driver_cat_710">Adreno 710/720</string>
     <string name="vulkan_driver_refresh">Repositories aktualisieren</string>
-    <string name="vulkan_driver_loading_repos">Synchronisiere 14 GitHub-Repositories...</string>
+    <string name="vulkan_driver_loading_repos">Synchronisiere kompatible Vulkan-Repositories...</string>
     <string name="vulkan_driver_no_matches">Keine Treffer für "%1$s"</string>
     <string name="vulkan_driver_repo_releases_count">%1$d Releases</string>
     <string name="vulkan_driver_show_notes">Versionshinweise</string>
@@ -69,4 +69,13 @@
     <string name="vulkan_driver_adreno8xx_warn_message">%1$s scheint nicht für Adreno 830/840 (Gen8) gedacht zu sein. Standard-Turnip-Treiber können abstürzen. Trotzdem installieren?</string>
     <string name="vulkan_driver_install_anyway">Trotzdem installieren</string>
     <string name="rom_config_vulkan_driver_blocked_value">System (für GPU blockiert)</string>
+    <string name="vulkan_driver_recommended_badge">Empfohlen</string>
+    <string name="vulkan_driver_incompatible_gpu_badge">Mit dieser GPU inkompatibel</string>
+    <string name="vulkan_driver_non_adreno_title">Treiber-Modus für GPU (%1$s)</string>
+    <string name="vulkan_driver_non_adreno_mali_desc">Turnip-Repositories sind ausgeblendet, da Turnip nur Qualcomm Adreno unterstützt. Für ARM Mali wird der System-GPU-Treiber empfohlen. Mesa PanVK erfordert einen Panfrost- oder Panthor-Kernel statt Stock-/dev/mali0. Manueller ZIP-Import ist freigeschaltet.</string>
+    <string name="vulkan_driver_non_adreno_other_desc">Erkannte GPU: %1$s. Adreno-Turnip-Repositories erfordern Qualcomm Adreno 6xx/7xx/8xx und wurden gefiltert. Der System-GPU-Treiber wird empfohlen, manueller ZIP-Import ist freigeschaltet.</string>
+    <string name="vulkan_driver_non_adreno_panfrost_detected">Panfrost- / Panthor-Kernel erkannt: Kompatible PanVK-ZIP-Pakete können manuell importiert werden.</string>
+    <string name="vulkan_driver_non_adreno_no_online_repos">Keine Online-Turnip-Repositories passen zu dieser GPU. Nutzen Sie den Systemtreiber oder importieren Sie manuell ein kompatibles ZIP-Paket.</string>
+    <string name="vulkan_driver_imported_incompatible_notice">%1$s importiert, scheint aber mit %2$s inkompatibel zu sein. Bei Abstürzen zum Systemtreiber wechseln.</string>
+    <string name="video_prefs_recommended_system_driver">Empfohlen: System-GPU-Treiber (ZIP-Import freigeschaltet)</string>
 </resources>

@@ -81,7 +81,13 @@ class AdrenoVulkanDriverManager(
     }
 
     fun getPipelineCacheFileForConfig(config: VulkanDriverConfiguration): File {
-        val cacheDir = File(context.cacheDir, "vulkan_pipeline_cache_v841")
+        runCatching {
+            val legacyDir = File(context.cacheDir, "vulkan_pipeline_cache_v841")
+            if (legacyDir.exists()) {
+                legacyDir.deleteRecursively()
+            }
+        }
+        val cacheDir = File(context.cacheDir, "vulkan_pipeline_cache_v880")
         if (!cacheDir.exists()) {
             cacheDir.mkdirs()
         }
@@ -94,7 +100,7 @@ class AdrenoVulkanDriverManager(
             }
             else -> "system"
         }
-        return File(cacheDir, "${driverKey}_v841.bin")
+        return File(cacheDir, "${driverKey}_v880.bin")
     }
 
     fun updateActiveDriverPipelineCachePath() {
@@ -130,12 +136,26 @@ class AdrenoVulkanDriverManager(
     fun clearDriverPipelineCaches(): Int {
         var deletedCount = 0
         listOf(
+            File(context.cacheDir, "vulkan_pipeline_cache_v880"),
             File(context.cacheDir, "vulkan_pipeline_cache_v841"),
             File(context.cacheDir, "adrenotools/tmp"),
         ).forEach { dir ->
             if (dir.isDirectory) {
                 dir.listFiles()?.forEach { child ->
                     if (child.deleteRecursively()) {
+                        deletedCount++
+                    }
+                }
+            }
+        }
+        listOf(context.filesDir, context.cacheDir).forEach { baseDir ->
+            if (baseDir.isDirectory) {
+                baseDir.listFiles { _, name ->
+                    name.startsWith("vulkan_", ignoreCase = true) &&
+                        name.contains("pipeline_cache", ignoreCase = true) &&
+                        name.endsWith(".bin", ignoreCase = true)
+                }?.forEach { file ->
+                    if (file.delete()) {
                         deletedCount++
                     }
                 }
@@ -327,14 +347,21 @@ class AdrenoVulkanDriverManager(
     }
 
     private fun deletePipelineCacheForDriver(driver: VulkanDriverInfo) {
-        val cacheDir = File(context.cacheDir, "vulkan_pipeline_cache_v841")
-        if (!cacheDir.isDirectory) return
         val keys = listOfNotNull(
             driver.displayName.takeIf { it.isNotBlank() },
             driver.driverName.takeIf { it.isNotBlank() },
         ).map { it.replace(Regex("[^a-zA-Z0-9._-]"), "_") }.distinct()
-        keys.forEach { key ->
-            File(cacheDir, "${key}_v841.bin").takeIf { it.isFile }?.delete()
+        val cacheDir880 = File(context.cacheDir, "vulkan_pipeline_cache_v880")
+        if (cacheDir880.isDirectory) {
+            keys.forEach { key ->
+                File(cacheDir880, "${key}_v880.bin").takeIf { it.isFile }?.delete()
+            }
+        }
+        val cacheDir841 = File(context.cacheDir, "vulkan_pipeline_cache_v841")
+        if (cacheDir841.isDirectory) {
+            keys.forEach { key ->
+                File(cacheDir841, "${key}_v841.bin").takeIf { it.isFile }?.delete()
+            }
         }
     }
 
@@ -536,14 +563,17 @@ class AdrenoVulkanDriverManager(
             else -> allSoFiles
         }
 
-        // Handle multi-SO bundles (such as STORM DRIVER containing both gen8 and a7xx binaries)
-        val gen8File = soFiles.firstOrNull { it.name.equals("vulkan.adreno_gen8.so", ignoreCase = true) }
-        val a7xxFile = soFiles.firstOrNull { it.name.equals("vulkan.adreno_a7xx.so", ignoreCase = true) }
-        if (gen8File != null && a7xxFile != null) {
-            return if (AdrenoVulkanDriverSupport.isAdreno8xx()) gen8File else a7xxFile
-        }
-        if (gen8File != null && AdrenoVulkanDriverSupport.isAdreno8xx()) {
-            return gen8File
+        val isAdrenoTurnip = AdrenoVulkanDriverSupport.isAdrenoTurnipCapable()
+        if (isAdrenoTurnip) {
+            // Handle multi-SO bundles (such as STORM DRIVER containing both gen8 and a7xx binaries)
+            val gen8File = soFiles.firstOrNull { it.name.equals("vulkan.adreno_gen8.so", ignoreCase = true) }
+            val a7xxFile = soFiles.firstOrNull { it.name.equals("vulkan.adreno_a7xx.so", ignoreCase = true) }
+            if (gen8File != null && a7xxFile != null) {
+                return if (AdrenoVulkanDriverSupport.isAdreno8xx()) gen8File else a7xxFile
+            }
+            if (gen8File != null && AdrenoVulkanDriverSupport.isAdreno8xx()) {
+                return gen8File
+            }
         }
 
         metadata.libraryName?.let { libraryName ->
@@ -559,13 +589,23 @@ class AdrenoVulkanDriverManager(
         }
 
         val preferredOrder = buildList {
-            if (AdrenoVulkanDriverSupport.isAdreno8xx()) {
-                add("vulkan.adreno_gen8.so")
+            if (isAdrenoTurnip) {
+                if (AdrenoVulkanDriverSupport.isAdreno8xx()) {
+                    add("vulkan.adreno_gen8.so")
+                }
+                add("vulkan.adreno_a7xx.so")
+                add("vulkan.freedreno.so")
+                add("libvulkan_freedreno.so")
+                add("vulkan.adreno.so")
+            } else {
+                add("vulkan.panvk.so")
+                add("libvulkan_panfrost.so")
+                add("vulkan.mali.so")
+                add("libvulkan_mali.so")
+                add("libGLES_mali.so")
+                add("vulkan.xclipse.so")
+                add("vulkan.powervr.so")
             }
-            add("vulkan.adreno_a7xx.so")
-            add("vulkan.freedreno.so")
-            add("libvulkan_freedreno.so")
-            add("vulkan.adreno.so")
         }
         preferredOrder.forEach { preferredName ->
             val matches = soFiles.filter { it.name.equals(preferredName, ignoreCase = true) }

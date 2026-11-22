@@ -97,7 +97,7 @@ using Platform::LogLevel;
 
 namespace
 {
-constexpr u32 kPipelineCacheFileVersion = 11;
+constexpr u32 kPipelineCacheFileVersion = 12;
 constexpr u32 kVulkanDiagnosticDisablePassiveRepeatCoverageExpand = 1u << 0u;
 constexpr float kTriangleAreaEpsilon = 0.000001f;
 constexpr float kTileOverlapEpsilon = 0.00001f;
@@ -5677,7 +5677,15 @@ std::string VulkanRenderer3D::buildPipelineCacheFileName(TextureSamplingPath sam
     VkPhysicalDeviceProperties deviceProperties{};
     vkGetPhysicalDeviceProperties(PhysicalDevice, &deviceProperties);
 
-    const u64 versionHash = fnv1a64(MELONDS_VERSION);
+    u64 versionHash = fnv1a64(MELONDS_VERSION);
+    const auto mixLen = [&](u64 v) {
+        versionHash ^= v;
+        versionHash *= 1099511628211ull;
+    };
+    mixLen(melonDS_gpu3d_vulkan_graphics_raster_fragment_depth_direct_fast_modulate_opaque_alpha_plain_frag_spv_len);
+    mixLen(melonDS_compat_gpu3d_vulkan_graphics_edge_frag_spv_len);
+    mixLen(melonDS_compat_gpu3d_vulkan_graphics_edge_fog_frag_spv_len);
+    mixLen(melonDS_gpu3d_vulkan_graphics_edge_frag_spv_len);
     const char* samplingPathSuffix = textureSamplingPathName(samplingPath);
     char cacheFileName[256]{};
     if (UsesVulkanFastPath(PipelineProfile))

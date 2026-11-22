@@ -46,14 +46,38 @@ class AppLogFileRecorder @Inject constructor(
         scope.cancel()
     }
 
+    private fun resolveWritableLogFile(): Triple<java.io.File, java.io.File, java.io.FileOutputStream>? {
+        val candidates = buildList {
+            val rootBase = android.os.Environment.getExternalStorageDirectory()
+            add(java.io.File(rootBase, "STORM DS/logs"))
+            context.getExternalFilesDir(null)?.let { extFiles ->
+                add(java.io.File(extFiles, "logs"))
+            }
+        }
+        for (logsDir in candidates) {
+            val logFile = java.io.File(logsDir, LOG_FILE_NAME)
+            val stream = runCatching {
+                logsDir.mkdirs()
+                java.io.FileOutputStream(logFile, true)
+            }.getOrNull()
+            if (stream != null) {
+                return Triple(logsDir, logFile, stream)
+            }
+        }
+        return null
+    }
+
     private suspend fun recordLogcat() {
-        val rootBase = android.os.Environment.getExternalStorageDirectory()
-        val logsDir = java.io.File(rootBase, "STORM DS/logs").apply { mkdirs() }
-        val logFile = java.io.File(logsDir, LOG_FILE_NAME)
+        val opened = resolveWritableLogFile()
+        if (opened == null) {
+            Log.w(TAG, "Could not open app log file in external storage or app-specific fallback dir")
+            return
+        }
+        val (logsDir, logFile, outputStream) = opened
 
         try {
-            java.io.FileOutputStream(logFile, true).use { outputStream ->
-                BufferedWriter(OutputStreamWriter(outputStream)).use { writer ->
+            outputStream.use { stream ->
+                BufferedWriter(OutputStreamWriter(stream)).use { writer ->
                     writer.appendLine()
                     writer.appendLine("STORM DS app log")
                     writer.appendLine("started=${DATE_FORMAT.format(Date())}")
