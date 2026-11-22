@@ -43,6 +43,7 @@ import me.magnum.melonds.domain.model.DSiProfileSettings
 import me.magnum.melonds.domain.model.DldiSdCardConfiguration
 import me.magnum.melonds.domain.model.DualScreenPreset
 import me.magnum.melonds.domain.model.EmulatorConfiguration
+import me.magnum.melonds.utils.getFloatCompat
 import me.magnum.melonds.domain.model.ExternalDisplayMode
 import me.magnum.melonds.domain.model.FirmwareConfiguration
 import me.magnum.melonds.domain.model.FpsCounterPosition
@@ -3044,13 +3045,9 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun getSlowMotionSpeed(): Float {
-        val speed = try {
-            if (preferences.contains("slow_motion_speed")) {
-                preferences.getFloat("slow_motion_speed", 0.5f)
-            } else {
-                preferences.getString("slow_motion_speed", "0.5")?.toFloatOrNull() ?: 0.5f
-            }
-        } catch (_: ClassCastException) {
+        val speed = if (preferences.contains("slow_motion_speed")) {
+            preferences.getFloatCompat("slow_motion_speed", 0.5f)
+        } else {
             preferences.getString("slow_motion_speed", "0.5")?.toFloatOrNull() ?: 0.5f
         }
         return speed.coerceIn(0.1f, 1.0f)

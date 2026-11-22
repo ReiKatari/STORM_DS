@@ -1,6 +1,7 @@
 package me.magnum.melonds.impl
 
 import android.content.ContextWrapper
+import android.content.SharedPreferences
 import android.net.Uri
 import kotlinx.coroutines.test.runTest
 import me.magnum.melonds.domain.model.AudioBitrate
@@ -23,6 +24,7 @@ import me.magnum.melonds.domain.model.VulkanPipelineProfile
 import me.magnum.melonds.domain.repositories.DSiWareMetadataRepository
 import me.magnum.melonds.domain.repositories.SettingsRepository
 import me.magnum.melonds.domain.services.ConfigurationDirectoryVerifier
+import me.magnum.melonds.utils.getFloatCompat
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -178,5 +180,155 @@ class DsiRestorationTest {
         assertTrue(excluded.contains("bios_dir"))
         assertTrue(excluded.contains("dsi_bios_dir"))
         assertTrue(excluded.contains("dsi_profiles"))
+    }
+
+    private class InMemorySharedPreferences : SharedPreferences {
+        private val data = LinkedHashMap<String, Any?>()
+
+        override fun getAll(): MutableMap<String, *> = LinkedHashMap(data)
+
+        override fun getString(key: String?, defValue: String?): String? {
+            if (key == null || !data.containsKey(key)) return defValue
+            return data[key] as String?
+        }
+
+        @Suppress("UNCHECKED_CAST")
+        override fun getStringSet(key: String?, defValues: MutableSet<String>?): MutableSet<String>? {
+            if (key == null || !data.containsKey(key)) return defValues
+            return data[key] as MutableSet<String>?
+        }
+
+        override fun getInt(key: String?, defValue: Int): Int {
+            if (key == null || !data.containsKey(key)) return defValue
+            return data[key] as Int
+        }
+
+        override fun getLong(key: String?, defValue: Long): Long {
+            if (key == null || !data.containsKey(key)) return defValue
+            return data[key] as Long
+        }
+
+        override fun getFloat(key: String?, defValue: Float): Float {
+            if (key == null || !data.containsKey(key)) return defValue
+            return data[key] as Float
+        }
+
+        override fun getBoolean(key: String?, defValue: Boolean): Boolean {
+            if (key == null || !data.containsKey(key)) return defValue
+            return data[key] as Boolean
+        }
+
+        override fun contains(key: String?): Boolean = key != null && data.containsKey(key)
+
+        override fun edit(): SharedPreferences.Editor = object : SharedPreferences.Editor {
+            private val pending = LinkedHashMap<String, Any?>()
+            private val removals = LinkedHashSet<String>()
+            private var clearAll = false
+
+            override fun putString(key: String?, value: String?): SharedPreferences.Editor = apply {
+                if (key != null) {
+                    removals.remove(key)
+                    pending[key] = value
+                }
+            }
+
+            override fun putStringSet(key: String?, values: MutableSet<String>?): SharedPreferences.Editor = apply {
+                if (key != null) {
+                    removals.remove(key)
+                    pending[key] = values?.toMutableSet()
+                }
+            }
+
+            override fun putInt(key: String?, value: Int): SharedPreferences.Editor = apply {
+                if (key != null) {
+                    removals.remove(key)
+                    pending[key] = value
+                }
+            }
+
+            override fun putLong(key: String?, value: Long): SharedPreferences.Editor = apply {
+                if (key != null) {
+                    removals.remove(key)
+                    pending[key] = value
+                }
+            }
+
+            override fun putFloat(key: String?, value: Float): SharedPreferences.Editor = apply {
+                if (key != null) {
+                    removals.remove(key)
+                    pending[key] = value
+                }
+            }
+
+            override fun putBoolean(key: String?, value: Boolean): SharedPreferences.Editor = apply {
+                if (key != null) {
+                    removals.remove(key)
+                    pending[key] = value
+                }
+            }
+
+            override fun remove(key: String?): SharedPreferences.Editor = apply {
+                if (key != null) {
+                    pending.remove(key)
+                    removals.add(key)
+                }
+            }
+
+            override fun clear(): SharedPreferences.Editor = apply {
+                clearAll = true
+                pending.clear()
+                removals.clear()
+            }
+
+            override fun commit(): Boolean {
+                if (clearAll) {
+                    data.clear()
+                }
+                for (r in removals) {
+                    data.remove(r)
+                }
+                for ((k, v) in pending) {
+                    data[k] = v
+                }
+                return true
+            }
+
+            override fun apply() {
+                commit()
+            }
+        }
+
+        override fun registerOnSharedPreferenceChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener?) = Unit
+        override fun unregisterOnSharedPreferenceChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener?) = Unit
+    }
+
+    @Test
+    fun sharedPreferences_getFloatCompat_handlesIntegerAndSelfHeals() {
+        val prefs = InMemorySharedPreferences()
+        prefs.edit().putInt("pref_button_cluster_spread", 1).apply()
+
+        val resolved = prefs.getFloatCompat("pref_button_cluster_spread", 0.5f)
+        assertEquals(1.0f, resolved, 0.0001f)
+        assertEquals(1.0f, prefs.getFloat("pref_button_cluster_spread", 0.5f), 0.0001f)
+    }
+
+    @Test
+    fun settingsBackupManager_restoresFloatKeysFromJsonIntegers() {
+        val prefs = InMemorySharedPreferences()
+        SettingsBackupManager.restoreSettingsEntries(
+            preferences = prefs,
+            entries = mapOf(
+                "pref_button_cluster_spread" to 1,
+                "pref_button_cluster_inner_scale" to 1,
+                "slow_motion_speed" to 1,
+                "volume" to 166,
+            ),
+            includeLocalKeys = true,
+        )
+
+        assertEquals(1.0f, prefs.getFloat("pref_button_cluster_spread", 0.0f), 0.0001f)
+        assertEquals(1.0f, prefs.getFloat("pref_button_cluster_inner_scale", 0.0f), 0.0001f)
+        assertEquals(1.0f, prefs.getFloat("slow_motion_speed", 0.0f), 0.0001f)
+        assertEquals(166, prefs.getInt("volume", 0))
     }
 }

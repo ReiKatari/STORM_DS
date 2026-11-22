@@ -88,16 +88,125 @@ class SettingsBackupManager @Inject constructor(
             "ra_profile_score",
             "ra_profile_softcore_score",
             "generation",
+            "ra_endpoint_generation",
             "quick_resume_last_played_timestamp",
             "cheats_db_last_updated_ms",
             "translator_cache_clear_epoch",
         )
+        private val FLOAT_PREF_KEYS = setOf(
+            "pref_button_cluster_spread",
+            "pref_button_cluster_inner_scale",
+            "slow_motion_speed",
+            "pref_translator_float_btn_x_ratio",
+            "pref_translator_float_btn_y_ratio",
+        )
 
-        private fun isLongPrefKey(key: String): Boolean {
+        internal fun isLongPrefKey(key: String): Boolean {
             return key in LONG_PREF_KEYS ||
                    key.startsWith("quick_resume_timestamp_") ||
                    key.startsWith("play_stats_daily_play_ms_") ||
                    key.startsWith("shader_compile_time_")
+        }
+
+        internal fun isFloatPrefKey(key: String): Boolean = key in FLOAT_PREF_KEYS
+
+        internal fun putTypedPreference(
+            editor: SharedPreferences.Editor,
+            key: String,
+            value: Any?,
+            existing: Any?,
+        ): Boolean {
+            return when (value) {
+                is Boolean -> {
+                    editor.putBoolean(key, value)
+                    true
+                }
+                is Int -> {
+                    when {
+                        isFloatPrefKey(key) || existing is Float -> editor.putFloat(key, value.toFloat())
+                        isLongPrefKey(key) || existing is Long -> editor.putLong(key, value.toLong())
+                        else -> editor.putInt(key, value)
+                    }
+                    true
+                }
+                is Long -> {
+                    if (isFloatPrefKey(key) || existing is Float) {
+                        editor.putFloat(key, value.toFloat())
+                    } else {
+                        editor.putLong(key, value)
+                    }
+                    true
+                }
+                is Float -> {
+                    editor.putFloat(key, value)
+                    true
+                }
+                is Double -> {
+                    editor.putFloat(key, value.toFloat())
+                    true
+                }
+                is String -> {
+                    editor.putString(key, value)
+                    true
+                }
+                is JSONArray -> {
+                    val set = mutableSetOf<String>()
+                    for (i in 0 until value.length()) {
+                        set.add(value.getString(i))
+                    }
+                    editor.putStringSet(key, set)
+                    true
+                }
+                is Set<*> -> {
+                    editor.putStringSet(key, value.mapNotNull { it?.toString() }.toSet())
+                    true
+                }
+                is Number -> {
+                    when {
+                        isFloatPrefKey(key) || existing is Float -> editor.putFloat(key, value.toFloat())
+                        existing is Long || isLongPrefKey(key) -> editor.putLong(key, value.toLong())
+                        existing is Int -> editor.putInt(key, value.toInt())
+                        else -> editor.putLong(key, value.toLong())
+                    }
+                    true
+                }
+                else -> false
+            }
+        }
+
+        internal fun restoreSettingsEntries(
+            preferences: SharedPreferences,
+            entries: Map<String, Any?>,
+            includeLocalKeys: Boolean = false,
+        ) {
+            val existingValues = preferences.all.toMap()
+            val editor = preferences.edit()
+            for (existingKey in existingValues.keys) {
+                if (isSensitivePrefKey(existingKey)) continue
+                if (existingKey == SETTINGS_MIRROR_ENABLED) continue
+                if (!includeLocalKeys && existingKey in EXCLUDED_PREF_KEYS) continue
+                if (includeLocalKeys && existingKey in EXCLUDED_PREF_KEYS && !entries.containsKey(existingKey)) continue
+                editor.remove(existingKey)
+            }
+            for ((key, value) in entries) {
+                if (isSensitivePrefKey(key)) continue
+                if (key == SETTINGS_MIRROR_ENABLED) continue
+                if (!includeLocalKeys && key in EXCLUDED_PREF_KEYS) continue
+                putTypedPreference(editor, key, value, existingValues[key])
+            }
+            editor.apply()
+        }
+
+        internal fun restoreSettingsPreferences(
+            preferences: SharedPreferences,
+            json: JSONObject,
+            includeLocalKeys: Boolean = false,
+        ) {
+            val entries = LinkedHashMap<String, Any?>()
+            for (key in json.keys()) {
+                entries[key] = json.get(key)
+            }
+            restoreSettingsEntries(preferences, entries, includeLocalKeys = includeLocalKeys)
         }
     }
 
@@ -696,51 +805,7 @@ class SettingsBackupManager @Inject constructor(
     }
 
     private fun restoreSettingsJson(json: JSONObject, includeLocalKeys: Boolean = false) {
-        val editor = preferences.edit()
-        for (existingKey in preferences.all.keys) {
-            if (isSensitivePrefKey(existingKey)) continue
-            if (existingKey == SETTINGS_MIRROR_ENABLED) continue
-            if (!includeLocalKeys && existingKey in EXCLUDED_PREF_KEYS) continue
-            if (includeLocalKeys && existingKey in EXCLUDED_PREF_KEYS && !json.has(existingKey)) continue
-            editor.remove(existingKey)
-        }
-        for (key in json.keys()) {
-            if (isSensitivePrefKey(key)) continue
-            if (key == SETTINGS_MIRROR_ENABLED) continue
-            if (!includeLocalKeys && key in EXCLUDED_PREF_KEYS) continue
-            val value = json.get(key)
-            when (value) {
-                is Boolean -> editor.putBoolean(key, value)
-                is Int -> {
-                    if (isLongPrefKey(key)) {
-                        editor.putLong(key, value.toLong())
-                    } else {
-                        editor.putInt(key, value)
-                    }
-                }
-                is Long -> editor.putLong(key, value)
-                is Double -> editor.putFloat(key, value.toFloat())
-                is String -> editor.putString(key, value)
-                is JSONArray -> {
-                    val set = mutableSetOf<String>()
-                    for (i in 0 until value.length()) {
-                        set.add(value.getString(i))
-                    }
-                    editor.putStringSet(key, set)
-                }
-                is Number -> {
-                    val current = preferences.all[key]
-                    when {
-                        current is Long || isLongPrefKey(key) -> editor.putLong(key, value.toLong())
-                        current is Int -> editor.putInt(key, value.toInt())
-                        current is Float -> editor.putFloat(key, value.toFloat())
-                        value is Double -> editor.putFloat(key, value.toFloat())
-                        else -> editor.putLong(key, value.toLong())
-                    }
-                }
-            }
-        }
-        editor.apply()
+        restoreSettingsPreferences(preferences, json, includeLocalKeys = includeLocalKeys)
     }
 
     private fun restoreJsonFile(root: JSONObject, key: String, fileName: String) {

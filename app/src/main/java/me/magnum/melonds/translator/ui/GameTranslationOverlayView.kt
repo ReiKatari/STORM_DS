@@ -13,6 +13,7 @@ import android.view.MotionEvent
 import android.view.View
 import me.magnum.melonds.R
 import me.magnum.melonds.translator.dictionary.GameDictionaryService
+import me.magnum.melonds.utils.getFloatCompat
 import me.magnum.melonds.translator.model.TranslatedTextBlock
 import me.magnum.melonds.translator.model.TranslationRegion
 import me.magnum.melonds.translator.model.TranslatorOverlayStyle
@@ -428,8 +429,8 @@ class GameTranslationOverlayView @JvmOverloads constructor(
     private fun initFloatBtnPosition(w: Int, h: Int) {
         val halfW = floatBtnPanelWidth / 2f
         val halfH = floatBtnPanelHeight / 2f
-        val savedXRatio = prefs.getFloat("pref_translator_float_btn_x_ratio", -1f)
-        val savedYRatio = prefs.getFloat("pref_translator_float_btn_y_ratio", -1f)
+        val savedXRatio = prefs.getFloatCompat("pref_translator_float_btn_x_ratio", -1f)
+        val savedYRatio = prefs.getFloatCompat("pref_translator_float_btn_y_ratio", -1f)
         if (savedXRatio in 0f..1f && savedYRatio in 0f..1f) {
             floatBtnX = (savedXRatio * w).coerceIn(halfW + 8f, w - halfW - 8f)
             floatBtnY = (savedYRatio * h).coerceIn(halfH + 8f, h - halfH - 8f)

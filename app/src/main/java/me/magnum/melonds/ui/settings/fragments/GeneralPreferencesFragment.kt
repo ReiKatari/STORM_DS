@@ -542,6 +542,7 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
                 val prefsJson = if (rootJson.has("preferences")) rootJson.getJSONObject("preferences") else rootJson
 
                 val prefs = PreferenceManager.getDefaultSharedPreferences(appContext)
+                val existingValues = prefs.all.toMap()
                 val editor = prefs.edit()
                 var appliedCount = 0
 
@@ -589,35 +590,8 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
                             }
                         }
                     } else {
-                        when (objOrVal) {
-                            is Boolean -> {
-                                editor.putBoolean(key, objOrVal)
-                                appliedCount++
-                            }
-                            is Int -> {
-                                editor.putInt(key, objOrVal)
-                                appliedCount++
-                            }
-                            is Long -> {
-                                editor.putLong(key, objOrVal)
-                                appliedCount++
-                            }
-                            is Double -> {
-                                editor.putFloat(key, objOrVal.toFloat())
-                                appliedCount++
-                            }
-                            is String -> {
-                                editor.putString(key, objOrVal)
-                                appliedCount++
-                            }
-                            is org.json.JSONArray -> {
-                                val set = mutableSetOf<String>()
-                                for (i in 0 until objOrVal.length()) {
-                                    set.add(objOrVal.getString(i))
-                                }
-                                editor.putStringSet(key, set)
-                                appliedCount++
-                            }
+                        if (SettingsBackupManager.putTypedPreference(editor, key, objOrVal, existingValues[key])) {
+                            appliedCount++
                         }
                     }
                 }
