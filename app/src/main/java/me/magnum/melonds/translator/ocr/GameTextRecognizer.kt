@@ -20,6 +20,8 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import me.magnum.melonds.translator.model.TranslatedTextBlock
 import me.magnum.melonds.translator.model.TranslationRegion
+import java.util.Collections
+import java.util.IdentityHashMap
 import kotlin.coroutines.resumeWithException
 import kotlin.math.max
 import kotlin.math.min
@@ -64,6 +66,47 @@ class GameTextRecognizer {
     }
 
     private val ocrLruCache = object : android.util.LruCache<String, List<TranslatedTextBlock>>(32) {}
+    private val bitmapRecycleLock = Any()
+    private val inFlightBitmapCounts = IdentityHashMap<Bitmap, Int>()
+    private val pendingRecycleBitmaps = Collections.newSetFromMap(IdentityHashMap<Bitmap, Boolean>())
+
+    private fun retainBitmapForOcr(bitmap: Bitmap) {
+        synchronized(bitmapRecycleLock) {
+            inFlightBitmapCounts[bitmap] = (inFlightBitmapCounts[bitmap] ?: 0) + 1
+        }
+    }
+
+    private fun releaseBitmapFromOcr(bitmap: Bitmap) {
+        val shouldRecycle = synchronized(bitmapRecycleLock) {
+            val current = inFlightBitmapCounts[bitmap] ?: 0
+            if (current <= 1) {
+                inFlightBitmapCounts.remove(bitmap)
+                pendingRecycleBitmaps.remove(bitmap)
+            } else {
+                inFlightBitmapCounts[bitmap] = current - 1
+                false
+            }
+        }
+        if (shouldRecycle && !bitmap.isRecycled) {
+            bitmap.recycle()
+        }
+    }
+
+    fun recycleBitmapSafely(bitmap: Bitmap?) {
+        if (bitmap == null) return
+        val recycleNow = synchronized(bitmapRecycleLock) {
+            if ((inFlightBitmapCounts[bitmap] ?: 0) > 0) {
+                pendingRecycleBitmaps.add(bitmap)
+                false
+            } else {
+                pendingRecycleBitmaps.remove(bitmap)
+                true
+            }
+        }
+        if (recycleNow && !bitmap.isRecycled) {
+            bitmap.recycle()
+        }
+    }
 
     fun clearCache() {
         ocrLruCache.evictAll()
@@ -139,7 +182,9 @@ class GameTextRecognizer {
                     val localBlocks = try {
                         recognizeWithMultiPass(cropBitmap, sourceLang)
                     } finally {
-                        if (!cropBitmap.isRecycled) cropBitmap.recycle()
+                        if (cropBitmap !== safeBitmap) {
+                            recycleBitmapSafely(cropBitmap)
+                        }
                     }
 
                     val regionWidthRel = region.rect.width()
@@ -171,8 +216,8 @@ class GameTextRecognizer {
             Log.i(TAG, "OCR finished fullscreen with ${blocks.size} total blocks (cached)")
             blocks
         } finally {
-            if (safeBitmap !== bitmap && !safeBitmap.isRecycled) {
-                safeBitmap.recycle()
+            if (safeBitmap !== bitmap) {
+                recycleBitmapSafely(safeBitmap)
             }
         }
     }
@@ -197,7 +242,7 @@ class GameTextRecognizer {
                 blocks = try {
                     recognizeOnBitmap(sauvolaBitmap, sourceLang)
                 } finally {
-                    if (!sauvolaBitmap.isRecycled) sauvolaBitmap.recycle()
+                    recycleBitmapSafely(sauvolaBitmap)
                 }
                 if (blocks.isNotEmpty()) {
                     Log.i(TAG, "OCR Pass 2 (Sauvola Adaptive Thresholding) matched ${blocks.size} blocks")
@@ -211,7 +256,7 @@ class GameTextRecognizer {
                 blocks = try {
                     recognizeOnBitmap(otsuInverted, sourceLang)
                 } finally {
-                    if (!otsuInverted.isRecycled) otsuInverted.recycle()
+                    recycleBitmapSafely(otsuInverted)
                 }
                 if (blocks.isNotEmpty()) {
                     Log.i(TAG, "OCR Pass 3 (Otsu Inverted Binarization) matched ${blocks.size} blocks")
@@ -225,7 +270,7 @@ class GameTextRecognizer {
                 blocks = try {
                     recognizeOnBitmap(colorIsolated, sourceLang)
                 } finally {
-                    if (!colorIsolated.isRecycled) colorIsolated.recycle()
+                    recycleBitmapSafely(colorIsolated)
                 }
                 if (blocks.isNotEmpty()) {
                     Log.i(TAG, "OCR Pass 4 (Chromatic Text Isolation) matched ${blocks.size} blocks")
@@ -249,7 +294,7 @@ class GameTextRecognizer {
                         )
                     }
                 } finally {
-                    if (!topHalf.isRecycled) topHalf.recycle()
+                    if (topHalf !== pixelScaled) recycleBitmapSafely(topHalf)
                 }
 
                 val bottomHalf = Bitmap.createBitmap(pixelScaled, 0, halfH, pixelScaled.width, halfH)
@@ -265,7 +310,7 @@ class GameTextRecognizer {
                         )
                     }
                 } finally {
-                    if (!bottomHalf.isRecycled) bottomHalf.recycle()
+                    if (bottomHalf !== pixelScaled) recycleBitmapSafely(bottomHalf)
                 }
 
                 blocks = topBlocks + bottomBlocks
@@ -276,8 +321,8 @@ class GameTextRecognizer {
 
             return blocks
         } finally {
-            if (pixelScaled !== inputBitmap && !pixelScaled.isRecycled) {
-                pixelScaled.recycle()
+            if (pixelScaled !== inputBitmap) {
+                recycleBitmapSafely(pixelScaled)
             }
         }
     }
@@ -622,13 +667,15 @@ class GameTextRecognizer {
 
         val inputImage = InputImage.fromBitmap(bitmap, 0)
         var visionText: Text? = null
+        var matchedRecognizer: TextRecognizer? = null
 
         for (provider in recognizerProviders) {
             try {
                 val rec = provider()
-                val result = rec.processAsync(inputImage)
+                val result = rec.processAsync(inputImage, bitmap)
                 if (result.textBlocks.isNotEmpty()) {
                     visionText = result
+                    matchedRecognizer = rec
                     Log.i(TAG, "ML Kit (${rec.javaClass.simpleName}) found ${result.textBlocks.size} blocks: \"${result.text.take(80).replace('\n', ' ')}\"")
                     break
                 }
@@ -640,9 +687,15 @@ class GameTextRecognizer {
 
         visionText ?: return emptyList()
 
+        val recognizerIsCjk = (japaneseInitialized && matchedRecognizer === japaneseRecognizer) ||
+            (chineseInitialized && matchedRecognizer === chineseRecognizer)
+        val textIsCjk = visionText.text.any {
+            it in '\u3040'..'\u30FF' || it in '\u4E00'..'\u9FFF' || it in '\uAC00'..'\uD7AF'
+        }
         val isCjk = sourceLang.startsWith("ja", ignoreCase = true) ||
                     sourceLang.startsWith("zh", ignoreCase = true) ||
-                    sourceLang.startsWith("ko", ignoreCase = true)
+                    sourceLang.startsWith("ko", ignoreCase = true) ||
+                    (sourceLang.equals("auto", ignoreCase = true) && (recognizerIsCjk || textIsCjk))
 
         val rawBlocks = mutableListOf<TranslatedTextBlock>()
         val rawLineHeights = mutableListOf<Float>()
@@ -789,9 +842,19 @@ class GameTextRecognizer {
         )
     }
 
-    private suspend fun TextRecognizer.processAsync(image: InputImage): Text =
-        suspendCancellableCoroutine { continuation ->
+    private suspend fun TextRecognizer.processAsync(image: InputImage, backingBitmap: Bitmap): Text {
+        retainBitmapForOcr(backingBitmap)
+        val task = try {
             process(image)
+        } catch (t: Throwable) {
+            releaseBitmapFromOcr(backingBitmap)
+            throw t
+        }
+        task.addOnCompleteListener {
+            releaseBitmapFromOcr(backingBitmap)
+        }
+        return suspendCancellableCoroutine { continuation ->
+            task
                 .addOnSuccessListener { text ->
                     if (continuation.isActive) continuation.resume(text, onCancellation = null)
                 }
@@ -799,6 +862,7 @@ class GameTextRecognizer {
                     if (continuation.isActive) continuation.resumeWithException(exception)
                 }
         }
+    }
 
     private fun sampleBackgroundColor(bitmap: Bitmap, box: Rect): Int {
         val w = bitmap.width

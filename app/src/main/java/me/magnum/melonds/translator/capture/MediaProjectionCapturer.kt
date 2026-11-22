@@ -46,7 +46,7 @@ class MediaProjectionCapturer(private val activity: Activity) {
 
     fun release() {
         permissionGranted = false
-        ScreenCaptureService.cleanup()
+        ScreenCaptureService.stop(activity)
     }
 
     fun onDestroy() {

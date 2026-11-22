@@ -233,24 +233,6 @@
                 app:iconSpaceReserved="false"
                 android:defaultValue="false" />
 
-        <ListPreference
-                android:key="video_ai_upscale_scale"
-                android:title="@string/video_ai_upscale_scale_title"
-                android:summary="%s"
-                android:dependency="video_ai_upscale_enabled"
-                app:iconSpaceReserved="false"
-                android:entries="@array/video_ai_upscale_scale_options"
-                android:entryValues="@array/video_ai_upscale_scale_values"
-                android:defaultValue="4x" />
-
-        <SwitchPreference
-                android:key="video_hd_textures_enabled"
-                android:title="@string/video_hd_textures_title"
-                android:summary="@string/video_hd_textures_summary"
-                app:iconSpaceReserved="false"
-                app:isPreferenceVisible="false"
-                android:defaultValue="false" />
-
         <SwitchPreference
                 android:key="video_oled_battery_saver"
                 android:title="@string/video_oled_battery_saver_title"

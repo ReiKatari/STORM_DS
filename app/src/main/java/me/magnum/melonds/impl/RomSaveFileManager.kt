@@ -31,6 +31,9 @@ class RomSaveFileManager @Inject constructor(
     )
 
     fun hasSaveFile(rom: Rom): Boolean {
+        if (rom.isInstalledDsiWareShortcut) {
+            return false
+        }
         return runCatching {
             val baseName = rom.fileName.substringBeforeLast('.')
             val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
@@ -58,6 +61,9 @@ class RomSaveFileManager @Inject constructor(
     }
 
     fun prepareShareFile(rom: Rom): SharedSaveFile? {
+        if (rom.isInstalledDsiWareShortcut) {
+            return null
+        }
         val sourceDocument = findExistingSaveFile(rom) ?: return null
         val sourceUri = sourceDocument.uri
         val fileName = sourceDocument.name ?: resolveSaveFileName(rom)
@@ -84,6 +90,9 @@ class RomSaveFileManager @Inject constructor(
     }
 
     fun importSaveFile(rom: Rom, sourceUri: Uri) {
+        require(!rom.isInstalledDsiWareShortcut) {
+            "Save files are not supported for installed DSiWare shortcuts"
+        }
         require(isPlausibleSaveFile(sourceUri)) {
             "Selected file is not a plausible DS save file"
         }

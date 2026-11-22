@@ -427,7 +427,7 @@ fun DialogueBacklogContent(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(glossaryEntries, key = { "${it.sourceTerm}_${it.caseSensitive}" }) { entry ->
-                        val isGame = glossaryManager.isGameSpecific(entry.sourceTerm)
+                        val isGame = glossaryManager.isGameSpecific(entry.sourceTerm, entry.caseSensitive)
                         GlossaryEntryCard(
                             entry = entry,
                             isGameSpecific = isGame,
@@ -489,7 +489,7 @@ fun DialogueBacklogContent(
 
     // Modal: Confirm Delete
     termToDelete?.let { entry ->
-        val isGame = glossaryManager.isGameSpecific(entry.sourceTerm)
+        val isGame = glossaryManager.isGameSpecific(entry.sourceTerm, entry.caseSensitive)
         AlertDialog(
             onDismissRequest = { termToDelete = null },
             backgroundColor = cardDark,

@@ -1,5 +1,6 @@
 package me.magnum.melonds.ui.romlist.composables
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -23,7 +24,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.systemBars
@@ -37,14 +40,21 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.Icon
+import androidx.compose.material.IconButton
 import androidx.compose.material.LinearProgressIndicator
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.ViewList
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
@@ -77,12 +87,19 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.foundation.MutatePriority
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
@@ -94,8 +111,10 @@ import me.magnum.melonds.domain.model.RomScanningStatus
 import me.magnum.melonds.domain.model.RomViewMode
 import me.magnum.melonds.domain.model.SortingMode
 import me.magnum.melonds.domain.model.rom.Rom
+import me.magnum.melonds.ui.common.WatermelonMark
 import me.magnum.melonds.ui.romlist.RomBrowserEntry
 import me.magnum.melonds.ui.romlist.RomBrowserUiState
+import me.magnum.melonds.ui.theme.SpaceGrotesk
 import me.magnum.melonds.ui.theme.watermelon
 
 @OptIn(ExperimentalMaterialApi::class)
@@ -106,6 +125,7 @@ fun RomBrowserScreen(
     boxArtByUri: Map<String, String>,
     searchQuery: String,
     allowConfiguration: Boolean,
+    isShortcutPickerMode: Boolean = false,
     scanningStatus: RomScanningStatus,
     confirmedAchievementHashes: Set<String>,
     isRaAuthenticated: Boolean,
@@ -279,7 +299,7 @@ fun RomBrowserScreen(
     val showAlphabetBar = (state.alphabetIndex.isNotEmpty() || hasFolders) && state.sortingMode == SortingMode.ALPHABETICALLY
 
     val isAtLibraryTop = state.isAtVirtualRoot || !state.canNavigateUp
-    val showContinueShelf = isAtLibraryTop && !state.isSearchActive && state.filter == RomFilter.ALL && state.continuePlaying.isNotEmpty()
+    val showContinueShelf = !isShortcutPickerMode && isAtLibraryTop && !state.isSearchActive && state.filter == RomFilter.ALL && state.continuePlaying.isNotEmpty()
     val showSectionHeader = !state.isSearchActive
 
     val gridLeadingItems = if (hasFolders) 1 else 0
@@ -323,25 +343,114 @@ fun RomBrowserScreen(
         }
     }
 
+    val renderAlphabetBar: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit = {
+        if (showAlphabetBar) {
+            val leadingItems = when (state.viewMode) {
+                RomViewMode.GRID -> gridLeadingItems
+                RomViewMode.LIST -> listLeadingItems
+            }
+            val activeFirstVis by remember(state.viewMode, leadingItems, folderCount) {
+                derivedStateOf {
+                    val firstVisItem = when (state.viewMode) {
+                        RomViewMode.GRID -> gridState.firstVisibleItemIndex
+                        RomViewMode.LIST -> listState.firstVisibleItemIndex
+                    }
+                    when (state.viewMode) {
+                        RomViewMode.GRID -> (firstVisItem - leadingItems + folderCount).coerceAtLeast(0)
+                        RomViewMode.LIST -> (firstVisItem - leadingItems).coerceAtLeast(0)
+                    }
+                }
+            }
+            val activeLetter by remember(state.alphabetIndex, state.viewMode, pinToTop, isCurrentlyAtTop, userHasScrolledManually) {
+                derivedStateOf {
+                    if (pinToTop || isCurrentlyAtTop || !userHasScrolledManually) {
+                        state.alphabetIndex.keys.firstOrNull() ?: '#'
+                    } else {
+                        letterForIndex(state.alphabetIndex, activeFirstVis)
+                    }
+                }
+            }
+            val isInFolderSection by remember(folderCount, state.viewMode) {
+                derivedStateOf { hasFolders && activeFirstVis < folderCount }
+            }
+            AlphabetIndexBar(
+                alphabetIndex = state.alphabetIndex,
+                activeLetter = activeLetter,
+                hasFolders = hasFolders,
+                isInFolderSection = isInFolderSection,
+                isInteractive = !userRefreshPending,
+                onFoldersClicked = {
+                    if (userRefreshPending) return@AlphabetIndexBar
+                    coroutineScope.launch {
+                        userHasScrolledManually = false
+                        pinToTop = true
+                        snapToTop()
+                        withFrameNanos { }
+                        requestFirstVisibleRomFocus(
+                            state = state,
+                            gridState = gridState,
+                            listState = listState,
+                            itemFocusRequesters = itemFocusRequesters,
+                        )
+                    }
+                },
+                onLetterTouched = { idx, letter ->
+                    if (userRefreshPending) return@AlphabetIndexBar
+                    coroutineScope.launch {
+                        if (letter == '#' || idx <= 0) {
+                            userHasScrolledManually = false
+                            pinToTop = true
+                            snapToTop()
+                        } else {
+                            userHasScrolledManually = true
+                            pinToTop = false
+                            val targetItemIndex = when (state.viewMode) {
+                                RomViewMode.GRID -> leadingItems + (idx - folderCount).coerceAtLeast(0)
+                                RomViewMode.LIST -> leadingItems + idx
+                            }
+                            when (state.viewMode) {
+                                RomViewMode.GRID -> gridState.scrollToItem(targetItemIndex, 0)
+                                RomViewMode.LIST -> listState.scrollToItem(targetItemIndex, 0)
+                            }
+                        }
+                    }
+                },
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(top = 8.dp, bottom = 12.dp, end = 2.dp),
+            )
+        }
+    }
+
     Surface(color = colors.bg, modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))) {
             Column(modifier = Modifier.fillMaxSize()) {
-                WatermelonLibraryHeader(
-                    isSearchActive = state.isSearchActive,
-                    searchQuery = searchQuery,
-                    viewMode = state.viewMode,
-                    onSearchQueryChanged = onSearchQueryChanged,
-                    onToggleViewMode = onToggleViewMode,
-                    onBootFirmwareDs = onBootFirmwareDs,
-                    onBootFirmwareDsi = onBootFirmwareDsi,
-                    onOpenSingleRom = onOpenSingleRom,
-                    onRandomRom = onRandomRom,
-                    onRefresh = handleRefreshWithScrollReset,
-                    onCheckUpdates = onCheckUpdates,
-                    onOpenSettings = onOpenSettings,
-                    onOpenPlayerStats = onOpenPlayerStats,
-                    onReportProblem = onReportProblem,
-                )
+                if (isShortcutPickerMode) {
+                    ShortcutPickerLibraryHeader(
+                        isSearchActive = state.isSearchActive,
+                        searchQuery = searchQuery,
+                        viewMode = state.viewMode,
+                        onSearchQueryChanged = onSearchQueryChanged,
+                        onToggleViewMode = onToggleViewMode,
+                    )
+                } else {
+                    WatermelonLibraryHeader(
+                        isSearchActive = state.isSearchActive,
+                        searchQuery = searchQuery,
+                        viewMode = state.viewMode,
+                        onSearchQueryChanged = onSearchQueryChanged,
+                        onToggleViewMode = onToggleViewMode,
+                        onBootFirmwareDs = onBootFirmwareDs,
+                        onBootFirmwareDsi = onBootFirmwareDsi,
+                        onOpenSingleRom = onOpenSingleRom,
+                        onRandomRom = onRandomRom,
+                        onRefresh = handleRefreshWithScrollReset,
+                        onCheckUpdates = onCheckUpdates,
+                        onOpenSettings = onOpenSettings,
+                        onOpenPlayerStats = onOpenPlayerStats,
+                        onReportProblem = onReportProblem,
+                    )
+                }
 
                 if (scanningStatus == RomScanningStatus.SCANNING) {
                     LinearProgressIndicator(
@@ -375,7 +484,7 @@ fun RomBrowserScreen(
                                 .fillMaxHeight()
                                 .padding(start = 16.dp, end = 10.dp, top = 6.dp, bottom = 6.dp),
                         ) {
-                            if (state.continuePlaying.isNotEmpty() && !state.isSearchActive && !state.canNavigateUp) {
+                            if (!isShortcutPickerMode && state.continuePlaying.isNotEmpty() && !state.isSearchActive && !state.canNavigateUp) {
                                 ContinuePlayingLandscapeColumn(
                                     roms = state.continuePlaying,
                                     coverByHash = coverByHash,
@@ -531,6 +640,7 @@ fun RomBrowserScreen(
                                     backgroundColor = colors.surface,
                                     contentColor = colors.red,
                                 )
+                                renderAlphabetBar()
                             }
                         }
                     }
@@ -667,86 +777,145 @@ fun RomBrowserScreen(
                         )
 
                         // Alphabet Index Bar: anchored inside the games list area
-                        if (showAlphabetBar) {
-                            val leadingItems = when (state.viewMode) {
-                                RomViewMode.GRID -> gridLeadingItems
-                                RomViewMode.LIST -> listLeadingItems
-                            }
-                            val activeFirstVis by remember(state.viewMode, leadingItems, folderCount) {
-                                derivedStateOf {
-                                    val firstVisItem = when (state.viewMode) {
-                                        RomViewMode.GRID -> gridState.firstVisibleItemIndex
-                                        RomViewMode.LIST -> listState.firstVisibleItemIndex
-                                    }
-                                    when (state.viewMode) {
-                                        RomViewMode.GRID -> (firstVisItem - leadingItems + folderCount).coerceAtLeast(0)
-                                        RomViewMode.LIST -> (firstVisItem - leadingItems).coerceAtLeast(0)
-                                    }
-                                }
-                            }
-                            val activeLetter by remember(state.alphabetIndex, state.viewMode, pinToTop, isCurrentlyAtTop, userHasScrolledManually) {
-                                derivedStateOf {
-                                    if (pinToTop || isCurrentlyAtTop || !userHasScrolledManually) {
-                                        state.alphabetIndex.keys.firstOrNull() ?: '#'
-                                    } else {
-                                        letterForIndex(state.alphabetIndex, activeFirstVis)
-                                    }
-                                }
-                            }
-                            val isInFolderSection by remember(folderCount, state.viewMode) {
-                                derivedStateOf { hasFolders && activeFirstVis < folderCount }
-                            }
-                            AlphabetIndexBar(
-                                alphabetIndex = state.alphabetIndex,
-                                activeLetter = activeLetter,
-                                hasFolders = hasFolders,
-                                isInFolderSection = isInFolderSection,
-                                isInteractive = !userRefreshPending,
-                                onFoldersClicked = {
-                                    if (userRefreshPending) return@AlphabetIndexBar
-                                    coroutineScope.launch {
-                                        userHasScrolledManually = false
-                                        pinToTop = true
-                                        snapToTop()
-                                        withFrameNanos { }
-                                        requestFirstVisibleRomFocus(
-                                            state = state,
-                                            gridState = gridState,
-                                            listState = listState,
-                                            itemFocusRequesters = itemFocusRequesters,
-                                        )
-                                    }
-                                },
-                                onLetterTouched = { idx, letter ->
-                                    if (userRefreshPending) return@AlphabetIndexBar
-                                    coroutineScope.launch {
-                                        if (letter == '#' || idx <= 0) {
-                                            userHasScrolledManually = false
-                                            pinToTop = true
-                                            snapToTop()
-                                        } else {
-                                            userHasScrolledManually = true
-                                            pinToTop = false
-                                            val targetItemIndex = when (state.viewMode) {
-                                                RomViewMode.GRID -> leadingItems + (idx - folderCount).coerceAtLeast(0)
-                                                RomViewMode.LIST -> leadingItems + idx
-                                            }
-                                            when (state.viewMode) {
-                                                RomViewMode.GRID -> gridState.scrollToItem(targetItemIndex, 0)
-                                                RomViewMode.LIST -> listState.scrollToItem(targetItemIndex, 0)
-                                            }
-                                        }
-                                    }
-                                },
-                                modifier = Modifier
-                                    .align(Alignment.CenterEnd)
-                                    .padding(top = 8.dp, bottom = 12.dp, end = 2.dp),
-                            )
-                        }
+                        renderAlphabetBar()
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ShortcutPickerLibraryHeader(
+    isSearchActive: Boolean,
+    searchQuery: String,
+    viewMode: RomViewMode,
+    onSearchQueryChanged: (String?) -> Unit,
+    onToggleViewMode: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = watermelon
+    var searchOpen by remember { mutableStateOf(isSearchActive) }
+    LaunchedEffect(isSearchActive) {
+        if (isSearchActive) searchOpen = true
+    }
+    BackHandler(enabled = searchOpen) {
+        searchOpen = false
+        onSearchQueryChanged(null)
+    }
+    val searchFocusRequester = remember { FocusRequester() }
+
+    Column(modifier = modifier.fillMaxWidth().background(colors.bg)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .padding(start = 14.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (searchOpen) {
+                IconButton(
+                    onClick = {
+                        searchOpen = false
+                        onSearchQueryChanged(null)
+                    },
+                    modifier = Modifier.size(38.dp),
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = colors.text2, modifier = Modifier.size(20.dp))
+                }
+                BasicTextField(
+                    value = searchQuery,
+                    onValueChange = { onSearchQueryChanged(it) },
+                    singleLine = true,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
+                    textStyle = TextStyle(color = colors.text, fontSize = 15.sp),
+                    cursorBrush = SolidColor(colors.red),
+                    decorationBox = { innerTextField ->
+                        Box {
+                            if (searchQuery.isEmpty()) {
+                                Text(
+                                    text = stringResource(R.string.hint_search_roms),
+                                    color = colors.text3,
+                                    fontSize = 15.sp,
+                                )
+                            }
+                            innerTextField()
+                        }
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 6.dp)
+                        .focusRequester(searchFocusRequester),
+                )
+                LaunchedEffect(Unit) {
+                    runCatching { searchFocusRequester.requestFocus() }
+                }
+                IconButton(
+                    onClick = {
+                        if (searchQuery.isNotEmpty()) {
+                            onSearchQueryChanged("")
+                        } else {
+                            searchOpen = false
+                            onSearchQueryChanged(null)
+                        }
+                    },
+                    modifier = Modifier.size(36.dp),
+                ) {
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = stringResource(R.string.close),
+                        tint = colors.text2,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+                IconButton(onClick = onToggleViewMode, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        imageVector = if (viewMode == RomViewMode.GRID) Icons.Filled.ViewList else Icons.Filled.GridView,
+                        contentDescription = stringResource(R.string.rom_view_toggle),
+                        tint = colors.text2,
+                        modifier = Modifier.size(19.dp),
+                    )
+                }
+            } else {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(end = 4.dp),
+                ) {
+                    WatermelonMark(height = 22.dp)
+                    Spacer(Modifier.width(7.dp))
+                    Text(
+                        text = buildAnnotatedString {
+                            withStyle(SpanStyle(color = colors.text, fontWeight = FontWeight.Bold)) {
+                                append("STORM ")
+                            }
+                            withStyle(SpanStyle(color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold)) {
+                                append("DS")
+                            }
+                        },
+                        fontFamily = SpaceGrotesk,
+                        fontSize = 18.sp,
+                        letterSpacing = (-0.3).sp,
+                        softWrap = false,
+                        maxLines = 1,
+                    )
+                }
+
+                Spacer(Modifier.weight(1f))
+
+                IconButton(onClick = { searchOpen = true; onSearchQueryChanged("") }, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.action_search_roms), tint = colors.text2, modifier = Modifier.size(19.dp))
+                }
+                IconButton(onClick = onToggleViewMode, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        imageVector = if (viewMode == RomViewMode.GRID) Icons.Filled.ViewList else Icons.Filled.GridView,
+                        contentDescription = stringResource(R.string.rom_view_toggle),
+                        tint = colors.text2,
+                        modifier = Modifier.size(19.dp),
+                    )
+                }
+            }
+        }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.line))
     }
 }
 

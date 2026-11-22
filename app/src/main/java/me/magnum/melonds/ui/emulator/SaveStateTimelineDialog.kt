@@ -64,7 +64,7 @@ fun SaveStateTimelineDialog(
         if (saveStateSlots.isNotEmpty()) {
             saveStateSlots.map { slot ->
                 val isQuick = slot.slot == SaveStateSlot.QUICK_SAVE_SLOT
-                val defaultTitle = if (isQuick) "Автосохранение" else "Слот ${slot.slot}"
+                val defaultTitle = if (isQuick) context.getString(R.string.v870_timeline_autosave) else context.getString(R.string.v870_save_slot_chip, slot.slot)
                 val title = slot.customName?.takeIf { it.isNotBlank() }?.let { "$defaultTitle ($it)" } ?: defaultTitle
                 val ts = if (slot.exists && slot.lastUsedDate != null) {
                     dateFormat.format(slot.lastUsedDate)
@@ -83,12 +83,12 @@ fun SaveStateTimelineDialog(
         } else {
             val now = System.currentTimeMillis()
             listOf(
-                StateTimelineSlot(0, "Автосохранение", dateFormat.format(Date(now - 5 * 60_000L)), isAutoSave = true, hasData = true),
-                StateTimelineSlot(1, "Слот 1 (Босс)", dateFormat.format(Date(now - 15 * 60_000L)), hasData = true),
-                StateTimelineSlot(2, "Слот 2 (Перед диалогом)", dateFormat.format(Date(now - 35 * 60_000L)), hasData = true),
-                StateTimelineSlot(3, "Слот 3 (Новая локация)", dateFormat.format(Date(now - 24 * 3600_000L)), hasData = true),
-                StateTimelineSlot(4, "Слот 4 (Свободный)", emptySlotLabel, hasData = false),
-                StateTimelineSlot(5, "Слот 5 (Свободный)", emptySlotLabel, hasData = false),
+                StateTimelineSlot(0, context.getString(R.string.v870_timeline_autosave), dateFormat.format(Date(now - 5 * 60_000L)), isAutoSave = true, hasData = true),
+                StateTimelineSlot(1, context.getString(R.string.v870_timeline_sample_boss), dateFormat.format(Date(now - 15 * 60_000L)), hasData = true),
+                StateTimelineSlot(2, context.getString(R.string.v870_timeline_sample_dialog), dateFormat.format(Date(now - 35 * 60_000L)), hasData = true),
+                StateTimelineSlot(3, context.getString(R.string.v870_timeline_sample_location), dateFormat.format(Date(now - 24 * 3600_000L)), hasData = true),
+                StateTimelineSlot(4, "${context.getString(R.string.v870_save_slot_chip, 4)} (${context.getString(R.string.v870_save_dup_free)})", emptySlotLabel, hasData = false),
+                StateTimelineSlot(5, "${context.getString(R.string.v870_save_slot_chip, 5)} (${context.getString(R.string.v870_save_dup_free)})", emptySlotLabel, hasData = false),
             )
         }
     }
@@ -127,14 +127,14 @@ fun SaveStateTimelineDialog(
                         )
                         Column {
                             Text(
-                                text = "ТАЙМЛАЙН СОХРАНЕНИЙ (STATE TIMELINE)",
+                                text = stringResource(R.string.v870_timeline_title),
                                 color = colors.text,
                                 fontFamily = SpaceGrotesk,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Мгновенная перемотка сюжета по слотам и скриншотам",
+                                text = stringResource(R.string.v870_timeline_subtitle),
                                 color = colors.text2,
                                 fontFamily = WatermelonMono,
                                 fontSize = 9.sp
@@ -158,12 +158,12 @@ fun SaveStateTimelineDialog(
                         SlotCard(
                             slot = slot,
                             onLoad = {
-                                Toast.makeText(context, "Загружен ${slot.title}", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, context.getString(R.string.v870_timeline_loaded_toast, slot.title), Toast.LENGTH_SHORT).show()
                                 onLoadSlot(slot.slotNumber)
                                 onDismiss()
                             },
                             onSave = {
-                                Toast.makeText(context, "Сохранено в ${slot.title}", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, context.getString(R.string.v870_timeline_saved_toast, slot.title), Toast.LENGTH_SHORT).show()
                                 onSaveSlot(slot.slotNumber)
                                 onDismiss()
                             }
@@ -259,7 +259,7 @@ private fun SlotCard(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = Color.Black, modifier = Modifier.size(14.dp))
-                        Text("ЗАГРУЗИТЬ", color = Color.Black, fontFamily = WatermelonMono, fontSize = 8.5.sp, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.v870_timeline_load_btn), color = Color.Black, fontFamily = WatermelonMono, fontSize = 8.5.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -276,7 +276,7 @@ private fun SlotCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Filled.Save, contentDescription = null, tint = colors.text, modifier = Modifier.size(12.dp))
                     Spacer(Modifier.width(2.dp))
-                    Text("СОХРАНИТЬ", color = colors.text, fontFamily = WatermelonMono, fontSize = 8.5.sp, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.v870_timeline_save_btn), color = colors.text, fontFamily = WatermelonMono, fontSize = 8.5.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }

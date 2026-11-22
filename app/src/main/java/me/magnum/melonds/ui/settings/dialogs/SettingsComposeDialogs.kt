@@ -27,6 +27,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,6 +54,7 @@ import me.magnum.melonds.ui.theme.WatermelonMono
 
 fun showSettingsComposeDialog(
     context: Context,
+    onDismiss: (() -> Unit)? = null,
     content: @Composable (dismiss: () -> Unit) -> Unit
 ): Dialog {
     val dialog = ComponentDialog(context, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
@@ -62,6 +66,25 @@ fun showSettingsComposeDialog(
     }
     dialog.setOnShowListener {
         dialog.window?.applyImmersiveFullscreen()
+    }
+
+    val lifecycleOwner = context as? LifecycleOwner
+    val lifecycleObserver = if (lifecycleOwner != null) {
+        object : DefaultLifecycleObserver {
+            override fun onDestroy(owner: LifecycleOwner) {
+                if (dialog.isShowing) {
+                    dialog.dismiss()
+                }
+            }
+        }.also { lifecycleOwner.lifecycle.addObserver(it) }
+    } else {
+        null
+    }
+    dialog.setOnDismissListener {
+        if (lifecycleOwner != null && lifecycleObserver != null) {
+            lifecycleOwner.lifecycle.removeObserver(lifecycleObserver)
+        }
+        onDismiss?.invoke()
     }
 
     val composeView = ComposeView(context).apply {
@@ -525,13 +548,10 @@ fun SettingsSeekBarDialogContent(
 }
 
 fun showSettingsRewindDialog(context: Context, onUpdated: (() -> Unit)? = null): Dialog {
-    return showSettingsComposeDialog(context) { dismiss ->
+    return showSettingsComposeDialog(context = context, onDismiss = onUpdated) { dismiss ->
         SettingsRewindDialogContent(
             context = context,
-            onDismiss = {
-                onUpdated?.invoke()
-                dismiss()
-            }
+            onDismiss = dismiss,
         )
     }
 }
@@ -740,9 +760,9 @@ fun SettingsRetroAchievementsLoginDialogContent(
     onDismiss: () -> Unit,
 ) {
     val colors = LocalWatermelonColors.current
-    var username by remember { mutableStateOf(existingUsername.orEmpty()) }
-    var password by remember { mutableStateOf("") }
-    var passwordVisible by remember { mutableStateOf(false) }
+    var username by rememberSaveable { mutableStateOf(existingUsername.orEmpty()) }
+    var password by rememberSaveable { mutableStateOf("") }
+    var passwordVisible by rememberSaveable { mutableStateOf(false) }
 
     SettingsDialogScaffold(
         title = stringResource(R.string.login_with_retro_achievements),

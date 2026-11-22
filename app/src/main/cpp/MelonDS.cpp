@@ -442,8 +442,16 @@ namespace MelonDSAndroid
     std::shared_ptr<Net> net;
 
     std::shared_ptr<MelonInstance> instance;
+    std::mutex currentConfigurationMutex;
     std::mutex instanceLifetimeMutex;
     std::mutex openGlContextMutex;
+    std::mutex mpInterfaceMutex;
+
+    std::shared_ptr<EmulatorConfiguration> GetConfigurationSnapshot()
+    {
+        std::lock_guard lock(currentConfigurationMutex);
+        return currentConfiguration;
+    }
 
     std::shared_ptr<MelonInstance> GetInstanceSnapshot()
     {
@@ -523,11 +531,15 @@ namespace MelonDSAndroid
      * @param emulatorConfiguration The emulator configuration during the next emulator run
      */
     void setConfiguration(EmulatorConfiguration emulatorConfiguration) {
-        currentConfiguration = ShareConfiguration(std::move(emulatorConfiguration));
-        internalFilesDir = currentConfiguration->internalFilesDir ? currentConfiguration->internalFilesDir : "";
-        rendererDebugToolsEnabled.store(ResolveRendererDebugToolsEnabled(*currentConfiguration), std::memory_order_relaxed);
-        rendererDebugBgObjEnabled.store(ResolveRendererDebugBgObjEnabled(*currentConfiguration), std::memory_order_relaxed);
-        rendererDebugLatchTraceEnabled.store(ResolveRendererDebugLatchTraceEnabled(*currentConfiguration), std::memory_order_relaxed);
+        auto sharedConfig = ShareConfiguration(std::move(emulatorConfiguration));
+        {
+            std::lock_guard lock(currentConfigurationMutex);
+            currentConfiguration = sharedConfig;
+        }
+        internalFilesDir = sharedConfig->internalFilesDir ? sharedConfig->internalFilesDir : "";
+        rendererDebugToolsEnabled.store(ResolveRendererDebugToolsEnabled(*sharedConfig), std::memory_order_relaxed);
+        rendererDebugBgObjEnabled.store(ResolveRendererDebugBgObjEnabled(*sharedConfig), std::memory_order_relaxed);
+        rendererDebugLatchTraceEnabled.store(ResolveRendererDebugLatchTraceEnabled(*sharedConfig), std::memory_order_relaxed);
         vulkanPerfLoggingEnabled.store(ResolveVulkanPerfLoggingEnabled(), std::memory_order_relaxed);
         vulkanGpu2DPerfLoggingEnabled.store(ResolveVulkanGpu2DPerfLoggingEnabled(), std::memory_order_relaxed);
         vulkanLatchPerfLoggingEnabled.store(ResolveVulkanLatchPerfLoggingEnabled(), std::memory_order_relaxed);
@@ -548,7 +560,13 @@ namespace MelonDSAndroid
         cameraHandler = androidCameraHandler;
         eventMessenger = androidEventMessenger;
         RetroAchievements::RetroAchievementsManager::EventMessenger = androidEventMessenger;
-        auto instanceArgs = BuildArgsFromConfiguration(*currentConfiguration, instanceId);
+        auto configSnapshot = GetConfigurationSnapshot();
+        if (!configSnapshot)
+        {
+            ReplaceInstance(nullptr);
+            return;
+        }
+        auto instanceArgs = BuildArgsFromConfiguration(*configSnapshot, instanceId);
         if (!instanceArgs.has_value())
         {
             // TODO: Handle this somehow?
@@ -557,18 +575,18 @@ namespace MelonDSAndroid
         }
 
         auto args = std::move(instanceArgs.value());
-        LogEffectiveJitConfiguration(*currentConfiguration, *args);
+        LogEffectiveJitConfiguration(*configSnapshot, *args);
         auto newInstance = std::make_shared<MelonInstance>(
             instanceId,
-            currentConfiguration,
+            configSnapshot,
             std::move(args),
             net,
             std::make_unique<ScreenshotRenderer>(screenshotBufferPointer),
-            currentConfiguration->consoleType
+            configSnapshot->consoleType
         );
         ReplaceInstance(newInstance);
 
-        setupAudio(currentConfiguration->audioSettings);
+        setupAudio(configSnapshot->audioSettings);
         setAudioActiveInstance(newInstance);
     }
 
@@ -689,14 +707,23 @@ namespace MelonDSAndroid
         }
     }
 
+    void setRetroAchievementsHardcoreEnabled(bool enabled)
+    {
+        auto currentInstance = GetInstanceSnapshot();
+        if (currentInstance)
+        {
+            currentInstance->setRetroAchievementsHardcoreEnabled(enabled);
+        }
+    }
+
     Renderer getCurrentRenderer()
     {
         auto currentInstance = GetInstanceSnapshot();
         if (currentInstance)
             return currentInstance->getCurrentRenderer();
 
-        if (currentConfiguration != nullptr)
-            return currentConfiguration->renderer;
+        if (auto configSnapshot = GetConfigurationSnapshot())
+            return configSnapshot->renderer;
 
         return Renderer::Software;
     }
@@ -714,7 +741,10 @@ namespace MelonDSAndroid
                 *emulatorConfiguration);
         }
         std::shared_ptr<EmulatorConfiguration> sharedConfig = ShareConfiguration(std::move(emulatorConfiguration));
-        currentConfiguration = sharedConfig;
+        {
+            std::lock_guard lock(currentConfigurationMutex);
+            currentConfiguration = sharedConfig;
+        }
         rendererDebugToolsEnabled.store(ResolveRendererDebugToolsEnabled(*sharedConfig), std::memory_order_relaxed);
         rendererDebugBgObjEnabled.store(ResolveRendererDebugBgObjEnabled(*sharedConfig), std::memory_order_relaxed);
         rendererDebugLatchTraceEnabled.store(ResolveRendererDebugLatchTraceEnabled(*sharedConfig), std::memory_order_relaxed);
@@ -831,7 +861,7 @@ namespace MelonDSAndroid
             return;
 
         startAudio();
-        if (currentConfiguration != nullptr && currentConfiguration->renderer != Renderer::Vulkan)
+        if (currentInstance->getCurrentRenderer() != Renderer::Vulkan)
             setupOpenGlContext();
 
         currentInstance->start();
@@ -843,8 +873,11 @@ namespace MelonDSAndroid
         if (!currentInstance)
             return 0;
 
-        MPInterface::Get().Process();
-        if (currentConfiguration != nullptr && currentConfiguration->renderer != Renderer::Vulkan)
+        {
+            std::lock_guard lock(mpInterfaceMutex);
+            MPInterface::Get().Process();
+        }
+        if (currentInstance->getCurrentRenderer() != Renderer::Vulkan)
             setupOpenGlContext();
         return currentInstance->runFrame();
     }
@@ -1686,6 +1719,8 @@ namespace MelonDSAndroid
     {
         if (path == nullptr)
             return false;
+
+        flushPendingSaveStateWrites();
 
         auto currentInstance = GetInstanceSnapshot();
         if (!currentInstance)

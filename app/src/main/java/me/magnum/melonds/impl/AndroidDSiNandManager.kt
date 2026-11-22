@@ -81,16 +81,31 @@ class AndroidDSiNandManager(
         }
     }
 
+    private fun openTruncatedOutputStream(uri: Uri): java.io.OutputStream? {
+        runCatching { context.contentResolver.openOutputStream(uri, "wt") }.getOrNull()?.let { return it }
+        runCatching { context.contentResolver.openOutputStream(uri, "rwt") }.getOrNull()?.let { return it }
+        return runCatching {
+            val pfd = context.contentResolver.openFileDescriptor(uri, "rw") ?: return@runCatching null
+            try {
+                android.system.Os.ftruncate(pfd.fileDescriptor, 0L)
+                android.os.ParcelFileDescriptor.AutoCloseOutputStream(pfd)
+            } catch (t: Throwable) {
+                runCatching { pfd.close() }
+                throw t
+            }
+        }.getOrNull()
+    }
+
     private fun restoreNandFileFromBackupIfNeeded(config: me.magnum.melonds.domain.model.EmulatorConfiguration): Boolean {
         val nandUri = config.dsiNandUri ?: return false
         try {
             val backupFile = getNandGoldenBackupFile()
             if (backupFile.exists() && backupFile.length() >= 512 * 1024) {
-                context.contentResolver.openOutputStream(nandUri, "wt")?.use { output ->
+                openTruncatedOutputStream(nandUri)?.use { output ->
                     backupFile.inputStream().use { input ->
                         input.copyTo(output)
                     }
-                }
+                } ?: return false
                 Log.w(TAG, "restoreNandFileFromBackupIfNeeded: restored NAND from ${backupFile.absolutePath}")
                 return true
             }
@@ -398,21 +413,17 @@ class AndroidDSiNandManager(
         val exported = MelonDSiNand.exportTitleFile((titleId and 0xFFFFFFFFL).toInt(), fileType.ordinal, tempFile.absolutePath)
         if (exported && tempFile.exists() && tempFile.length() > 0L) {
             runCatching {
-                val openStream = {
-                    runCatching { context.contentResolver.openOutputStream(fileUri, "rwt") }.getOrNull()
-                        ?: runCatching { context.contentResolver.openOutputStream(fileUri, "w") }.getOrNull()
-                }
                 if (fileUri.scheme == "file") {
                     val destFile = fileUri.path?.let(::File)
                     if (destFile != null) {
                         tempFile.copyTo(destFile, overwrite = true)
                     } else {
-                        openStream()?.use { output ->
+                        openTruncatedOutputStream(fileUri)?.use { output ->
                             tempFile.inputStream().use { input -> input.copyTo(output) }
                         }
                     }
                 } else {
-                    openStream()?.use { output ->
+                    openTruncatedOutputStream(fileUri)?.use { output ->
                         tempFile.inputStream().use { input -> input.copyTo(output) }
                     }
                 }

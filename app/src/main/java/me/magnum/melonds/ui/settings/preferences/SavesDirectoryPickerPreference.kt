@@ -26,9 +26,17 @@ class SavesDirectoryPickerPreference(context: Context, attrs: AttributeSet?) : S
     private var imageViewStatus: ImageView? = null
 
     private fun getDefaultDirectory(): File {
-        val baseDir = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS")
         val subFolder = if (key == "save_state_custom_dir") "quicksaves" else "saves"
-        return File(baseDir, subFolder).apply { mkdirs() }
+        val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
+        val extDir = extRoot?.let { File(File(it, "STORM DS"), subFolder) }
+        val isExtReady = extDir != null && runCatching {
+            (extDir.exists() || extDir.mkdirs()) && extDir.isDirectory && extDir.canWrite()
+        }.getOrDefault(false)
+        return if (isExtReady) {
+            extDir!!
+        } else {
+            File(context.filesDir, subFolder).apply { mkdirs() }
+        }
     }
 
     override fun onAttached() {

@@ -25,6 +25,8 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import me.magnum.melonds.ui.theme.SpaceGrotesk
 import me.magnum.melonds.ui.theme.WatermelonMono
+import androidx.compose.ui.res.stringResource
+import me.magnum.melonds.R
 
 data class LiveAchievementEvent(
     val id: String,
@@ -112,7 +114,7 @@ fun RaLiveAchievementOverlay(
                     Column(modifier = Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = "ДОСТИЖЕНИЕ РАЗБЛОКИРОВАНО",
+                                text = stringResource(R.string.v870_ra_unlocked_banner),
                                 color = Color(0xFFFACC15),
                                 fontFamily = WatermelonMono,
                                 fontSize = 8.5.sp,

@@ -9,9 +9,12 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
+import java.util.UUID
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import me.magnum.melonds.common.cheats.jusrcheat.JusrcheatRepository
@@ -42,6 +45,7 @@ class RoomCheatsRepository(
     }
 
     private val findGameMutex = Mutex()
+    private val activeImportWorkId = MutableStateFlow<UUID?>(null)
 
     @get:JvmName("jusrcheatRepositoryProp")
     val jusrcheatRepository: JusrcheatRepository by lazy {
@@ -394,10 +398,11 @@ class RoomCheatsRepository(
 
     override fun importCheats(uri: Uri) {
         val workRequest = OneTimeWorkRequestBuilder<CheatImportWorker>()
-                .setInputData(workDataOf(CheatImportWorker.KEY_URI to uri.toString()))
-                .build()
+            .setInputData(workDataOf(CheatImportWorker.KEY_URI to uri.toString()))
+            .build()
 
-        WorkManager.getInstance(context).enqueueUniqueWork(IMPORT_WORKER_NAME, ExistingWorkPolicy.KEEP, workRequest)
+        activeImportWorkId.value = workRequest.id
+        WorkManager.getInstance(context).enqueueUniqueWork(IMPORT_WORKER_NAME, ExistingWorkPolicy.REPLACE, workRequest)
     }
 
     override fun isCheatImportOngoing(): Boolean {
@@ -410,30 +415,49 @@ class RoomCheatsRepository(
 
     override fun getCheatImportProgress(): Flow<CheatImportProgress> {
         val workManager = WorkManager.getInstance(context)
-        return workManager.getWorkInfosForUniqueWorkFlow(IMPORT_WORKER_NAME)
-            .mapNotNull { workInfos ->
-                if (workInfos.isEmpty()) {
-                    return@mapNotNull CheatImportProgress(CheatImportProgress.CheatImportStatus.NOT_IMPORTING, 0f, null)
+        return combine(
+            workManager.getWorkInfosForUniqueWorkFlow(IMPORT_WORKER_NAME),
+            activeImportWorkId,
+        ) { workInfos, expectedWorkId ->
+            if (workInfos.isEmpty()) {
+                return@combine if (expectedWorkId != null) {
+                    CheatImportProgress(CheatImportProgress.CheatImportStatus.STARTING, 0f, null)
+                } else {
+                    CheatImportProgress(CheatImportProgress.CheatImportStatus.NOT_IMPORTING, 0f, null)
                 }
-                val workInfo = workInfos.firstOrNull { !it.state.isFinished } ?: workInfos.first()
-                when (workInfo.state) {
-                    WorkInfo.State.ENQUEUED -> CheatImportProgress(CheatImportProgress.CheatImportStatus.STARTING, 0f, null)
-                    WorkInfo.State.RUNNING -> {
-                        val relativeProgress = workInfo.progress.getFloat(CheatImportWorker.KEY_PROGRESS_RELATIVE, 0f)
-                        val itemName = workInfo.progress.getString(CheatImportWorker.KEY_PROGRESS_ITEM)
-                        CheatImportProgress(CheatImportProgress.CheatImportStatus.ONGOING, relativeProgress, itemName)
-                    }
-                    WorkInfo.State.SUCCEEDED -> CheatImportProgress(CheatImportProgress.CheatImportStatus.FINISHED, 1f, null)
-                    WorkInfo.State.CANCELLED,
-                    WorkInfo.State.FAILED -> CheatImportProgress(CheatImportProgress.CheatImportStatus.FAILED, 0f, null)
-                    WorkInfo.State.BLOCKED -> {
-                        if (workInfos.all { it.state.isFinished }) {
-                            CheatImportProgress(CheatImportProgress.CheatImportStatus.NOT_IMPORTING, 0f, null)
-                        } else {
-                            null
-                        }
+            }
+
+            val workInfo = if (expectedWorkId != null) {
+                workInfos.firstOrNull { it.id == expectedWorkId }
+                    ?: return@combine CheatImportProgress(CheatImportProgress.CheatImportStatus.STARTING, 0f, null)
+            } else {
+                val active = workInfos.firstOrNull { !it.state.isFinished }
+                if (active != null) {
+                    activeImportWorkId.compareAndSet(null, active.id)
+                    active
+                } else {
+                    return@combine CheatImportProgress(CheatImportProgress.CheatImportStatus.NOT_IMPORTING, 0f, null)
+                }
+            }
+
+            when (workInfo.state) {
+                WorkInfo.State.ENQUEUED -> CheatImportProgress(CheatImportProgress.CheatImportStatus.STARTING, 0f, null)
+                WorkInfo.State.RUNNING -> {
+                    val relativeProgress = workInfo.progress.getFloat(CheatImportWorker.KEY_PROGRESS_RELATIVE, 0f)
+                    val itemName = workInfo.progress.getString(CheatImportWorker.KEY_PROGRESS_ITEM)
+                    CheatImportProgress(CheatImportProgress.CheatImportStatus.ONGOING, relativeProgress, itemName)
+                }
+                WorkInfo.State.SUCCEEDED -> CheatImportProgress(CheatImportProgress.CheatImportStatus.FINISHED, 1f, null)
+                WorkInfo.State.CANCELLED,
+                WorkInfo.State.FAILED -> CheatImportProgress(CheatImportProgress.CheatImportStatus.FAILED, 0f, null)
+                WorkInfo.State.BLOCKED -> {
+                    if (workInfos.all { it.state.isFinished }) {
+                        CheatImportProgress(CheatImportProgress.CheatImportStatus.NOT_IMPORTING, 0f, null)
+                    } else {
+                        null
                     }
                 }
             }
+        }.mapNotNull { it }
     }
 }

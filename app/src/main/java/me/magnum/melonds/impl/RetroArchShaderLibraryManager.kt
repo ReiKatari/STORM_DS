@@ -70,10 +70,22 @@ class RetroArchShaderLibraryManager @Inject constructor(
         data object Finalizing : InstallProgress
     }
 
+    private fun isDirectoryWritable(dir: File): Boolean {
+        return runCatching {
+            if (!dir.exists() && !dir.mkdirs()) return@runCatching false
+            if (!dir.isDirectory) return@runCatching false
+            val probe = File(dir, ".write_probe_${UUID.randomUUID()}")
+            val created = probe.createNewFile()
+            if (created) probe.delete()
+            created
+        }.getOrDefault(false)
+    }
+
     private val shaderRoot: File by lazy {
         val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
-        if (extRoot != null) {
-            File(extRoot, "STORM DS/shaders/retroarch-shaders")
+        val extDir = extRoot?.let { File(it, "STORM DS/shaders/retroarch-shaders") }
+        if (extDir != null && isDirectoryWritable(extDir)) {
+            extDir
         } else {
             File(context.filesDir, "retroarch-shaders")
         }
@@ -82,7 +94,12 @@ class RetroArchShaderLibraryManager @Inject constructor(
     private val manifestFile: File get() = File(shaderRoot, "installed.json")
     private val downloadFile: File get() {
         val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
-        val cacheDir = if (extRoot != null) File(extRoot, "STORM DS/cache/retroarch-shaders") else File(context.cacheDir, "retroarch-shaders")
+        val extCacheDir = extRoot?.let { File(it, "STORM DS/cache/retroarch-shaders") }
+        val cacheDir = if (extCacheDir != null && isDirectoryWritable(extCacheDir)) {
+            extCacheDir
+        } else {
+            File(context.cacheDir, "retroarch-shaders")
+        }
         return File(cacheDir, "shaders_slang.zip.part")
     }
 
@@ -177,17 +194,16 @@ class RetroArchShaderLibraryManager @Inject constructor(
         }
     }
 
-    fun importLocalDirectory(sourceDir: File): Int {
+    fun importLocalDirectory(sourceDir: File): Result<Int> {
         if (!sourceDir.exists() || !sourceDir.isDirectory) {
-            return 0
+            return Result.failure(IllegalArgumentException("Source shader directory does not exist"))
         }
 
         val pendingRoot = File(shaderRoot, "pending-${UUID.randomUUID()}")
-        return try {
+        return runCatching {
             pendingRoot.mkdirs()
             if (!sourceDir.copyRecursively(pendingRoot, overwrite = true)) {
-                pendingRoot.deleteRecursively()
-                return 0
+                throw IllegalStateException("Failed to copy shader files from ${sourceDir.absolutePath}")
             }
 
             val rootSubdirectory = RetroArchShaderArchive.detectRootSubdirectory(pendingRoot)
@@ -228,9 +244,8 @@ class RetroArchShaderLibraryManager @Inject constructor(
             manifestFile.writeText(json.toString())
             bumpLibraryVersion()
             presetCount
-        } catch (e: Throwable) {
+        }.onFailure {
             pendingRoot.deleteRecursively()
-            throw e
         }
     }
 
@@ -259,7 +274,9 @@ class RetroArchShaderLibraryManager @Inject constructor(
         }
 
         val required = contentLength + contentLength * EXTRACTED_SIZE_FACTOR + SPACE_HEADROOM_BYTES
-        val usable = context.filesDir.usableSpace
+        shaderRoot.mkdirs()
+        val spaceTarget = if (shaderRoot.exists()) shaderRoot else context.filesDir
+        val usable = spaceTarget.usableSpace
         if (usable < required) {
             Log.w(TAG, "Not enough space for shader install: need $required, have $usable")
             throw ShaderInstallException(ShaderInstallException.Reason.NotEnoughSpace, required)

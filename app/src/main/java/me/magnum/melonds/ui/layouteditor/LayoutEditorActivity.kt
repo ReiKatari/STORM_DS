@@ -93,6 +93,8 @@ class LayoutEditorActivity : AppCompatActivity() {
 
     private var externalLayoutEditorPresentation: ExternalLayoutEditorPresentation? = null
     private var savedExternalEditorState: ScreenEditorState? = null
+    private var latestSecondaryDisplayId: Int? = null
+    private var latestFoldsSignature: String? = null
 
     private val mainScreenBackgroundPickerLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         if (it.resultCode == RESULT_OK) {
@@ -231,6 +233,8 @@ class LayoutEditorActivity : AppCompatActivity() {
                 var lastOrientation: LayoutConfiguration.LayoutOrientation? = null
                 var lastSystemOrientation: Orientation? = null
                 var lastResetToken: Long = -1L
+                var lastSecondaryDisplayId: Int? = null
+                var lastFoldsSignature: String? = null
                 viewModel.currentLayout.collect {
                     if (it == null) {
                         layoutEditorManager.layoutEditorView.destroyLayout()
@@ -238,18 +242,22 @@ class LayoutEditorActivity : AppCompatActivity() {
                         lastOrientation = null
                         lastSystemOrientation = null
                         lastResetToken = -1L
+                        lastSecondaryDisplayId = null
+                        lastFoldsSignature = null
                     } else {
                         handler.removeCallbacksAndMessages(null)
                         handler.post {
                             val orientationChanged = lastOrientation != it.orientation || lastSystemOrientation != it.systemOrientation
                             val resetChanged = lastResetToken != it.layoutResetToken
+                            val displayOrFoldChanged = lastSecondaryDisplayId != latestSecondaryDisplayId ||
+                                lastFoldsSignature != latestFoldsSignature
                             val hasAnyEdits = layoutEditorManager.layoutEditorView.isModifiedByUser() ||
                                 layoutEditorManager.layoutEditorView.canUndo() ||
                                 (externalLayoutEditorPresentation?.layoutEditorManager?.layoutEditorView?.let { v ->
                                     v.isModifiedByUser() || v.canUndo()
                                 } == true) ||
                                 viewModel.hasUnsavedChanges.value
-                            if (resetChanged || orientationChanged || !hasAnyEdits) {
+                            if (resetChanged || orientationChanged || displayOrFoldChanged || !hasAnyEdits) {
                                 val spread = viewModel.pendingButtonSpread.value
                                 val innerScale = viewModel.pendingButtonInnerScale.value
                                 layoutEditorManager.layoutEditorView.applyButtonClusterAppearance(spread, innerScale)
@@ -259,6 +267,8 @@ class LayoutEditorActivity : AppCompatActivity() {
                                 lastOrientation = it.orientation
                                 lastSystemOrientation = it.systemOrientation
                                 lastResetToken = it.layoutResetToken
+                                lastSecondaryDisplayId = latestSecondaryDisplayId
+                                lastFoldsSignature = latestFoldsSignature
                             }
                             setLayoutOrientation(it.orientation)
                         }
@@ -299,6 +309,10 @@ class LayoutEditorActivity : AppCompatActivity() {
                         }
                     }
 
+                    val foldsSignature = folds.joinToString("|") {
+                        "${it.orientation}:${it.type}:${it.foldBounds}"
+                    }
+                    latestFoldsSignature = foldsSignature
                     storeLayoutChanges()
                     viewModel.setScreenFolds(folds)
                 }
@@ -346,6 +360,11 @@ class LayoutEditorActivity : AppCompatActivity() {
     private fun updateDisplays() {
         val currentDisplay = ContextCompat.getDisplayOrDefault(this)
         val secondaryDisplay = secondaryDisplaySelector.getSecondaryDisplay(this)
+        val newSecondaryId = secondaryDisplay?.displayId
+        if (latestSecondaryDisplayId != newSecondaryId) {
+            latestSecondaryDisplayId = newSecondaryId
+            storeLayoutChanges()
+        }
 
         val displays = deviceLayoutDisplayMapper.mapDisplaysToLayoutDisplays(currentDisplay, secondaryDisplay)
         viewModel.setConnectedDisplays(displays)

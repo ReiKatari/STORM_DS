@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <string-array name="wfc_server_options" tools:ignore="InconsistentArrays">
+        <item>@string/wfc_server_disabled</item>
+        <item>Wiimmfi.de (167.235.229.36)</item>
+        <item>AltWFC (172.104.88.237)</item>
+        <item>Kaeru WFC (178.62.43.212)</item>
+        <item>@string/wfc_server_custom</item>
+    </string-array>
+    <string-array name="video_vulkan_3d_depth_strength_options" tools:ignore="InconsistentArrays">
+        <item>25%</item>
+        <item>50%</item>
+        <item>75%</item>
+        <item>100%</item>
+    </string-array>
+    <string-array name="app_language_options" tools:ignore="InconsistentArrays">
+        <item>🌐 Par défaut</item>
+        <item>🇷🇺 Русский</item>
+        <item>🇬🇧 English</item>
+        <item>🇩🇪 Deutsch</item>
+        <item>🇫🇷 Français</item>
+        <item>🇨🇳 简体中文</item>
+        <item>🇯🇵 日本語</item>
+        <item>🇪🇸 Español</item>
+        <item>🇮🇹 Italiano</item>
+        <item>🇵🇹 Português (Brasil)</item>
+        <item>🇮🇩 Bahasa Indonesia</item>
+    </string-array>
+    <string-array name="resolution_hud_position_options" tools:ignore="InconsistentArrays">
+        <item>Masqué</item>
+        <item>Coin supérieur gauche</item>
+        <item>Coin supérieur droit</item>
+        <item>Coin inférieur gauche</item>
+        <item>Coin inférieur droit</item>
+    </string-array>
+    <string-array name="video_console_skin_type_options" tools:ignore="InconsistentArrays">
+        <item>Nintendo DS Lite (Noir mat)</item>
+        <item>Nintendo DS Lite (Blanc polaire)</item>
+        <item>Nintendo DS Lite (Rouge cramoisi)</item>
+        <item>Nintendo DSi XL (Bleu nuit)</item>
+        <item>Nintendo 3DS (Bleu lagon)</item>
+        <item>New Nintendo 3DS XL (Noir cosmos)</item>
+    </string-array>
+    <string-array name="frame_limit_speed_multiplier_options" tools:ignore="InconsistentArrays">
+        <item>1.0x</item>
+        <item>0.75x</item>
+        <item>0.5x</item>
+        <item>0.25x</item>
+    </string-array>
+    <string-array name="dldi_sd_card_image_size_options" tools:ignore="InconsistentArrays">
+        <item>Automatique</item>
+        <item>256 Mo</item>
+        <item>512 Mo</item>
+        <item>1 Go</item>
+        <item>2 Go</item>
+        <item>4 Go</item>
+    </string-array>
+    <string-array name="rom_input_mode_options" tools:ignore="InconsistentArrays">
+        <item>@string/use_global_preference</item>
+        <item>Personnalisé</item>
+    </string-array>
+    <string-array name="gba_slot_options" tools:ignore="InconsistentArrays">
+        <item>Aucun</item>
+        <item>ROM GBA</item>
+        <item>Rumble Pak</item>
+        <item>Extension mémoire</item>
+        <item>Entrée analogique</item>
+    </string-array>
+    <string-array name="video_renderer_options" tools:ignore="InconsistentArrays">
+        <item>Logiciel (Software)</item>
+        <item>OpenGL</item>
+        <item>Vulkan</item>
+        <item>Compute</item>
+    </string-array>
+    <string-array name="external_display_mode_options" tools:ignore="InconsistentArrays">
+        <item>Miroir</item>
+        <item>STORM DS</item>
+    </string-array>
+    <string-array name="soft_input_behaviour_options" tools:ignore="InconsistentArrays">
+        <item>Toujours visible</item>
+        <item>Masquer les boutons console si une manette est connectée</item>
+        <item>Masquer les entrées assignées si une manette est connectée</item>
+        <item>Toujours invisible</item>
+    </string-array>
+    <string-array name="soft_input_behaviour_descriptions" tools:ignore="InconsistentArrays">
+        <item>Les commandes tactiles sont toujours visibles selon la disposition actuelle.</item>
+        <item>Lorsqu\'une manette est connectée, les boutons de la console (A, B, X, Y, croix, L, R, Start, Select) sont masqués.</item>
+        <item>Lorsqu\'une manette est connectée, toutes les touches qui lui sont assignées sont masquées.</item>
+        <item>Les commandes tactiles sont toujours masquées.</item>
+    </string-array>
+    <string-array name="translator_local_voice_model_options" tools:ignore="InconsistentArrays">
+        <item>🎭 24 voix (Distribution neurale automatique par contexte)</item>
+        <item>🎙️ Dmitry (Baryton neural)</item>
+        <item>🎙️ Elena (Soprano neurale)</item>
+        <item>🗡️ Jeune héros (Ténor clair)</item>
+        <item>🦇 Chevalier Noir / Batman (Basse graveleuse)</item>
+        <item>👹 Boss / Tyran / Bowser (Basse lourde)</item>
+        <item>🃏 Joker / Farceur (Ténor maniaque)</item>
+        <item>💀 Démon / Dracula (Basse profonde)</item>
+        <item>📜 Sage ancien / Professeur (Éraillé)</item>
+        <item>👦 Jeune garçon / Luke Triton (Clair)</item>
+        <item>👧 Jeune fille / Pearl Fey (Douce)</item>
+        <item>👑 Princesse / Reine Zelda (Royale)</item>
+        <item>💰 Marchand / Tom Nook (Enjoué)</item>
+        <item>🛡️ Garde / Capitaine (Sévère)</item>
+        <item>🤖 Robot / Cyborg / Pokedex (Synthétique)</item>
+        <item>📖 Narrateur / Chroniqueur (Velouté)</item>
+        <item>🎀 Tsundere / Franziska (Soprano hautaine)</item>
+        <item>🤫 Murmure mystérieux (Mystique)</item>
+        <item>✨ Fée joyeuse / Navi (Alto joueur)</item>
+        <item>🏴‍☠️ Capitaine pirate (Basse rauque)</item>
+        <item>🔬 Savant fou / Dr. Wily (Excentrique)</item>
+        <item>🎩 Gentleman / Layton / Wright (Raffiné)</item>
+        <item>👻 Fantôme / Spectre (Éthéré)</item>
+        <item>⚔️ Noble chevalier / Meta Knight (Baryton ferme)</item>
+        <item>🕊️ Déesse / Ange Palutena (Cristallin)</item>
+    </string-array>
+    <string-array name="button_color_theme_options" tools:ignore="InconsistentArrays">
+        <item>Nintendo 3DS (Cosmo Aqua Blue)</item>
+        <item>Nintendo DS Classic (Metallic Grey)</item>
+        <item>Nintendo DS Lite (Pure White)</item>
+        <item>Nintendo Famicom / NES (Gold and Maroon)</item>
+        <item>Nintendo Game Boy (DMG Retro Grey and Plum)</item>
+        <item>Nintendo Game Boy Advance (Glacier Indigo)</item>
+        <item>Nintendo GameCube (Indigo and Green/Red)</item>
+        <item>Nintendo Super Famicom / SNES (Four Colors)</item>
+        <item>Nintendo Switch Neon (Red and Blue)</item>
+        <item>Nintendo Switch OLED (Matte White)</item>
+        <item>Nintendo Virtual Boy (Laser Red and Void)</item>
+        <item>Nintendo Wii (Crystal White and Blue)</item>
+        <item>Nintendo Wii U (Dark Slate and Cyan)</item>
+        <item>STORM Arcade Retro (Classic Arcade Machine / 4 Colors)</item>
+        <item>STORM Aurora Spectrum (Four Pastel Colors / Light)</item>
+        <item>STORM Cyber Neon (Cyan and Dark)</item>
+        <item>STORM Cyberpunk 2077 (Neon / Multi-Color)</item>
+        <item>STORM Frost Glacier (Ice Gradient / Light)</item>
+        <item>STORM Gothic Crimson (Ruby Red and Carbon)</item>
+        <item>STORM Matrix Emerald (Neon Green)</item>
+        <item>STORM Midnight Amethyst (Deep Purple)</item>
+        <item>STORM Royal Gold (Gold and Obsidian)</item>
+        <item>STORM Sakura Blossom (Cherry Blossom / Light)</item>
+        <item>STORM Solar Fusion (Solar Spectrum / Light)</item>
+    </string-array>
+</resources>

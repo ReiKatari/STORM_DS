@@ -81,7 +81,11 @@ object ManualUpdateChecker {
                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(candidate.asset.url)).apply {
                                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                             }
-                            context.startActivity(intent)
+                            runCatching {
+                                context.startActivity(intent)
+                            }.onFailure {
+                                Toast.makeText(context, R.string.v800_update_error, Toast.LENGTH_SHORT).show()
+                            }
                         }
                         .setNegativeButton(R.string.v800_update_later, null)
                         .show()

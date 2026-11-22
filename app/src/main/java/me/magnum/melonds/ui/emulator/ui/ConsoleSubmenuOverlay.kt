@@ -1,6 +1,7 @@
 package me.magnum.melonds.ui.emulator.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -58,6 +59,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -71,14 +73,12 @@ import me.magnum.melonds.ui.theme.watermelon
 
 private val SubmenuScrim = Color(0xF208070A)
 
-enum class ConsoleSubmenuCategory(val titleRu: String, val titleEn: String) {
-    ALL("Все параметры", "All Settings"),
-    SYSTEM("Система и консоль", "System and Console"),
-    GRAPHICS("Графика и 3D", "Graphics and 3D"),
-    SCREENS("Экраны и корпус", "Screens and Layout"),
-    CONTROLS("Звук и управление", "Audio and Controls");
-
-    fun title(isRu: Boolean): String = if (isRu) titleRu else titleEn
+enum class ConsoleSubmenuCategory(@StringRes val titleRes: Int) {
+    ALL(R.string.v870_submenu_cat_all),
+    SYSTEM(R.string.v870_submenu_cat_system),
+    GRAPHICS(R.string.v870_submenu_cat_graphics),
+    SCREENS(R.string.v870_submenu_cat_screens),
+    CONTROLS(R.string.v870_submenu_cat_controls);
 }
 
 data class ConsoleSubmenuEntry(
@@ -125,18 +125,19 @@ fun ConsoleSubmenuOverlay(
     onDismiss: () -> Unit,
     onResumeGame: (() -> Unit)? = null,
 ) {
-    val items = remember(entries) {
+    val context = LocalContext.current
+    val items = remember(entries, context) {
         entries.mapIndexed { index, entry ->
             val parts = entry.split(": ", limit = 2)
             val itemTitle = parts[0]
             val itemValue = if (parts.size == 2) parts[1] else null
-            val (icon, desc) = getMetadataForSetting(itemTitle)
+            val (icon, descRes) = getMetadataForSetting(itemTitle)
             val category = getCategoryForSetting(itemTitle)
             ConsoleSubmenuEntry(
                 originalIndex = index,
                 title = itemTitle,
                 value = itemValue,
-                description = desc,
+                description = context.getString(descRes),
                 icon = icon,
                 category = category,
             )
@@ -217,9 +218,8 @@ fun ConsoleSubmenuOverlayDetailed(
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    val isRu = remember { java.util.Locale.getDefault().language.startsWith("ru") }
                     var selectedCategory by remember { mutableStateOf(ConsoleSubmenuCategory.ALL) }
-                    val (headerIcon, headerSubtitle) = getHeaderMetadata(title)
+                    val (headerIcon, headerSubtitleRes) = getHeaderMetadata(title)
 
                     // Header Bar
                     Row(
@@ -255,7 +255,7 @@ fun ConsoleSubmenuOverlayDetailed(
                                         .padding(horizontal = 6.dp, vertical = 1.dp),
                                 ) {
                                     Text(
-                                        text = if (isRu) "${items.size} параметров" else "${items.size} items",
+                                        text = stringResource(R.string.v870_submenu_items_count, items.size),
                                         color = colors.green,
                                         fontFamily = SpaceGrotesk,
                                         fontSize = 9.5.sp,
@@ -264,7 +264,7 @@ fun ConsoleSubmenuOverlayDetailed(
                                 }
                             }
                             Text(
-                                text = headerSubtitle,
+                                text = stringResource(headerSubtitleRes),
                                 color = colors.text3,
                                 fontSize = 10.5.sp,
                                 maxLines = 1,
@@ -291,7 +291,7 @@ fun ConsoleSubmenuOverlayDetailed(
                                     )
                                     Spacer(Modifier.width(4.dp))
                                     Text(
-                                        text = if (isRu) "В игру" else "Resume",
+                                        text = stringResource(R.string.v870_overlay_resume_game),
                                         color = colors.green,
                                         fontFamily = SpaceGrotesk,
                                         fontSize = 11.5.sp,
@@ -329,7 +329,7 @@ fun ConsoleSubmenuOverlayDetailed(
                                     contentAlignment = Alignment.Center,
                                 ) {
                                     Text(
-                                        text = "${cat.title(isRu)} ($catCount)",
+                                        text = "${stringResource(cat.titleRes)} ($catCount)",
                                         color = if (isCatSelected) colors.green else colors.text2,
                                         fontSize = 11.sp,
                                         fontFamily = SpaceGrotesk,
@@ -389,7 +389,7 @@ fun ConsoleSubmenuOverlayDetailed(
                                     )
                                     Spacer(Modifier.width(6.dp))
                                     Text(
-                                        text = cat.title(isRu).uppercase(),
+                                        text = stringResource(cat.titleRes).uppercase(),
                                         color = colors.text2,
                                         fontFamily = SpaceGrotesk,
                                         fontSize = 10.5.sp,
@@ -469,7 +469,7 @@ fun ConsoleSubmenuOverlayDetailed(
                                                         .padding(horizontal = 7.dp, vertical = 2.dp),
                                                 ) {
                                                     Text(
-                                                        text = if (isRu) "ВКЛ" else "ON",
+                                                        text = stringResource(R.string.v870_toggle_on),
                                                         color = colors.green,
                                                         fontSize = 10.sp,
                                                         fontWeight = FontWeight.Bold,
@@ -484,7 +484,7 @@ fun ConsoleSubmenuOverlayDetailed(
                                                         .padding(horizontal = 7.dp, vertical = 2.dp),
                                                 ) {
                                                     Text(
-                                                        text = if (isRu) "ВЫКЛ" else "OFF",
+                                                        text = stringResource(R.string.v870_toggle_off),
                                                         color = colors.text3,
                                                         fontSize = 10.sp,
                                                         fontWeight = FontWeight.SemiBold,
@@ -549,43 +549,43 @@ fun ConsoleSubmenuOverlayDetailed(
     }
 }
 
-private fun getHeaderMetadata(title: String): Pair<ImageVector, String> {
+private fun getHeaderMetadata(title: String): Pair<ImageVector, Int> {
     val lower = title.lowercase()
     return when {
         lower.contains("настройки игры") || lower.contains("rom settings") || lower.contains("game settings") ->
-            Icons.Filled.Tune to "Параметры и оверлеи для текущей игры"
+            Icons.Filled.Tune to R.string.v870_submenu_desc_rom
         lower.contains("видео") || lower.contains("video") || lower.contains("фильтр") ->
-            Icons.Filled.AutoAwesome to "Шейдеры, фильтры и видеочип"
+            Icons.Filled.AutoAwesome to R.string.v870_submenu_desc_video
         lower.contains("звук") || lower.contains("audio") || lower.contains("микрофон") ->
-            Icons.Filled.Mic to "Аудиопотоки и параметры микрофона"
+            Icons.Filled.Mic to R.string.v870_submenu_desc_audio
         lower.contains("управлен") || lower.contains("input") || lower.contains("клавиш") ->
-            Icons.Filled.SportsEsports to "Геймпады, маппинг и сенсор"
+            Icons.Filled.SportsEsports to R.string.v870_submenu_desc_input
         lower.contains("экран") || lower.contains("расклад") || lower.contains("preset") || lower.contains("пресет") ->
-            Icons.Filled.Tv to "Ориентация, пресеты и вывод экранов"
+            Icons.Filled.Tv to R.string.v870_submenu_desc_screens
         else ->
-            Icons.Filled.Tune to "Параметры и настройки"
+            Icons.Filled.Tune to R.string.v870_submenu_desc_default
     }
 }
 
-private fun getMetadataForSetting(title: String): Pair<ImageVector, String> {
+private fun getMetadataForSetting(title: String): Pair<ImageVector, Int> {
     val lower = title.lowercase()
     return when {
         lower.contains("mapping") || lower.contains("назнач") || lower.contains("клавиш") ->
-            Icons.Filled.SportsEsports to "Назначение физических кнопок геймпада или клавиатуры"
+            Icons.Filled.SportsEsports to R.string.v870_submenu_item_mapping
         lower.contains("layout") || lower.contains("макет") || lower.contains("расклад") ->
-            Icons.Filled.TouchApp to "Выбор и редактирование сенсорных кнопок"
+            Icons.Filled.TouchApp to R.string.v870_submenu_item_layout
         lower.contains("dual") || lower.contains("двух") || lower.contains("экран") ->
-            Icons.Filled.Tv to "Пресеты и вывод экранов на ТВ/монитор"
+            Icons.Filled.Tv to R.string.v870_submenu_item_dual
         lower.contains("filter") || lower.contains("фильтр") ->
-            Icons.Filled.Filter to "Шейдерная постобработка и графические фильтры"
+            Icons.Filled.Filter to R.string.v870_submenu_item_filter
         lower.contains("preset") || lower.contains("пресет") ->
-            Icons.Filled.AutoAwesome to "Файл шейдера RetroArch (.slangp / .glslp)"
+            Icons.Filled.AutoAwesome to R.string.v870_submenu_item_preset
         lower.contains("parameter") || lower.contains("параметр") ->
-            Icons.Filled.Tune to "Пользовательские параметры активного шейдера"
+            Icons.Filled.Tune to R.string.v870_submenu_item_param
         lower.contains("mic") || lower.contains("микрофон") ->
-            Icons.Filled.Mic to "Выбор источника микрофона DS"
+            Icons.Filled.Mic to R.string.v870_submenu_item_mic
         else ->
-            Icons.Filled.Tune to "Параметры для текущей игры"
+            Icons.Filled.Tune to R.string.v870_submenu_item_rom
     }
 }
 

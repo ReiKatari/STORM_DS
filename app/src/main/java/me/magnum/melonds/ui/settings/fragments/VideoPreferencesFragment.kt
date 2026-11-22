@@ -497,15 +497,6 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                     retroArchShaderClearHistoryPreference = retroArchShaderClearHistoryPreference,
                 )
             }
-            findPreference<Preference>("video_ai_upscale_scale")?.let { scalePref ->
-                scalePref.isVisible = enabled
-                scalePref.isEnabled = enabled
-            }
-            view?.post { updateAiUpscaleSummary() }
-            true
-        }
-
-        findPreference<ListPreference>("video_ai_upscale_scale")?.setOnPreferenceChangeListener { _, _ ->
             view?.post { updateAiUpscaleSummary() }
             true
         }
@@ -517,10 +508,6 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             if (aiUpscaleSwitch != null && aiUpscaleSwitch.isChecked != aiSelected) {
                 aiUpscaleSwitch.isChecked = aiSelected
                 preferenceManager.sharedPreferences?.edit()?.putBoolean("video_ai_upscale_enabled", aiSelected)?.apply()
-            }
-            findPreference<Preference>("video_ai_upscale_scale")?.let { scalePref ->
-                scalePref.isVisible = aiSelected
-                scalePref.isEnabled = aiSelected
             }
             updateShaderPickerPreferences(
                 renderer = enumValueOfIgnoreCase(rendererPreference.value),
@@ -753,13 +740,22 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         val hasCustomActive = settingsRepository.getVulkanDriverMode() == VulkanDriverMode.CUSTOM &&
             !settingsRepository.getCustomVulkanDriverDisplayName().isNullOrBlank()
 
+        updateVulkanManagerSummary(managerPreference)
+        updateVulkanDriverPreferenceSummaries(modePreference, removePreference, managerPreference)
+    }
+
+    private fun updateVulkanManagerSummary(managerPreference: Preference?) {
+        val subFamily = me.magnum.melonds.impl.AdrenoVulkanDriverSupport.getSubFamily()
+        val recommendedLabel = me.magnum.melonds.impl.vulkandriver.OnlineVulkanDriverRepository
+            .getRecommendedDriverDisplayTitle(subFamily)
+        val hasCustomActive = settingsRepository.getVulkanDriverMode() == VulkanDriverMode.CUSTOM &&
+            !settingsRepository.getCustomVulkanDriverDisplayName().isNullOrBlank()
+
         if (recommendedLabel != null && !hasCustomActive) {
             managerPreference?.summary = getString(R.string.video_prefs_recommended_driver_available, recommendedLabel)
         } else {
             managerPreference?.summary = getString(R.string.video_vulkan_driver_manager_summary)
         }
-
-        updateVulkanDriverPreferenceSummaries(modePreference, removePreference)
     }
 
     private fun showVulkanDriverSelectionDialog(
@@ -778,9 +774,9 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             .setSingleChoiceItems(entries.toTypedArray(), checkedIndex) { dialog, which ->
                 val value = values[which]
                 if (value == VULKAN_SYSTEM_DRIVER_VALUE) {
-                    settingsRepository.setVulkanDriverMode(VulkanDriverMode.SYSTEM)
+                    adrenoVulkanDriverManager.setSystemDriver()
                 } else {
-                    settingsRepository.setSelectedVulkanDriver(value)
+                    adrenoVulkanDriverManager.selectDriver(value)
                 }
                 updateVulkanDriverPreferenceSummaries(modePreference, removePreference)
                 dialog.dismiss()
@@ -831,6 +827,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
     private fun updateVulkanDriverPreferenceSummaries(
         modePreference: ListPreference,
         removePreference: Preference,
+        managerPreference: Preference? = findPreference("video_vulkan_driver_manager"),
     ) {
         val installedDrivers = settingsRepository.getInstalledVulkanDrivers()
         val selectedDriverId = settingsRepository.getSelectedVulkanDriverId()
@@ -850,6 +847,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             getString(R.string.video_vulkan_driver_active_system)
         }
         removePreference.isVisible = installedDrivers.isNotEmpty()
+        updateVulkanManagerSummary(managerPreference)
     }
 
     private fun showRemoveVulkanDriverDialog(
@@ -1361,12 +1359,6 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             strengthPref.isVisible = depthActive
             strengthPref.isEnabled = depthActive
         }
-
-        val aiUpscaleOn = findPreference<androidx.preference.TwoStatePreference>("video_ai_upscale_enabled")?.isChecked == true
-        findPreference<Preference>("video_ai_upscale_scale")?.let { scalePref ->
-            scalePref.isVisible = aiUpscaleOn
-            scalePref.isEnabled = aiUpscaleOn
-        }
     }
 
     private fun updateFilteringPreferences(
@@ -1409,13 +1401,6 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         findPreference<androidx.preference.TwoStatePreference>("video_ai_upscale_enabled")?.let { aiSwitch ->
             aiSwitch.isEnabled = true
             aiSwitch.summary = getString(R.string.video_ai_upscale_summary)
-        }
-
-        findPreference<ListPreference>("video_ai_upscale_scale")?.let { aiUpscalePref ->
-            val aiEnabled = findPreference<androidx.preference.TwoStatePreference>("video_ai_upscale_enabled")?.isChecked == true
-            aiUpscalePref.isVisible = aiEnabled
-            aiUpscalePref.isEnabled = aiEnabled
-            updateListPreferenceSummary(aiUpscalePref)
         }
 
         updateShaderPickerPreferences(
@@ -1462,7 +1447,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
 
         val source = resolveShaderSource()
         if (::shaderManagePreference.isInitialized) {
-            shaderManagePreference.isVisible = source == RetroArchShaderSource.INTERNAL
+            shaderManagePreference.isVisible = source != RetroArchShaderSource.FOLDER
         }
         rootPreference?.isVisible = source == RetroArchShaderSource.FOLDER
         updateShaderManageSummary()
@@ -1546,7 +1531,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         if (!::shaderPresetPreference.isInitialized) {
             val source = resolveShaderSource()
             if (::shaderManagePreference.isInitialized) {
-                shaderManagePreference.isVisible = source == RetroArchShaderSource.INTERNAL
+                shaderManagePreference.isVisible = source != RetroArchShaderSource.FOLDER
                 updateShaderManageSummary()
             }
             if (::shaderRootPreference.isInitialized) {
@@ -1694,20 +1679,35 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                 .setMessage(getString(R.string.video_retroarch_shader_scan_found_msg, foundDir.absolutePath))
                 .setPositiveButton(R.string.ok) { _, _ ->
                     lifecycleScope.launch {
-                        val importedCount = withContext(Dispatchers.IO) {
-                            runCatching { shaderLibraryManager.importLocalDirectory(foundDir) }.getOrDefault(0)
+                        val result = withContext(Dispatchers.IO) {
+                            shaderLibraryManager.importLocalDirectory(foundDir)
                         }
                         if (!isAdded) return@launch
                         val activeCtx = context ?: return@launch
+                        val importedCount = result.getOrNull() ?: 0
+                        if (result.isFailure || importedCount <= 0) {
+                            Toast.makeText(
+                                activeCtx,
+                                R.string.video_retroarch_shader_scan_not_found,
+                                Toast.LENGTH_LONG,
+                            ).show()
+                            return@launch
+                        }
 
+                        shaderWeightCache.clear()
                         persistShaderSource(RetroArchShaderSource.INTERNAL)
+                        if (::shaderPresetPreference.isInitialized) {
+                            updateRetroArchPresetEntries(shaderPresetPreference, resetSelection = true)
+                        }
                         refreshShaderPreferenceVisibility()
                         Toast.makeText(
                             activeCtx,
                             getString(R.string.video_retroarch_shader_scan_import_success, importedCount),
                             Toast.LENGTH_LONG,
                         ).show()
-                        showRetroArchPresetBrowserDialog(shaderPresetPreference)
+                        if (::shaderPresetPreference.isInitialized) {
+                            showRetroArchPresetBrowserDialog(shaderPresetPreference)
+                        }
                     }
                 }
                 .setNegativeButton(android.R.string.cancel, null)
@@ -1782,6 +1782,9 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
     private var isShaderInstallBackgrounded = false
 
     private fun startShaderInstall() {
+        if (resolveShaderSource() == null) {
+            persistShaderSource(RetroArchShaderSource.INTERNAL)
+        }
         isShaderInstallBackgrounded = false
         val request = OneTimeWorkRequestBuilder<RetroArchShaderInstallWorker>()
             .setConstraints(
@@ -1991,8 +1994,8 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         updateDualScreenPresetSummary()
         if (::shaderPresetPreference.isInitialized) {
             updateRetroArchPresetEntries(shaderPresetPreference, resetSelection = false)
-            refreshShaderPreferenceVisibility()
         }
+        refreshShaderPreferenceVisibility()
         val vulkanCategory = findPreference<PreferenceCategory>("video_vulkan_driver_category")
         val modePreference = findPreference<ListPreference>("video_vulkan_driver_mode")
         val importPreference = findPreference<Preference>("video_vulkan_driver_import")
@@ -2400,7 +2403,6 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             remove("video_retroarch_shader_parameters")
             putBoolean("video_retroarch_shader_clear_history", false)
             putBoolean("video_ai_upscale_enabled", false)
-            putString("video_ai_upscale_scale", "4x")
             putBoolean("video_widescreen_3d", false)
             putBoolean("video_60fps_patch", false)
             putBoolean("video_drs_enabled", false)
@@ -2443,10 +2445,6 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         findPreference<EditTextPreference>("video_retroarch_shader_parameters")?.text = null
         findPreference<androidx.preference.TwoStatePreference>("video_retroarch_shader_clear_history")?.isChecked = false
         findPreference<androidx.preference.TwoStatePreference>("video_ai_upscale_enabled")?.isChecked = false
-        findPreference<ListPreference>("video_ai_upscale_scale")?.let {
-            it.value = "4x"
-            updateListPreferenceSummary(it)
-        }
         updateAiUpscaleSummary()
         findPreference<androidx.preference.TwoStatePreference>("video_widescreen_3d")?.isChecked = false
         findPreference<androidx.preference.TwoStatePreference>("video_60fps_patch")?.isChecked = false

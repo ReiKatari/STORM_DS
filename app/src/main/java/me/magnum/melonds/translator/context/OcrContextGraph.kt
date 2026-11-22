@@ -3,14 +3,18 @@ package me.magnum.melonds.translator.context
 import android.content.Context
 import android.os.Environment
 import android.util.Log
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import me.magnum.melonds.translator.grammar.Gender
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.FileOutputStream
 import kotlin.math.abs
 
 /**
@@ -102,19 +106,30 @@ object OcrContextGraph {
     private val compiledGlossary = mutableListOf<Pair<Regex, String>>()
 
     private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    private val castWriteLock = Any()
+    private val castMutex = Mutex()
+    @Volatile
+    private var castLoadGate: CompletableDeferred<Unit> = CompletableDeferred<Unit>().apply { complete(Unit) }
+    @Volatile
+    private var castLoadGen: Long = 0L
 
     // Persistent & in-memory speaker voice profiles (keyed by normalized speaker name)
     private val speakerProfileCache = mutableMapOf<String, SpeakerVoiceProfile>()
     private val speakerPersonaCache = mutableMapOf<String, String>()
 
+    @Volatile
     private var currentGameKey: String = "global"
+    @Volatile
     private var lastActiveSpeaker: CharacterEntity? = null
+    @Volatile
     private var lastActiveProfile: SpeakerVoiceProfile? = null
+    @Volatile
     private var previousSpeakerWasMale = true
+    @Volatile
     var activeSpeakerName: String = ""
+    @Volatile
     var activeSpeakerGender: Gender = Gender.NEUTRAL
 
+    @Synchronized
     fun setExplicitActiveSpeaker(name: String, gender: Gender) {
         activeSpeakerName = name
         activeSpeakerGender = gender
@@ -428,23 +443,32 @@ object OcrContextGraph {
     fun setActiveGame(context: Context, gameKey: String) {
         val normalizedKey = gameKey.ifBlank { "global" }.replace(Regex("[^a-zA-Z0-9_]"), "_").take(32)
         currentGameKey = normalizedKey
+        val gen = ++castLoadGen
+        val gate = CompletableDeferred<Unit>()
+        castLoadGate = gate
         speakerProfileCache.clear()
         speakerPersonaCache.clear()
         val appCtx = context.applicationContext
         ioScope.launch {
-            val loadedProfiles = mutableMapOf<String, SpeakerVoiceProfile>()
-            loadCastFileInto(getCastFiles(appCtx, "global").firstOrNull { it.exists() }, loadedProfiles)
-            if (normalizedKey != "global") {
-                loadCastFileInto(getCastFiles(appCtx, normalizedKey).firstOrNull { it.exists() }, loadedProfiles)
-            }
-            synchronized(this@OcrContextGraph) {
-                if (currentGameKey == normalizedKey) {
-                    for ((k, v) in loadedProfiles) {
-                        speakerProfileCache.putIfAbsent(k, v)
-                        speakerPersonaCache.putIfAbsent(k, v.persona)
+            try {
+                castMutex.withLock {
+                    val loadedProfiles = mutableMapOf<String, SpeakerVoiceProfile>()
+                    loadCastFileInto(getCastFiles(appCtx, "global").firstOrNull { it.exists() }, loadedProfiles)
+                    if (normalizedKey != "global") {
+                        loadCastFileInto(getCastFiles(appCtx, normalizedKey).firstOrNull { it.exists() }, loadedProfiles)
                     }
-                    Log.i(TAG, "Loaded ${speakerProfileCache.size} persistent character voice profiles for game [$normalizedKey]")
+                    synchronized(this@OcrContextGraph) {
+                        if (castLoadGen == gen && currentGameKey == normalizedKey) {
+                            for ((k, v) in loadedProfiles) {
+                                speakerProfileCache.putIfAbsent(k, v)
+                                speakerPersonaCache.putIfAbsent(k, v.persona)
+                            }
+                            Log.i(TAG, "Loaded ${speakerProfileCache.size} persistent character voice profiles for game [$normalizedKey]")
+                        }
+                    }
                 }
+            } finally {
+                gate.complete(Unit)
             }
         }
     }
@@ -478,30 +502,41 @@ object OcrContextGraph {
 
     @Synchronized
     private fun saveCurrentGameCast(context: Context) {
-        val profiles = speakerProfileCache.values.toList()
-        if (profiles.isEmpty()) return
+        if (speakerProfileCache.isEmpty()) return
         val gameKey = currentGameKey
+        val gen = castLoadGen
+        val gate = castLoadGate
         val appCtx = context.applicationContext
         ioScope.launch {
-            val arr = JSONArray()
-            profiles.forEach { arr.put(it.toJson()) }
-            val jsonStr = arr.toString(2)
-            synchronized(castWriteLock) {
+            gate.await()
+            castMutex.withLock {
+                if (castLoadGen != gen || currentGameKey != gameKey) return@withLock
+                val profiles = synchronized(this@OcrContextGraph) { speakerProfileCache.values.toList() }
+                if (profiles.isEmpty()) return@withLock
+                val arr = JSONArray()
+                profiles.forEach { arr.put(it.toJson()) }
+                val jsonStr = arr.toString(2)
                 for (target in getCastFiles(appCtx, gameKey)) {
-                    try {
-                        target.parentFile?.mkdirs()
-                        target.writeText(jsonStr, Charsets.UTF_8)
-                    } catch (_: Throwable) {}
-                }
-                if (gameKey != "global") {
-                    for (globalTarget in getCastFiles(appCtx, "global")) {
-                        try {
-                            globalTarget.parentFile?.mkdirs()
-                            globalTarget.writeText(jsonStr, Charsets.UTF_8)
-                        } catch (_: Throwable) {}
+                    runCatching {
+                        writeTextAtomically(target, jsonStr)
                     }
                 }
             }
+        }
+    }
+
+    private fun writeTextAtomically(file: File, text: String) {
+        val parent = file.parentFile ?: return
+        if (!parent.exists()) parent.mkdirs()
+        val tempFile = File(parent, "${file.name}.${System.nanoTime()}.tmp")
+        FileOutputStream(tempFile).use { stream ->
+            stream.write(text.toByteArray(Charsets.UTF_8))
+            stream.flush()
+            runCatching { stream.fd.sync() }
+        }
+        if (!tempFile.renameTo(file)) {
+            tempFile.copyTo(file, overwrite = true)
+            tempFile.delete()
         }
     }
 
@@ -531,6 +566,7 @@ object OcrContextGraph {
         return bestMatch
     }
 
+    @Synchronized
     fun recordSpeaker(entity: CharacterEntity) {
         lastActiveSpeaker = entity
         previousSpeakerWasMale = entity.gender != Gender.FEMALE
@@ -817,6 +853,7 @@ object OcrContextGraph {
         return profile.persona
     }
 
+    @Synchronized
     fun getNextTurnPersona(text: String, detectedDirectly: String?): String {
         val entity = findEntity(text)
         if (entity != null) {
@@ -852,6 +889,7 @@ object OcrContextGraph {
     private const val MAX_DIALOGUE_HISTORY = 6
     private val dialogueHistory = ArrayDeque<String>()
 
+    @Synchronized
     fun recordDialogueTurn(originalText: String, translatedText: String) {
         val cleanOrig = originalText.replace('\n', ' ').trim()
         val cleanTrans = translatedText.replace('\n', ' ').trim()
@@ -873,6 +911,7 @@ object OcrContextGraph {
         }
     }
 
+    @Synchronized
     fun buildTranslationContextPrompt(): List<String> {
         val list = mutableListOf<String>()
         val spk = lastActiveSpeaker
@@ -897,12 +936,15 @@ object OcrContextGraph {
         return list
     }
 
+    @Synchronized
     fun clearDialogueHistory() {
         synchronized(dialogueHistory) {
             dialogueHistory.clear()
         }
         lastActiveSpeaker = null
         lastActiveProfile = null
+        activeSpeakerName = ""
+        activeSpeakerGender = Gender.NEUTRAL
     }
 
     fun sanitizeTranslation(translatedText: String, targetLang: String = "ru"): String {

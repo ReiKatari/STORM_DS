@@ -152,7 +152,7 @@ fun ScreenLayoutOverlay(
                                 color = colors.text,
                             )
                             Text(
-                                text = "Быстрая смена раскладки",
+                                text = stringResource(R.string.v870_screen_layout_quick_switch),
                                 fontFamily = SpaceGrotesk,
                                 fontWeight = FontWeight.Normal,
                                 fontSize = 10.5.sp,
@@ -194,7 +194,7 @@ fun ScreenLayoutOverlay(
 
                     LayoutOptionItem(
                         title = stringResource(R.string.layout_even_landscape),
-                        subtitle = "2 экрана в альбомном режиме",
+                        subtitle = stringResource(R.string.v870_screen_layout_land_2),
                         isSelected = currentLayoutMode == ScreenLayoutMode.EVEN_LANDSCAPE,
                         focusRequester = firstOptionFocusRequester,
                         icon = { isSel -> LayoutModeIcon(ScreenLayoutMode.EVEN_LANDSCAPE, isSel, colors.green, colors.text2) },
@@ -208,7 +208,7 @@ fun ScreenLayoutOverlay(
 
                     LayoutOptionItem(
                         title = stringResource(R.string.layout_uneven_landscape),
-                        subtitle = "2 экрана (один большой, второй маленький)",
+                        subtitle = stringResource(R.string.v870_screen_layout_hybrid),
                         isSelected = currentLayoutMode == ScreenLayoutMode.UNEVEN_LANDSCAPE,
                         icon = { isSel -> LayoutModeIcon(ScreenLayoutMode.UNEVEN_LANDSCAPE, isSel, colors.green, colors.text2) },
                         onClick = {
@@ -221,7 +221,7 @@ fun ScreenLayoutOverlay(
 
                     LayoutOptionItem(
                         title = stringResource(R.string.layout_even_portrait_locked),
-                        subtitle = "2 экрана в портретном режиме",
+                        subtitle = stringResource(R.string.v870_screen_layout_port_2),
                         isSelected = currentLayoutMode == ScreenLayoutMode.EVEN_PORTRAIT_LOCKED,
                         icon = { isSel -> LayoutModeIcon(ScreenLayoutMode.EVEN_PORTRAIT_LOCKED, isSel, colors.green, colors.text2) },
                         onClick = {
@@ -234,7 +234,7 @@ fun ScreenLayoutOverlay(
 
                     LayoutOptionItem(
                         title = stringResource(R.string.layout_proportional_landscape),
-                        subtitle = "Один большой экран 4:3 по центру",
+                        subtitle = stringResource(R.string.v870_screen_layout_4_3),
                         isSelected = currentLayoutMode == ScreenLayoutMode.PROPORTIONAL_LANDSCAPE,
                         icon = { isSel -> LayoutModeIcon(ScreenLayoutMode.PROPORTIONAL_LANDSCAPE, isSel, colors.green, colors.text2) },
                         onClick = {
@@ -247,7 +247,7 @@ fun ScreenLayoutOverlay(
 
                     LayoutOptionItem(
                         title = stringResource(R.string.layout_fullscreen_landscape),
-                        subtitle = "1 экран на весь дисплей (альбомно)",
+                        subtitle = stringResource(R.string.v870_screen_layout_full),
                         isSelected = currentLayoutMode == ScreenLayoutMode.FULLSCREEN_LANDSCAPE,
                         icon = { isSel -> LayoutModeIcon(ScreenLayoutMode.FULLSCREEN_LANDSCAPE, isSel, colors.green, colors.text2) },
                         onClick = {
@@ -267,7 +267,7 @@ fun ScreenLayoutOverlay(
 
                     LayoutOptionItem(
                         title = stringResource(R.string.layout_auto_rotate),
-                        subtitle = "Снять блокировку (поворот по датчику)",
+                        subtitle = stringResource(R.string.v870_screen_layout_unlock_rot),
                         isSelected = currentLayoutMode == ScreenLayoutMode.AUTO_ROTATE,
                         icon = { isSel -> LayoutModeIcon(ScreenLayoutMode.AUTO_ROTATE, isSel, colors.green, colors.text2) },
                         onClick = {

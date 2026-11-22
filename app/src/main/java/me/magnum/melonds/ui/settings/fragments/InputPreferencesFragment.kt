@@ -24,6 +24,7 @@ class InputPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
     @Inject lateinit var vibrator: TouchVibrator
 
     private lateinit var softInputBehaviourPreference: androidx.preference.ListPreference
+    private var activeDialog: android.app.Dialog? = null
 
     override fun getTitle() = getString(R.string.input)
 
@@ -69,82 +70,29 @@ class InputPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             true
         }
         keyMappingPreference.setOnPreferenceClickListener {
+            if (keyMappingPreference.isInGameLocked) {
+                return@setOnPreferenceClickListener true
+            }
             val intent = InputSetupActivity.getGlobalIntent(requireContext())
             startActivity(intent)
             true
         }
         layoutsPreference.setOnPreferenceClickListener {
+            if (layoutsPreference.isInGameLocked) {
+                return@setOnPreferenceClickListener true
+            }
             val intent = Intent(requireContext(), LayoutListActivity::class.java)
             startActivity(intent)
             true
         }
 
         findPreference<androidx.preference.ListPreference>("pref_motion_gyro_mode")?.apply {
-            val lang = resources.configuration.locales.get(0)?.language?.lowercase().orEmpty()
-            title = when (lang) {
-                "ru" -> "Режим работы гироскопа"
-                "de" -> "Gyroskop-Modus"
-                "fr" -> "Mode gyroscope"
-                "zh" -> "陀螺仪模式"
-                "ja" -> "ジャイロモード"
-                "es" -> "Modo de giroscopio"
-                "it" -> "Modalità giroscopio"
-                "pt" -> "Modo do giroscópio"
-                "id" -> "Mode giroskop"
-                else -> "Gyroscope mode"
-            }
-            entries = when (lang) {
-                "ru" -> arrayOf(
-                    "Прицеливание стилусом (FPS / Шутеры)",
-                    "Наклон руля D-Pad (Гонки)",
-                    "Аналоговый сенсор Slot-2"
-                )
-                "de" -> arrayOf(
-                    "Stylus-Zielen (FPS / Shooter)",
-                    "D-Pad-Lenkung (Rennspiele)",
-                    "Slot-2-Analogsensor"
-                )
-                "fr" -> arrayOf(
-                    "Visée au stylet (FPS / Tir)",
-                    "Direction D-Pad (Course)",
-                    "Capteur analogique Slot-2"
-                )
-                "zh" -> arrayOf(
-                    "触控笔瞄准 (FPS / 射击)",
-                    "十字键倾斜转向 (赛车)",
-                    "Slot-2 模拟传感器"
-                )
-                "ja" -> arrayOf(
-                    "タッチペン照準 (FPS / シューティング)",
-                    "十字キー傾きステアリング (レース)",
-                    "スロット2アナログセンサー"
-                )
-                "es" -> arrayOf(
-                    "Apuntado con lápiz táctil (FPS)",
-                    "Dirección por inclinación D-Pad (Carreras)",
-                    "Sensor analógico Slot-2"
-                )
-                "it" -> arrayOf(
-                    "Mira con stilo touch (FPS)",
-                    "Sterzo D-Pad con inclinazione (Corse)",
-                    "Sensore analogico Slot-2"
-                )
-                "pt" -> arrayOf(
-                    "Mira com caneta touch (FPS)",
-                    "Direção D-Pad por inclinação (Corrida)",
-                    "Sensor analógico Slot-2"
-                )
-                "id" -> arrayOf(
-                    "Bidikan stylus layar sentuh (FPS)",
-                    "Kemudi miring D-Pad (Balap)",
-                    "Sensor analog Slot-2"
-                )
-                else -> arrayOf(
-                    "Touchscreen stylus aiming (FPS)",
-                    "D-Pad tilt steering (Racing)",
-                    "Slot-2 analog motion sensor"
-                )
-            }
+            title = getString(R.string.v870_input_gyro_mode_title)
+            entries = arrayOf(
+                getString(R.string.v870_input_gyro_stylus),
+                getString(R.string.v870_input_gyro_dpad),
+                getString(R.string.v870_input_gyro_paddle)
+            )
             entryValues = arrayOf("touch_aim", "dpad_steer", "slot2_analog")
             if (value == null) {
                 value = "touch_aim"
@@ -153,7 +101,8 @@ class InputPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
 
         findPreference<Preference>("input_gamepad_tester")?.setOnPreferenceClickListener {
             val deadzone = preferenceManager.sharedPreferences?.getInt("input_gamepad_analog_deadzone", 15)?.coerceIn(5, 40) ?: 15
-            me.magnum.melonds.ui.settings.dialogs.showGamepadTesterDialog(requireContext(), deadzone)
+            activeDialog?.dismiss()
+            activeDialog = me.magnum.melonds.ui.settings.dialogs.showGamepadTesterDialog(requireContext(), deadzone)
             true
         }
 
@@ -201,7 +150,8 @@ class InputPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
     override fun onDisplayPreferenceDialog(preference: Preference) {
         if (preference.key == "button_color_theme" && preference is androidx.preference.ListPreference) {
             val ctx = context ?: return
-            me.magnum.melonds.ui.settings.dialogs.showButtonColorThemePickerDialog(
+            activeDialog?.dismiss()
+            activeDialog = me.magnum.melonds.ui.settings.dialogs.showButtonColorThemePickerDialog(
                 context = ctx,
                 selectedValue = preference.value,
             ) { selectedKey ->
@@ -212,6 +162,12 @@ class InputPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             return
         }
         super.onDisplayPreferenceDialog(preference)
+    }
+
+    override fun onDestroyView() {
+        activeDialog?.dismiss()
+        activeDialog = null
+        super.onDestroyView()
     }
 
     override fun onResume() {

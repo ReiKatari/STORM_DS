@@ -133,7 +133,6 @@ object ProblemReportGenerator {
                 "vulkan_debug_report.json" to File(rootStormDir, "debug/vulkan_debug_report.json"),
                 "vulkan_debug_report_logs.json" to File(rootStormDir, "logs/vulkan_debug_report.json"),
                 "vulkan_debug_report_internal.json" to File(context.filesDir, "vulkan_debug_report.json"),
-                "STORM_DS.opts" to File(rootStormDir, "settings/STORM_DS.opts"),
                 "STORM_DS.log" to File(rootStormDir, "logs/STORM_DS.log"),
             )
 

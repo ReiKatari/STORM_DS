@@ -100,7 +100,11 @@ class ShortcutSetupActivity : AppCompatActivity() {
     private fun addRomListFragment() {
         var fragment = supportFragmentManager.findFragmentByTag(FRAGMENT_ROM_LIST) as? RomListFragment
         if (fragment == null) {
-            fragment = RomListFragment.newInstance(false, RomListFragment.RomEnableCriteria.ENABLE_ALL)
+            fragment = RomListFragment.newInstance(
+                allowRomConfiguration = false,
+                enableCriteria = RomListFragment.RomEnableCriteria.ENABLE_ALL,
+                isShortcutPickerMode = true,
+            )
             supportFragmentManager.commit(allowStateLoss = true) {
                 replace(binding.layoutRoot.id, fragment, FRAGMENT_ROM_LIST)
             }
@@ -111,7 +115,7 @@ class ShortcutSetupActivity : AppCompatActivity() {
     private fun addNoSearchDirectoriesFragment() {
         var fragment = supportFragmentManager.findFragmentByTag(FRAGMENT_NO_ROM_DIRECTORIES) as? NoRomSearchDirectoriesFragment
         if (fragment == null) {
-            fragment = NoRomSearchDirectoriesFragment.newInstance()
+            fragment = NoRomSearchDirectoriesFragment.newInstance(isShortcutPickerMode = true)
             supportFragmentManager.commit(allowStateLoss = true) {
                 replace(binding.layoutRoot.id, fragment, FRAGMENT_NO_ROM_DIRECTORIES)
             }

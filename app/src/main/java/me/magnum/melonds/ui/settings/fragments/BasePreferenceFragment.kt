@@ -29,6 +29,23 @@ import me.magnum.melonds.ui.settings.dialogs.showSettingsComposeDialog
 
 abstract class BasePreferenceFragment : PreferenceFragmentCompat() {
 
+    protected fun isLaunchedInGame(): Boolean {
+        return activity?.intent?.getBooleanExtra(me.magnum.melonds.ui.settings.SettingsActivity.KEY_IN_GAME, false) == true
+    }
+
+    protected fun lockPreferenceInGame(key: String) {
+        val pref = findPreference<Preference>(key) ?: return
+        pref.isEnabled = false
+        val lockNotice = getString(me.magnum.melonds.R.string.video_setting_cannot_change_ingame)
+        val current = pref.summary?.toString()
+        pref.summaryProvider = null
+        pref.summary = when {
+            current.isNullOrBlank() || current == "%s" -> lockNotice
+            current.contains(lockNotice) -> current
+            else -> "$current ($lockNotice)"
+        }
+    }
+
     protected fun hideDependentsWhenInactive(
         switchKey: String,
         vararg dependentKeys: String,

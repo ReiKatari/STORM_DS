@@ -26,10 +26,12 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import me.magnum.melonds.R
 import me.magnum.melonds.ui.common.RequestInitialFocus
 import me.magnum.melonds.ui.theme.SpaceGrotesk
 import me.magnum.melonds.ui.theme.WatermelonMono
@@ -102,7 +104,7 @@ fun ConsoleLidClosedOverlay(
             Spacer(Modifier.height(16.dp))
 
             Text(
-                text = "Консоль закрыта",
+                text = stringResource(R.string.v870_lid_closed_title),
                 fontFamily = SpaceGrotesk,
                 fontWeight = FontWeight.Bold,
                 fontSize = 20.sp,
@@ -113,7 +115,7 @@ fun ConsoleLidClosedOverlay(
             Spacer(Modifier.height(4.dp))
 
             Text(
-                text = "РЕЖИМ СНА (SLEEP MODE)",
+                text = stringResource(R.string.v870_lid_sleep_mode),
                 fontFamily = WatermelonMono,
                 fontWeight = FontWeight.Bold,
                 fontSize = 10.sp,
@@ -125,7 +127,7 @@ fun ConsoleLidClosedOverlay(
             Spacer(Modifier.height(10.dp))
 
             Text(
-                text = "Экраны выключены, консоль находится в режиме энергосбережения.",
+                text = stringResource(R.string.v870_lid_sleep_desc),
                 fontFamily = SpaceGrotesk,
                 fontSize = 13.sp,
                 color = colors.text2,
@@ -156,7 +158,7 @@ fun ConsoleLidClosedOverlay(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = "Открыть консоль",
+                        text = stringResource(R.string.v870_lid_open_console),
                         fontFamily = SpaceGrotesk,
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp,
@@ -168,7 +170,7 @@ fun ConsoleLidClosedOverlay(
             Spacer(Modifier.height(8.dp))
 
             Text(
-                text = "или коснитесь экрана в любом месте",
+                text = stringResource(R.string.v870_lid_tap_anywhere),
                 fontFamily = WatermelonMono,
                 fontSize = 10.sp,
                 color = colors.text3,

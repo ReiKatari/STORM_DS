@@ -50,6 +50,7 @@ import me.magnum.melonds.ui.theme.SpaceGrotesk
 import me.magnum.melonds.ui.theme.WatermelonMono
 import me.magnum.melonds.ui.theme.watermelon
 import java.io.OutputStream
+import me.magnum.melonds.R
 
 @Composable
 fun FullScreenCoverDialog(
@@ -88,7 +89,7 @@ fun FullScreenCoverDialog(
 
                 if (bitmap == null) {
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(context, "Не удалось загрузить изображение", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.v870_cover_load_failed), Toast.LENGTH_SHORT).show()
                     }
                     return@launch
                 }
@@ -116,7 +117,7 @@ fun FullScreenCoverDialog(
 
                 if (outputStream == null) {
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(context, "Ошибка сохранения: не удалось открыть файл", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.v870_cover_open_file_failed), Toast.LENGTH_SHORT).show()
                     }
                     return@launch
                 }
@@ -126,18 +127,18 @@ fun FullScreenCoverDialog(
                 }
                 if (!compressed) {
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(context, "Ошибка сохранения изображения", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.v870_cover_save_failed), Toast.LENGTH_SHORT).show()
                     }
                     return@launch
                 }
 
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "Обложка сохранена: $filename", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.v870_cover_saved_toast, filename), Toast.LENGTH_SHORT).show()
                     showFormatSelector = false
                 }
             } catch (e: Throwable) {
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "Ошибка сохранения: ${e.message}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.v870_cover_save_error_detail, e.message ?: ""), Toast.LENGTH_SHORT).show()
                 }
             }
         }

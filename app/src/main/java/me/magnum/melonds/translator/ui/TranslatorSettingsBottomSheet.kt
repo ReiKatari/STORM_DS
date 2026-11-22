@@ -40,7 +40,6 @@ fun TranslatorSettingsContent(
     onEngineChanged: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
-    val lang = context.resources.configuration.locales.get(0)?.language?.lowercase().orEmpty()
     var enginePref by remember { mutableStateOf(preferences.getString(GameTranslatorManager.PREF_TRANSLATOR_ENGINE, "google") ?: "google") }
     var triggerModePref by remember { mutableStateOf(preferences.getString(GameTranslatorManager.PREF_TRANSLATOR_TRIGGER_MODE, "on_demand") ?: "on_demand") }
     var overlayStylePref by remember { mutableStateOf(preferences.getString(GameTranslatorManager.PREF_TRANSLATOR_OVERLAY_STYLE, "smart_background_match") ?: "smart_background_match") }
@@ -63,6 +62,47 @@ fun TranslatorSettingsContent(
     var pauseOnTranslate by remember { mutableStateOf(preferences.getBoolean(GameTranslatorManager.PREF_TRANSLATOR_PAUSE_ON_TRANSLATE, true)) }
     var showFloatingButton by remember { mutableStateOf(preferences.getBoolean(GameTranslatorManager.PREF_TRANSLATOR_SHOW_FLOATING_BUTTON, false)) }
 
+    DisposableEffect(preferences) {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
+            when (key) {
+                GameTranslatorManager.PREF_TRANSLATOR_ENGINE ->
+                    enginePref = prefs.getString(key, "google") ?: "google"
+                GameTranslatorManager.PREF_TRANSLATOR_TRIGGER_MODE ->
+                    triggerModePref = prefs.getString(key, "on_demand") ?: "on_demand"
+                GameTranslatorManager.PREF_TRANSLATOR_OVERLAY_STYLE ->
+                    overlayStylePref = prefs.getString(key, "smart_background_match") ?: "smart_background_match"
+                GameTranslatorManager.PREF_TRANSLATOR_TTS_ENABLED ->
+                    ttsEnabled = prefs.getBoolean(key, false)
+                GameTtsManager.PREF_TRANSLATOR_TTS_VOICE_ENGINE ->
+                    voiceEnginePref = prefs.getString(key, "neural_edge") ?: "neural_edge"
+                GameTtsManager.PREF_TRANSLATOR_TTS_LANG ->
+                    ttsLangPref = prefs.getString(key, "auto") ?: "auto"
+                "translator_local_voice_model" ->
+                    voiceModelPref = prefs.getString(key, "auto_gender_neural") ?: "auto_gender_neural"
+                GameTtsManager.PREF_TRANSLATOR_LOCAL_PITCH_VARIANCE ->
+                    voicePitchVariance = prefs.getInt(key, 65).coerceIn(0, 100).toFloat()
+                GameTtsManager.PREF_TRANSLATOR_VOICE_PITCH ->
+                    voicePitch = prefs.getInt(key, 0).coerceIn(-20, 20).toFloat()
+                GameTtsManager.PREF_TRANSLATOR_TTS_SPEED ->
+                    ttsSpeed = prefs.getInt(key, 100).coerceIn(50, 200).toFloat()
+                GameTranslatorManager.PREF_TRANSLATOR_FONT_SIZE_SCALE ->
+                    fontSizeScale = prefs.getInt(key, 100).coerceIn(50, 200).toFloat()
+                GameTranslatorManager.PREF_TRANSLATOR_BUBBLE_OPACITY ->
+                    bubbleOpacity = prefs.getInt(key, 90).coerceIn(10, 100).toFloat()
+                GameTranslatorManager.PREF_TRANSLATOR_FLOATING_BUTTON_OPACITY ->
+                    floatingButtonOpacity = prefs.getInt(key, 35).coerceIn(5, 100).toFloat()
+                GameTranslatorManager.PREF_TRANSLATOR_PAUSE_ON_TRANSLATE ->
+                    pauseOnTranslate = prefs.getBoolean(key, true)
+                GameTranslatorManager.PREF_TRANSLATOR_SHOW_FLOATING_BUTTON ->
+                    showFloatingButton = prefs.getBoolean(key, false)
+            }
+        }
+        preferences.registerOnSharedPreferenceChangeListener(listener)
+        onDispose {
+            preferences.unregisterOnSharedPreferenceChangeListener(listener)
+        }
+    }
+
     val voiceModelOptions = remember(context) {
         val values = try {
             context.resources.getStringArray(R.array.translator_tts_voices_values_v792)
@@ -77,16 +117,7 @@ fun TranslatorSettingsContent(
         values.indices.map { i -> values[i] to (titles.getOrNull(i) ?: values[i]) }
     }
 
-    val ttsSpeedLabel = remember(lang) {
-        when (lang) {
-            "ru" -> "Скорость речи озвучки (%)"
-            "de" -> "Sprechgeschwindigkeit (%)"
-            "fr" -> "Vitesse de parole (%)"
-            "zh" -> "语音朗读语速 (%)"
-            "ja" -> "音声読み上げ速度 (%)"
-            else -> "Speech rate (%)"
-        }
-    }
+    val ttsSpeedLabel = context.getString(R.string.v870_translator_tts_speed_percent)
 
     val updatePref = { key: String, value: Any ->
         when (value) {
@@ -151,9 +182,9 @@ fun TranslatorSettingsContent(
                 Divider(color = watermelon.line)
                 SettingsOption(
                     label = context.getString(R.string.translator_engine),
-                    value = TranslatorEngineType.fromPreference(enginePref).displayName.substringBefore(" ("),
+                    value = TranslatorEngineType.fromPreference(enginePref).getDisplayName(context).substringBefore(" ("),
                     onClick = {
-                        val engines = TranslatorEngineType.entries.map { it.preferenceValue to it.displayName.substringBefore(" (") }
+                        val engines = TranslatorEngineType.entries.map { it.preferenceValue to it.getDisplayName(context).substringBefore(" (") }
                         val nextIdx = (engines.indexOfFirst { it.first == enginePref } + 1) % engines.size
                         enginePref = engines[nextIdx].first
                         updatePref(GameTranslatorManager.PREF_TRANSLATOR_ENGINE, enginePref)
@@ -304,19 +335,19 @@ fun TranslatorSettingsContent(
                                 updatePref(GameTtsManager.PREF_TRANSLATOR_LOCAL_PITCH_VARIANCE, it.toInt())
                             }
                         )
-                        Divider(color = watermelon.line)
-                        SettingsSlider(
-                            label = context.getString(R.string.translator_voice_pitch_title),
-                            value = voicePitch,
-                            valueRange = -20f..20f,
-                            steps = 39,
-                            valueText = "${if (voicePitch >= 0) "+" else ""}${voicePitch.toInt()}%",
-                            onValueChange = {
-                                voicePitch = it
-                                updatePref(GameTtsManager.PREF_TRANSLATOR_VOICE_PITCH, it.toInt())
-                            }
-                        )
                     }
+                    Divider(color = watermelon.line)
+                    SettingsSlider(
+                        label = context.getString(R.string.translator_voice_pitch_title),
+                        value = voicePitch,
+                        valueRange = -20f..20f,
+                        steps = 39,
+                        valueText = "${if (voicePitch >= 0) "+" else ""}${voicePitch.toInt()}%",
+                        onValueChange = {
+                            voicePitch = it
+                            updatePref(GameTtsManager.PREF_TRANSLATOR_VOICE_PITCH, it.toInt())
+                        }
+                    )
                     Divider(color = watermelon.line)
                     SettingsSlider(
                         label = ttsSpeedLabel,

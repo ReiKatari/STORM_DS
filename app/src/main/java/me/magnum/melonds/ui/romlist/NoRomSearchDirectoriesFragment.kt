@@ -44,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.os.bundleOf
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import dagger.hilt.android.AndroidEntryPoint
@@ -59,8 +60,12 @@ import me.magnum.melonds.ui.theme.watermelon
 @AndroidEntryPoint
 class NoRomSearchDirectoriesFragment : Fragment() {
     companion object {
-        fun newInstance(): NoRomSearchDirectoriesFragment {
-            return NoRomSearchDirectoriesFragment()
+        private const val KEY_SHORTCUT_PICKER_MODE = "shortcut_picker_mode"
+
+        fun newInstance(isShortcutPickerMode: Boolean = false): NoRomSearchDirectoriesFragment {
+            return NoRomSearchDirectoriesFragment().apply {
+                arguments = bundleOf(KEY_SHORTCUT_PICKER_MODE to isShortcutPickerMode)
+            }
         }
 
         private val DOCUMENT_PICKER_PACKAGES = listOf(
@@ -87,6 +92,8 @@ class NoRomSearchDirectoriesFragment : Fragment() {
         val pickerNotFound = directoryPickerComponent == null && disabledFilePicker == null
         val isPickerDisabled = disabledFilePicker != null
 
+        val isShortcutPickerMode = arguments?.getBoolean(KEY_SHORTCUT_PICKER_MODE, false) ?: false
+
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
@@ -94,7 +101,15 @@ class NoRomSearchDirectoriesFragment : Fragment() {
                     NoDirectoriesScreen(
                         isPickerDisabled = isPickerDisabled,
                         pickerNotFound = pickerNotFound,
-                        onOpenSettings = { (activity as? RomListActivity)?.openSettings() },
+                        isShortcutPickerMode = isShortcutPickerMode,
+                        onOpenSettings = {
+                            val host = activity
+                            if (host is RomListActivity) {
+                                host.openSettings()
+                            } else {
+                                startActivity(Intent(requireContext(), me.magnum.melonds.ui.settings.SettingsActivity::class.java))
+                            }
+                        },
                         onOpenSingleRom = { (activity as? RomListActivity)?.openSingleRom() },
                         onActionClick = {
                             if (isPickerDisabled && disabledFilePicker != null) {
@@ -131,6 +146,7 @@ class NoRomSearchDirectoriesFragment : Fragment() {
 private fun NoDirectoriesScreen(
     isPickerDisabled: Boolean,
     pickerNotFound: Boolean,
+    isShortcutPickerMode: Boolean = false,
     onOpenSettings: () -> Unit,
     onOpenSingleRom: () -> Unit = {},
     onActionClick: () -> Unit,
@@ -239,25 +255,27 @@ private fun NoDirectoriesScreen(
                         )
                     }
 
-                    Spacer(Modifier.height(12.dp))
+                    if (!isShortcutPickerMode) {
+                        Spacer(Modifier.height(12.dp))
 
-                    androidx.compose.material.OutlinedButton(
-                        onClick = onOpenSingleRom,
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            backgroundColor = Color.Transparent,
-                            contentColor = colors.text,
-                        ),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, colors.line),
-                        modifier = Modifier.fillMaxWidth().height(48.dp),
-                    ) {
-                        Text(
-                            text = stringResource(R.string.action_open_single_rom),
-                            fontFamily = SpaceGrotesk,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 14.sp,
-                            color = colors.text,
-                        )
+                        androidx.compose.material.OutlinedButton(
+                            onClick = onOpenSingleRom,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                backgroundColor = Color.Transparent,
+                                contentColor = colors.text,
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, colors.line),
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                        ) {
+                            Text(
+                                text = stringResource(R.string.action_open_single_rom),
+                                fontFamily = SpaceGrotesk,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 14.sp,
+                                color = colors.text,
+                            )
+                        }
                     }
                 }
             }

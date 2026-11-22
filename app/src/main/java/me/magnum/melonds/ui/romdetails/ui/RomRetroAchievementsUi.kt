@@ -179,7 +179,7 @@ fun RomRetroAchievementsUi(
                                         horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
                                         Text(
-                                            text = "⏳ Ожидают отправки: $pendingCount",
+                                            text = stringResource(R.string.v870_ra_pending_badge, pendingCount),
                                             fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 11.5.sp,
@@ -328,7 +328,7 @@ fun OfflineAchievementsStatusUi(
                 Column {
                     Text(
                         text = when (state.availability) {
-                            OfflineAchievementsUiState.Availability.ENABLED -> "ОФЛАЙН-СИСТЕМА RETROACHIEVEMENTS АКТИВНА"
+                            OfflineAchievementsUiState.Availability.ENABLED -> stringResource(R.string.v870_ra_offline_active_title)
                             OfflineAchievementsUiState.Availability.DISABLED_NOT_LOGGED_IN -> stringResource(R.string.ra_offline_status_not_logged_in)
                             OfflineAchievementsUiState.Availability.DISABLED_NO_CACHE -> stringResource(R.string.ra_offline_status_no_cache)
                         },
@@ -339,8 +339,8 @@ fun OfflineAchievementsStatusUi(
                     )
                     Text(
                         text = when (state.availability) {
-                            OfflineAchievementsUiState.Availability.ENABLED -> "Достижения сохраняются локально и синхронизируются при появлении сети"
-                            OfflineAchievementsUiState.Availability.DISABLED_NOT_LOGGED_IN -> "Войдите в аккаунт RetroAchievements для локального кэширования"
+                            OfflineAchievementsUiState.Availability.ENABLED -> stringResource(R.string.v870_ra_offline_active_desc)
+                            OfflineAchievementsUiState.Availability.DISABLED_NOT_LOGGED_IN -> stringResource(R.string.v870_ra_offline_login_desc)
                             OfflineAchievementsUiState.Availability.DISABLED_NO_CACHE -> stringResource(R.string.ra_offline_status_no_cache)
                         },
                         fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
@@ -375,7 +375,7 @@ fun OfflineAchievementsStatusUi(
                         )
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            text = "СОФТКОР",
+                            text = stringResource(R.string.v870_ra_mode_softcore),
                             fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
@@ -384,14 +384,14 @@ fun OfflineAchievementsStatusUi(
                     }
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        text = "${state.pendingSoftcoreUnlockCount} в очереди",
+                        text = stringResource(R.string.v870_ra_queued_count, state.pendingSoftcoreUnlockCount),
                         fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = colors.text
                     )
                     Text(
-                        text = "Ожидают отправки",
+                        text = stringResource(R.string.v870_ra_pending_send_label),
                         fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
                         fontSize = 8.5.sp,
                         color = colors.text3
@@ -418,7 +418,7 @@ fun OfflineAchievementsStatusUi(
                         )
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            text = "ХАРДКОР ЛЕДЖЕР",
+                            text = stringResource(R.string.v870_ra_hardcore_ledger_label),
                             fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
@@ -427,14 +427,14 @@ fun OfflineAchievementsStatusUi(
                     }
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        text = me.magnum.melonds.utils.RussianPlurals.format(state.pendingLedgerUnlockCount, "запись", "записи", "записей"),
+                        text = LocalContext.current.resources.getQuantityString(R.plurals.v870_ra_ledger_entries, state.pendingLedgerUnlockCount, state.pendingLedgerUnlockCount),
                         fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = colors.text
                     )
                     Text(
-                        text = "Защищенный журнал",
+                        text = stringResource(R.string.v870_ra_protected_journal_label),
                         fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
                         fontSize = 8.5.sp,
                         color = colors.text3
@@ -460,14 +460,14 @@ fun OfflineAchievementsStatusUi(
             ) {
                 Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                     Text(
-                        text = "Очередь офлайн-достижений",
+                        text = stringResource(R.string.v870_ra_offline_queue_title),
                         fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.5.sp,
                         color = colors.text
                     )
                     Text(
-                        text = if (totalPending > 0) "Ожидает отправки: $totalPending" else "Все достижения синхронизированы",
+                        text = if (totalPending > 0) stringResource(R.string.v870_ra_queue_waiting_count, totalPending) else stringResource(R.string.v870_ra_queue_all_synced),
                         fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
                         fontSize = 9.sp,
                         color = if (totalPending > 0) androidx.compose.ui.graphics.Color(0xFF38BDF8) else colors.text3
@@ -538,14 +538,14 @@ fun OfflineAchievementsStatusUi(
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            text = "Целостность журнала достижений",
+                            text = stringResource(R.string.v870_ra_ledger_integrity_title),
                             fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
                             fontSize = 11.sp,
                             color = colors.text
                         )
                     }
                     Text(
-                        text = if (state.isLedgerIntegrityOk) "ПОДТВЕРЖДЕНА (OK)" else "НАРУШЕНА",
+                        text = if (state.isLedgerIntegrityOk) stringResource(R.string.v870_ra_ledger_integrity_ok) else stringResource(R.string.v870_ra_ledger_integrity_broken),
                         fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
                         fontWeight = FontWeight.Bold,
                         fontSize = 10.sp,
@@ -570,7 +570,7 @@ fun OfflineAchievementsStatusUi(
                             )
                             Spacer(Modifier.width(8.dp))
                             Text(
-                                text = "Срок действия кэша",
+                                text = stringResource(R.string.v870_ra_cache_expiry_title),
                                 fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
                                 fontSize = 11.sp,
                                 color = colors.text
@@ -611,7 +611,7 @@ fun OfflineAchievementsStatusUi(
                     CircularProgressIndicator(color = androidx.compose.ui.graphics.Color.White, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = "СИНХРОНИЗАЦИЯ...",
+                        text = stringResource(R.string.v870_ra_syncing_btn),
                         fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp,
@@ -619,7 +619,7 @@ fun OfflineAchievementsStatusUi(
                     )
                 } else {
                     Text(
-                        text = "СИНХРОНИЗИРОВАТЬ С СЕРВЕРОМ СЕЙЧАС",
+                        text = stringResource(R.string.v870_ra_sync_now_btn),
                         fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp,

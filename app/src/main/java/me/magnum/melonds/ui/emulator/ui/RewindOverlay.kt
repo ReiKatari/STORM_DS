@@ -199,7 +199,7 @@ fun RewindOverlay(
                                 maxLines = 1,
                             )
                             Text(
-                                text = "Выберите момент времени для возврата",
+                                text = stringResource(R.string.v870_rewind_select_moment),
                                 color = colors.text3,
                                 fontSize = 11.sp,
                                 maxLines = 1,
@@ -334,23 +334,23 @@ fun RewindOverlay(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = "Прыжок:",
+                        text = stringResource(R.string.v870_rewind_jump_label),
                         color = colors.text3,
                         fontSize = 11.sp,
                         fontFamily = WatermelonMono,
                     )
-                    QuickJumpChip(label = "В начало", onClick = {
+                    QuickJumpChip(label = stringResource(R.string.v870_rewind_jump_start), onClick = {
                         selectedIndex = states.lastIndex
                         scope.launch { listState.animateScrollToItem(states.lastIndex) }
                     })
                     if (states.size > 10) {
-                        QuickJumpChip(label = "-15с", onClick = {
+                        QuickJumpChip(label = stringResource(R.string.v870_rewind_jump_m15s), onClick = {
                             val target = (states.size / 2).coerceIn(0, states.lastIndex)
                             selectedIndex = target
                             scope.launch { listState.animateScrollToItem(target) }
                         })
                     }
-                    QuickJumpChip(label = "Сейчас", onClick = {
+                    QuickJumpChip(label = stringResource(R.string.v870_rewind_jump_now), onClick = {
                         selectedIndex = 0
                         scope.launch { listState.animateScrollToItem(0) }
                     })
@@ -409,7 +409,7 @@ fun RewindOverlay(
                         )
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            text = "Вернуться сюда",
+                            text = stringResource(R.string.v870_rewind_restore_here),
                             fontFamily = SpaceGrotesk,
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.5.sp,

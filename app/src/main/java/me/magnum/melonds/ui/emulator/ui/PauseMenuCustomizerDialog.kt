@@ -69,6 +69,7 @@ import me.magnum.melonds.ui.theme.watermelon
 fun PauseMenuCustomizerDialog(
     availableOptions: List<PauseMenuOption>,
     store: PauseMenuCustomizationStore,
+    isExtendedEnabled: Boolean = false,
     onDismiss: () -> Unit,
     onApplied: () -> Unit,
 ) {
@@ -204,7 +205,7 @@ fun PauseMenuCustomizerDialog(
                     val optName = (option as? Enum<*>)?.name ?: option.toString()
                     val isProtected = option == RomPauseMenuOption.SETTINGS || option == FirmwarePauseMenuOption.SETTINGS
                     val isExtended = store.isExtendedOption(option)
-                    val isVisible = if (isProtected) true else optName !in hiddenItems
+                    val isVisible = store.isOptionVisible(option, isExtendedEnabled, hiddenItems, pinnedItems)
 
                     Row(
                         modifier = Modifier
@@ -334,16 +335,23 @@ fun PauseMenuCustomizerDialog(
                             onCheckedChange = { checked ->
                                 if (!isProtected) {
                                     pendingReset = false
-                                    hiddenItems = if (checked) {
-                                        hiddenItems - optName
-                                    } else {
-                                        hiddenItems + optName
-                                    }
                                     if (isExtended) {
-                                        pinnedItems = if (checked) {
-                                            pinnedItems + optName
+                                        if (checked) {
+                                            hiddenItems = hiddenItems - optName
+                                            if (!isExtendedEnabled) {
+                                                pinnedItems = pinnedItems + optName
+                                            }
                                         } else {
-                                            pinnedItems - optName
+                                            pinnedItems = pinnedItems - optName
+                                            if (isExtendedEnabled) {
+                                                hiddenItems = hiddenItems + optName
+                                            }
+                                        }
+                                    } else {
+                                        hiddenItems = if (checked) {
+                                            hiddenItems - optName
+                                        } else {
+                                            hiddenItems + optName
                                         }
                                     }
                                 }

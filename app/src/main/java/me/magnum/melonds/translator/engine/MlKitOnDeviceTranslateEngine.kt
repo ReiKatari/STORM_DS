@@ -44,21 +44,34 @@ class MlKitOnDeviceTranslateEngine(
         fun closeAll() {
             val cached = translatorsCache.values.toList()
             translatorsCache.clear()
+            val activeDownloads = downloads.values.toList()
+            downloads.clear()
+            activeDownloads.forEach { it.cancel() }
             cached.forEach { translator ->
                 runCatching { translator.close() }
             }
         }
     }
 
+    @Volatile
+    private var preparedSourceLang: String? = null
+
     override suspend fun prepare(sourceLang: String, targetLang: String) {
         prepare(sourceLang, targetLang, "")
     }
 
     suspend fun prepare(sourceLang: String, targetLang: String, sampleText: String) = withContext(Dispatchers.IO) {
-        val target = resolveLanguageCode("", targetLang)
+        val target = resolveTargetLanguageCode(targetLang)
         val source = if (normalizeLangCode(sourceLang) == "auto") {
-            if (sampleText.isNotBlank()) resolveLanguageCode(sampleText, "auto") else return@withContext
+            if (sampleText.isNotBlank()) {
+                detectSourceLanguageCode(sampleText, preparedSourceLang).also {
+                    preparedSourceLang = it
+                }
+            } else {
+                return@withContext
+            }
         } else {
+            preparedSourceLang = null
             resolveLanguageCode("", sourceLang)
         }
         if (source == target) return@withContext
@@ -78,8 +91,12 @@ class MlKitOnDeviceTranslateEngine(
         val cleanText = text.trim()
         if (cleanText.isBlank()) return@withContext text
 
-        val resolvedSource = resolveLanguageCode(cleanText, sourceLang)
-        val resolvedTarget = resolveLanguageCode(cleanText, targetLang)
+        val resolvedSource = if (normalizeLangCode(sourceLang) == "auto") {
+            detectSourceLanguageCode(cleanText, preparedSourceLang)
+        } else {
+            resolveLanguageCode(cleanText, sourceLang)
+        }
+        val resolvedTarget = resolveTargetLanguageCode(targetLang)
 
         if (resolvedSource == resolvedTarget) return@withContext cleanText
 
@@ -112,11 +129,23 @@ class MlKitOnDeviceTranslateEngine(
         targetLang: String,
         context: List<String>,
     ): List<String?> {
+        val effectiveSourceLang = if (normalizeLangCode(sourceLang) == "auto") {
+            val frameText = texts.joinToString(" ").trim()
+            if (frameText.isNotBlank()) {
+                detectSourceLanguageCode(frameText, preparedSourceLang).also {
+                    preparedSourceLang = it
+                }
+            } else {
+                preparedSourceLang ?: TranslateLanguage.ENGLISH
+            }
+        } else {
+            resolveLanguageCode("", sourceLang)
+        }
         // ML Kit translators are single-threaded internally; run sequentially.
         var firstError: TranslationException? = null
         val results = texts.map { text ->
             try {
-                translate(text, sourceLang, targetLang)
+                translate(text, effectiveSourceLang, targetLang)
             } catch (e: TranslationException) {
                 if (firstError == null) firstError = e
                 null
@@ -170,18 +199,71 @@ class MlKitOnDeviceTranslateEngine(
         }
     }
 
+    private fun resolveTargetLanguageCode(langTag: String): String {
+        val tag = langTag.lowercase().trim()
+        if (tag == "auto" || tag.isBlank()) return TranslateLanguage.RUSSIAN
+        return resolveLanguageCode("", tag)
+    }
+
+    private fun detectSourceLanguageCode(text: String, fallbackLang: String? = null): String {
+        val hasKana = text.any { it in '\u3040'..'\u30ff' }
+        if (hasKana) return TranslateLanguage.JAPANESE
+        val hasHangul = text.any { it in '\uac00'..'\ud7af' || it in '\u1100'..'\u11ff' }
+        if (hasHangul) return TranslateLanguage.KOREAN
+        val hasHan = text.any { it in '\u4e00'..'\u9fff' }
+        if (hasHan) {
+            return if (fallbackLang == TranslateLanguage.JAPANESE) {
+                TranslateLanguage.JAPANESE
+            } else {
+                TranslateLanguage.CHINESE
+            }
+        }
+        val hasCyrillic = text.any { it in '\u0400'..'\u04ff' }
+        if (hasCyrillic) return TranslateLanguage.RUSSIAN
+
+        val lower = text.lowercase()
+        if (lower.any { it == 'ß' }) return TranslateLanguage.GERMAN
+        if (lower.any { it == 'ñ' || it == '¿' || it == '¡' }) return TranslateLanguage.SPANISH
+        if (lower.any { it == 'ã' || it == 'õ' }) return TranslateLanguage.PORTUGUESE
+        if (lower.any { it == 'œ' }) return TranslateLanguage.FRENCH
+
+        val scores = mapOf(
+            TranslateLanguage.GERMAN to (
+                lower.count { it in "äöü" } * 2 +
+                    Regex("\\b(der|die|das|und|ist|nicht|ich|sie|ein|eine|mit|auf|auch|zu)\\b").findAll(lower).count()
+                ),
+            TranslateLanguage.FRENCH to (
+                lower.count { it in "çàâêèéëîïôûù" } * 2 +
+                    Regex("\\b(le|la|les|des|est|vous|nous|avec|pour|dans|une|pas|qui|que|mais)\\b").findAll(lower).count()
+                ),
+            TranslateLanguage.SPANISH to (
+                lower.count { it in "áéíóúü" } * 2 +
+                    Regex("\\b(el|la|los|las|que|por|para|con|una|está|como|pero|muy|del)\\b").findAll(lower).count()
+                ),
+            TranslateLanguage.ITALIAN to (
+                lower.count { it in "àèéìòù" } * 2 +
+                    Regex("\\b(che|non|per|una|sono|con|della|questo|anche|come|più)\\b").findAll(lower).count()
+                ),
+            TranslateLanguage.PORTUGUESE to (
+                lower.count { it in "áâàãçéêíóôõú" } * 2 +
+                    Regex("\\b(não|você|para|com|uma|que|isso|como|mais|muito)\\b").findAll(lower).count()
+                ),
+        )
+        val best = scores.maxByOrNull { it.value }
+        if (best != null && best.value >= 3) {
+            return best.key
+        }
+        return if (fallbackLang != null && fallbackLang != TranslateLanguage.CHINESE && fallbackLang != TranslateLanguage.JAPANESE) {
+            fallbackLang
+        } else {
+            TranslateLanguage.ENGLISH
+        }
+    }
+
     private fun resolveLanguageCode(text: String, langTag: String): String {
         val tag = langTag.lowercase().trim()
         if (tag == "auto" || tag.isBlank()) {
-            val hasKana = text.any { it in '\u3040'..'\u30ff' }
-            if (hasKana) return TranslateLanguage.JAPANESE
-            val hasHangul = text.any { it in '\uac00'..'\ud7af' || it in '\u1100'..'\u11ff' }
-            if (hasHangul) return TranslateLanguage.KOREAN
-            val hasHan = text.any { it in '\u4e00'..'\u9fff' }
-            if (hasHan) return TranslateLanguage.CHINESE
-            val hasCyrillic = text.any { it in '\u0400'..'\u04ff' }
-            if (hasCyrillic) return TranslateLanguage.RUSSIAN
-            return TranslateLanguage.ENGLISH
+            return detectSourceLanguageCode(text, preparedSourceLang)
         }
 
         return when {

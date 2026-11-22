@@ -1,6 +1,7 @@
 package me.magnum.melonds.ui.settings.fragments
 
 import android.Manifest
+import android.app.Dialog
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
@@ -39,7 +40,7 @@ import java.util.Locale
 class CheatsPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitleProvider {
 
     private val viewModel by viewModels<CheatsPreferencesViewModel>()
-    private var isDownloadingOnline = false
+    private var activeComposeDialog: Dialog? = null
 
     private val cheatFilePickerLauncher = registerForActivityResult(FilePickerContract(Permission.READ)) {
         if (it != null) {
@@ -63,40 +64,49 @@ class CheatsPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
         val clearDatabasePreference = findPreference<Preference>("cheats_clear_database")
 
         downloadCheatsPreference?.setOnPreferenceClickListener {
-            if (isDownloadingOnline || viewModel.areCheatsBeingImported()) {
+            if (viewModel.isDownloadingOnline.value || viewModel.areCheatsBeingImported()) {
                 if (viewModel.areCheatsBeingImported()) {
                     CheatsImportProgressDialog().show(childFragmentManager, null)
                 }
                 return@setOnPreferenceClickListener true
             }
-            isDownloadingOnline = true
-            downloadCheatsPreference.isEnabled = false
-            downloadCheatsPreference.summary = getString(R.string.cheats_downloading_progress)
             val selectedMirror = downloadMirrorPreference?.value
-            lifecycleScope.launch {
-                val result = viewModel.downloadAndImportOnlineCheats(selectedMirror)
-                isDownloadingOnline = false
-                if (!isAdded) return@launch
-                downloadCheatsPreference.isEnabled = true
-                downloadCheatsPreference.summary = getString(R.string.cheats_download_online_summary)
-                when (result) {
-                    is OnlineCheatsDownloadResult.OnlineUsrCheatImportStarted -> {
-                        CheatsImportProgressDialog().show(childFragmentManager, null)
-                    }
-                    is OnlineCheatsDownloadResult.EmbeddedFallbackLoaded -> {
-                        updateDatabaseStatusSummary()
-                        Toast.makeText(
-                            requireContext(),
-                            getString(R.string.cheats_download_fallback_embedded, result.gamesCount),
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-                    is OnlineCheatsDownloadResult.Failed -> {
-                        Toast.makeText(requireContext(), R.string.cheats_import_failed, Toast.LENGTH_LONG).show()
+            viewModel.startOnlineCheatsDownload(selectedMirror)
+            true
+        }
+
+        lifecycleScope.launch {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.isDownloadingOnline.collect { downloading ->
+                    downloadCheatsPreference?.isEnabled = !downloading
+                    downloadCheatsPreference?.summary = getString(
+                        if (downloading) R.string.cheats_downloading_progress else R.string.cheats_download_online_summary
+                    )
+                }
+            }
+        }
+
+        lifecycleScope.launch {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.onlineDownloadResult.collect { result ->
+                    when (result) {
+                        is OnlineCheatsDownloadResult.OnlineUsrCheatImportStarted -> {
+                            CheatsImportProgressDialog().show(childFragmentManager, null)
+                        }
+                        is OnlineCheatsDownloadResult.EmbeddedFallbackLoaded -> {
+                            updateDatabaseStatusSummary()
+                            Toast.makeText(
+                                requireContext(),
+                                getString(R.string.cheats_download_fallback_embedded, result.gamesCount),
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                        is OnlineCheatsDownloadResult.Failed -> {
+                            Toast.makeText(requireContext(), R.string.cheats_import_failed, Toast.LENGTH_LONG).show()
+                        }
                     }
                 }
             }
-            true
         }
 
         importCheatsPreference.setOnPreferenceClickListener {
@@ -110,11 +120,18 @@ class CheatsPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
             lifecycleScope.launch {
                 val (games, _) = viewModel.getDatabaseStats()
                 if (!isAdded) return@launch
-                showCheatDatabaseSearchDialog(
+                activeComposeDialog?.dismiss()
+                activeComposeDialog = showCheatDatabaseSearchDialog(
                     context = requireContext(),
                     totalGamesCount = games,
                     onSearch = { query -> viewModel.searchGames(query) },
-                )
+                ).apply {
+                    setOnDismissListener {
+                        if (activeComposeDialog === this) {
+                            activeComposeDialog = null
+                        }
+                    }
+                }
             }
             true
         }
@@ -122,7 +139,8 @@ class CheatsPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
         clearDatabasePreference?.setOnPreferenceClickListener {
             val ctx = requireContext()
             val colors = AppThemeManager.getCurrentWatermelonColors(ctx)
-            showSettingsComposeDialog(ctx) { dismiss ->
+            activeComposeDialog?.dismiss()
+            activeComposeDialog = showSettingsComposeDialog(ctx) { dismiss ->
                 CompositionLocalProvider(LocalWatermelonColors provides colors) {
                     SettingsConfirmDialogContent(
                         title = getString(R.string.cheats_clear_database_confirm_title),
@@ -146,6 +164,12 @@ class CheatsPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
                         onDismiss = dismiss,
                     )
                 }
+            }.apply {
+                setOnDismissListener {
+                    if (activeComposeDialog === this) {
+                        activeComposeDialog = null
+                    }
+                }
             }
             true
         }
@@ -167,6 +191,12 @@ class CheatsPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
     override fun onResume() {
         super.onResume()
         updateDatabaseStatusSummary()
+    }
+
+    override fun onDestroyView() {
+        activeComposeDialog?.dismiss()
+        activeComposeDialog = null
+        super.onDestroyView()
     }
 
     private fun updateDatabaseStatusSummary() {

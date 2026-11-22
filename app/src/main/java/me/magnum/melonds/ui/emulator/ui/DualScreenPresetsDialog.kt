@@ -330,17 +330,17 @@ private fun DualScreenPresetsContent(
                 Triple(
                     DualScreenPreset.OFF,
                     stringResource(R.string.dual_screen_preset_off),
-                    "Оба экрана Nintendo DS выводятся на основном дисплее устройства",
+                    stringResource(R.string.v870_presets_desc_off),
                 ),
                 Triple(
                     DualScreenPreset.INTERNAL_TOP_EXTERNAL_BOTTOM,
                     stringResource(R.string.dual_screen_preset_internal_top_external_bottom),
-                    "Основной экран смартфона - Верхний (игра), Внешний монитор - Нижний (тач)",
+                    stringResource(R.string.v870_presets_desc_top_ext_bot),
                 ),
                 Triple(
                     DualScreenPreset.INTERNAL_BOTTOM_EXTERNAL_TOP,
                     stringResource(R.string.dual_screen_preset_internal_bottom_external_top),
-                    "Основной экран смартфона - Нижний (тач в руках), Внешний монитор - Верхний (игра)",
+                    stringResource(R.string.v870_presets_desc_bot_ext_top),
                 ),
             )
 
@@ -428,7 +428,7 @@ private fun DualScreenPresetsContent(
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
-                        text = "Сохранение исходных пропорций 4:3 без растягивания картинки",
+                        text = stringResource(R.string.v870_ds_scaling_aspect_desc),
                         color = Color.White.copy(alpha = 0.55f),
                         fontSize = 11.sp,
                     )
@@ -467,7 +467,7 @@ private fun DualScreenPresetsContent(
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
-                        text = "Кратное целочисленное масштабирование пикселей (1x, 2x, 3x)",
+                        text = stringResource(R.string.v870_ds_scaling_integer_desc),
                         color = Color.White.copy(alpha = 0.55f),
                         fontSize = 11.sp,
                     )
@@ -503,7 +503,7 @@ private fun DualScreenPresetsContent(
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
-                        text = "Заполнение пространства по высоте и ширине экрана",
+                        text = stringResource(R.string.v870_ds_scaling_fill_desc),
                         color = Color.White.copy(alpha = 0.55f),
                         fontSize = 11.sp,
                     )
@@ -543,7 +543,7 @@ private fun DualScreenPresetsContent(
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
-                        text = "Позиционирование кадров по вертикали (сверху / центр / снизу)",
+                        text = stringResource(R.string.v870_ds_scaling_vertical_desc),
                         color = Color.White.copy(alpha = 0.55f),
                         fontSize = 11.sp,
                     )

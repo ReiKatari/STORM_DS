@@ -1,0 +1,242 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <string-array name="wfc_server_options" tools:ignore="InconsistentArrays">
+        <item>@string/wfc_server_disabled</item>
+        <item>Wiimmfi.de (167.235.229.36)</item>
+        <item>AltWFC (172.104.88.237)</item>
+        <item>Kaeru WFC (178.62.43.212)</item>
+        <item>@string/wfc_server_custom</item>
+    </string-array>
+    <string-array name="video_vulkan_3d_depth_strength_options" tools:ignore="InconsistentArrays">
+        <item>25%</item>
+        <item>50%</item>
+        <item>75%</item>
+        <item>100%</item>
+    </string-array>
+    <string-array name="app_language_options" tools:ignore="InconsistentArrays">
+        <item>🌐 Systemstandard</item>
+        <item>🇷🇺 Русский</item>
+        <item>🇬🇧 English</item>
+        <item>🇩🇪 Deutsch</item>
+        <item>🇫🇷 Français</item>
+        <item>🇨🇳 简体中文</item>
+        <item>🇯🇵 日本語</item>
+        <item>🇪🇸 Español</item>
+        <item>🇮🇹 Italiano</item>
+        <item>🇵🇹 Português (Brasil)</item>
+        <item>🇮🇩 Bahasa Indonesia</item>
+    </string-array>
+    <string-array name="resolution_hud_position_options" tools:ignore="InconsistentArrays">
+        <item>Ausgeblendet</item>
+        <item>Oben links</item>
+        <item>Oben rechts</item>
+        <item>Unten links</item>
+        <item>Unten rechts</item>
+    </string-array>
+    <string-array name="video_console_skin_type_options" tools:ignore="InconsistentArrays">
+        <item>Nintendo DS Lite (Mattschwarz)</item>
+        <item>Nintendo DS Lite (Polarweiß)</item>
+        <item>Nintendo DS Lite (Karmesinrot)</item>
+        <item>Nintendo DSi XL (Mitternachtsblau)</item>
+        <item>Nintendo 3DS (Aquablau)</item>
+        <item>New Nintendo 3DS XL (Kosmos-Schwarz)</item>
+    </string-array>
+    <string-array name="frame_limit_speed_multiplier_options" tools:ignore="InconsistentArrays">
+        <item>1.0x</item>
+        <item>0.75x</item>
+        <item>0.5x</item>
+        <item>0.25x</item>
+    </string-array>
+    <string-array name="dldi_sd_card_image_size_options" tools:ignore="InconsistentArrays">
+        <item>Automatisch</item>
+        <item>256 MB</item>
+        <item>512 MB</item>
+        <item>1 GB</item>
+        <item>2 GB</item>
+        <item>4 GB</item>
+    </string-array>
+    <string-array name="rom_input_mode_options" tools:ignore="InconsistentArrays">
+        <item>@string/use_global_preference</item>
+        <item>Benutzerdefiniert</item>
+    </string-array>
+    <string-array name="gba_slot_options" tools:ignore="InconsistentArrays">
+        <item>Keine</item>
+        <item>GBA-ROM</item>
+        <item>Rumble Pak</item>
+        <item>Speichererweiterung</item>
+        <item>Analogeingabe</item>
+    </string-array>
+    <string-array name="video_renderer_options" tools:ignore="InconsistentArrays">
+        <item>Software</item>
+        <item>OpenGL</item>
+        <item>Vulkan</item>
+        <item>Compute</item>
+    </string-array>
+    <string-array name="external_display_mode_options" tools:ignore="InconsistentArrays">
+        <item>Spiegeln</item>
+        <item>STORM DS</item>
+    </string-array>
+    <string-array name="dsi_camera_source_options" tools:ignore="InconsistentArrays">
+        <item>Schwarzer Bildschirm</item>
+        <item>Physische Kameras</item>
+        <item>Statisches Bild</item>
+    </string-array>
+    <string-array name="soft_input_behaviour_options" tools:ignore="InconsistentArrays">
+        <item>Immer sichtbar</item>
+        <item>Konsolentasten ausblenden, wenn Controller verbunden</item>
+        <item>Zugewiesene Eingaben ausblenden, wenn Controller verbunden</item>
+        <item>Immer unsichtbar</item>
+    </string-array>
+    <string-array name="soft_input_behaviour_descriptions" tools:ignore="InconsistentArrays">
+        <item>Die Bildschirmsteuerung ist immer wie im aktuellen Layout sichtbar.</item>
+        <item>Wenn ein Controller verbunden ist, werden die Konsolentasten (A, B, X, Y, Steuerkreuz, L, R, Start, Select) ausgeblendet.</item>
+        <item>Wenn ein Controller verbunden ist, werden alle ihm zugewiesenen Tasten ausgeblendet.</item>
+        <item>Die Bildschirmsteuerung ist immer ausgeblendet.</item>
+    </string-array>
+    <string-array name="fast_forward_speed_multiplier_options" tools:ignore="InconsistentArrays">
+        <item>Unbegrenzt</item>
+        <item>1.5x</item>
+        <item>2x</item>
+        <item>3x</item>
+        <item>4x</item>
+        <item>8x</item>
+    </string-array>
+    <string-array name="rom_icon_filtering_options" tools:ignore="InconsistentArrays">
+        <item>Keine (Pixelig)</item>
+        <item>Linear (Glatt)</item>
+    </string-array>
+    <string-array name="game_runtime_console_type_options" tools:ignore="InconsistentArrays">
+        <item>Standard</item>
+        <item>@string/console_ds</item>
+        <item>@string/console_dsi</item>
+    </string-array>
+    <string-array name="firmware_settings_language_options" tools:ignore="InconsistentArrays">
+        <item>Englisch</item>
+        <item>Französisch</item>
+        <item>Deutsch</item>
+        <item>Italienisch</item>
+        <item>Spanisch</item>
+        <item>Japanisch</item>
+    </string-array>
+    <string-array name="game_runtime_mic_source_options" tools:ignore="InconsistentArrays">
+        <item>Standard</item>
+        <item>Keine</item>
+        <item>Pusten</item>
+        <item>Gerätemikrofon</item>
+    </string-array>
+    <string-array name="fps_counter_position_options" tools:ignore="InconsistentArrays">
+        <item>Ausgeblendet</item>
+        <item>Oben links</item>
+        <item>Oben mittig</item>
+        <item>Oben rechts</item>
+        <item>Unten links</item>
+        <item>Unten mittig</item>
+        <item>Unten rechts</item>
+    </string-array>
+    <string-array name="video_filtering_options" tools:ignore="InconsistentArrays">
+        <item>Keine</item>
+        <item>Linear</item>
+        <item>2xBR</item>
+        <item>HQ2X</item>
+        <item>HQ4X</item>
+        <item>Quilez</item>
+        <item>LCD</item>
+        <item>Scanlines</item>
+        <item>Scale2x</item>
+        <item>AI-Upscale (Anime4K)</item>
+        <item>RetroArch (.slangp)</item>
+    </string-array>
+    <string-array name="audio_interpolation_options" tools:ignore="InconsistentArrays">
+        <item>Keine</item>
+        <item>Linear</item>
+        <item>Kosinus</item>
+        <item>Kubisch</item>
+    </string-array>
+    <string-array name="audio_bitrate_options" tools:ignore="InconsistentArrays">
+        <item>Automatisch</item>
+        <item>10-Bit</item>
+        <item>16-Bit</item>
+    </string-array>
+    <string-array name="audio_latency_options" tools:ignore="InconsistentArrays">
+        <item>Niedrig (Langsamer)</item>
+        <item>Mittel</item>
+        <item>Hoch (Schneller)</item>
+    </string-array>
+    <string-array name="mic_source_options" tools:ignore="InconsistentArrays">
+        <item>Keine</item>
+        <item>Pusten</item>
+        <item>Gerätemikrofon</item>
+    </string-array>
+    <string-array name="save_state_locations" tools:ignore="InconsistentArrays">
+        <item>Speicherdatei-Ordner</item>
+        <item>ROM-Ordner</item>
+        <item>Interner Ordner</item>
+        <item>Benutzerdefiniert</item>
+    </string-array>
+    <string-array name="layout_orientation_options" tools:ignore="InconsistentArrays">
+        <item>System folgen</item>
+        <item>Hochformat</item>
+        <item>Querformat</item>
+    </string-array>
+    <string-array name="background_portrait_mode_options" tools:ignore="InconsistentArrays">
+        <item>Strecken</item>
+        <item>Mittig einpassen</item>
+        <item>Oben einpassen</item>
+        <item>Links einpassen</item>
+        <item>Unten einpassen</item>
+        <item>Rechts einpassen</item>
+    </string-array>
+    <string-array name="translator_local_voice_model_options" tools:ignore="InconsistentArrays">
+        <item>🎭 24 Stimmen (Auto Neural-Verteilung nach Kontext und Charakter)</item>
+        <item>🎙️ Dmitry (Neural Bariton)</item>
+        <item>🎙️ Elena (Neural Sopran)</item>
+        <item>🗡️ Junger Held (Heller Tenor)</item>
+        <item>🦇 Dunkler Ritter / Batman (Rauer Bass)</item>
+        <item>👹 Boss / Tyrann / Bowser (Schwerer Bass)</item>
+        <item>🃏 Joker / Trickster (Manischer Tenor)</item>
+        <item>💀 Abgrund-Dämon / Dracula (Tiefer Bass)</item>
+        <item>📜 Weiser Alter / Professor (Kratzig)</item>
+        <item>👦 Junger Junge / Luke Triton (Klar)</item>
+        <item>👧 Junges Mädchen / Pearl Fey (Sanft)</item>
+        <item>👑 Prinzessin / Königin Zelda (Königlich)</item>
+        <item>💰 Händler / Tom Nook (Eifrig)</item>
+        <item>🛡️ Wache / Hauptmann (Streng)</item>
+        <item>🤖 Roboter / Cyborg / Pokedex (Synthetisch)</item>
+        <item>📖 Erzähler / Chronist (Samtig)</item>
+        <item>🎀 Tsundere / Franziska (Hochmütiger Sopran)</item>
+        <item>🤫 Geheimnisvolles Flüstern (Mystisch)</item>
+        <item>✨ Fröhliche Fee / Navi (Hoher Alt)</item>
+        <item>🏴‍☠️ Piratenkapitän (Knurrender Bass)</item>
+        <item>🔬 Verrückter Wissenschaftler / Dr. Wily (Exzentrisch)</item>
+        <item>🎩 Gentleman / Layton / Wright (Raffiniert)</item>
+        <item>👻 Geist / Phantom (Ätherisch)</item>
+        <item>⚔️ Edler Ritter / Meta Knight (Fester Bariton)</item>
+        <item>🕊️ Göttin / Engel Palutena (Kristallklar)</item>
+    </string-array>
+    <string-array name="button_color_theme_options" tools:ignore="InconsistentArrays">
+        <item>Nintendo 3DS (Cosmo Aqua Blue)</item>
+        <item>Nintendo DS Classic (Metallic Grey)</item>
+        <item>Nintendo DS Lite (Pure White)</item>
+        <item>Nintendo Famicom / NES (Gold and Maroon)</item>
+        <item>Nintendo Game Boy (DMG Retro Grey and Plum)</item>
+        <item>Nintendo Game Boy Advance (Glacier Indigo)</item>
+        <item>Nintendo GameCube (Indigo and Green/Red)</item>
+        <item>Nintendo Super Famicom / SNES (Four Colors)</item>
+        <item>Nintendo Switch Neon (Red and Blue)</item>
+        <item>Nintendo Switch OLED (Matte White)</item>
+        <item>Nintendo Virtual Boy (Laser Red and Void)</item>
+        <item>Nintendo Wii (Crystal White and Blue)</item>
+        <item>Nintendo Wii U (Dark Slate and Cyan)</item>
+        <item>STORM Arcade Retro (Classic Arcade Machine / 4 Colors)</item>
+        <item>STORM Aurora Spectrum (Four Pastel Colors / Light)</item>
+        <item>STORM Cyber Neon (Cyan and Dark)</item>
+        <item>STORM Cyberpunk 2077 (Neon / Multi-Color)</item>
+        <item>STORM Frost Glacier (Ice Gradient / Light)</item>
+        <item>STORM Gothic Crimson (Ruby Red and Carbon)</item>
+        <item>STORM Matrix Emerald (Neon Green)</item>
+        <item>STORM Midnight Amethyst (Deep Purple)</item>
+        <item>STORM Royal Gold (Gold and Obsidian)</item>
+        <item>STORM Sakura Blossom (Cherry Blossom / Light)</item>
+        <item>STORM Solar Fusion (Solar Spectrum / Light)</item>
+    </string-array>
+</resources>

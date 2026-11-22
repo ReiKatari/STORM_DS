@@ -116,15 +116,13 @@ private fun Loading(modifier: Modifier) {
 }
 
 
-enum class RomConfigCategory(val titleRu: String, val titleEn: String) {
-    ALL("Все разделы", "All Sections"),
-    SYSTEM_CPU("Система и CPU", "System and CPU"),
-    GRAPHICS_VULKAN("Графика и Vulkan", "Graphics and Vulkan"),
-    SCREENS_LAYOUT("Экраны и корпус", "Screens and Layout"),
-    AUDIO_CONTROLS("Управление и звук", "Controls and Audio"),
-    GBA_SLOT("Слот GBA", "GBA Slot");
-
-    fun title(isRu: Boolean): String = if (isRu) titleRu else titleEn
+enum class RomConfigCategory(@androidx.annotation.StringRes val titleRes: Int) {
+    ALL(R.string.v870_rom_config_cat_all),
+    SYSTEM_CPU(R.string.v870_rom_config_cat_sys),
+    GRAPHICS_VULKAN(R.string.v870_rom_config_cat_gfx),
+    SCREENS_LAYOUT(R.string.v870_rom_config_cat_scr),
+    AUDIO_CONTROLS(R.string.v870_rom_config_cat_aud),
+    GBA_SLOT(R.string.v870_rom_config_cat_gba);
 }
 
 @Composable
@@ -236,7 +234,6 @@ private fun Content(
     }
 
     val colors = watermelon
-    val isRu = remember { java.util.Locale.getDefault().language.startsWith("ru") }
     var selectedFilter by remember { mutableStateOf(RomConfigCategory.ALL) }
 
     val activeOverridesCount = remember(romConfig) {
@@ -313,9 +310,9 @@ private fun Content(
                 Column {
                     Text(
                         text = if (activeOverridesCount > 0) {
-                            if (isRu) "Активных настроек: $activeOverridesCount" else "Custom Overrides: $activeOverridesCount"
+                            stringResource(R.string.v870_rom_config_overrides_count, activeOverridesCount)
                         } else {
-                            if (isRu) "Используются глобальные настройки" else "Using Global Defaults"
+                            stringResource(R.string.v870_rom_config_using_global)
                         },
                         color = colors.text,
                         fontFamily = SpaceGrotesk,
@@ -324,9 +321,9 @@ private fun Content(
                     )
                     Text(
                         text = if (activeOverridesCount > 0) {
-                            if (isRu) "Параметры переопределены специально для этой игры" else "Settings overridden specifically for this game"
+                            stringResource(R.string.v870_rom_config_overrides_desc)
                         } else {
-                            if (isRu) "Все параметры наследуются из главного меню" else "All settings inherited from main preferences"
+                            stringResource(R.string.v870_rom_config_global_desc)
                         },
                         color = colors.text3,
                         fontSize = 11.sp,
@@ -361,7 +358,7 @@ private fun Content(
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = cat.title(isRu),
+                        text = stringResource(cat.titleRes),
                         color = if (isSelected) colors.green else colors.text2,
                         fontSize = 11.5.sp,
                         fontFamily = SpaceGrotesk,

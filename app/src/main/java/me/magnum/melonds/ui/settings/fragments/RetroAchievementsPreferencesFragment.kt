@@ -80,6 +80,7 @@ class RetroAchievementsPreferencesFragment : BasePreferenceFragment(), Preferenc
     lateinit var endpointProvider: RetroAchievementsEndpointProvider
 
     private var loginProgressDialog: LoadingDialog? = null
+    private var activeComposeDialog: android.app.Dialog? = null
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.pref_retroachievements, rootKey)
@@ -393,7 +394,8 @@ class RetroAchievementsPreferencesFragment : BasePreferenceFragment(), Preferenc
                                 Toast.LENGTH_LONG,
                             ).show()
                             val ctx = context ?: return@collect
-                            me.magnum.melonds.ui.settings.dialogs.showSettingsComposeDialog(ctx) { dismiss ->
+                            activeComposeDialog?.dismiss()
+                            activeComposeDialog = me.magnum.melonds.ui.settings.dialogs.showSettingsComposeDialog(ctx) { dismiss ->
                                 me.magnum.melonds.ui.settings.dialogs.SettingsConfirmDialogContent(
                                     title = getString(R.string.ra_sync_pending_result_title),
                                     message = message,
@@ -427,12 +429,16 @@ class RetroAchievementsPreferencesFragment : BasePreferenceFragment(), Preferenc
 
     override fun onDestroyView() {
         dismissLoginProgressDialog()
+        activeComposeDialog?.dismiss()
+        activeComposeDialog = null
+        viewModel.resetConnectionTestState()
         super.onDestroyView()
     }
 
     private fun showLoginDialog(existingUsername: String?) {
         val ctx = context ?: return
-        me.magnum.melonds.ui.settings.dialogs.showSettingsComposeDialog(ctx) { dismiss ->
+        activeComposeDialog?.dismiss()
+        activeComposeDialog = me.magnum.melonds.ui.settings.dialogs.showSettingsComposeDialog(ctx) { dismiss ->
             me.magnum.melonds.ui.settings.dialogs.SettingsRetroAchievementsLoginDialogContent(
                 existingUsername = existingUsername,
                 onLogin = { username, password ->
@@ -466,7 +472,8 @@ class RetroAchievementsPreferencesFragment : BasePreferenceFragment(), Preferenc
         } else {
             R.string.retroachievements_logout_confirmation
         }
-        me.magnum.melonds.ui.settings.dialogs.showSettingsComposeDialog(ctx) { dismiss ->
+        activeComposeDialog?.dismiss()
+        activeComposeDialog = me.magnum.melonds.ui.settings.dialogs.showSettingsComposeDialog(ctx) { dismiss ->
             me.magnum.melonds.ui.settings.dialogs.SettingsConfirmDialogContent(
                 title = getString(R.string.retroachievements_logout),
                 message = getString(messageRes),
@@ -491,7 +498,8 @@ class RetroAchievementsPreferencesFragment : BasePreferenceFragment(), Preferenc
 
     private fun showInGameAccountChangeBlockedDialog() {
         val ctx = context ?: return
-        me.magnum.melonds.ui.settings.dialogs.showSettingsComposeDialog(ctx) { dismiss ->
+        activeComposeDialog?.dismiss()
+        activeComposeDialog = me.magnum.melonds.ui.settings.dialogs.showSettingsComposeDialog(ctx) { dismiss ->
             me.magnum.melonds.ui.settings.dialogs.SettingsConfirmDialogContent(
                 title = getString(R.string.retroachievements),
                 message = getString(R.string.retroachievements_account_change_blocked_in_game),
@@ -504,7 +512,11 @@ class RetroAchievementsPreferencesFragment : BasePreferenceFragment(), Preferenc
 
     private fun showConnectionTestDialog() {
         val ctx = context ?: return
-        me.magnum.melonds.ui.settings.dialogs.showSettingsComposeDialog(ctx) { dismiss ->
+        activeComposeDialog?.dismiss()
+        activeComposeDialog = me.magnum.melonds.ui.settings.dialogs.showSettingsComposeDialog(
+            context = ctx,
+            onDismiss = { viewModel.resetConnectionTestState() },
+        ) { dismiss ->
             val composeContext = LocalContext.current
             val colors = remember(composeContext) {
                 AppThemeManager.getCurrentWatermelonColors(composeContext)

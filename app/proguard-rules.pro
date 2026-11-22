@@ -59,6 +59,8 @@
 
 # Prevent DTOs and models from being obfuscated or removed
 -keep class me.magnum.melonds.impl.dtos.** { *; }
+-keep class me.magnum.melonds.impl.FileSystemRomsRepository$RomMetadataMirrorDto { *; }
+-keep class me.magnum.melonds.impl.FileSystemRomsRepository$RomOptionsDto { *; }
 -keep class me.magnum.rcheevosapi.dto.** { *; }
 -keep class me.magnum.melonds.domain.model.rom.** { *; }
 -keep class me.magnum.melonds.domain.model.Background { *; }

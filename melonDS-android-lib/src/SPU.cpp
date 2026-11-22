@@ -206,14 +206,13 @@ SPU::SPU(melonDS::NDS& nds, AudioBitDepth bitdepth, AudioInterpolation interpola
         SPUCaptureUnit(1, nds),
     },
     AudioLock(Platform::Mutex_Create()),
-    Degrade10Bit(bitdepth == AudioBitDepth::_10Bit || (nds.ConsoleType == 1 && bitdepth == AudioBitDepth::Auto)),
+    Degrade10Bit(bitdepth == AudioBitDepth::_10Bit || (nds.ConsoleType == 0 && bitdepth == AudioBitDepth::Auto)),
     OutputSampleRate(outputSampleRate),
     OutputBuffer(nullptr)
 {
     NDS.RegisterEventFuncs(Event_SPU, this, {MakeEventThunk(SPU, Mix)});
 
     ApplyBias = true;
-    Degrade10Bit = false;
 
     BlipLeft = blip_new(512);
     BlipRight = blip_new(512);

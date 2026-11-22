@@ -23,15 +23,21 @@ class GitHubNightlyUpdatesRepository(
         private const val KEY_LAST_RELEASE_DATE = "github_updates_nightly_last_release_date"
     }
 
-    override suspend fun checkNewUpdate(): Result<AppUpdate?> {
-        if (!shouldCheckUpdates()) {
+    override suspend fun checkNewUpdate(ignorePreferences: Boolean): Result<AppUpdate?> {
+        if (!ignorePreferences && !shouldCheckUpdates()) {
             return Result.success(null)
         }
 
         return suspendRunCatching { api.getReleases() }.suspendMapCatching { releases ->
             val candidate = GitHubReleaseSelector.selectNightly(releases) ?: return@suspendMapCatching null
-            if (!shouldUpdate(candidate.publishedAt.toEpochMilliseconds())) {
+            if (!ignorePreferences && !shouldUpdate(candidate.publishedAt.toEpochMilliseconds())) {
                 return@suspendMapCatching null
+            }
+            if (ignorePreferences) {
+                val lastReleaseDate = statePreferences.getLong(KEY_LAST_RELEASE_DATE, -1L)
+                if (lastReleaseDate != -1L && candidate.publishedAt.toEpochMilliseconds() <= lastReleaseDate) {
+                    return@suspendMapCatching null
+                }
             }
 
             AppUpdate(

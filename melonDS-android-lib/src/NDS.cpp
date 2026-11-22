@@ -450,7 +450,8 @@ void NDS::Reset()
     {
         // BIOS files are now loaded by the frontend
 
-        ARM9ClockShift = std::max<u32>(2u, std::min<u32>(3u, 1u + ARM9OverclockShift));
+        const u32 baseShift = 2u;
+        ARM9ClockShift = std::min<u32>(3u, baseShift + ARM9OverclockShift);
         MainRAMMask = 0xFFFFFF;
     }
     else

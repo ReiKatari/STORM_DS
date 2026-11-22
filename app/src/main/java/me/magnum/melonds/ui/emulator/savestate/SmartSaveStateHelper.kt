@@ -2,6 +2,7 @@ package me.magnum.melonds.ui.emulator.savestate
 
 import android.content.Context
 import android.content.SharedPreferences
+import me.magnum.melonds.R
 
 object SmartSaveStateHelper {
     private const val PREFS_NAME = "smart_savestate_bookmarks"
@@ -23,44 +24,45 @@ object SmartSaveStateHelper {
         }
     }
 
-    fun generateAutoBookmarkTag(gameTitle: String?, slot: Int): String {
+    fun generateAutoBookmarkTag(context: Context, gameTitle: String?, slot: Int): String {
         val title = gameTitle?.lowercase() ?: ""
-        return when {
+        val resId = when {
             title.contains("pokemon") || title.contains("heartgold") || title.contains("soulsilver") -> when (slot % 4) {
-                0 -> "⭐ Быстрое сохранение"
-                1 -> "🏛️ Покецентр / Лига"
-                2 -> "⚔️ Битва с лидером гима"
-                else -> "🌲 Маршрут / Исследование"
+                0 -> R.string.v870_smart_quick
+                1 -> R.string.v870_smart_pokemon_center
+                2 -> R.string.v870_smart_gym_leader
+                else -> R.string.v870_smart_route
             }
             title.contains("mario") -> when (slot % 4) {
-                0 -> "⭐ Быстрое сохранение"
-                1 -> "🏰 Замок Боузера"
-                2 -> "🍄 Мир испытаний"
-                else -> "🚩 Контрольная точка"
+                0 -> R.string.v870_smart_quick
+                1 -> R.string.v870_smart_bowser
+                2 -> R.string.v870_smart_trial_world
+                else -> R.string.v870_smart_checkpoint
             }
             title.contains("zelda") -> when (slot % 4) {
-                0 -> "⭐ Быстрое сохранение"
-                1 -> "⚔️ Босс подземелья"
-                2 -> "🗝️ Храм / Загадка"
-                else -> "⛵ Морское плавание"
+                0 -> R.string.v870_smart_quick
+                1 -> R.string.v870_smart_dungeon_boss
+                2 -> R.string.v870_smart_temple
+                else -> R.string.v870_smart_sea
             }
             title.contains("batman") -> when (slot % 4) {
-                0 -> "⭐ Быстрое сохранение"
-                1 -> "🦇 Готэм: Битва с боссом"
-                2 -> "🌃 Логово суперзлодея"
-                else -> "⚡ Ночной патруль"
+                0 -> R.string.v870_smart_quick
+                1 -> R.string.v870_smart_gotham_boss
+                2 -> R.string.v870_smart_lair
+                else -> R.string.v870_smart_patrol
             }
             title.contains("castlevania") -> when (slot % 4) {
-                0 -> "⭐ Быстрое сохранение"
-                1 -> "🩸 Тронный зал / Замок"
-                2 -> "🦇 Врата бессмертия"
-                else -> "🗝️ Потайная комната"
+                0 -> R.string.v870_smart_quick
+                1 -> R.string.v870_smart_throne
+                2 -> R.string.v870_smart_gate
+                else -> R.string.v870_smart_secret
             }
             else -> when (slot % 3) {
-                0 -> "⭐ Быстрое сохранение"
-                1 -> "⚔️ Битва с боссом"
-                else -> "📍 Точка сюжета"
+                0 -> R.string.v870_smart_quick
+                1 -> R.string.v870_smart_boss
+                else -> R.string.v870_smart_story
             }
         }
+        return context.getString(resId)
     }
 }

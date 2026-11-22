@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <string-array name="wfc_server_options" tools:ignore="InconsistentArrays">
+        <item>@string/wfc_server_disabled</item>
+        <item>Wiimmfi.de (167.235.229.36)</item>
+        <item>AltWFC (172.104.88.237)</item>
+        <item>Kaeru WFC (178.62.43.212)</item>
+        <item>@string/wfc_server_custom</item>
+    </string-array>
+    <string-array name="video_vulkan_3d_depth_strength_options" tools:ignore="InconsistentArrays">
+        <item>25%</item>
+        <item>50%</item>
+        <item>75%</item>
+        <item>100%</item>
+    </string-array>
+    <string-array name="app_language_options" tools:ignore="InconsistentArrays">
+        <item>🌐 系统默认</item>
+        <item>🇷🇺 Русский</item>
+        <item>🇬🇧 English</item>
+        <item>🇩🇪 Deutsch</item>
+        <item>🇫🇷 Français</item>
+        <item>🇨🇳 简体中文</item>
+        <item>🇯🇵 日本語</item>
+        <item>🇪🇸 Español</item>
+        <item>🇮🇹 Italiano</item>
+        <item>🇵🇹 Português (Brasil)</item>
+        <item>🇮🇩 Bahasa Indonesia</item>
+    </string-array>
+    <string-array name="resolution_hud_position_options" tools:ignore="InconsistentArrays">
+        <item>隐藏</item>
+        <item>左上角</item>
+        <item>右上角</item>
+        <item>左下角</item>
+        <item>右下角</item>
+    </string-array>
+    <string-array name="video_console_skin_type_options" tools:ignore="InconsistentArrays">
+        <item>Nintendo DS Lite (哑光黑)</item>
+        <item>Nintendo DS Lite (极地白)</item>
+        <item>Nintendo DS Lite (深红)</item>
+        <item>Nintendo DSi XL (午夜蓝)</item>
+        <item>Nintendo 3DS (湖水蓝)</item>
+        <item>New Nintendo 3DS XL (宇宙黑)</item>
+    </string-array>
+    <string-array name="dldi_sd_card_image_size_options" tools:ignore="InconsistentArrays">
+        <item>自动</item>
+        <item>256 MB</item>
+        <item>512 MB</item>
+        <item>1 GB</item>
+        <item>2 GB</item>
+        <item>4 GB</item>
+    </string-array>
+    <string-array name="external_display_mode_options" tools:ignore="InconsistentArrays">
+        <item>镜像</item>
+        <item>STORM DS</item>
+    </string-array>
+    <string-array name="translator_local_voice_model_options" tools:ignore="InconsistentArrays">
+        <item>🎭 24 种声音（按语境与角色智能分配）</item>
+        <item>🎙️ 德米特里（神经男中音）</item>
+        <item>🎙️ 叶莲娜（神经女高音）</item>
+        <item>🗡️ 少年英雄（明亮男高音）</item>
+        <item>🦇 黑暗骑士 / 蝙蝠侠（低沉沙哑）</item>
+        <item>👹 首领 / 暴君 / 库巴（浑厚男低音）</item>
+        <item>🃏 小丑 / 诡计师（狂躁男高音）</item>
+        <item>💀 深渊恶魔 / 德古拉（极深低音）</item>
+        <item>📜 智慧长者 / 教授（苍老沙哑）</item>
+        <item>👦 少年 / 卢克·特里顿（清脆）</item>
+        <item>👧 少女 / 珍珠·费伊（柔和稚嫩）</item>
+        <item>👑 公主 / 塞尔达女王（高贵）</item>
+        <item>💰 商人 / 狸克（热情欢快）</item>
+        <item>🛡️ 守卫 / 队长（威严冷峻）</item>
+        <item>🤖 机器人 / 赛博格 / 图鉴（电子合成）</item>
+        <item>📖 旁白 / 编年史官（温润磁性）</item>
+        <item>🎀 傲娇 / 弗朗西斯卡（傲慢女高音）</item>
+        <item>🤫 神秘低语 / 暗影（幽邃神秘）</item>
+        <item>✨ 欢快妖精 / 娜薇（俏皮高音）</item>
+        <item>🏴‍☠️ 海盗船长（粗犷咆哮低音）</item>
+        <item>🔬 疯狂科学家 / 威利博士（古怪）</item>
+        <item>🎩 绅士 / 雷顿 / 成步堂（儒雅）</item>
+        <item>👻 幽灵 / 幻影（空灵回响）</item>
+        <item>⚔️ 贵族骑士 / 魅塔骑士（坚定男中音）</item>
+        <item>🕊️ 女神 / 天使帕露蒂娜（神圣清亮）</item>
+    </string-array>
+    <string-array name="button_color_theme_options" tools:ignore="InconsistentArrays">
+        <item>Nintendo 3DS (Cosmo Aqua Blue)</item>
+        <item>Nintendo DS Classic (Metallic Grey)</item>
+        <item>Nintendo DS Lite (Pure White)</item>
+        <item>Nintendo Famicom / NES (Gold and Maroon)</item>
+        <item>Nintendo Game Boy (DMG Retro Grey and Plum)</item>
+        <item>Nintendo Game Boy Advance (Glacier Indigo)</item>
+        <item>Nintendo GameCube (Indigo and Green/Red)</item>
+        <item>Nintendo Super Famicom / SNES (Four Colors)</item>
+        <item>Nintendo Switch Neon (Red and Blue)</item>
+        <item>Nintendo Switch OLED (Matte White)</item>
+        <item>Nintendo Virtual Boy (Laser Red and Void)</item>
+        <item>Nintendo Wii (Crystal White and Blue)</item>
+        <item>Nintendo Wii U (Dark Slate and Cyan)</item>
+        <item>STORM Arcade Retro (Classic Arcade Machine / 4 Colors)</item>
+        <item>STORM Aurora Spectrum (Four Pastel Colors / Light)</item>
+        <item>STORM Cyber Neon (Cyan and Dark)</item>
+        <item>STORM Cyberpunk 2077 (Neon / Multi-Color)</item>
+        <item>STORM Frost Glacier (Ice Gradient / Light)</item>
+        <item>STORM Gothic Crimson (Ruby Red and Carbon)</item>
+        <item>STORM Matrix Emerald (Neon Green)</item>
+        <item>STORM Midnight Amethyst (Deep Purple)</item>
+        <item>STORM Royal Gold (Gold and Obsidian)</item>
+        <item>STORM Sakura Blossom (Cherry Blossom / Light)</item>
+        <item>STORM Solar Fusion (Solar Spectrum / Light)</item>
+    </string-array>
+</resources>

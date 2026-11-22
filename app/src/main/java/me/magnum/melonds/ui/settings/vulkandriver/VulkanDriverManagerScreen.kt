@@ -149,13 +149,16 @@ fun VulkanDriverManagerScreen(
                 },
                 actions = {
                     if (state.isSupported) {
+                        val isBusy = state.activeDownloadKey != null || state.isImportingLocal
                         IconButton(
+                            enabled = !isBusy,
                             onClick = {
                                 zipPickerLauncher.launch(
                                     arrayOf(
                                         "application/zip",
                                         "application/x-zip-compressed",
                                         "application/octet-stream",
+                                        "application/x-compressed",
                                     )
                                 )
                             }
@@ -291,6 +294,7 @@ fun VulkanDriverManagerScreen(
                                     "application/zip",
                                     "application/x-zip-compressed",
                                     "application/octet-stream",
+                                    "application/x-compressed",
                                 )
                             )
                         },
@@ -693,7 +697,7 @@ private fun InstalledDriversTab(
         item {
             StormQuickInstallCard(
                 isInstalled = stormInstalled,
-                isBusy = state.activeDownloadKey != null,
+                isBusy = state.activeDownloadKey != null || state.isImportingLocal,
                 onClick = onInstallStorm,
             )
         }
@@ -785,6 +789,7 @@ private fun InstalledDriversTab(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 OutlinedButton(
+                    enabled = state.activeDownloadKey == null && !state.isImportingLocal,
                     onClick = onImportClick,
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(10.dp),
@@ -1193,7 +1198,7 @@ private fun RecommendedForGpuTab(
         item {
             StormQuickInstallCard(
                 isInstalled = stormInstalled,
-                isBusy = state.activeDownloadKey != null,
+                isBusy = state.activeDownloadKey != null || state.isImportingLocal,
                 onClick = onInstallStorm,
             )
         }

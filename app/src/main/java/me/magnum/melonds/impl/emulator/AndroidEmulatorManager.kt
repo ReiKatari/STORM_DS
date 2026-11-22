@@ -656,13 +656,23 @@ class AndroidEmulatorManager(
                             dsiNandManager.importTitleFile(titleId, directPrimaryFileType, sram)
                             Log.i(TAG, "loadDsiWare: successfully synced valid user FAT12 save (${sramBytes?.size} B, $directPrimaryFileType) into NAND title=$titleIdHex")
                         } else {
-                            val validFatBytes = createFormattedFat12(expectedSize)
-                            val openStream = runCatching { context.contentResolver.openOutputStream(sram, "wt") }.getOrNull()
-                                ?: runCatching { context.contentResolver.openOutputStream(sram, "rwt") }.getOrNull()
-                                ?: runCatching { context.contentResolver.openOutputStream(sram, "w") }.getOrNull()
-                            openStream?.use { output -> output.write(validFatBytes) }
-                            Log.i(TAG, "loadDsiWare: formatted and wrote valid FAT12 save (${validFatBytes.size} B, $directPrimaryFileType) to user sram=$sram")
-                            dsiNandManager.importTitleFile(titleId, directPrimaryFileType, sram)
+                            val existingOnNand = runCatching {
+                                dsiNandManager.listTitles().any { (it.titleId and 0xFFFFFFFFL) == (titleId and 0xFFFFFFFFL) }
+                            }.getOrDefault(false)
+                            val exportedFromNand = if (existingOnNand) {
+                                dsiNandManager.exportTitleFile(titleId, directPrimaryFileType, sram)
+                            } else {
+                                false
+                            }
+                            val nandExportedBytes = if (exportedFromNand) readUserSaveBytes(sram) else null
+                            if (exportedFromNand && isValidDsiWareFatSave(nandExportedBytes)) {
+                                Log.i(TAG, "loadDsiWare: exported existing NAND save (${nandExportedBytes?.size} B, $directPrimaryFileType) to user sram=$sram")
+                            } else {
+                                val validFatBytes = createFormattedFat12(expectedSize)
+                                openTruncatedOutputStream(sram)?.use { output -> output.write(validFatBytes) }
+                                Log.i(TAG, "loadDsiWare: formatted and wrote valid FAT12 save (${validFatBytes.size} B, $directPrimaryFileType) to user sram=$sram")
+                                dsiNandManager.importTitleFile(titleId, directPrimaryFileType, sram)
+                            }
                         }
                     } catch (e: Throwable) {
                         Log.w(TAG, "loadDsiWare: error syncing user save into NAND", e)
@@ -1509,15 +1519,50 @@ class AndroidEmulatorManager(
     suspend fun stopEmulatorSuspend() {
         withContext(Dispatchers.IO) {
             nativeLifecycleMutex.withLock {
-                stopNativeEmulation()
-                val session = takeActiveDsiWareSession()
-                if (session != null) {
-                    syncDsiWareSessionSaveAndCleanup(session)
-                }
-                cameraManager.stopCurrentCameraSource()
-                messageQueue.stop()
+                stopEmulatorLocked()
             }
         }
+    }
+
+    fun stopAndCleanEmulator() {
+        coroutineScope.launch {
+            stopAndCleanEmulatorSuspend()
+        }
+    }
+
+    suspend fun stopAndCleanEmulatorSuspend() {
+        withContext(Dispatchers.IO) {
+            nativeLifecycleMutex.withLock {
+                stopEmulatorLocked()
+                cameraManager.dispose()
+                messageQueue.cleanup()
+            }
+        }
+    }
+
+    private suspend fun stopEmulatorLocked() {
+        stopNativeEmulation()
+        val session = takeActiveDsiWareSession()
+        if (session != null) {
+            syncDsiWareSessionSaveAndCleanup(session)
+        }
+        cameraManager.stopCurrentCameraSource()
+        messageQueue.stop()
+    }
+
+    private fun openTruncatedOutputStream(uri: Uri): java.io.OutputStream? {
+        runCatching { context.contentResolver.openOutputStream(uri, "wt") }.getOrNull()?.let { return it }
+        runCatching { context.contentResolver.openOutputStream(uri, "rwt") }.getOrNull()?.let { return it }
+        return runCatching {
+            val pfd = context.contentResolver.openFileDescriptor(uri, "rw") ?: return@runCatching null
+            try {
+                android.system.Os.ftruncate(pfd.fileDescriptor, 0L)
+                ParcelFileDescriptor.AutoCloseOutputStream(pfd)
+            } catch (t: Throwable) {
+                runCatching { pfd.close() }
+                throw t
+            }
+        }.getOrNull()
     }
 
     private fun takeActiveDsiWareSession(): ActiveDsiWareSession? {

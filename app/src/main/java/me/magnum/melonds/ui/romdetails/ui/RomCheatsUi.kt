@@ -105,6 +105,7 @@ fun RomCheatsUi(
 
     val expandedFolders = remember(rom) { mutableStateMapOf<Long, Boolean>() }
     var refreshJob by remember(rom) { mutableStateOf<Job?>(null) }
+    var pendingAutoImportSig by remember { mutableStateOf<String?>(null) }
 
     fun refreshCheats() {
         refreshJob?.cancel()
@@ -161,20 +162,71 @@ fun RomCheatsUi(
         }
     }
 
+    LaunchedEffect(cheatsRepository) {
+        var sawActiveImport = false
+        cheatsRepository.getCheatImportProgress().collect { progress ->
+            when (progress.status) {
+                me.magnum.melonds.domain.model.CheatImportProgress.CheatImportStatus.STARTING,
+                me.magnum.melonds.domain.model.CheatImportProgress.CheatImportStatus.ONGOING -> {
+                    sawActiveImport = true
+                }
+                me.magnum.melonds.domain.model.CheatImportProgress.CheatImportStatus.FINISHED -> {
+                    if (sawActiveImport) {
+                        sawActiveImport = false
+                        pendingAutoImportSig?.let { sig ->
+                            context.getSharedPreferences("storm_cheats_auto_import", android.content.Context.MODE_PRIVATE)
+                                .edit()
+                                .putString("usrcheat_auto_import_sig", sig)
+                                .apply()
+                            pendingAutoImportSig = null
+                        }
+                        Toast.makeText(context, R.string.cheats_import_finished, Toast.LENGTH_LONG).show()
+                        refreshCheats()
+                    }
+                }
+                me.magnum.melonds.domain.model.CheatImportProgress.CheatImportStatus.FAILED -> {
+                    if (sawActiveImport) {
+                        sawActiveImport = false
+                        pendingAutoImportSig = null
+                        Toast.makeText(context, R.string.cheats_import_failed, Toast.LENGTH_LONG).show()
+                    }
+                }
+                me.magnum.melonds.domain.model.CheatImportProgress.CheatImportStatus.NOT_IMPORTING -> {
+                    sawActiveImport = false
+                }
+            }
+        }
+    }
+
     LaunchedEffect(rom) {
         // Auto-check for cheat files in /storage/emulated/0/STORM DS/cheats/
         withContext(Dispatchers.IO) {
             val rootBase = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS")
             val cheatsDir = File(rootBase, "cheats").apply { mkdirs() }
             val usrCheat = File(cheatsDir, "usrcheat.dat")
-            if (usrCheat.exists() && usrCheat.length() > 0) {
-                val prefs = context.getSharedPreferences("storm_cheats_auto_import", android.content.Context.MODE_PRIVATE)
-                val currentSig = "${usrCheat.length()}_${usrCheat.lastModified()}"
-                val lastSig = prefs.getString("usrcheat_auto_import_sig", null)
-                if (currentSig != lastSig) {
-                    runCatching {
-                        cheatsRepository.importCheats(Uri.fromFile(usrCheat))
-                        prefs.edit().putString("usrcheat_auto_import_sig", currentSig).apply()
+            if (usrCheat.exists() && usrCheat.length() > 1024L) {
+                val hasValidMagic = runCatching {
+                    usrCheat.inputStream().use { ins ->
+                        val hdr = ByteArray(12)
+                        val r = ins.read(hdr)
+                        r == 12 && String(hdr, Charsets.US_ASCII).startsWith("R4 CheatCode")
+                    }
+                }.getOrDefault(false)
+                if (hasValidMagic) {
+                    val prefs = context.getSharedPreferences("storm_cheats_auto_import", android.content.Context.MODE_PRIVATE)
+                    val currentSig = "${usrCheat.length()}_${usrCheat.lastModified()}"
+                    val lastSig = prefs.getString("usrcheat_auto_import_sig", null)
+                    if (currentSig != lastSig) {
+                        withContext(Dispatchers.Main) {
+                            pendingAutoImportSig = currentSig
+                        }
+                        runCatching {
+                            cheatsRepository.importCheats(Uri.fromFile(usrCheat))
+                        }.onFailure {
+                            withContext(Dispatchers.Main) {
+                                pendingAutoImportSig = null
+                            }
+                        }
                     }
                 }
             }
@@ -185,8 +237,8 @@ fun RomCheatsUi(
     val importCheatsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             coroutineScope.launch(Dispatchers.IO) {
-                cheatsRepository.importCheats(uri)
-                // Also copy imported file to STORM DS/cheats/ for persistence
+                var importedSig: String? = null
+                // Copy imported file to STORM DS/cheats/ for persistence
                 runCatching {
                     val rootBase = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS")
                     val cheatsDir = File(rootBase, "cheats").apply { mkdirs() }
@@ -205,15 +257,14 @@ fun RomCheatsUi(
                             input.copyTo(output)
                         }
                         if (targetName == "usrcheat.dat") {
-                            val prefs = context.getSharedPreferences("storm_cheats_auto_import", android.content.Context.MODE_PRIVATE)
-                            prefs.edit().putString("usrcheat_auto_import_sig", "${target.length()}_${target.lastModified()}").apply()
+                            importedSig = "${target.length()}_${target.lastModified()}"
                         }
                     }
                 }
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "Импорт чит-базы в STORM DS/cheats/ успешно выполнен!", Toast.LENGTH_SHORT).show()
+                    pendingAutoImportSig = importedSig
                 }
-                refreshCheats()
+                cheatsRepository.importCheats(uri)
             }
         }
     }
@@ -230,6 +281,7 @@ fun RomCheatsUi(
 
             // 2. Try online mirror download of full usrcheat.dat
             var downloaded = false
+            var downloadedSig: String? = null
             val candidateUrls = listOf(
                 "https://raw.githubusercontent.com/3song/Hacking-DeadSkullzJr-s-NDS-i--Cheat-Databases/main/Cheat%20Databases/usrcheat.dat",
                 "https://ghfast.top/https://raw.githubusercontent.com/3song/Hacking-DeadSkullzJr-s-NDS-i--Cheat-Databases/main/Cheat%20Databases/usrcheat.dat",
@@ -260,31 +312,27 @@ fun RomCheatsUi(
                     client.newCall(request).execute().use { response ->
                         val body = response.body
                         if (response.isSuccessful && body != null) {
-                            var totalBytes = 0L
                             body.byteStream().use { input ->
-                                FileOutputStream(tempCheatFile).use { fos ->
-                                    val buffer = ByteArray(32 * 1024)
-                                    while (true) {
-                                        val read = input.read(buffer)
-                                        if (read <= 0) break
-                                        fos.write(buffer, 0, read)
-                                        totalBytes += read
+                                val header = ByteArray(16)
+                                val headerRead = input.read(header)
+                                if (headerRead >= 12 && String(header, 0, 12, Charsets.US_ASCII).startsWith("R4 CheatCode")) {
+                                    FileOutputStream(tempCheatFile).use { fos ->
+                                        fos.write(header, 0, headerRead)
+                                        input.copyTo(fos, 32 * 1024)
+                                        fos.flush()
                                     }
-                                    fos.flush()
+                                    if (tempCheatFile.length() > 1024L) {
+                                        if (targetCheatFile.exists()) targetCheatFile.delete()
+                                        if (!tempCheatFile.renameTo(targetCheatFile)) {
+                                            tempCheatFile.copyTo(targetCheatFile, overwrite = true)
+                                            tempCheatFile.delete()
+                                        }
+                                        downloadedSig = "${targetCheatFile.length()}_${targetCheatFile.lastModified()}"
+                                        downloaded = true
+                                    } else {
+                                        tempCheatFile.delete()
+                                    }
                                 }
-                            }
-                            if (totalBytes > 0L) {
-                                if (targetCheatFile.exists()) targetCheatFile.delete()
-                                if (!tempCheatFile.renameTo(targetCheatFile)) {
-                                    tempCheatFile.copyTo(targetCheatFile, overwrite = true)
-                                    tempCheatFile.delete()
-                                }
-                                cheatsRepository.importCheats(Uri.fromFile(targetCheatFile))
-                                val prefs = context.getSharedPreferences("storm_cheats_auto_import", android.content.Context.MODE_PRIVATE)
-                                prefs.edit().putString("usrcheat_auto_import_sig", "${targetCheatFile.length()}_${targetCheatFile.lastModified()}").apply()
-                                downloaded = true
-                            } else {
-                                tempCheatFile.delete()
                             }
                         }
                     }
@@ -294,16 +342,23 @@ fun RomCheatsUi(
                 }
             }
 
-            withContext(Dispatchers.Main) {
-                isDownloadingDb = false
-                if (downloaded) {
-                    Toast.makeText(context, "База читов (usrcheat.dat) сохранена в STORM DS/cheats/ и подключена!", Toast.LENGTH_LONG).show()
-                } else if (populated) {
-                    Toast.makeText(context, "Чит-коды Action Replay успешно подключены!", Toast.LENGTH_LONG).show()
-                } else {
-                    Toast.makeText(context, "База читов проверена и синхронизирована.", Toast.LENGTH_SHORT).show()
+            if (downloaded) {
+                withContext(Dispatchers.Main) {
+                    pendingAutoImportSig = downloadedSig
+                    isDownloadingDb = false
+                    Toast.makeText(context, context.getString(R.string.v870_cheats_downloaded_importing), Toast.LENGTH_SHORT).show()
                 }
-                refreshCheats()
+                cheatsRepository.importCheats(Uri.fromFile(targetCheatFile))
+            } else {
+                withContext(Dispatchers.Main) {
+                    isDownloadingDb = false
+                    if (populated) {
+                        Toast.makeText(context, context.getString(R.string.v870_cheats_ar_connected), Toast.LENGTH_LONG).show()
+                    } else {
+                        Toast.makeText(context, context.getString(R.string.v870_cheats_db_synced), Toast.LENGTH_SHORT).show()
+                    }
+                    refreshCheats()
+                }
             }
         }
     }
@@ -340,7 +395,7 @@ fun RomCheatsUi(
                             modifier = Modifier.size(26.dp).padding(end = 8.dp)
                         )
                         Text(
-                            text = if (displayGameCode.isNotBlank()) "ACTION REPLAY ЧИТЫ ($displayGameCode)" else "ACTION REPLAY ЧИТЫ",
+                            text = if (displayGameCode.isNotBlank()) stringResource(R.string.v870_cheats_header_with_code, displayGameCode) else stringResource(R.string.v870_cheats_header_default),
                             fontFamily = SpaceGrotesk,
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp,
@@ -349,7 +404,7 @@ fun RomCheatsUi(
                     }
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text = "Официальные чит-коды для выбранной игры. Включение читов применяется мгновенно при запуске эмулятора.",
+                        text = stringResource(R.string.v870_cheats_rom_card_desc),
                         fontFamily = WatermelonMono,
                         fontSize = 9.5.sp,
                         color = Color.White.copy(alpha = 0.75f)
@@ -373,7 +428,7 @@ fun RomCheatsUi(
                                 Icon(Icons.Filled.UploadFile, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.size(6.dp))
                                 Text(
-                                    text = "Импорт чит-базы (.dat, .xml, .zip)",
+                                    text = stringResource(R.string.v870_cheats_import_file_btn),
                                     fontFamily = SpaceGrotesk,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.SemiBold,
@@ -399,7 +454,7 @@ fun RomCheatsUi(
                                 }
                                 Spacer(Modifier.size(6.dp))
                                 Text(
-                                    text = if (isDownloadingDb) "Обновление..." else "Обновить базу читов",
+                                    text = if (isDownloadingDb) stringResource(R.string.v870_cheats_updating_btn) else stringResource(R.string.v870_cheats_update_db_btn),
                                     fontFamily = SpaceGrotesk,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.SemiBold,
@@ -463,7 +518,7 @@ fun RomCheatsUi(
                         )
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            text = "ЧИТ-КОДЫ ДЛЯ ДАННОЙ ИГРЫ НЕ НАЙДЕНЫ",
+                            text = stringResource(R.string.v870_cheats_none_found_title),
                             fontFamily = SpaceGrotesk,
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp,
@@ -471,7 +526,7 @@ fun RomCheatsUi(
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            text = "В базе пока нет читов для ${romDisplayName(rom)}${if (displayGameCode.isNotBlank()) " [$displayGameCode]" else ""}.\nНажмите «Импорт usrcheat.dat» или «Обновить базу читов», чтобы подключить Action Replay.",
+                            text = stringResource(R.string.v870_cheats_none_found_desc, "${romDisplayName(rom)}${if (displayGameCode.isNotBlank()) " [$displayGameCode]" else ""}"),
                             fontFamily = WatermelonMono,
                             fontSize = 9.5.sp,
                             color = Color(0xFF64748B),

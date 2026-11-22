@@ -1,7 +1,6 @@
 package me.magnum.melonds.ui.emulator.ui
 
 import android.view.HapticFeedbackConstants
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -66,8 +65,6 @@ fun Slot2PeripheralOverlay(
     onPaddleAnalogDelta: (deltaX: Float) -> Unit,
     onDismissOverlay: () -> Unit,
 ) {
-    BackHandler(onBack = onDismissOverlay)
-
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -461,7 +458,7 @@ private fun PaddleControllerOverlay(
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = "◀  ПОВОРОТ КОЛЕСА PADDLE  ▶",
+                    text = stringResource(R.string.v870_slot2_paddle_hint),
                     color = colors.text2,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,

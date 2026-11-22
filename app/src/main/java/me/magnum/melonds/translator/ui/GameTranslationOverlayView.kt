@@ -18,6 +18,7 @@ import me.magnum.melonds.translator.model.TranslationRegion
 import me.magnum.melonds.translator.model.TranslatorOverlayStyle
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.isActive
@@ -40,6 +41,7 @@ class GameTranslationOverlayView @JvmOverloads constructor(
 ) : View(context, attrs, defStyleAttr) {
 
     private var viewScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private var dictionaryLookupJob: Job? = null
     private val blocks = mutableListOf<TranslatedTextBlock>()
     val customRegions = mutableListOf<TranslationRegion>()
 
@@ -107,6 +109,8 @@ class GameTranslationOverlayView @JvmOverloads constructor(
         set(value) {
             field = value
             if (value) {
+                dictionaryLookupJob?.cancel()
+                dictionaryLookupJob = null
                 blocks.clear()
                 activeDictionaryResult = null
             }
@@ -371,6 +375,8 @@ class GameTranslationOverlayView @JvmOverloads constructor(
     }
 
     fun clearTranslations() {
+        dictionaryLookupJob?.cancel()
+        dictionaryLookupJob = null
         blocks.clear()
         layoutCache.evictAll()
         activeDictionaryResult = null
@@ -1195,10 +1201,13 @@ class GameTranslationOverlayView @JvmOverloads constructor(
                         val br = block.boundingBox.right * w
                         val bb = block.boundingBox.bottom * h
                         if (RectF(bl - blockHitPad, bt - blockHitPad, br + blockHitPad, bb + blockHitPad).contains(x, y)) {
-                            viewScope.launch {
+                            dictionaryLookupJob?.cancel()
+                            dictionaryLookupJob = viewScope.launch {
                                 val lookupResult = GameDictionaryService.lookup(block.originalText, block.translatedText)
-                                activeDictionaryResult = lookupResult
-                                invalidate()
+                                if (isActive && blocks.isNotEmpty()) {
+                                    activeDictionaryResult = lookupResult
+                                    invalidate()
+                                }
                             }
                             return true
                         }
@@ -1276,6 +1285,8 @@ class GameTranslationOverlayView @JvmOverloads constructor(
         super.onDetachedFromWindow()
         longPressHandler.removeCallbacks(longPressRunnable)
         longPressHandler.removeCallbacksAndMessages(null)
+        dictionaryLookupJob?.cancel()
+        dictionaryLookupJob = null
         viewScope.cancel()
     }
 }

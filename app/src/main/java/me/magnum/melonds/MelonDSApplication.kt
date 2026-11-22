@@ -56,6 +56,46 @@ class MelonDSApplication : Application(), Configuration.Provider {
             }.getOrDefault(false)
         }
 
+        private fun hasExternalStorageWriteAccess(context: Context): Boolean {
+            return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                android.os.Environment.isExternalStorageManager()
+            } else {
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                ) == PackageManager.PERMISSION_GRANTED
+            }
+        }
+
+        private val CONFIG_JSON_FILES = listOf(
+            "rom_data.json",
+            "rom_directory_state.json",
+            "rom_metadata_mirror.json",
+            "layouts.json",
+            "controller_config.json",
+            "backgrounds.json",
+            "STORM_DS.opts",
+            "settings.json",
+        )
+
+        fun migrateConfigJsonFilesSynchronously(context: Context) {
+            if (!hasExternalStorageWriteAccess(context)) return
+            val rootBase = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS")
+            val settingsDir = File(rootBase, "settings")
+            if (!isDirectoryWritable(settingsDir)) return
+
+            CONFIG_JSON_FILES.forEach { jsonName ->
+                val src = File(context.filesDir, jsonName)
+                val dst = File(settingsDir, jsonName)
+                if (src.isFile && src.length() > 0L && (!dst.exists() || dst.length() == 0L)) {
+                    runCatching { src.copyTo(dst, overwrite = true) }
+                }
+                if (src.exists() && dst.isFile && dst.length() > 0L) {
+                    runCatching { src.delete() }
+                }
+            }
+        }
+
         fun migrateStorageToRoot(context: Context, force: Boolean = false) {
             val now = System.currentTimeMillis()
             if (!force && (now - lastMigrationTime < 30_000L)) return
@@ -123,22 +163,17 @@ class MelonDSApplication : Application(), Configuration.Provider {
                     val translationCacheDir = File(cacheRootDir, "translation_cache").apply { mkdirs() }
                     val shadersDir = File(rootBase, "shaders/retroarch-shaders").apply { mkdirs() }
 
-                    listOf(
-                        "rom_data.json",
-                        "rom_directory_state.json",
-                        "rom_metadata_mirror.json",
-                        "layouts.json",
-                        "controller_config.json",
-                        "backgrounds.json",
-                        "STORM_DS.opts",
-                        "settings.json",
-                    ).forEach { jsonName ->
-                        val src = File(context.filesDir, jsonName)
-                        val dst = File(settingsDir, jsonName)
-                        if (src.isFile && src.length() > 0L && (!dst.exists() || dst.length() == 0L)) {
-                            runCatching { src.copyTo(dst, overwrite = false) }
+                    if (isDirectoryWritable(settingsDir)) {
+                        CONFIG_JSON_FILES.forEach { jsonName ->
+                            val src = File(context.filesDir, jsonName)
+                            val dst = File(settingsDir, jsonName)
+                            if (src.isFile && src.length() > 0L && (!dst.exists() || dst.length() == 0L)) {
+                                runCatching { src.copyTo(dst, overwrite = true) }
+                            }
+                            if (src.exists() && dst.isFile && dst.length() > 0L) {
+                                runCatching { src.delete() }
+                            }
                         }
-                        runCatching { if (src.exists()) src.delete() }
                     }
 
                     runCatching {
@@ -173,6 +208,7 @@ class MelonDSApplication : Application(), Configuration.Provider {
 
                     // Purge legacy internal system directories so deleted files are NEVER resurrected
                     val externalCoversWritable = isDirectoryWritable(File(rootBase, "cache/covers_cache"))
+                    val internalCoversCache = File(context.cacheDir, "covers_cache")
                     val legacyInternalDirs = mutableListOf(
                         File(context.filesDir, "bios"),
                         File(context.filesDir, "quicksaves"),
@@ -188,8 +224,8 @@ class MelonDSApplication : Application(), Configuration.Provider {
                         File(context.cacheDir, "save_backups"),
                         File(context.cacheDir, "retroarch-shaders"),
                     )
-                    if (externalCoversWritable) {
-                        legacyInternalDirs.add(File(context.cacheDir, "covers_cache"))
+                    if (externalCoversWritable && !me.magnum.melonds.di.CoilModule.isLiveDiskCacheAt(internalCoversCache)) {
+                        legacyInternalDirs.add(internalCoversCache)
                     }
                     legacyInternalDirs.forEach { legacyDir ->
                         runCatching { if (legacyDir.exists()) legacyDir.deleteRecursively() }
@@ -369,9 +405,11 @@ class MelonDSApplication : Application(), Configuration.Provider {
     override fun onCreate() {
         appContext = this
         super.onCreate()
+        runCatching { me.magnum.melonds.common.AppLocaleSync.syncFromPreferences(this) }
         runCatching { System.setProperty("http.agent", "melonDS/0.9.5") }
         installCrashHandler()
         runCatching { giveLibrashaderACacheDirectory() }
+        runCatching { migrateConfigJsonFilesSynchronously(this) }
         runCatching { settingsBackupManager.initializeMirror() }
         runCatching { ButtonThemeManager.init(this) }
         runCatching { AppThemeManager.init(this) }

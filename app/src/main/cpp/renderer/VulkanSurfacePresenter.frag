@@ -2865,7 +2865,10 @@ vec3 applyLcdGridEffect(vec3 rgb, vec2 uv, uint lcdGridMode)
 {
     if (lcdGridMode == 0u)
         return rgb;
-    vec2 cellCoord = uv * vec2(256.0, 192.0);
+    vec2 localUv = isCompositeAtlasDrawMode()
+        ? screenLocalCoord(uv, resolvePresenterTopScreen(uv))
+        : uv;
+    vec2 cellCoord = localUv * vec2(256.0, 192.0);
     vec2 fw = max(fwidth(cellCoord), vec2(0.0001));
     // Auto-fade smoothly if output pixels per DS texel are too small to prevent moire
     float visibility = clamp(1.0 - max(fw.x, fw.y) * 1.45, 0.0, 1.0);
@@ -2907,6 +2910,7 @@ void main()
     vec2 uvDx = dFdx(inFragUv);
     vec2 uvDy = dFdy(inFragUv);
     vec2 baseUv = inFragUv;
+    vec2 carryRefUv = inFragUv;
     vec2 gridUv = inFragUv;
     float depthFactor = 0.0;
     float sheen = 0.0;
@@ -2944,6 +2948,7 @@ void main()
             bool rightEye = inFragUv.x >= 0.5;
             float eyeSign = rightEye ? 1.0 : -1.0;
             vec2 sbsUv = vec2(rightEye ? ((inFragUv.x - 0.5) * 2.0) : (inFragUv.x * 2.0), inFragUv.y);
+            carryRefUv = sbsUv;
             float dispScale = eyeSign * (0.004 + 0.018 * strengthNorm);
             float d1 = estimateSceneDepthFactor(sbsUv);
             vec2 uv1 = clampDepth3dUv(vec2(sbsUv.x + dispScale * d1, sbsUv.y), depthTopScreen);
@@ -2962,7 +2967,7 @@ void main()
     gAllowCarryStore = !uvDistorted;
     if (uvDistorted && abs(uvDx.x) > 1e-6 && abs(uvDy.y) > 1e-6)
     {
-        vec2 deltaUv = baseUv - inFragUv;
+        vec2 deltaUv = baseUv - carryRefUv;
         gCarryUvPixelOffset = ivec2(round(deltaUv.x / uvDx.x), round(deltaUv.y / uvDy.y));
     }
     else

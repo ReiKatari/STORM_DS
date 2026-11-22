@@ -114,7 +114,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="ПАРАМЕТРЫ МАСШТАБИРОВАНИЯ"
+            android:text="@string/v870_dual_screen_scaling_header"
             android:textSize="11sp"
             android:textStyle="bold"
             android:textColor="?attr/colorAccent"

@@ -19,11 +19,43 @@ class NdsRomCache(private val context: Context, private val settingsRepository: 
     companion object {
         private const val ROMS_CACHE_DIR = "extracted_roms"
         private const val TEMP_FILE_NAME = "temp"
+
+        private fun resolveRomCacheDirs(context: Context): List<File> {
+            val dirs = mutableListOf<File>()
+            val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
+            if (extRoot != null) {
+                dirs.add(File(extRoot, "STORM DS/cache/$ROMS_CACHE_DIR"))
+            }
+            context.externalCacheDir?.let { dirs.add(File(it, ROMS_CACHE_DIR)) }
+            dirs.add(File(context.cacheDir, "nds_rom_cache"))
+            return dirs.distinctBy { it.absolutePath }
+        }
+
+        fun invalidateCachedRom(context: Context, romUri: Uri): Boolean {
+            val romHash = romUri.hashCode().toString()
+            var deletedAny = false
+            for (dir in resolveRomCacheDirs(context)) {
+                if (!dir.isDirectory) continue
+                val cachedFile = File(dir, romHash)
+                if (cachedFile.exists() && cachedFile.delete()) {
+                    deletedAny = true
+                }
+            }
+            return deletedAny
+        }
     }
 
     private class CouldNotCreateRomCacheDirectoryException : Exception("Failed to create ROM cache directory")
 
     private val cacheModifiedSubject = Channel<Unit>(Channel.CONFLATED)
+
+    fun invalidateCachedRom(romUri: Uri): Boolean {
+        val deleted = Companion.invalidateCachedRom(context, romUri)
+        if (deleted) {
+            cacheModifiedSubject.trySend(Unit)
+        }
+        return deleted
+    }
 
     fun getCacheSizeFlow(): Flow<SizeUnit> {
         return cacheModifiedSubject.receiveAsFlow()

@@ -10,7 +10,7 @@ class ChoreographerVSyncFrameRenderer(
 ) : ChoreographerFrameRenderer, Choreographer.VsyncCallback {
 
     private var isRendering = false
-    private var lastRenderedFrameTimeNanos = 0L
+    private var nextRenderTimeNanos = 0L
 
     override fun startRendering() {
         if (isRendering) {
@@ -18,13 +18,13 @@ class ChoreographerVSyncFrameRenderer(
         }
 
         isRendering = true
-        lastRenderedFrameTimeNanos = 0L
+        nextRenderTimeNanos = 0L
         Choreographer.getInstance().postVsyncCallback(this)
     }
 
     override fun stopRendering() {
         isRendering = false
-        lastRenderedFrameTimeNanos = 0L
+        nextRenderTimeNanos = 0L
         Choreographer.getInstance().removeVsyncCallback(this)
     }
 
@@ -38,17 +38,25 @@ class ChoreographerVSyncFrameRenderer(
         val isHighRefresh = frameDelta <= ChoreographerFrameRenderer.DEADLINE_FRAME_TIME_THRESHOLD
         val frameDeadline = if (isHighRefresh) null else rawDeadline
         val shouldRender = if (isHighRefresh) {
-            val safeFrameDelta = frameDelta.coerceAtLeast(1_000_000L)
-            val dynamicPacingIntervalNs = (TARGET_DS_FRAME_INTERVAL_NS - safeFrameDelta / 2L - VSYNC_JITTER_TOLERANCE_NS).coerceAtLeast(0L)
-            lastRenderedFrameTimeNanos == 0L ||
-                data.frameTimeNanos < lastRenderedFrameTimeNanos ||
-                (data.frameTimeNanos - lastRenderedFrameTimeNanos) >= dynamicPacingIntervalNs
+            val frameTimeNanos = data.frameTimeNanos
+            if (nextRenderTimeNanos == 0L || frameTimeNanos + TARGET_DS_FRAME_INTERVAL_NS < nextRenderTimeNanos) {
+                nextRenderTimeNanos = frameTimeNanos + TARGET_DS_FRAME_INTERVAL_NS
+                true
+            } else if (frameTimeNanos + VSYNC_JITTER_TOLERANCE_NS >= nextRenderTimeNanos) {
+                nextRenderTimeNanos += TARGET_DS_FRAME_INTERVAL_NS
+                if (frameTimeNanos - nextRenderTimeNanos > TARGET_DS_FRAME_INTERVAL_NS) {
+                    nextRenderTimeNanos = frameTimeNanos + TARGET_DS_FRAME_INTERVAL_NS
+                }
+                true
+            } else {
+                false
+            }
         } else {
+            nextRenderTimeNanos = 0L
             true
         }
 
         if (shouldRender) {
-            lastRenderedFrameTimeNanos = data.frameTimeNanos
             frameRenderCoordinator.renderFrame(frameDeadline)
         }
         if (isRendering) {

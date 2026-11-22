@@ -2,12 +2,16 @@ package me.magnum.melonds.translator.grammar
 
 import android.content.Context
 import android.util.Log
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 import java.io.File
+import java.io.FileOutputStream
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -20,16 +24,30 @@ import java.util.concurrent.ConcurrentHashMap
 class CharacterGenderStore(private val context: Context) {
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val ioMutex = Mutex()
     private val memory = ConcurrentHashMap<String, Gender>()
+    @Volatile
     private var currentGameKey: String = "global"
+    @Volatile
+    private var loadGeneration: Long = 0L
+    @Volatile
+    private var activeLoadGate: CompletableDeferred<Unit> = CompletableDeferred()
 
     private val primaryDir = File("/storage/emulated/0/STORM DS/translator/dictionaries")
     private val fallbackDir by lazy { File(context.filesDir, "translator/dictionaries") }
 
     init {
+        val gate = activeLoadGate
+        val gen = loadGeneration
         scope.launch {
-            ensureDirs()
-            loadFromDisk("global")
+            try {
+                ioMutex.withLock {
+                    ensureDirs()
+                    loadFromDisk("global", gen)
+                }
+            } finally {
+                gate.complete(Unit)
+            }
         }
     }
 
@@ -42,17 +60,27 @@ class CharacterGenderStore(private val context: Context) {
         return if (primaryDir.exists() && primaryDir.canWrite()) primaryDir else fallbackDir
     }
 
+    @Synchronized
     fun loadForGame(gameKey: String) {
         val sanitized = sanitizeKey(gameKey)
         currentGameKey = sanitized
+        val gen = ++loadGeneration
+        val gate = CompletableDeferred<Unit>()
+        activeLoadGate = gate
         memory.clear()
         scope.launch {
-            ensureDirs()
-            loadFromDisk(sanitized)
+            try {
+                ioMutex.withLock {
+                    ensureDirs()
+                    loadFromDisk(sanitized, gen)
+                }
+            } finally {
+                gate.complete(Unit)
+            }
         }
     }
 
-    private fun loadFromDisk(sanitized: String) {
+    private fun loadFromDisk(sanitized: String, expectedGen: Long) {
         val file = File(getStorageDir(), "character_gender_${sanitized}.json")
         if (!file.exists()) return
 
@@ -66,7 +94,7 @@ class CharacterGenderStore(private val context: Context) {
                 val genderStr = json.optString(name, "NEUTRAL")
                 loaded[name.lowercase()] = Gender.fromString(genderStr)
             }
-            if (currentGameKey == sanitized) {
+            if (loadGeneration == expectedGen && currentGameKey == sanitized) {
                 for ((k, v) in loaded) {
                     memory.putIfAbsent(k, v)
                 }
@@ -95,19 +123,40 @@ class CharacterGenderStore(private val context: Context) {
 
     private fun saveAsync() {
         val key = currentGameKey
-        val snapshot = memory.toMap()
+        val gen = loadGeneration
+        val gate = activeLoadGate
         scope.launch {
-            try {
-                ensureDirs()
-                val file = File(getStorageDir(), "character_gender_${key}.json")
-                val json = JSONObject()
-                for ((name, gender) in snapshot) {
-                    json.put(name, gender.name)
+            gate.await()
+            ioMutex.withLock {
+                if (loadGeneration != gen || currentGameKey != key) return@withLock
+                val snapshot = memory.toMap()
+                try {
+                    ensureDirs()
+                    val file = File(getStorageDir(), "character_gender_${key}.json")
+                    val json = JSONObject()
+                    for ((name, gender) in snapshot) {
+                        json.put(name, gender.name)
+                    }
+                    writeTextAtomically(file, json.toString(2))
+                } catch (e: Throwable) {
+                    Log.w(TAG, "Failed to save character gender store for " + key + ": " + e.message)
                 }
-                file.writeText(json.toString(2), Charsets.UTF_8)
-            } catch (e: Throwable) {
-                Log.w(TAG, "Failed to save character gender store for " + key + ": " + e.message)
             }
+        }
+    }
+
+    private fun writeTextAtomically(file: File, text: String) {
+        val parent = file.parentFile ?: return
+        if (!parent.exists()) parent.mkdirs()
+        val tempFile = File(parent, "${file.name}.${System.nanoTime()}.tmp")
+        FileOutputStream(tempFile).use { stream ->
+            stream.write(text.toByteArray(Charsets.UTF_8))
+            stream.flush()
+            runCatching { stream.fd.sync() }
+        }
+        if (!tempFile.renameTo(file)) {
+            tempFile.copyTo(file, overwrite = true)
+            tempFile.delete()
         }
     }
 

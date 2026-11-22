@@ -117,7 +117,7 @@ object GameCompatibilityManager {
         vulkanUnavailableLoaded = true
         val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         if (prefs.contains(KEY_VULKAN_UNAVAILABLE_FINGERPRINT)) {
-            prefs.edit {
+            prefs.edit(commit = true) {
                 remove(KEY_VULKAN_UNAVAILABLE_FINGERPRINT)
             }
         }
@@ -134,7 +134,7 @@ object GameCompatibilityManager {
                 it.startsWith(KEY_MARKER_PREFIX)
         }
         if (keysToRemove.isNotEmpty()) {
-            prefs.edit {
+            prefs.edit(commit = true) {
                 for (k in keysToRemove) {
                     remove(k)
                 }
@@ -147,7 +147,7 @@ object GameCompatibilityManager {
         if (!vulkanUnavailableLoaded) {
             val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             if (prefs.contains(KEY_VULKAN_UNAVAILABLE_FINGERPRINT)) {
-                prefs.edit {
+                prefs.edit(commit = true) {
                     remove(KEY_VULKAN_UNAVAILABLE_FINGERPRINT)
                 }
             }
@@ -218,7 +218,7 @@ object GameCompatibilityManager {
         if (prefs.getBoolean(noticeKey, false)) {
             return null
         }
-        prefs.edit {
+        prefs.edit(commit = true) {
             putBoolean(noticeKey, true)
         }
         return pending
@@ -248,7 +248,7 @@ object GameCompatibilityManager {
             put("timestampMs", System.currentTimeMillis())
             put("crashCount", prevCrashCount + 1)
         }
-        prefs.edit {
+        prefs.edit(commit = true) {
             putString("$KEY_MARKER_PREFIX$key", json.toString())
             putString(KEY_LAST_MARKER_GAME_KEY, key)
         }
@@ -270,7 +270,7 @@ object GameCompatibilityManager {
                 put("timestampMs", System.currentTimeMillis())
             }.toString()
         }.getOrNull() ?: return
-        prefs.edit {
+        prefs.edit(commit = true) {
             putString("$KEY_MARKER_PREFIX$key", updatedJson)
         }
     }
@@ -284,7 +284,7 @@ object GameCompatibilityManager {
         val key = resolveGameKey(gameCode, romName, fileName) ?: return
         val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val lastKey = prefs.getString(KEY_LAST_MARKER_GAME_KEY, null)
-        prefs.edit {
+        prefs.edit(commit = true) {
             remove("$KEY_MARKER_PREFIX$key")
             if (lastKey == key) {
                 remove(KEY_LAST_MARKER_GAME_KEY)
@@ -295,7 +295,7 @@ object GameCompatibilityManager {
     fun clearAllActiveLaunchMarkers(context: Context) {
         val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val lastKey = prefs.getString(KEY_LAST_MARKER_GAME_KEY, null)
-        prefs.edit {
+        prefs.edit(commit = true) {
             if (!lastKey.isNullOrBlank()) {
                 remove("$KEY_MARKER_PREFIX$lastKey")
             }
@@ -316,7 +316,7 @@ object GameCompatibilityManager {
         // If another game crashed previously, clear its stale marker without blindly penalizing unrelated games.
         val lastMarkerKey = prefs.getString(KEY_LAST_MARKER_GAME_KEY, null)
         if (!lastMarkerKey.isNullOrBlank() && lastMarkerKey != key) {
-            prefs.edit {
+            prefs.edit(commit = true) {
                 remove("$KEY_MARKER_PREFIX$lastMarkerKey")
             }
         }
@@ -333,7 +333,7 @@ object GameCompatibilityManager {
         val marker = parseLaunchMarker(rawMarker)
         if (marker == null) {
             val lastKey = prefs.getString(KEY_LAST_MARKER_GAME_KEY, null)
-            prefs.edit {
+            prefs.edit(commit = true) {
                 remove("$KEY_MARKER_PREFIX$key")
                 if (lastKey == key) {
                     remove(KEY_LAST_MARKER_GAME_KEY)
@@ -345,7 +345,7 @@ object GameCompatibilityManager {
             return null
         }
         val lastKey = prefs.getString(KEY_LAST_MARKER_GAME_KEY, null)
-        prefs.edit {
+        prefs.edit(commit = true) {
             remove("$KEY_MARKER_PREFIX$key")
             if (lastKey == key) {
                 remove(KEY_LAST_MARKER_GAME_KEY)
@@ -478,7 +478,7 @@ object GameCompatibilityManager {
         val lastKey = prefs.getString(KEY_LAST_MARKER_GAME_KEY, null)
         cachedVulkanUnavailableFp = null
         vulkanUnavailableLoaded = true
-        prefs.edit {
+        prefs.edit(commit = true) {
             remove("$KEY_PROFILE_PREFIX$key")
             remove("$KEY_MARKER_PREFIX$key")
             if (lastKey == key) {
@@ -511,7 +511,7 @@ object GameCompatibilityManager {
             put("disableJit", profile.disableJit)
             put("level", profile.level)
         }
-        prefs.edit {
+        prefs.edit(commit = true) {
             putString("$KEY_PROFILE_PREFIX$key", json.toString())
         }
         emptyProfileKeys.remove(key)

@@ -15,6 +15,7 @@ import me.magnum.melonds.common.DirectoryAccessValidator
 import me.magnum.melonds.common.UriPermissionManager
 import me.magnum.melonds.domain.model.ConfigurationDirResult
 import me.magnum.melonds.domain.model.ConsoleType
+import me.magnum.melonds.extensions.addOnPreferenceChangeListener
 import me.magnum.melonds.ui.settings.viewmodel.CustomFirmwareViewModel
 import me.magnum.melonds.ui.settings.PreferenceFragmentHelper
 import me.magnum.melonds.ui.settings.PreferenceFragmentTitleProvider
@@ -38,6 +39,15 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
 
         helper.setupStoragePickerPreference(dsBiosDirPreference)
         helper.setupStoragePickerPreference(dsiBiosDirPreference)
+
+        dsBiosDirPreference.addOnPreferenceChangeListener { _, _ ->
+            view?.post { updateBiosSummaries() }
+            true
+        }
+        dsiBiosDirPreference.addOnPreferenceChangeListener { _, _ ->
+            view?.post { updateBiosSummaries() }
+            true
+        }
 
         val biosValidator = object : BiosDirectoryPickerPreference.BiosDirectoryValidator {
             override fun getBiosDirectoryValidationResult(consoleType: ConsoleType, directory: Uri?): ConfigurationDirResult {
@@ -179,6 +189,22 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
             )
             true
         }
+
+        applyInGameLocks()
+    }
+
+    private fun applyInGameLocks() {
+        if (!isLaunchedInGame()) return
+        listOf(
+            "use_custom_bios",
+            "console_type",
+            "show_bios",
+            "custom_randomize_mac_address",
+            "bios_dir",
+            "dsi_bios_dir",
+            "auto_download_ds_bios",
+            "auto_download_dsi_bios",
+        ).forEach { lockPreferenceInGame(it) }
     }
 
     private fun runBiosHealthCheck(
@@ -268,6 +294,7 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
                 exactSize: Long?,
                 minSize: Long,
                 required: Boolean,
+                validSizes: Set<Long>? = null,
                 vararg candidateNames: String,
             ): CheckRow {
                 val doc = findFileIgnoreCase(dirDoc, fallbackBiosDir, *candidateNames)
@@ -296,7 +323,11 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
                 }.getOrNull() ?: return CheckRow(label, ok = false, required = required, detail = "Read error")
 
                 val (len, shaShort) = sizeAndHash
-                val sizeOk = if (exactSize != null) len == exactSize else len >= minSize
+                val sizeOk = when {
+                    exactSize != null -> len == exactSize
+                    validSizes != null -> len in validSizes
+                    else -> len >= minSize
+                }
                 val sizeText = if (len >= 1024L * 1024L) {
                     String.format(java.util.Locale.US, "%.1f MB", len / (1024.0 * 1024.0))
                 } else {
@@ -308,19 +339,20 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
 
             val dsDir = resolveDirDoc(ConsoleType.DS, dsUri)
             val dsiDir = resolveDirDoc(ConsoleType.DSi, dsiUri)
+            val validFirmwareSizes = setOf(131072L, 262144L, 524288L)
 
             val dsRows = listOf(
-                inspectFile(dsDir, "DS bios7.bin", exactSize = 16384L, minSize = 16384L, required = true, "bios7.bin", "ds_bios7.bin", "arm7.bin"),
-                inspectFile(dsDir, "DS bios9.bin", exactSize = 4096L, minSize = 4096L, required = true, "bios9.bin", "ds_bios9.bin", "arm9.bin"),
-                inspectFile(dsDir, "DS firmware.bin", exactSize = null, minSize = 131072L, required = true, "firmware.bin", "ds_firmware.bin"),
-                inspectFile(dsDir, "DS sd_card.bin", exactSize = null, minSize = 1024L, required = false, "sd_card.bin", "dldi_sd_card.bin"),
+                inspectFile(dsDir, "DS bios7.bin", exactSize = 16384L, minSize = 16384L, required = true, candidateNames = arrayOf("bios7.bin", "ds_bios7.bin", "arm7.bin")),
+                inspectFile(dsDir, "DS bios9.bin", exactSize = 4096L, minSize = 4096L, required = true, candidateNames = arrayOf("bios9.bin", "ds_bios9.bin", "arm9.bin")),
+                inspectFile(dsDir, "DS firmware.bin", exactSize = null, minSize = 131072L, required = true, validSizes = validFirmwareSizes, candidateNames = arrayOf("firmware.bin", "ds_firmware.bin")),
+                inspectFile(dsDir, "DS sd_card.bin", exactSize = null, minSize = 1024L, required = false, candidateNames = arrayOf("sd_card.bin", "dldi_sd_card.bin")),
             )
             val dsiRows = listOf(
-                inspectFile(dsiDir, "DSi bios7.bin", exactSize = 65536L, minSize = 65536L, required = true, "bios7.bin", "dsi_bios7.bin", "arm7.bin", "bios7i.bin"),
-                inspectFile(dsiDir, "DSi bios9.bin", exactSize = 65536L, minSize = 65536L, required = true, "bios9.bin", "dsi_bios9.bin", "arm9.bin", "bios9i.bin"),
-                inspectFile(dsiDir, "DSi firmware.bin", exactSize = null, minSize = 131072L, required = true, "firmware.bin", "dsi_firmware.bin"),
-                inspectFile(dsiDir, "DSi nand.bin", exactSize = null, minSize = 1024L * 1024L, required = true, "nand.bin", "dsi_nand.bin"),
-                inspectFile(dsiDir, "DSi sd_card.bin", exactSize = null, minSize = 1024L, required = false, "sd_card.bin", "dsi_sd_card.bin"),
+                inspectFile(dsiDir, "DSi bios7.bin", exactSize = 65536L, minSize = 65536L, required = true, candidateNames = arrayOf("bios7.bin", "dsi_bios7.bin", "arm7.bin", "bios7i.bin")),
+                inspectFile(dsiDir, "DSi bios9.bin", exactSize = 65536L, minSize = 65536L, required = true, candidateNames = arrayOf("bios9.bin", "dsi_bios9.bin", "arm9.bin", "bios9i.bin")),
+                inspectFile(dsiDir, "DSi firmware.bin", exactSize = null, minSize = 131072L, required = true, validSizes = validFirmwareSizes, candidateNames = arrayOf("firmware.bin", "dsi_firmware.bin")),
+                inspectFile(dsiDir, "DSi nand.bin", exactSize = null, minSize = 1024L * 1024L, required = true, candidateNames = arrayOf("nand.bin", "dsi_nand.bin")),
+                inspectFile(dsiDir, "DSi sd_card.bin", exactSize = null, minSize = 1024L, required = false, candidateNames = arrayOf("sd_card.bin", "dsi_sd_card.bin")),
             )
 
             val dsMissing = dsRows.any { it.required && !it.ok }
@@ -352,7 +384,7 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
                     .setMessage(report)
                     .setPositiveButton(R.string.ok, null)
 
-                if ((dsMissing || dsiMissing) && !blocked) {
+                if ((dsMissing || dsiMissing) && !blocked && !isLaunchedInGame()) {
                     builder.setNeutralButton(R.string.bios_health_check_download_missing) { _, _ ->
                         val (progressDialog, progressBar) = createDownloadProgressDialog(
                             getString(R.string.bios_health_check_download_missing),
@@ -423,8 +455,9 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
                 ds to dsi
             }
             if (!isAdded) return@launch
-            if (dsPref != null && dsSummary.isNotEmpty()) dsPref.summary = dsSummary
-            if (dsiPref != null && dsiSummary.isNotEmpty()) dsiPref.summary = dsiSummary
+            val inGameSuffix = if (isLaunchedInGame()) " (${getString(R.string.video_setting_cannot_change_ingame)})" else ""
+            if (dsPref != null && dsSummary.isNotEmpty()) dsPref.summary = dsSummary + inGameSuffix
+            if (dsiPref != null && dsiSummary.isNotEmpty()) dsiPref.summary = dsiSummary + inGameSuffix
         }
     }
 
@@ -474,6 +507,7 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
             }.getOrDefault(-1L)
         }
 
+        val validFirmwareSizes = setOf(131072L, 262144L, 524288L)
         val sb = StringBuilder(decodedPath).append("\n")
         if (consoleType == ConsoleType.DS) {
             val f7 = findDoc("bios7.bin", "ds_bios7.bin", "arm7.bin")
@@ -485,17 +519,35 @@ class CustomFirmwarePreferencesFragment : BasePreferenceFragment(), PreferenceFr
 
             val s7 = if (l7 == 16384L) "DS BIOS7: 16 $unitKb ✓" else if (l7 > 0) "DS BIOS7: ${l7 / 1024} $unitKb ⚠ ($expectedWord 16 $unitKb)" else "DS BIOS7: $missingWord"
             val s9 = if (l9 == 4096L) "DS BIOS9: 4 $unitKb ✓" else if (l9 > 0) "DS BIOS9: ${l9 / 1024} $unitKb ⚠ ($expectedWord 4 $unitKb)" else "DS BIOS9: $missingWord"
-            val sf = if (lf >= 1024L) "Firmware: ${lf / 1024} $unitKb ✓" else "Firmware: $missingWord"
+            val sf = when {
+                lf in validFirmwareSizes -> "Firmware: ${lf / 1024} $unitKb ✓"
+                lf > 0 -> "Firmware: ${lf / 1024} $unitKb ⚠ ($expectedWord 128/256/512 $unitKb)"
+                else -> "Firmware: $missingWord"
+            }
             sb.append(s7).append(" | ").append(s9).append(" | ").append(sf)
         } else {
             val f7 = findDoc("bios7.bin", "dsi_bios7.bin", "arm7.bin", "bios7i.bin")
             val l7 = getLength(f7)
             val f9 = findDoc("bios9.bin", "dsi_bios9.bin", "arm9.bin", "bios9i.bin")
             val l9 = getLength(f9)
+            val ff = findDoc("firmware.bin", "dsi_firmware.bin")
+            val lf = getLength(ff)
+            val fn = findDoc("nand.bin", "dsi_nand.bin")
+            val ln = getLength(fn)
 
             val s7 = if (l7 == 65536L) "DSi BIOS7: 64 $unitKb ✓" else if (l7 > 0) "DSi BIOS7: ${l7 / 1024} $unitKb ⚠ ($expectedWord 64 $unitKb)" else "DSi BIOS7: $missingWord"
             val s9 = if (l9 == 65536L) "DSi BIOS9: 64 $unitKb ✓" else if (l9 > 0) "DSi BIOS9: ${l9 / 1024} $unitKb ⚠ ($expectedWord 64 $unitKb)" else "DSi BIOS9: $missingWord"
-            sb.append(s7).append(" | ").append(s9)
+            val sf = when {
+                lf in validFirmwareSizes -> "Firmware: ${lf / 1024} $unitKb ✓"
+                lf > 0 -> "Firmware: ${lf / 1024} $unitKb ⚠ ($expectedWord 128/256/512 $unitKb)"
+                else -> "Firmware: $missingWord"
+            }
+            val sn = when {
+                ln >= 1024L * 1024L -> String.format(java.util.Locale.US, "NAND: %.1f MB ✓", ln / (1024.0 * 1024.0))
+                ln > 0 -> "NAND: ${ln / 1024} $unitKb ⚠"
+                else -> "NAND: $missingWord"
+            }
+            sb.append(s7).append(" | ").append(s9).append(" | ").append(sf).append(" | ").append(sn)
         }
         return sb.toString()
     }

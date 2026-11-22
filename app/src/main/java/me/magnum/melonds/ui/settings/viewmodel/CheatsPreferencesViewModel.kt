@@ -4,11 +4,19 @@ import android.content.Context
 import android.net.Uri
 import android.os.Environment
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import androidx.preference.PreferenceManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.magnum.melonds.common.cheats.EmbeddedActionReplayCheats
 import me.magnum.melonds.common.network.SharedOkHttpClient
@@ -43,9 +51,70 @@ class CheatsPreferencesViewModel @Inject constructor(
         const val MIRROR_GITHUB_RAW = "github_raw"
         const val MIRROR_JSDELIVR = "jsdelivr"
         const val MIRROR_GHPROXY = "ghproxy"
+        private const val PREFS_AUTO_IMPORT = "storm_cheats_auto_import"
+        private const val KEY_AUTO_IMPORT_SIG = "usrcheat_auto_import_sig"
+    }
+
+    private val _isDownloadingOnline = MutableStateFlow(false)
+    val isDownloadingOnline: StateFlow<Boolean> = _isDownloadingOnline.asStateFlow()
+
+    private val _onlineDownloadResult = MutableSharedFlow<OnlineCheatsDownloadResult>(extraBufferCapacity = 1)
+    val onlineDownloadResult: SharedFlow<OnlineCheatsDownloadResult> = _onlineDownloadResult.asSharedFlow()
+
+    @Volatile
+    private var pendingAutoImportSig: String? = null
+
+    init {
+        viewModelScope.launch {
+            var sawActiveImport = false
+            cheatsRepository.getCheatImportProgress().collect { progress ->
+                when (progress.status) {
+                    CheatImportProgress.CheatImportStatus.STARTING,
+                    CheatImportProgress.CheatImportStatus.ONGOING -> {
+                        sawActiveImport = true
+                    }
+                    CheatImportProgress.CheatImportStatus.FINISHED -> {
+                        if (sawActiveImport) {
+                            sawActiveImport = false
+                            val sig = pendingAutoImportSig
+                            if (sig != null) {
+                                appContext.getSharedPreferences(PREFS_AUTO_IMPORT, Context.MODE_PRIVATE)
+                                    .edit()
+                                    .putString(KEY_AUTO_IMPORT_SIG, sig)
+                                    .apply()
+                                pendingAutoImportSig = null
+                            }
+                        }
+                    }
+                    CheatImportProgress.CheatImportStatus.FAILED -> {
+                        if (sawActiveImport) {
+                            sawActiveImport = false
+                            pendingAutoImportSig = null
+                        }
+                    }
+                    CheatImportProgress.CheatImportStatus.NOT_IMPORTING -> {
+                        sawActiveImport = false
+                    }
+                }
+            }
+        }
+    }
+
+    fun startOnlineCheatsDownload(mirrorKey: String? = null) {
+        if (_isDownloadingOnline.value) return
+        _isDownloadingOnline.value = true
+        viewModelScope.launch {
+            try {
+                val result = downloadAndImportOnlineCheats(mirrorKey)
+                _onlineDownloadResult.tryEmit(result)
+            } finally {
+                _isDownloadingOnline.value = false
+            }
+        }
     }
 
     fun importCheatsDatabase(databaseUri: Uri) {
+        pendingAutoImportSig = null
         cheatsRepository.importCheats(databaseUri)
     }
 
@@ -58,10 +127,15 @@ class CheatsPreferencesViewModel @Inject constructor(
     }
 
     suspend fun clearCheatDatabase() = withContext(Dispatchers.IO) {
+        pendingAutoImportSig = null
         cheatsRepository.clearAllCheatDatabases()
         PreferenceManager.getDefaultSharedPreferences(appContext)
             .edit()
             .remove(PREF_CHEATS_DB_LAST_UPDATED_MS)
+            .apply()
+        appContext.getSharedPreferences(PREFS_AUTO_IMPORT, Context.MODE_PRIVATE)
+            .edit()
+            .remove(KEY_AUTO_IMPORT_SIG)
             .apply()
     }
 
@@ -165,6 +239,7 @@ class CheatsPreferencesViewModel @Inject constructor(
         }
 
         if (downloadedValidDat) {
+            pendingAutoImportSig = "${targetFile.length()}_${targetFile.lastModified()}"
             cheatsRepository.importCheats(Uri.fromFile(targetFile))
             return@withContext OnlineCheatsDownloadResult.OnlineUsrCheatImportStarted
         }

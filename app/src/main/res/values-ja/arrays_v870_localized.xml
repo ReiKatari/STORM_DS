@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <string-array name="wfc_server_options" tools:ignore="InconsistentArrays">
+        <item>@string/wfc_server_disabled</item>
+        <item>Wiimmfi.de (167.235.229.36)</item>
+        <item>AltWFC (172.104.88.237)</item>
+        <item>Kaeru WFC (178.62.43.212)</item>
+        <item>@string/wfc_server_custom</item>
+    </string-array>
+    <string-array name="video_vulkan_3d_depth_strength_options" tools:ignore="InconsistentArrays">
+        <item>25%</item>
+        <item>50%</item>
+        <item>75%</item>
+        <item>100%</item>
+    </string-array>
+    <string-array name="app_language_options" tools:ignore="InconsistentArrays">
+        <item>🌐 システム設定</item>
+        <item>🇷🇺 Русский</item>
+        <item>🇬🇧 English</item>
+        <item>🇩🇪 Deutsch</item>
+        <item>🇫🇷 Français</item>
+        <item>🇨🇳 简体中文</item>
+        <item>🇯🇵 日本語</item>
+        <item>🇪🇸 Español</item>
+        <item>🇮🇹 Italiano</item>
+        <item>🇵🇹 Português (Brasil)</item>
+        <item>🇮🇩 Bahasa Indonesia</item>
+    </string-array>
+    <string-array name="resolution_hud_position_options" tools:ignore="InconsistentArrays">
+        <item>非表示</item>
+        <item>左上</item>
+        <item>右上</item>
+        <item>左下</item>
+        <item>右下</item>
+    </string-array>
+    <string-array name="video_console_skin_type_options" tools:ignore="InconsistentArrays">
+        <item>Nintendo DS Lite (マットブラック)</item>
+        <item>Nintendo DS Lite (ポーラーホワイト)</item>
+        <item>Nintendo DS Lite (クリムゾンレッド)</item>
+        <item>Nintendo DSi XL (ミッドナイトブルー)</item>
+        <item>Nintendo 3DS (アクアブルー)</item>
+        <item>New Nintendo 3DS XL (コスモブラック)</item>
+    </string-array>
+    <string-array name="translator_local_voice_model_options" tools:ignore="InconsistentArrays">
+        <item>🎭 24音声（文脈とキャラクターに応じた自動ニューラル配役）</item>
+        <item>🎙️ ドミトリー（ニューラルバリトン）</item>
+        <item>🎙️ エレナ（ニューラルソプラノ）</item>
+        <item>🗡️ 若き勇者（明るいテノール）</item>
+        <item>🦇 ダークナイト / バットマン（渋いバス）</item>
+        <item>👹 ボス / クッパ（重厚なバス）</item>
+        <item>🃏 ジョーカー / トリックスター（狂気テノール）</item>
+        <item>💀 深淵の悪魔 / ドラキュラ（深いバス）</item>
+        <item>📜 賢者 / 教授（しわがれ声）</item>
+        <item>👦 少年 / ルーク・トライトン（澄んだ声）</item>
+        <item>👧 少女 / 春美（柔らかい声）</item>
+        <item>👑 姫 / ゼルダ女王（高貴）</item>
+        <item>💰 商人 / たぬきち（陽気）</item>
+        <item>🛡️ 衛兵 / 隊長（厳格）</item>
+        <item>🤖 ロボット / サイボーグ / 図鑑（合成音声）</item>
+        <item>📖 ナレーター / 語り部（落ち着いた声）</item>
+        <item>🎀 ツンデレ / 冥（高飛車ソプラノ）</item>
+        <item>🤫 謎の囁き / シャドウ（神秘的）</item>
+        <item>✨ 陽気な妖精 / ナビィ（明るいアルト）</item>
+        <item>🏴‍☠️ 海賊船長（荒々しいバス）</item>
+        <item>🔬 マッドサイエンティスト / ワイリー（奇抜）</item>
+        <item>🎩 紳士 / レイトン / 成歩堂（洗練）</item>
+        <item>👻 ゴースト / ファントム（幽玄）</item>
+        <item>⚔️ 高潔な騎士 / メタナイト（力強いバリトン）</item>
+        <item>🕊️ 女神 / パルテナ（神聖で透明感）</item>
+    </string-array>
+</resources>

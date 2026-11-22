@@ -1,11 +1,13 @@
 package me.magnum.melonds.ui.layouteditor
 
+import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -15,6 +17,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import me.magnum.melonds.R
 import me.magnum.melonds.domain.model.RuntimeBackground
 import me.magnum.melonds.domain.model.layout.BackgroundMode
 import me.magnum.melonds.domain.model.layout.Insets
@@ -39,6 +42,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class LayoutEditorViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val layoutsRepository: LayoutsRepository,
     private val backgroundsRepository: BackgroundRepository,
     private val uiLayoutProvider: UILayoutProvider,
@@ -101,7 +105,7 @@ class LayoutEditorViewModel @Inject constructor(
         val layoutId = editingLayoutId
         if (layoutId != null && layoutId != LayoutConfiguration.DEFAULT_ID) {
             viewModelScope.launch {
-                val initialLayout = layoutsRepository.getLayout(layoutId)
+                val initialLayout = layoutsRepository.getLayout(layoutId)?.let(::ensureEditableCustomLayout)
                 initialLayoutConfiguration = initialLayout
                 layoutResetToken++
                 _hasUnsavedChanges.value = false
@@ -112,9 +116,9 @@ class LayoutEditorViewModel @Inject constructor(
                 val defaultLayout = layoutsRepository.getLayout(LayoutConfiguration.DEFAULT_ID)
                 val newLayout = defaultLayout?.copy(
                     id = null,
-                    name = if (layoutId == LayoutConfiguration.DEFAULT_ID) "Пользовательский (на основе стандарта)" else "Пользовательская раскладка",
+                    name = if (layoutId == LayoutConfiguration.DEFAULT_ID) context.getString(R.string.v870_layout_custom_copy_name) else context.getString(R.string.v870_layout_custom_name),
                     type = LayoutConfiguration.LayoutType.CUSTOM,
-                ) ?: LayoutConfiguration.newCustom().copy(name = "Пользовательская раскладка")
+                ) ?: LayoutConfiguration.newCustom().copy(name = context.getString(R.string.v870_layout_custom_name))
                 initialLayoutConfiguration = newLayout
                 layoutResetToken++
                 _hasUnsavedChanges.value = false
@@ -241,6 +245,18 @@ class LayoutEditorViewModel @Inject constructor(
         }
     }
 
+    private fun ensureEditableCustomLayout(layout: LayoutConfiguration): LayoutConfiguration {
+        return if (layout.type == LayoutConfiguration.LayoutType.DEFAULT || layout.id == LayoutConfiguration.DEFAULT_ID) {
+            layout.copy(
+                id = null,
+                name = context.getString(R.string.v870_layout_custom_copy_name),
+                type = LayoutConfiguration.LayoutType.CUSTOM,
+            )
+        } else {
+            layout
+        }
+    }
+
     suspend fun saveCurrentLayout() {
         _currentLayoutConfiguration.value?.let {
             withContext(NonCancellable) {
@@ -248,7 +264,9 @@ class LayoutEditorViewModel @Inject constructor(
                     putFloat("pref_button_cluster_spread", _pendingButtonSpread.value)
                     putFloat("pref_button_cluster_inner_scale", _pendingButtonInnerScale.value)
                 }
-                layoutsRepository.saveLayout(it)
+                val editableLayout = ensureEditableCustomLayout(it)
+                _currentLayoutConfiguration.value = editableLayout
+                layoutsRepository.saveLayout(editableLayout)
                 _hasUnsavedChanges.value = false
             }
         }

@@ -156,7 +156,7 @@ class Migration35to36(
             val finalArray = JsonArray(updatedLayouts)
             layoutsFile.writeText(finalArray.toString())
         } catch (e: Exception) {
-            // Don't delete the layouts file — preserve user data even if migration fails
+            // Don't delete the layouts file - preserve user data even if migration fails
             e.printStackTrace()
         }
     }

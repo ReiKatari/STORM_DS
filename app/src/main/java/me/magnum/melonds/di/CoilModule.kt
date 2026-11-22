@@ -24,6 +24,15 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object CoilModule {
 
+    @Volatile
+    private var activeDiskCacheDir: File? = null
+
+    fun isLiveDiskCacheAt(dir: File): Boolean {
+        val active = activeDiskCacheDir ?: return false
+        return runCatching { active.canonicalPath == dir.canonicalPath }
+            .getOrDefault(active.absolutePath == dir.absolutePath)
+    }
+
     @Provides
     fun provideBackgroundThumbnailFetcher(backgroundThumbnailProvider: BackgroundThumbnailProvider): CoilBackgroundThumbnailFetcher.Factory {
         return CoilBackgroundThumbnailFetcher.Factory(backgroundThumbnailProvider)
@@ -60,6 +69,7 @@ object CoilModule {
                 } else {
                     File(context.cacheDir, "covers_cache").apply { mkdirs() }
                 }
+                activeDiskCacheDir = targetDir
                 DiskCache.Builder()
                     .directory(targetDir)
                     .maxSizeBytes(256L * 1024 * 1024)

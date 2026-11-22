@@ -10,6 +10,7 @@ import androidx.core.net.toUri
 import androidx.documentfile.provider.DocumentFile
 import android.provider.DocumentsContract
 import com.google.gson.Gson
+import com.google.gson.annotations.SerializedName
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -1592,21 +1593,34 @@ class FileSystemRomsRepository(
     )
 
     private data class RomMetadataMirrorDto(
+        @SerializedName("name")
         val name: String,
+        @SerializedName("developerName")
         val developerName: String,
+        @SerializedName("fileName")
         val fileName: String,
+        @SerializedName("config")
         val config: RomConfigDto,
+        @SerializedName("lastPlayed")
         val lastPlayed: Date? = null,
+        @SerializedName("isDsiWareTitle")
         val isDsiWareTitle: Boolean,
+        @SerializedName("isDsiEnhanced")
         val isDsiEnhanced: Boolean = false,
+        @SerializedName("retroAchievementsHash")
         val retroAchievementsHash: String,
+        @SerializedName("totalPlayTime")
         val totalPlayTime: Long = 0,
+        @SerializedName("isFavorite")
         val isFavorite: Boolean = false,
+        @SerializedName("gameCode")
         val gameCode: String = "",
     )
 
     private data class RomOptionsDto(
+        @SerializedName("version")
         val version: Int = 1,
+        @SerializedName("config")
         val config: RomConfigDto,
     )
 

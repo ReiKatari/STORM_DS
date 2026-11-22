@@ -102,7 +102,7 @@ fun LayoutEditorMenuDialog(
                                 fontWeight = FontWeight.Bold,
                             )
                             Text(
-                                text = "Параметры и действия с макетом",
+                                text = stringResource(R.string.v870_layout_menu_title),
                                 color = colors.text3,
                                 fontFamily = WatermelonMono,
                                 fontSize = 11.sp,

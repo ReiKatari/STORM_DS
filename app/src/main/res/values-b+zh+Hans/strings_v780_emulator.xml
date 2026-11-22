@@ -11,7 +11,7 @@
     <string name="pause_session_duration_format">本节时间: %s</string>
     <string name="pause_session_less_than_minute">&lt; 1分钟</string>
     <string name="pause_session_minutes">%d分钟</string>
-    <string name="pause_session_hours_minutes">%d小时%d分钟</string>
+    <string name="pause_session_hours_minutes">%1$d小时%2$d分钟</string>
     <string name="battery_format">%d%%</string>
     <string name="fast_forward_speed_unlimited">无限制 (最高)</string>
     <string name="solar_preset_0" formatted="false">0% 阴影</string>

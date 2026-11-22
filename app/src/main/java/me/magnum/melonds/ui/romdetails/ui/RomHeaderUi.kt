@@ -419,26 +419,29 @@ fun RomTechPassportCard(
 ) {
     val context = LocalContext.current
     val colors = watermelon
-    val isRu = remember { java.util.Locale.getDefault().language.startsWith("ru") }
     var isExpanded by remember { mutableStateOf(false) }
 
     val hasSaveData by produceState<Boolean?>(initialValue = null, rom.uri) {
-        value = withContext(Dispatchers.IO) {
-            runCatching {
-                val ep = EntryPointAccessors.fromApplication(
-                    context.applicationContext,
-                    RomHeaderEntryPoint::class.java,
-                )
-                ep.romSaveFileManager().hasSaveFile(rom) ||
-                    ep.saveStatesRepository().getRomQuickSaveStateSlot(rom).exists ||
-                    ep.saveStatesRepository().getPeriodicAutoSaveSlot(rom).exists ||
-                    ep.saveStatesRepository().getRomSaveStates(rom).any { it.exists }
-            }.getOrDefault(false)
+        value = if (rom.isInstalledDsiWareShortcut) {
+            false
+        } else {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val ep = EntryPointAccessors.fromApplication(
+                        context.applicationContext,
+                        RomHeaderEntryPoint::class.java,
+                    )
+                    ep.romSaveFileManager().hasSaveFile(rom) ||
+                        ep.saveStatesRepository().getRomQuickSaveStateSlot(rom).exists ||
+                        ep.saveStatesRepository().getPeriodicAutoSaveSlot(rom).exists ||
+                        ep.saveStatesRepository().getRomSaveStates(rom).any { it.exists }
+                }.getOrDefault(false)
+            }
         }
     }
     val saveStatusLabel = when (hasSaveData) {
-        true -> if (isRu) "НАЙДЕН" else "FOUND"
-        false -> if (isRu) "НЕТ .SAV" else "NONE"
+        true -> stringResource(R.string.v870_rom_header_sav_found)
+        false -> stringResource(R.string.v870_rom_header_sav_none)
         null -> "..."
     }
 
@@ -477,7 +480,7 @@ fun RomTechPassportCard(
                         .background(colors.green),
                 )
                 Text(
-                    text = if (isRu) "ТЕХНИЧЕСКИЙ ПАСПОРТ И СТАТУС" else "TECHNICAL SPECS AND STATUS",
+                    text = stringResource(R.string.v870_rom_header_passport),
                     color = Color.White.copy(alpha = 0.9f),
                     fontFamily = SpaceGrotesk,
                     fontSize = 10.5.sp,
@@ -505,17 +508,17 @@ fun RomTechPassportCard(
                 modifier = Modifier.weight(1f),
             )
             RomInfoChip(
-                label = if (isRu) "ПЛАТФОРМА" else "PLATFORM",
+                label = stringResource(R.string.v870_rom_header_platform),
                 value = platformStr,
                 modifier = Modifier.weight(1f),
             )
             RomInfoChip(
-                label = if (isRu) "ФОРМАТ" else "FORMAT",
+                label = stringResource(R.string.v870_rom_header_format),
                 value = fileExt,
                 modifier = Modifier.weight(0.8f),
             )
             RomInfoChip(
-                label = if (isRu) "СТАТУС .SAV" else "SAVE STATUS",
+                label = stringResource(R.string.v870_rom_header_sav_status),
                 value = saveStatusLabel,
                 modifier = Modifier.weight(1f),
             )
@@ -542,13 +545,13 @@ fun RomTechPassportCard(
                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                             val clip = ClipData.newPlainText("GameCode", "$gameCodeStr (${rom.fileName})")
                             clipboard?.setPrimaryClip(clip)
-                            Toast.makeText(context, if (isRu) "GameCode $gameCodeStr скопирован!" else "GameCode copied!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.v870_rom_header_gamecode_copied, gameCodeStr), Toast.LENGTH_SHORT).show()
                         }
                         .padding(vertical = 6.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = if (isRu) "Скопировать GameCode" else "Copy GameCode",
+                        text = stringResource(R.string.v870_rom_header_copy_gamecode),
                         color = colors.green,
                         fontFamily = SpaceGrotesk,
                         fontSize = 11.sp,
@@ -568,7 +571,7 @@ fun RomTechPassportCard(
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = if (isRu) "Открыть обложку" else "View Cover",
+                        text = stringResource(R.string.v870_rom_header_view_cover),
                         color = Color.White,
                         fontFamily = SpaceGrotesk,
                         fontSize = 11.sp,
@@ -730,17 +733,18 @@ fun RomHeroVertical(
             Spacer(Modifier.height(8.dp))
 
             // Row 2: Structured Quick Action Tiles
-            val isRu = remember { java.util.Locale.getDefault().language.startsWith("ru") }
             Row(
                 modifier = Modifier.fillMaxWidth(0.94f),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 NetplayLobbyButton(size = 44.dp, rom = rom, onLaunchRom = onLaunchRom, modifier = Modifier.weight(1f))
-                SaveActionsButton(size = 44.dp, onSendSaveFile = onSendSaveFile, onImportSaveFile = onImportSaveFile, modifier = Modifier.weight(1f))
+                if (!rom.isInstalledDsiWareShortcut) {
+                    SaveActionsButton(size = 44.dp, onSendSaveFile = onSendSaveFile, onImportSaveFile = onImportSaveFile, modifier = Modifier.weight(1f))
+                }
                 QuickActionTile(
                     icon = Icons.Filled.Image,
-                    label = if (isRu) "Обложка" else "Cover",
+                    label = stringResource(R.string.v870_rom_header_cover_label),
                     tint = Color.White,
                     onClick = { showFullScreenCover = true },
                     modifier = Modifier.weight(1.2f),
@@ -881,7 +885,9 @@ fun RomHeroSidePanel(
                     modifier = Modifier.weight(1f),
                 )
                 NetplayLobbyButton(size = 50.dp, rom = rom, onLaunchRom = onLaunchRom)
-                SaveActionsButton(size = 50.dp, onSendSaveFile = onSendSaveFile, onImportSaveFile = onImportSaveFile)
+                if (!rom.isInstalledDsiWareShortcut) {
+                    SaveActionsButton(size = 50.dp, onSendSaveFile = onSendSaveFile, onImportSaveFile = onImportSaveFile)
+                }
             }
         }
     }
@@ -894,7 +900,6 @@ fun RomDetailsTabRow(
     modifier: Modifier = Modifier,
 ) {
     val colors = watermelon
-    val isRu = remember { java.util.Locale.getDefault().language.startsWith("ru") }
     Column(modifier = modifier.fillMaxWidth().background(colors.bg)) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),

@@ -2572,24 +2572,19 @@ class EmulatorViewModel @Inject constructor(
     }
 
     fun switchToSoftcore() {
+        if (isNativeEmulationActive) {
+            runCatching { MelonEmulator.setRetroAchievementsHardcoreEnabled(false) }
+        }
         settingsRepository.setRetroAchievementsHardcoreEnabled(false)
         emulatorSession.switchToSoftcore()
         retroAchievementsSessionMode = RetroAchievementsSessionMode.SOFTCORE
         val updatedConfig = activeRuntimeBridgeConfig?.copy(hardcoreEnabled = false)
         activeRuntimeBridgeConfig = updatedConfig
-        val achievementData = activeAchievementData
         val runningRom = (_emulatorState.value as? EmulatorState.RunningRom)?.rom ?: currentRom
-        if (isNativeEmulationActive) {
+        if (isNativeEmulationActive && runningRom != null) {
             sessionCoroutineScope.launch {
-                if (updatedConfig != null && achievementData != null) {
-                    runCatching {
-                        emulatorManager.setupRetroAchievements(achievementData, updatedConfig)
-                    }
-                }
-                if (runningRom != null) {
-                    runCatching {
-                        emulatorManager.updateRomEmulatorConfiguration(runningRom)
-                    }
+                runCatching {
+                    emulatorManager.updateRomEmulatorConfiguration(runningRom)
                 }
             }
         }
@@ -3418,12 +3413,13 @@ class EmulatorViewModel @Inject constructor(
         val current = _runtimeRendererConfiguration.value ?: return
         if (current.resolutionScaling == scaling) return
         _runtimeRendererConfiguration.value = current.copy(resolutionScaling = scaling)
-        sessionCoroutineScope.launch {
-            val runningRom = (_emulatorState.value as? EmulatorState.RunningRom)?.rom
-            if (runningRom != null) {
-                val updatedRom = runningRom.copy(
-                    config = runningRom.config.copy(internalResolutionScaling = scaling)
-                )
+        val runningRom = (_emulatorState.value as? EmulatorState.RunningRom)?.rom ?: currentRom
+        if (runningRom != null) {
+            val updatedRom = runningRom.copy(
+                config = runningRom.config.copy(internalResolutionScaling = scaling)
+            )
+            updateRunningRom(updatedRom)
+            sessionCoroutineScope.launch {
                 emulatorManager.updateRomEmulatorConfiguration(updatedRom)
             }
         }
@@ -3434,6 +3430,9 @@ class EmulatorViewModel @Inject constructor(
             return emptyList()
         }
         if (emulatorSession.isRetroAchievementsHardcoreModeEnabled) {
+            if (isNativeEmulationActive) {
+                runCatching { MelonEmulator.setRetroAchievementsHardcoreEnabled(false) }
+            }
             emulatorSession.switchToSoftcore()
             retroAchievementsSessionMode = RetroAchievementsSessionMode.SOFTCORE
         }
@@ -6324,7 +6323,7 @@ class EmulatorViewModel @Inject constructor(
                                 // TODO: Should we pause the session if the app goes to background? If so, how?
                                 delay(2.minutes)
                                 val isHardcoreModeEnabled =
-                                    effectiveLaunchDecision.sessionMode == RetroAchievementsSessionMode.HARDCORE
+                                    retroAchievementsSessionMode == RetroAchievementsSessionMode.HARDCORE
                                 if (isHardcoreModeEnabled) {
                                     if ((pendingRaSubmissionStore?.snapshot?.value?.counts?.total ?: 0) > 0) {
                                         syncPendingRaSubmissions(RaPendingSyncSource.BEFORE_ONLINE_SUBMISSION)
@@ -7093,11 +7092,14 @@ class EmulatorViewModel @Inject constructor(
         sessionCoroutineScope.cancel()
         unloadAndReleaseActiveRuntimeAuthenticationLease("view_model_cleared")
         retroAchievementsEndpointProvider.endSession()
-        if (isNativeEmulationActive) {
-            isNativeEmulationActive = false
+        isNativeEmulationActive = false
+        val androidManager = emulatorManager as? AndroidEmulatorManager
+        if (androidManager != null) {
+            androidManager.stopAndCleanEmulator()
+        } else {
             runCatching { emulatorManager.stopEmulator() }
+            emulatorManager.cleanEmulator()
         }
-        emulatorManager.cleanEmulator()
     }
 
     private class EmulatorSessionCoroutineScope : CoroutineScope {

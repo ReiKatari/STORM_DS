@@ -145,7 +145,7 @@ namespace MelonDSAndroid
         cleanupAudioOutputStreamLocked();
         if (currentAudioSettings.soundEnabled && currentAudioSettings.volume > 0) {
             setupAudioOutputStreamLocked(currentAudioSettings.audioLatency, currentAudioSettings.volume);
-            if (audioStream) {
+            if (audioStream && !isAudioPaused.load(std::memory_order_relaxed)) {
                 audioStream->requestStart();
             }
         }

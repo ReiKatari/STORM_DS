@@ -5820,6 +5820,13 @@ void MelonInstance::setRetroAchievementsSubmissionTransportSuspended(bool suspen
         retroAchievementsManager->SetSubmissionTransportSuspended(suspended);
 }
 
+void MelonInstance::setRetroAchievementsHardcoreEnabled(bool enabled)
+{
+    std::lock_guard lock(retroAchievementsManagerLifetimeMutex);
+    if (instanceId == 0 && retroAchievementsManager)
+        retroAchievementsManager->SetHardcoreEnabled(enabled);
+}
+
 void MelonInstance::updateRenderer()
 {
     auto config = getConfigurationSnapshot();

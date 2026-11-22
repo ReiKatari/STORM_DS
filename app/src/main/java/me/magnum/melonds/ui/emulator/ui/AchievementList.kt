@@ -72,6 +72,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -520,7 +521,7 @@ private fun AchievementsHeader(
                         )
                         Spacer(Modifier.width(5.dp))
                         Text(
-                            text = "СОФТКОР",
+                            text = stringResource(R.string.v870_ra_mode_softcore),
                             fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
                             fontSize = 9.5.sp,
                             fontWeight = FontWeight.Bold,
@@ -536,7 +537,7 @@ private fun AchievementsHeader(
                         )
                     }
                     Spacer(Modifier.height(3.dp))
-                    val softcorePointsStr = me.magnum.melonds.utils.RussianPlurals.format(summary.totalPoints, "очко", "очка", "очков")
+                    val softcorePointsStr = LocalContext.current.resources.getQuantityString(R.plurals.v870_ra_points_count, summary.totalPoints, summary.totalPoints)
                     Text(
                         text = "$softcorePointsStr (${summary.completedPercentage}%)",
                         fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
@@ -570,7 +571,7 @@ private fun AchievementsHeader(
                         )
                         Spacer(Modifier.width(5.dp))
                         Text(
-                            text = "ХАРДКОР (x2)",
+                            text = stringResource(R.string.v870_ra_mode_hardcore_2x),
                             fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
                             fontSize = 9.5.sp,
                             fontWeight = FontWeight.Bold,
@@ -587,9 +588,9 @@ private fun AchievementsHeader(
                     }
                     Spacer(Modifier.height(3.dp))
                     val hardcorePoints = if (summary.forHardcoreMode) summary.totalPoints else summary.totalPoints * 2
-                    val hardcorePointsStr = me.magnum.melonds.utils.RussianPlurals.format(hardcorePoints, "очко", "очка", "очков")
+                    val hardcorePointsStr = LocalContext.current.resources.getQuantityString(R.plurals.v870_ra_points_count, hardcorePoints, hardcorePoints)
                     Text(
-                        text = "$hardcorePointsStr ${if (summary.forHardcoreMode) "(${summary.completedPercentage}%)" else "(Заблокировано)"}",
+                        text = "$hardcorePointsStr ${if (summary.forHardcoreMode) "(${summary.completedPercentage}%)" else "(${stringResource(R.string.retro_achievements_locked)})"}",
                         fontFamily = me.magnum.melonds.ui.theme.WatermelonMono,
                         fontSize = 9.sp,
                         color = if (summary.forHardcoreMode) androidx.compose.ui.graphics.Color(0xFFFBBF24) else colors.text3

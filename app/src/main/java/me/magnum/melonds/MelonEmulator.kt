@@ -88,6 +88,8 @@ object MelonEmulator {
 
     external fun setRetroAchievementsSubmissionTransportSuspended(suspended: Boolean)
 
+    external fun setRetroAchievementsHardcoreEnabled(enabled: Boolean)
+
     fun loadRom(romUri: Uri, sramUri: Uri, gbaSlotType: GbaSlotType, gbaRomUri: Uri?, gbaSramUri: Uri?): LoadResult {
         val loadResult = loadRomInternal(romUri.toString(), sramUri.toString(), gbaSlotType.ordinal, gbaRomUri?.toString(), gbaSramUri?.toString())
         return when (loadResult) {
@@ -176,6 +178,8 @@ object MelonEmulator {
     external fun loadRewindState(rewindSaveState: RewindSaveState): Boolean
 
     external fun setRewindActive(active: Boolean)
+
+    external fun flushPendingSaveStateWrites()
 
     external fun getRewindWindow(): RewindWindow
 

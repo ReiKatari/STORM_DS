@@ -12,6 +12,7 @@ import java.io.RandomAccessFile
 import java.util.zip.ZipInputStream
 import javax.inject.Inject
 import javax.inject.Singleton
+import me.magnum.melonds.R
 
 @Singleton
 class BiosDownloadManager @Inject constructor(
@@ -92,10 +93,10 @@ class BiosDownloadManager @Inject constructor(
                     settingsRepository.setUseCustomBios(true)
                     Result.success(rootDsDir)
                 } else {
-                    Result.failure(lastException ?: Exception("Не удалось проверить файлы BIOS DS после копирования."))
+                    Result.failure(lastException ?: Exception(context.getString(R.string.v870_bios_ds_verify_failed)))
                 }
             } else {
-                Result.failure(lastException ?: Exception("Не удалось скачать файлы BIOS DS."))
+                Result.failure(lastException ?: Exception(context.getString(R.string.v870_bios_ds_download_failed)))
             }
         } finally {
             runCatching { tempZip.delete() }
@@ -160,10 +161,10 @@ class BiosDownloadManager @Inject constructor(
                     settingsRepository.setUseCustomBios(true)
                     Result.success(rootDsiDir)
                 } else {
-                    Result.failure(lastException ?: Exception("Не удалось проверить файлы BIOS DSi после копирования."))
+                    Result.failure(lastException ?: Exception(context.getString(R.string.v870_bios_dsi_verify_failed)))
                 }
             } else {
-                Result.failure(lastException ?: Exception("Не удалось скачать файлы BIOS DSi и образ NAND."))
+                Result.failure(lastException ?: Exception(context.getString(R.string.v870_bios_dsi_download_failed)))
             }
         } finally {
             runCatching { tempZip.delete() }

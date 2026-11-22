@@ -18,7 +18,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Доступно обновление STORM DS"
+            android:text="@string/v870_update_available_title"
             android:textColor="@color/textColorPrimary"
             android:textSize="18sp"
             android:textStyle="bold"
@@ -76,7 +76,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Что нового:"
+            android:text="@string/v870_update_whats_new"
             android:textColor="@color/textColorPrimary"
             android:textSize="13sp"
             android:textStyle="bold"

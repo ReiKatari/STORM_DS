@@ -631,8 +631,9 @@ class EmulatorActivity : AppCompatActivity() {
     private var romLoadingTimeoutJob: kotlinx.coroutines.Job? = null
     private var lastVulkanCompileProgress: VulkanCompileProgress? = null
     private var lastRaLoadStage: RetroAchievementsLoadStage? = null
-    private var lastDecryptPromptedRomUri: android.net.Uri? = null
+    private var escapeConsumedOnDownInOverlay = false
     private var isTranslatorManagerInitialized = false
+    private var heavyShaderCompileDialog: AlertDialog? = null
     private var romLoadErrorDialog: AlertDialog? = null
     private var romNotFoundDialog: AlertDialog? = null
     private var firmwareLoadErrorDialog: AlertDialog? = null
@@ -728,6 +729,7 @@ class EmulatorActivity : AppCompatActivity() {
         raHardcoreConfirmOpenedFromPauseMenu = false
         raHardcoreLoadConfirmTarget.value = null
         raHardcorePeriodicLoadConfirm.value = false
+        activeOverlays.removeActiveOverlay(EmulatorOverlay.RA_HARDCORE_CONFIRM)
         if (!hasComposeOverlayOpen()) {
             if (reopenMenu) {
                 reopenPauseMenu()
@@ -751,6 +753,9 @@ class EmulatorActivity : AppCompatActivity() {
         onOverlaysPresent = {
             enableScreenTimeOut()
             presentation?.setPauseOverlayVisibility(true)
+            if (::nativeInputListener.isInitialized) {
+                (nativeInputListener as? InputProcessor)?.resetHeldInputs()
+            }
         }
     )
 
@@ -801,6 +806,10 @@ class EmulatorActivity : AppCompatActivity() {
             }
 
             override fun onValidationAborted() {
+                runCatching {
+                    MelonEmulator.stopLanSession()
+                    MelonEmulator.stopLanDiscovery()
+                }
                 finish()
             }
         })
@@ -1244,6 +1253,7 @@ class EmulatorActivity : AppCompatActivity() {
                                 viewModel.onCheatsChanged()
                             },
                             onDismiss = {
+                                activeOverlays.removeActiveOverlay(EmulatorOverlay.CHEATS_DIALOG)
                                 cheatsOverlayRomInfo.value = null
                                 reopenPauseMenu()
                             },
@@ -1354,14 +1364,14 @@ class EmulatorActivity : AppCompatActivity() {
                         onSelectSpeed = { speed ->
                             activeOverlays.removeActiveOverlay(EmulatorOverlay.SLOW_MOTION_DIALOG)
                             showSlowMotionSpeedDialog.value = false
-                            slowMotionMultiplier = speed
-                            settingsRepository.setSlowMotionSpeed(speed)
                             if (speed >= 0.99f) {
                                 if (isSlowMotionActive) {
                                     toggleSlowMotion()
                                 }
                                 slowMotionMultiplier = 1.0f
                             } else {
+                                slowMotionMultiplier = speed
+                                settingsRepository.setSlowMotionSpeed(speed)
                                 toggleSlowMotion(speed)
                             }
                             isFrameAdvanceHudVisible.value = false
@@ -1406,11 +1416,15 @@ class EmulatorActivity : AppCompatActivity() {
                             raHardcoreConfirmOpenedFromPauseMenu = false
                             raHardcoreLoadConfirmTarget.value = null
                             raHardcorePeriodicLoadConfirm.value = false
+                            activeOverlays.removeActiveOverlay(EmulatorOverlay.RA_HARDCORE_CONFIRM)
                             viewModel.switchToSoftcore()
                             if (isPeriodic) {
                                 viewModel.loadPeriodicAutoSave()
                             } else if (target != null) {
                                 viewModel.loadStateFromSlot(target)
+                                if (!target.exists && !hasComposeOverlayOpen()) {
+                                    viewModel.resumeEmulator()
+                                }
                             } else {
                                 viewModel.doQuickLoad(viewModel.getActiveQuickSlot())
                             }
@@ -1457,10 +1471,7 @@ class EmulatorActivity : AppCompatActivity() {
 
                 if (
                     activeSlot2AddonState.value in listOf(3, 5, 6) &&
-                    pauseMenu == null &&
-                    topConsoleNode == null &&
-                    saveStatesData == null &&
-                    rewindWindow == null &&
+                    !hasComposeOverlayOpen() &&
                     !showBootAnimation.value
                 ) {
                     me.magnum.melonds.ui.emulator.ui.Slot2PeripheralOverlay(
@@ -1490,6 +1501,8 @@ class EmulatorActivity : AppCompatActivity() {
                             runCatching { MelonEmulator.setSlot2AnalogInput(deltaX, 0f) }
                         },
                         onDismissOverlay = {
+                            peripheralSensorBridge.stopLightSensor()
+                            motionSensorManager.solarSensorAutoEnabled = false
                             activeSlot2AddonState.value = 0
                             runCatching { MelonEmulator.setSlot2AddonType(0) }
                         },
@@ -1756,6 +1769,7 @@ class EmulatorActivity : AppCompatActivity() {
                             closeEmulatorActivity()
                         }
                         is EmulatorUiEvent.OpenScreen.CheatsScreen -> {
+                            activeOverlays.addActiveOverlay(EmulatorOverlay.CHEATS_DIALOG)
                             cheatsOverlayRomInfo.value = it.romInfo
                         }
                         is EmulatorUiEvent.OpenScreen.SettingsScreen -> {
@@ -1860,8 +1874,18 @@ class EmulatorActivity : AppCompatActivity() {
                         it is EmulatorState.LoadingFirmware || it is EmulatorState.LoadingRom) {
                         if (romLoadingTimeoutJob == null || romLoadingTimeoutJob?.isActive != true) {
                             romLoadingTimeoutJob = lifecycleScope.launch {
-                                kotlinx.coroutines.delay(90_000L)
-                                if (!bootRomReady.value && !isFinishing && !isDestroyed) {
+                                var elapsedMs = 0L
+                                while (elapsedMs < 90_000L && isActive) {
+                                    kotlinx.coroutines.delay(500L)
+                                    val isInteractiveDialogShowing =
+                                        emulatorLaunchValidatorDelegate.isInteractiveDialogActive.value ||
+                                            heavyShaderCompileDialog?.isShowing == true ||
+                                            offlineSyncChoiceDialog?.isShowing == true
+                                    if (!isInteractiveDialogShowing) {
+                                        elapsedMs += 500L
+                                    }
+                                }
+                                if (isActive && !bootRomReady.value && !isFinishing && !isDestroyed) {
                                     android.util.Log.e("EmulatorActivity", "ROM launch timed out after 90s")
                                     binding.textLoading.isGone = true
                                     binding.progressLoading.isGone = true
@@ -1879,6 +1903,8 @@ class EmulatorActivity : AppCompatActivity() {
 
                     when (it) {
                         is EmulatorState.Uninitialized -> {
+                            bootRom.value = null
+                            bootBoxArtUrl.value = null
                             binding.viewLayoutControls.isInvisible = true
                             binding.textFps.isGone = true
                             binding.textLoading.isGone = true
@@ -1891,6 +1917,8 @@ class EmulatorActivity : AppCompatActivity() {
                         }
                         is EmulatorState.ValidatingFirmware -> {
                             bootRomReady.value = false
+                            bootRom.value = null
+                            bootBoxArtUrl.value = null
                             showBootAnimation.value = true
                             bootStatus.value = null
                             lastVulkanCompileProgress = null
@@ -1968,23 +1996,7 @@ class EmulatorActivity : AppCompatActivity() {
                             binding.textLoadingDetail.isGone = true
                             showBootAnimation.value = false
                             presentation?.setInfoOverlayContent(null)
-                            val failedRom = bootRom.value
-                            if (failedRom != null && lastDecryptPromptedRomUri != failedRom.uri) {
-                                lifecycleScope.launch {
-                                    val encStatus = withContext(Dispatchers.IO) {
-                                        me.magnum.melonds.MelonRomDecryptor.checkEncryption(this@EmulatorActivity, failedRom.uri)
-                                    }
-                                    if (isFinishing || isDestroyed) return@launch
-                                    if (encStatus == me.magnum.melonds.MelonRomDecryptor.EncryptionStatus.MODCRYPT_ENCRYPTED) {
-                                        lastDecryptPromptedRomUri = failedRom.uri
-                                        emulatorLaunchValidatorDelegate.validateRom(failedRom)
-                                    } else {
-                                        showRomLoadErrorDialog()
-                                    }
-                                }
-                            } else {
-                                showRomLoadErrorDialog()
-                            }
+                            showRomLoadErrorDialog()
                         }
                         is EmulatorState.FirmwareLoadError -> {
                             binding.viewLayoutControls.isInvisible = true
@@ -2477,7 +2489,6 @@ class EmulatorActivity : AppCompatActivity() {
                     .setMessage(getString(R.string.message_stop_emulation))
                     .setPositiveButton(R.string.ok) { _, _ ->
                         dismissActiveErrorDialogs()
-                        lastDecryptPromptedRomUri = null
                         setIntent(intent)
                         viewModel.relaunchWithNewArgs(launchArgs)
                     }
@@ -2493,7 +2504,6 @@ class EmulatorActivity : AppCompatActivity() {
                     .show()
         } else {
             dismissActiveErrorDialogs()
-            lastDecryptPromptedRomUri = null
             setIntent(intent)
             viewModel.relaunchWithNewArgs(launchArgs)
         }
@@ -2943,6 +2953,14 @@ class EmulatorActivity : AppCompatActivity() {
 
     private fun applyDualScreenPresetSwapState(preset: DualScreenPreset = viewModel.dualScreenPreset.value) {
         if (preset == DualScreenPreset.OFF || presentation == null) {
+            if (binding.viewLayoutControls.areScreensSwapped()) {
+                binding.viewLayoutControls.swapScreens()
+            }
+            presentation?.layoutView?.let { layoutView ->
+                if (layoutView.areScreensSwapped()) {
+                    layoutView.swapScreens()
+                }
+            }
             return
         }
 
@@ -3612,12 +3630,14 @@ class EmulatorActivity : AppCompatActivity() {
             request.presetName,
             duration,
         )
-        AlertDialog.Builder(this)
+        heavyShaderCompileDialog?.dismiss()
+        heavyShaderCompileDialog = AlertDialog.Builder(this)
             .setTitle(R.string.shader_heavy_compile_title)
             .setMessage(message)
             .setCancelable(false)
             .setPositiveButton(R.string.shader_heavy_compile_continue) { _, _ -> request.response.complete(true) }
             .setNegativeButton(R.string.shader_heavy_compile_skip) { _, _ -> request.response.complete(false) }
+            .setOnDismissListener { heavyShaderCompileDialog = null }
             .show()
     }
 
@@ -4287,6 +4307,7 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
             .setView(input)
             .setPositiveButton(R.string.ok) { _, _ ->
                 onConfirm(input.text.toString().ifBlank { null })
+                handler.post { refreshRomSettingsMenuIfOpen() }
             }
             .setNegativeButton(R.string.cancel, null)
             .show()
@@ -4556,6 +4577,9 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
                 selectedIndex = current,
                 onSelect = { which ->
                     val addonType = which.coerceIn(0, labels.lastIndex)
+                    if (addonType != 3) {
+                        peripheralSensorBridge.stopLightSensor()
+                    }
                     activeSlot2AddonState.value = addonType
                     motionSensorManager.motionPakEnabled = (addonType == 4)
                     motionSensorManager.solarSensorAutoEnabled = (addonType == 3 && solarSensorOverrideLevel == -1)
@@ -4622,9 +4646,9 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
     private fun showIrPedometerChoiceOverlay() {
         val pedometerActive = peripheralSensorBridge.isPedometerActive.value
         val toggleLabel = if (pedometerActive) {
-            getString(R.string.pedometer_real_sensor_title) + " (ВКЛ / ON)"
+            getString(R.string.pedometer_real_sensor_title) + " (" + getString(R.string.v870_toggle_on) + ")"
         } else {
-            getString(R.string.pedometer_real_sensor_title) + " (ВЫКЛ / OFF)"
+            getString(R.string.pedometer_real_sensor_title) + " (" + getString(R.string.v870_toggle_off) + ")"
         }
         val labels = listOf(
             toggleLabel,
@@ -4812,7 +4836,7 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
         backAction: (() -> Unit)?,
     ) {
         val showRuntimeButtons = isDebuggableBuild() && backAction != null
-        activeOverlays.addActiveOverlay(EmulatorOverlay.PAUSE_MENU)
+        activeOverlays.addActiveOverlay(EmulatorOverlay.RENDERER_DEBUG_DIALOG)
         val dialog = AlertDialog.Builder(this)
             .setTitle(title)
             .setItems(entries.map { it.title }.toTypedArray()) { _, which ->
@@ -4828,7 +4852,7 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
                 }
             }
             .setOnDismissListener {
-                activeOverlays.removeActiveOverlay(EmulatorOverlay.PAUSE_MENU)
+                activeOverlays.removeActiveOverlay(EmulatorOverlay.RENDERER_DEBUG_DIALOG)
             }
             .setOnCancelListener {
                 syncRendererDebugEmulationMode()
@@ -4863,7 +4887,7 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
             return
         }
 
-        activeOverlays.addActiveOverlay(EmulatorOverlay.PAUSE_MENU)
+        activeOverlays.addActiveOverlay(EmulatorOverlay.RENDERER_DEBUG_DIALOG)
         val dialog = AlertDialog.Builder(this)
             .setTitle(title)
             .setView(scrollView)
@@ -4873,7 +4897,7 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
                 setPositiveButton("+1 Frame", null)
             }
             .setOnDismissListener {
-                activeOverlays.removeActiveOverlay(EmulatorOverlay.PAUSE_MENU)
+                activeOverlays.removeActiveOverlay(EmulatorOverlay.RENDERER_DEBUG_DIALOG)
             }
             .setOnCancelListener {
                 syncRendererDebugEmulationMode()
@@ -6071,10 +6095,28 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (event.keyCode == KeyEvent.KEYCODE_ESCAPE && event.action == KeyEvent.ACTION_UP) {
-            if (hasComposeOverlayOpen() || activeOverlays.hasActiveOverlays()) {
-                onBackPressedDispatcher.onBackPressed()
-                return true
+        if (event.keyCode == KeyEvent.KEYCODE_ESCAPE) {
+            if (event.action == KeyEvent.ACTION_DOWN) {
+                if (event.repeatCount > 0) {
+                    return true
+                }
+                escapeConsumedOnDownInOverlay = false
+                if (hasComposeOverlayOpen() || activeOverlays.hasActiveOverlays()) {
+                    if (super.dispatchKeyEvent(event)) {
+                        escapeConsumedOnDownInOverlay = true
+                    }
+                    return true
+                }
+            } else if (event.action == KeyEvent.ACTION_UP) {
+                val wasConsumedOnDown = escapeConsumedOnDownInOverlay
+                escapeConsumedOnDownInOverlay = false
+                if (wasConsumedOnDown) {
+                    return true
+                }
+                if (hasComposeOverlayOpen() || activeOverlays.hasActiveOverlays()) {
+                    onBackPressedDispatcher.onBackPressed()
+                    return true
+                }
             }
         }
 
@@ -6197,6 +6239,8 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
                         else viewModel.getRomSaveStateSlots(r).firstOrNull { it.slot == num }
                     }
                 }
+                viewModel.pauseEmulator(showPauseMenu = false)
+                activeOverlays.addActiveOverlay(EmulatorOverlay.RA_HARDCORE_CONFIRM)
                 raHardcoreLoadConfirmTarget.value = target ?: SaveStateSlot(SaveStateSlot.QUICK_SAVE_SLOT, true, null, null)
             }
         } else {
@@ -6210,6 +6254,8 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
 
     private fun requestLoadPeriodicAutoSaveWithHardcoreCheck() {
         if (viewModel.isRetroAchievementsHardcoreActive()) {
+            viewModel.pauseEmulator(showPauseMenu = false)
+            activeOverlays.addActiveOverlay(EmulatorOverlay.RA_HARDCORE_CONFIRM)
             raHardcorePeriodicLoadConfirm.value = true
         } else {
             viewModel.loadPeriodicAutoSave()

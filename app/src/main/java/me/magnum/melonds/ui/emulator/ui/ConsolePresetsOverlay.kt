@@ -182,9 +182,9 @@ fun ConsolePresetsOverlay(
                             )
                             Text(
                                 text = when (screen) {
-                                    PresetsScreen.MAIN -> "Настройка вывода на 2 экрана"
-                                    PresetsScreen.FILL_AREA -> "Растяжение по ширине и высоте"
-                                    PresetsScreen.VERTICAL_ALIGNMENT -> "Позиционирование кадров"
+                                    PresetsScreen.MAIN -> stringResource(R.string.v870_presets_title_main)
+                                    PresetsScreen.FILL_AREA -> stringResource(R.string.v870_presets_title_fill)
+                                    PresetsScreen.VERTICAL_ALIGNMENT -> stringResource(R.string.v870_presets_title_valign)
                                 },
                                 color = colors.text3,
                                 fontSize = 10.5.sp,
@@ -279,7 +279,7 @@ fun ConsolePresetsOverlay(
                                 }
 
                                 Spacer(Modifier.height(4.dp))
-                                ConsoleSectionLabel("Режимы разделения")
+                                ConsoleSectionLabel(stringResource(R.string.v870_presets_sec_split))
 
                                 val presets = listOf(
                                     Triple(
@@ -300,9 +300,9 @@ fun ConsolePresetsOverlay(
                                 )
                                 presets.forEach { (preset, label, icon) ->
                                     val subtitle = when (preset) {
-                                        DualScreenPreset.OFF -> "Оба экрана Nintendo DS выводятся на основном дисплее устройства"
-                                        DualScreenPreset.INTERNAL_TOP_EXTERNAL_BOTTOM -> "Основной экран смартфона - Верхний (игра), Внешний монитор - Нижний (тач)"
-                                        DualScreenPreset.INTERNAL_BOTTOM_EXTERNAL_TOP -> "Основной экран смартфона - Нижний (тач в руках), Внешний монитор - Верхний (игра)"
+                                        DualScreenPreset.OFF -> stringResource(R.string.v870_presets_desc_off)
+                                        DualScreenPreset.INTERNAL_TOP_EXTERNAL_BOTTOM -> stringResource(R.string.v870_presets_desc_top_ext_bot)
+                                        DualScreenPreset.INTERNAL_BOTTOM_EXTERNAL_TOP -> stringResource(R.string.v870_presets_desc_bot_ext_top)
                                     }
                                     ConsoleRow(
                                         label = label,
@@ -319,7 +319,7 @@ fun ConsolePresetsOverlay(
                                 }
 
                                 Spacer(Modifier.height(4.dp))
-                                ConsoleSectionLabel("Масштабирование")
+                                ConsoleSectionLabel(stringResource(R.string.v870_presets_sec_scaling))
 
                                 ConsoleToggleRow(
                                     label = stringResource(R.string.keep_ds_ratio),
@@ -338,7 +338,7 @@ fun ConsolePresetsOverlay(
                                 val fillEnabled = presetSelected && (keepAspectRatio || integerScaleEnabled)
                                 ConsoleRow(
                                     label = stringResource(R.string.dual_screen_fill_area_button),
-                                    subtitle = "Настройка заполнения пространства для обоих экранов",
+                                    subtitle = stringResource(R.string.v870_presets_sub_fill),
                                     icon = Icons.Filled.FitScreen,
                                     enabled = fillEnabled,
                                     onClick = { screen = PresetsScreen.FILL_AREA },
@@ -347,7 +347,7 @@ fun ConsolePresetsOverlay(
                                 }
                                 ConsoleRow(
                                     label = stringResource(R.string.dual_screen_vertical_alignment_button),
-                                    subtitle = "Точное позиционирование кадров (сверху, по центру, снизу)",
+                                    subtitle = stringResource(R.string.v870_presets_sub_valign),
                                     icon = Icons.Filled.AspectRatio,
                                     enabled = fillEnabled,
                                     onClick = { screen = PresetsScreen.VERTICAL_ALIGNMENT },

@@ -2455,7 +2455,7 @@ void DSi::Set_SCFG_Clock9(u16 val)
     SCFG_Clock9 = val & 0x0187;
 
     const u32 baseShift = (SCFG_Clock9 & (1<<0)) ? 2u : 1u;
-    ARM9ClockShift = std::max<u32>(baseShift, std::min<u32>(3u, 1u + ARM9OverclockShift));
+    ARM9ClockShift = std::min<u32>(3u, baseShift + ARM9OverclockShift);
 
     ARM9Timestamp <<= ARM9ClockShift;
     ARM9Target    <<= ARM9ClockShift;

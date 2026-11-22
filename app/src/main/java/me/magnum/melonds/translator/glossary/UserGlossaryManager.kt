@@ -3,15 +3,19 @@ package me.magnum.melonds.translator.glossary
 import android.content.Context
 import android.os.Environment
 import android.util.Log
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import me.magnum.melonds.translator.grammar.Gender
 import me.magnum.melonds.translator.grammar.RussianGrammarAndDeclensionEngine
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.FileOutputStream
 import java.text.Normalizer
 import java.util.concurrent.ConcurrentHashMap
 import java.util.regex.Matcher
@@ -38,18 +42,34 @@ class UserGlossaryManager(
     )
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val ioMutex = Mutex()
     private val globalEntries = ConcurrentHashMap<String, GlossaryEntry>()
     private val gameEntries = ConcurrentHashMap<String, GlossaryEntry>()
 
+    @Volatile
     private var activeGameKey: String = "global"
+    @Volatile
+    private var gameLoadGen: Long = 0L
+    @Volatile
+    private var globalLoadGate: CompletableDeferred<Unit> = CompletableDeferred()
+    @Volatile
+    private var gameLoadGate: CompletableDeferred<Unit> = CompletableDeferred<Unit>().apply { complete(Unit) }
 
     private val primaryBaseDir = File("/storage/emulated/0/STORM DS/translator/dictionaries")
     private val fallbackBaseDir by lazy { File(context.filesDir, "translator/dictionaries") }
 
     init {
+        val initGlobalGate = globalLoadGate
+        val initGameGen = gameLoadGen
         scope.launch {
-            ensureDirectories()
-            loadDictionariesInternal()
+            try {
+                ioMutex.withLock {
+                    ensureDirectories()
+                    loadDictionariesInternal(initGameGen)
+                }
+            } finally {
+                initGlobalGate.complete(Unit)
+            }
         }
     }
 
@@ -84,36 +104,59 @@ class UserGlossaryManager(
         return getDictionaryFile(if (isGameSpecific) activeGameKey else "global").absolutePath
     }
 
+    @Synchronized
     fun setGameKey(gameKey: String?) {
         val sanitized = sanitizeKey(gameKey ?: "global")
         if (sanitized != activeGameKey) {
             activeGameKey = sanitized
+            val gen = ++gameLoadGen
+            val gate = CompletableDeferred<Unit>()
+            gameLoadGate = gate
             gameEntries.clear()
             if (sanitized != "global") {
                 scope.launch {
-                    ensureDirectories()
-                    val loaded = HashMap<String, GlossaryEntry>()
-                    loadEntriesFromFile(getDictionaryFile(sanitized), loaded)
-                    if (activeGameKey == sanitized) {
-                        for ((k, v) in loaded) {
-                            gameEntries.putIfAbsent(k, v)
+                    try {
+                        ioMutex.withLock {
+                            ensureDirectories()
+                            val loaded = HashMap<String, GlossaryEntry>()
+                            loadEntriesFromFile(getDictionaryFile(sanitized), loaded)
+                            if (gameLoadGen == gen && activeGameKey == sanitized) {
+                                for ((k, v) in loaded) {
+                                    gameEntries.putIfAbsent(k, v)
+                                }
+                            }
                         }
+                    } finally {
+                        gate.complete(Unit)
                     }
                 }
+            } else {
+                gate.complete(Unit)
             }
         }
     }
 
     fun getActiveGameKey(): String = activeGameKey
 
+    @Synchronized
     fun loadDictionaries() {
+        val gGate = CompletableDeferred<Unit>().also { globalLoadGate = it }
+        val gmGate = CompletableDeferred<Unit>().also { gameLoadGate = it }
+        val gen = ++gameLoadGen
         scope.launch {
-            ensureDirectories()
-            loadDictionariesInternal()
+            try {
+                ioMutex.withLock {
+                    ensureDirectories()
+                    loadDictionariesInternal(gen)
+                }
+            } finally {
+                gGate.complete(Unit)
+                gmGate.complete(Unit)
+            }
         }
     }
 
-    private fun loadDictionariesInternal() {
+    private fun loadDictionariesInternal(expectedGameGen: Long) {
         val currentKey = activeGameKey
         val loadedGlobal = HashMap<String, GlossaryEntry>()
         loadEntriesFromFile(getDictionaryFile("global"), loadedGlobal)
@@ -124,7 +167,7 @@ class UserGlossaryManager(
         if (currentKey != "global") {
             val loadedGame = HashMap<String, GlossaryEntry>()
             loadEntriesFromFile(getDictionaryFile(currentKey), loadedGame)
-            if (activeGameKey == currentKey) {
+            if (gameLoadGen == expectedGameGen && activeGameKey == currentKey) {
                 for ((k, v) in loadedGame) {
                     gameEntries.putIfAbsent(k, v)
                 }
@@ -195,7 +238,10 @@ class UserGlossaryManager(
 
     fun getGameEntries(): List<GlossaryEntry> = gameEntries.values.toList()
 
-    fun isGameSpecific(sourceTerm: String): Boolean {
+    fun isGameSpecific(sourceTerm: String, caseSensitive: Boolean? = null): Boolean {
+        if (caseSensitive != null) {
+            return gameEntries.containsKey(normalizeTermKey(sourceTerm, caseSensitive))
+        }
         val exactKey = normalizeTermKey(sourceTerm, true)
         val lowerKey = normalizeTermKey(sourceTerm, false)
         return gameEntries.containsKey(exactKey) || gameEntries.containsKey(lowerKey)
@@ -225,18 +271,19 @@ class UserGlossaryManager(
         val oppositeKey = normalizeTermKey(cleanSource, !entry.caseSensitive)
         val validEntry = entry.copy(sourceTerm = cleanSource, targetTerm = cleanTarget)
 
-        if (isGameSpecific && activeGameKey != "global") {
+        val currentKey = activeGameKey
+        if (isGameSpecific && currentKey != "global") {
             if (oppositeKey != normalizedKey && gameEntries[oppositeKey]?.sourceTerm?.equals(cleanSource, ignoreCase = true) == true) {
                 gameEntries.remove(oppositeKey)
             }
             gameEntries[normalizedKey] = validEntry
-            saveToFileAsync(getDictionaryFile(activeGameKey), gameEntries.values.toList(), activeGameKey)
+            saveScopeAsync(isGame = true, expectedGameKey = currentKey)
         } else {
             if (oppositeKey != normalizedKey && globalEntries[oppositeKey]?.sourceTerm?.equals(cleanSource, ignoreCase = true) == true) {
                 globalEntries.remove(oppositeKey)
             }
             globalEntries[normalizedKey] = validEntry
-            saveToFileAsync(getDictionaryFile("global"), globalEntries.values.toList(), "global")
+            saveScopeAsync(isGame = false, expectedGameKey = "global")
         }
 
         // Evict affected cached translations immediately
@@ -253,17 +300,18 @@ class UserGlossaryManager(
     ) {
         val cleanOld = oldSourceTerm.trim()
         if (cleanOld.isNotEmpty()) {
+            val currentKey = activeGameKey
             val oldKey = normalizeTermKey(cleanOld, oldCaseSensitive)
             val oldLowerKey = normalizeTermKey(cleanOld, false)
             val oldExactKey = normalizeTermKey(cleanOld, true)
-            val oldTargetGame = oldGameSpecific && activeGameKey != "global"
-            val newTargetGame = newGameSpecific && activeGameKey != "global"
+            val oldTargetGame = oldGameSpecific && currentKey != "global"
+            val newTargetGame = newGameSpecific && currentKey != "global"
             val oldMap = if (oldTargetGame) gameEntries else globalEntries
             val removed = oldMap.remove(oldKey) ?: oldMap.remove(oldExactKey) ?: oldMap.remove(oldLowerKey)
             if (removed != null) {
                 if (oldTargetGame != newTargetGame) {
-                    val oldScopeKey = if (oldTargetGame) activeGameKey else "global"
-                    saveToFileAsync(getDictionaryFile(oldScopeKey), oldMap.values.toList(), oldScopeKey)
+                    val oldScopeKey = if (oldTargetGame) currentKey else "global"
+                    saveScopeAsync(isGame = oldTargetGame, expectedGameKey = oldScopeKey)
                 }
                 onCacheInvalidate?.invoke(cleanOld)
             }
@@ -282,17 +330,18 @@ class UserGlossaryManager(
         val lowerKey = normalizeTermKey(cleanSource, false)
 
         var removed = false
-        if (isGameSpecific && activeGameKey != "global") {
+        val currentKey = activeGameKey
+        if (isGameSpecific && currentKey != "global") {
             val removedEntry = gameEntries.remove(exactKey) ?: gameEntries.remove(lowerKey)
             if (removedEntry != null) {
                 removed = true
-                saveToFileAsync(getDictionaryFile(activeGameKey), gameEntries.values.toList(), activeGameKey)
+                saveScopeAsync(isGame = true, expectedGameKey = currentKey)
             }
         } else {
             val removedEntry = globalEntries.remove(exactKey) ?: globalEntries.remove(lowerKey)
             if (removedEntry != null) {
                 removed = true
-                saveToFileAsync(getDictionaryFile("global"), globalEntries.values.toList(), "global")
+                saveScopeAsync(isGame = false, expectedGameKey = "global")
             }
         }
 
@@ -301,30 +350,55 @@ class UserGlossaryManager(
         }
     }
 
-    private fun saveToFileAsync(file: File, entries: List<GlossaryEntry>, gameKey: String) {
+    private fun saveScopeAsync(isGame: Boolean, expectedGameKey: String) {
+        val gate = if (isGame) gameLoadGate else globalLoadGate
+        val gen = gameLoadGen
         scope.launch {
-            try {
-                ensureDirectories()
-                val json = JSONObject()
-                json.put("version", 1)
-                json.put("gameKey", gameKey)
-                json.put("exportedAt", System.currentTimeMillis())
-
-                val array = JSONArray()
-                for (entry in entries) {
-                    val obj = JSONObject()
-                    obj.put("sourceTerm", entry.sourceTerm)
-                    obj.put("targetTerm", entry.targetTerm)
-                    obj.put("caseSensitive", entry.caseSensitive)
-                    obj.put("gender", entry.gender.name)
-                    array.put(obj)
+            gate.await()
+            ioMutex.withLock {
+                if (isGame && (gameLoadGen != gen || activeGameKey != expectedGameKey)) {
+                    return@withLock
                 }
-                json.put("entries", array)
+                val entries = if (isGame) gameEntries.values.toList() else globalEntries.values.toList()
+                val file = getDictionaryFile(expectedGameKey)
+                try {
+                    ensureDirectories()
+                    val json = JSONObject()
+                    json.put("version", 1)
+                    json.put("gameKey", expectedGameKey)
+                    json.put("exportedAt", System.currentTimeMillis())
 
-                file.writeText(json.toString(2), Charsets.UTF_8)
-            } catch (e: Throwable) {
-                Log.e(TAG, "Failed to save dictionary to ${file.name}", e)
+                    val array = JSONArray()
+                    for (entry in entries) {
+                        val obj = JSONObject()
+                        obj.put("sourceTerm", entry.sourceTerm)
+                        obj.put("targetTerm", entry.targetTerm)
+                        obj.put("caseSensitive", entry.caseSensitive)
+                        obj.put("gender", entry.gender.name)
+                        array.put(obj)
+                    }
+                    json.put("entries", array)
+
+                    writeTextAtomically(file, json.toString(2))
+                } catch (e: Throwable) {
+                    Log.e(TAG, "Failed to save dictionary to ${file.name}", e)
+                }
             }
+        }
+    }
+
+    private fun writeTextAtomically(file: File, text: String) {
+        val parent = file.parentFile ?: return
+        if (!parent.exists()) parent.mkdirs()
+        val tempFile = File(parent, "${file.name}.${System.nanoTime()}.tmp")
+        FileOutputStream(tempFile).use { stream ->
+            stream.write(text.toByteArray(Charsets.UTF_8))
+            stream.flush()
+            runCatching { stream.fd.sync() }
+        }
+        if (!tempFile.renameTo(file)) {
+            tempFile.copyTo(file, overwrite = true)
+            tempFile.delete()
         }
     }
 

@@ -1917,6 +1917,25 @@ void RetroAchievementsManager::SetSubmissionTransportSuspended(bool suspended)
     submissionTransportSuspended.store(suspended, std::memory_order_release);
 }
 
+void RetroAchievementsManager::SetHardcoreEnabled(bool enabled)
+{
+    std::unique_lock lock(runtimeLock);
+    if (runtimeBridgeConfig.has_value())
+    {
+        runtimeBridgeConfig->hardcoreEnabled = enabled;
+    }
+    if (rcClientRuntime != nullptr)
+    {
+        rc_client_set_hardcore_enabled(rcClientRuntime, enabled ? 1 : 0);
+    }
+    melonDS::Platform::Log(
+        melonDS::Platform::LogLevel::Info,
+        "[RAClient] hardcore_updated enabled=%d runtime_active=%d\n",
+        enabled ? 1 : 0,
+        rcClientRuntime != nullptr ? 1 : 0
+    );
+}
+
 void RetroAchievementsManager::RcClientEventHandler(const rc_client_event_t* event, rc_client_t* client)
 {
     if (!event || !client)

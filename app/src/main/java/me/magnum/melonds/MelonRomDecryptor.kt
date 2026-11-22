@@ -3,10 +3,14 @@ package me.magnum.melonds
 import android.content.Context
 import android.net.Uri
 import android.os.Build
+import android.os.ParcelFileDescriptor
+import android.provider.DocumentsContract
 import android.provider.OpenableColumns
+import android.system.Os
 import android.util.Log
 import androidx.documentfile.provider.DocumentFile
 import me.magnum.melonds.domain.model.rom.Rom
+import me.magnum.melonds.impl.NdsRomCache
 import me.magnum.melonds.utils.FileUtils
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
@@ -31,7 +35,7 @@ import java.util.zip.ZipOutputStream
 object MelonRomDecryptor {
     private const val TAG = "MelonRomDecryptor"
     private val RAW_ROM_EXTENSIONS = setOf("nds", "dsi", "srl", "app", "ids")
-    private val ZIP_ROM_EXTENSIONS = setOf("nds", "dsi", "srl")
+    private val ZIP_ROM_EXTENSIONS = setOf("nds", "dsi", "srl", "ids")
     private val SKIPPED_ARCHIVE_EXTENSIONS = setOf("7z", "rar")
 
     private val CRC16_TABLE = IntArray(256).apply {
@@ -105,7 +109,7 @@ object MelonRomDecryptor {
             return checkContainerEncryption(context, uri, path, ext)
         }
 
-        if (ext == "zip") {
+        if (ext == "zip" || ext == "ndz") {
             return checkZipEncryption(context, uri, path)
         }
 
@@ -152,7 +156,7 @@ object MelonRomDecryptor {
             return decryptContainerRom(context, uri, path, ext, progressCallback)
         }
 
-        if (ext == "zip") {
+        if (ext == "zip" || ext == "ndz") {
             return decryptZipRom(context, uri, path, progressCallback)
         }
 
@@ -287,7 +291,7 @@ object MelonRomDecryptor {
                 return DecryptResult.ERROR_VALIDATION_FAILED
             }
 
-            if (writeFileToTarget(context, uri, path, tempRom)) {
+            if (writeSiblingNdsFromContainer(context, uri, path, tempRom)) {
                 DecryptResult.SUCCESS
             } else {
                 DecryptResult.ERROR_WRITING_FILE
@@ -363,7 +367,7 @@ object MelonRomDecryptor {
                 if (read < 0x160) return null
             }
 
-            if (!isValidRomHeader(romHeader) && romHeader[0x12] == 0.toByte()) {
+            if (!isValidRomHeader(romHeader)) {
                 return null
             }
 
@@ -410,7 +414,7 @@ object MelonRomDecryptor {
                 if (read < 0x160) return null
             }
 
-            if (!isValidRomHeader(romHeader) && romHeader[0x12] == 0.toByte()) {
+            if (!isValidRomHeader(romHeader)) {
                 return null
             }
 
@@ -505,6 +509,7 @@ object MelonRomDecryptor {
             }
 
             if (writeFileToTarget(context, uri, path, tempZip)) {
+                NdsRomCache.invalidateCachedRom(context, uri)
                 DecryptResult.SUCCESS
             } else {
                 DecryptResult.ERROR_WRITING_FILE
@@ -619,11 +624,134 @@ object MelonRomDecryptor {
         }
     }
 
+    private fun writeSiblingNdsFromContainer(
+        context: Context,
+        uri: Uri,
+        path: String?,
+        validatedSource: File,
+    ): Boolean {
+        if (!validatedSource.exists() || validatedSource.length() == 0L) {
+            return false
+        }
+
+        val baseName = resolveBaseName(context, uri, path)
+        val siblingName = "$baseName.nds"
+
+        if (path != null) {
+            val sourceFile = File(path)
+            val parentDir = sourceFile.parentFile
+            if (parentDir != null && parentDir.isDirectory && parentDir.canWrite()) {
+                val targetFile = File(parentDir, siblingName)
+                val siblingTemp = File(parentDir, ".${siblingName}.storm_stage_${System.currentTimeMillis()}.tmp")
+                val staged = runCatching {
+                    FileInputStream(validatedSource).use { input ->
+                        FileOutputStream(siblingTemp).use { output ->
+                            input.copyTo(output)
+                            output.fd.sync()
+                        }
+                    }
+                    replaceFileAtomically(siblingTemp, targetFile)
+                }.getOrDefault(false)
+                if (staged) {
+                    return true
+                }
+                runCatching { siblingTemp.delete() }
+            }
+        }
+
+        val parentDoc = resolveSafParentDirectory(context, uri)
+        if (parentDoc != null && parentDoc.canWrite()) {
+            val targetDoc = parentDoc.findFile(siblingName)
+                ?: parentDoc.createFile("application/octet-stream", siblingName)
+            if (targetDoc != null) {
+                val outStream = openTruncatedOutputStream(context, targetDoc.uri)
+                if (outStream != null) {
+                    val wrote = runCatching {
+                        outStream.use { out ->
+                            FileInputStream(validatedSource).use { inStream ->
+                                inStream.copyTo(out)
+                            }
+                            out.flush()
+                        }
+                        true
+                    }.getOrElse { e ->
+                        Log.e(TAG, "Failed writing sibling .nds to SAF document $siblingName: ${e.message}")
+                        false
+                    }
+                    if (wrote) {
+                        return true
+                    }
+                }
+            }
+        }
+
+        Log.e(TAG, "Cannot create sibling $siblingName for container URI $uri; refusing to overwrite container")
+        return false
+    }
+
+    private fun resolveSafParentDirectory(context: Context, uri: Uri): DocumentFile? {
+        if (!DocumentsContract.isTreeUri(uri)) {
+            return null
+        }
+        return runCatching {
+            val treeRoot = DocumentFile.fromTreeUri(context, uri) ?: return@runCatching null
+            val treeId = DocumentsContract.getTreeDocumentId(uri)
+            val docId = if (DocumentsContract.isDocumentUri(context, uri)) {
+                DocumentsContract.getDocumentId(uri)
+            } else {
+                treeId
+            }
+            val parentDocId = if (docId.contains('/')) docId.substringBeforeLast('/') else treeId
+            val relSegments = if (parentDocId.startsWith("$treeId/")) {
+                parentDocId.removePrefix("$treeId/").split('/').filter { it.isNotEmpty() }
+            } else {
+                emptyList()
+            }
+            var dirDoc: DocumentFile? = treeRoot
+            for (segment in relSegments) {
+                dirDoc = dirDoc?.findFile(segment) ?: return@runCatching null
+            }
+            dirDoc
+        }.getOrNull()
+    }
+
+    private fun resolveBaseName(context: Context, uri: Uri, path: String?): String {
+        val candidates = mutableListOf<String>()
+        if (!path.isNullOrBlank()) candidates.add(File(path).name)
+        runCatching { DocumentFile.fromSingleUri(context, uri)?.name }.getOrNull()?.let { candidates.add(it) }
+        runCatching {
+            context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (idx >= 0 && !cursor.isNull(idx)) {
+                        cursor.getString(idx)?.let { candidates.add(it) }
+                    }
+                }
+            }
+        }
+        uri.lastPathSegment?.let { candidates.add(it.substringAfterLast('/')) }
+        for (name in candidates) {
+            val base = name.substringBeforeLast('.').trim()
+            if (base.isNotEmpty()) {
+                return base
+            }
+        }
+        return "decrypted_rom"
+    }
+
     private fun openTruncatedOutputStream(context: Context, uri: Uri): OutputStream? {
-        return runCatching { context.contentResolver.openOutputStream(uri, "wt") }.getOrNull()
-            ?: runCatching { context.contentResolver.openOutputStream(uri, "rwt") }.getOrNull()
-            ?: runCatching { context.contentResolver.openOutputStream(uri, "w") }.getOrNull()
-            ?: runCatching { context.contentResolver.openOutputStream(uri) }.getOrNull()
+        runCatching { context.contentResolver.openOutputStream(uri, "wt") }.getOrNull()?.let { return it }
+        runCatching { context.contentResolver.openOutputStream(uri, "rwt") }.getOrNull()?.let { return it }
+        return runCatching {
+            val pfd = context.contentResolver.openFileDescriptor(uri, "rw") ?: return@runCatching null
+            try {
+                Os.ftruncate(pfd.fileDescriptor, 0L)
+                ParcelFileDescriptor.AutoCloseOutputStream(pfd)
+            } catch (t: Throwable) {
+                runCatching { pfd.close() }
+                throw t
+            }
+        }.getOrNull()
     }
 
     private fun replaceFileAtomically(source: File, target: File): Boolean {

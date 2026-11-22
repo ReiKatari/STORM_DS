@@ -111,9 +111,11 @@ namespace MelonDSAndroid {
     extern AndroidCameraHandler* cameraHandler;
     extern std::string internalFilesDir;
     extern std::shared_ptr<MelonEventMessenger> eventMessenger;
+    extern std::mutex mpInterfaceMutex;
     extern bool ensureOpenGlContext();
 
     extern void setConfiguration(EmulatorConfiguration emulatorConfiguration);
+    extern std::shared_ptr<EmulatorConfiguration> GetConfigurationSnapshot();
     extern std::shared_ptr<EmulatorConfiguration> cloneEmulatorConfiguration(const EmulatorConfiguration& source);
     extern std::shared_ptr<MelonInstance> GetInstanceSnapshot();
     extern void setup(AndroidCameraHandler* androidCameraHandler, std::shared_ptr<MelonEventMessenger> androidEventMessenger, u32* screenshotBufferPointer, int instanceId);
@@ -135,6 +137,7 @@ namespace MelonDSAndroid {
     extern int32_t discardPendingRetroAchievementsSubmissions(
         const std::vector<uint64_t>& expectedSubmissionIds);
     extern void setRetroAchievementsSubmissionTransportSuspended(bool suspended);
+    extern void setRetroAchievementsHardcoreEnabled(bool enabled);
     extern Renderer getCurrentRenderer();
     extern void updateEmulatorConfiguration(std::unique_ptr<EmulatorConfiguration> emulatorConfiguration);
 

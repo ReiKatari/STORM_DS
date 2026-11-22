@@ -169,6 +169,12 @@ bool LAN::StartDiscovery()
 {
     if (!Inited) return false;
 
+    if (DiscoverySocket != INVALID_SOCKET)
+    {
+        Active = true;
+        return true;
+    }
+
     int res;
 
     DiscoverySocket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -177,6 +183,9 @@ bool LAN::StartDiscovery()
         DiscoverySocket = INVALID_SOCKET;
         return false;
     }
+
+    int opt_true = 1;
+    setsockopt(DiscoverySocket, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt_true, sizeof(int));
 
     sockaddr_in_t saddr;
     memset(&saddr, 0, sizeof(saddr));
@@ -191,7 +200,6 @@ bool LAN::StartDiscovery()
         return false;
     }
 
-    int opt_true = 1;
     res = setsockopt(DiscoverySocket, SOL_SOCKET, SO_BROADCAST, (const char*)&opt_true, sizeof(int));
     if (res < 0)
     {

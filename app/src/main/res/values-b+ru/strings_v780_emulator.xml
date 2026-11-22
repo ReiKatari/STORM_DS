@@ -11,7 +11,7 @@
     <string name="pause_session_duration_format">Сессия: %s</string>
     <string name="pause_session_less_than_minute">&lt; 1 мин</string>
     <string name="pause_session_minutes">%d мин</string>
-    <string name="pause_session_hours_minutes">%d ч %d мин</string>
+    <string name="pause_session_hours_minutes">%1$d ч %2$d мин</string>
     <string name="battery_format">%d%%</string>
     <string name="fast_forward_speed_unlimited">Без ограничений (макс.)</string>
     <string name="solar_preset_0" formatted="false">0% Тень</string>

@@ -424,7 +424,7 @@ object SpeakerAndGenderResolver {
 
         // Nameplate must sit above or slightly overlapping the top of dialogue box
         val isAbove = cBox.bottom <= dBox.top + (dBox.height() * 0.35f) && cBox.top < dBox.bottom
-        val isAlignedLeft = cBox.left >= dBox.left - 48f && cBox.left <= dBox.right
+        val isAlignedLeft = cBox.left >= dBox.left - 0.12f && cBox.left <= dBox.right
 
         return isAbove && isAlignedLeft
     }

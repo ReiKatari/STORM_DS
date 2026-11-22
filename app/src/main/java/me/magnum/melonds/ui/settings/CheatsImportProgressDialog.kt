@@ -55,11 +55,15 @@ class CheatsImportProgressDialog : DialogFragment() {
                             binding.textCheatImportItemName.text = it.ongoingItemName
                         }
                         CheatImportProgress.CheatImportStatus.FINISHED -> {
-                            Toast.makeText(requireContext(), R.string.cheats_import_finished, Toast.LENGTH_LONG).show()
+                            if (sawActiveImport) {
+                                Toast.makeText(requireContext(), R.string.cheats_import_finished, Toast.LENGTH_LONG).show()
+                            }
                             dismiss()
                         }
                         CheatImportProgress.CheatImportStatus.FAILED -> {
-                            Toast.makeText(requireContext(), R.string.cheats_import_failed, Toast.LENGTH_LONG).show()
+                            if (sawActiveImport) {
+                                Toast.makeText(requireContext(), R.string.cheats_import_failed, Toast.LENGTH_LONG).show()
+                            }
                             dismiss()
                         }
                         CheatImportProgress.CheatImportStatus.NOT_IMPORTING -> {

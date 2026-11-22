@@ -1,7 +1,12 @@
 package me.magnum.melonds.di
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.database.sqlite.SQLiteDatabase
+import android.os.Build
+import android.os.Environment
+import androidx.core.content.ContextCompat
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import dagger.Module
@@ -44,7 +49,8 @@ object DatabaseModule {
         // and eliminate pre/post-permission database switching. Perform a one-time safe copy from legacy external DB if present.
         val internalDb = context.getDatabasePath(DB_NAME)
         val markerFile = internalDb?.parentFile?.let { File(it, LEGACY_MIGRATION_MARKER) }
-        if (internalDb != null && (markerFile == null || !markerFile.exists())) {
+        val hasStorageAccess = hasStorageReadAccess(context)
+        if (internalDb != null && hasStorageAccess && (markerFile == null || !markerFile.exists())) {
             val internalExists = internalDb.exists()
             val internalIsEmpty = !internalExists || isInternalDatabaseEmpty(internalDb)
             if (!internalIsEmpty) {
@@ -53,7 +59,7 @@ object DatabaseModule {
                     markerFile?.writeText("populated")
                 }
             } else {
-                val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
+                val extRoot = runCatching { Environment.getExternalStorageDirectory() }.getOrNull()
                 if (extRoot != null) {
                     val legacyDbDir = File(File(extRoot, "STORM DS"), "database")
                     val legacyDbFile = File(legacyDbDir, DB_NAME)
@@ -79,6 +85,11 @@ object DatabaseModule {
                             runCatching { File(internalDb.parentFile, "$DB_NAME-shm").delete() }
                             runCatching { File(internalDb.parentFile, "$DB_NAME-wal").delete() }
                         }
+                    } else if (!legacyDbFile.exists()) {
+                        runCatching {
+                            markerFile?.parentFile?.mkdirs()
+                            markerFile?.writeText("none")
+                        }
                     }
                 }
             }
@@ -94,18 +105,43 @@ object DatabaseModule {
             .build()
     }
 
+    private fun hasStorageReadAccess(context: Context): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Environment.isExternalStorageManager()
+        } else {
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.READ_EXTERNAL_STORAGE,
+            ) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
     private fun isInternalDatabaseEmpty(dbFile: File): Boolean {
         if (!dbFile.exists() || dbFile.length() == 0L) return true
+        val walFile = File(dbFile.parentFile, "$DB_NAME-wal")
+        val hasWalData = walFile.exists() && walFile.length() > 0L
         return runCatching {
-            SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
-                val tablesToCheck = listOf("game", "cheat_database", "cheat", "play_stats", "ra_game")
-                for (table in tablesToCheck) {
+            val openFlags = if (hasWalData) SQLiteDatabase.OPEN_READWRITE else SQLiteDatabase.OPEN_READONLY
+            SQLiteDatabase.openDatabase(dbFile.absolutePath, null, openFlags).use { db ->
+                if (hasWalData) {
+                    runCatching {
+                        db.rawQuery("PRAGMA wal_checkpoint(PASSIVE)", null).use { it.moveToFirst() }
+                    }
+                }
+                val tableQueries = listOf(
+                    "game" to "SELECT COUNT(*) FROM game",
+                    "cheat_database" to "SELECT COUNT(*) FROM cheat_database WHERE id != 0",
+                    "cheat" to "SELECT COUNT(*) FROM cheat",
+                    "play_stats" to "SELECT COUNT(*) FROM play_stats",
+                    "ra_game" to "SELECT COUNT(*) FROM ra_game",
+                )
+                for ((table, countSql) in tableQueries) {
                     val tableExists = db.rawQuery(
                         "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
                         arrayOf(table),
                     ).use { cursor -> cursor.moveToFirst() }
                     if (tableExists) {
-                        val count = db.rawQuery("SELECT COUNT(*) FROM $table", null).use { cursor ->
+                        val count = db.rawQuery(countSql, null).use { cursor ->
                             if (cursor.moveToFirst()) cursor.getLong(0) else 0L
                         }
                         if (count > 0L) return@use false
@@ -113,7 +149,7 @@ object DatabaseModule {
                 }
                 true
             }
-        }.getOrDefault(true)
+        }.getOrDefault(false)
     }
 
     @Provides

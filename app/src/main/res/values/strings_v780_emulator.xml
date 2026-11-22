@@ -11,7 +11,7 @@
     <string name="pause_session_duration_format">Session: %s</string>
     <string name="pause_session_less_than_minute">&lt; 1 min</string>
     <string name="pause_session_minutes">%d min</string>
-    <string name="pause_session_hours_minutes">%d h %d min</string>
+    <string name="pause_session_hours_minutes">%1$d h %2$d min</string>
     <string name="battery_format">%d%%</string>
     <string name="fast_forward_speed_unlimited">Unlimited (max)</string>
     <string name="solar_preset_0" formatted="false">0% Shadow</string>

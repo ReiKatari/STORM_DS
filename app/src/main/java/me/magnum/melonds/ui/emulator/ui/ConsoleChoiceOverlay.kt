@@ -147,7 +147,7 @@ fun ConsoleChoiceOverlay(
                                 overflow = TextOverflow.Ellipsis,
                             )
                             Text(
-                                text = "Выберите вариант",
+                                text = stringResource(R.string.v870_overlay_choose_option),
                                 color = colors.text3,
                                 fontSize = 10.5.sp,
                                 maxLines = 1,
@@ -174,7 +174,7 @@ fun ConsoleChoiceOverlay(
                                     )
                                     Spacer(Modifier.width(4.dp))
                                     Text(
-                                        text = "В игру",
+                                        text = stringResource(R.string.v870_overlay_resume_game),
                                         color = colors.green,
                                         fontFamily = SpaceGrotesk,
                                         fontSize = 11.5.sp,

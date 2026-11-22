@@ -194,7 +194,7 @@ fun JusrcheatAllGamesTab(
                         settingsRepository?.setCheatsEnabled(true)
                         onSwitchToSoftcore?.invoke()
                         onCheatAttached()
-                        Toast.makeText(context, "Режим Softcore включён. Чит-коды активированы!", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.v870_cheats_softcore_toast), Toast.LENGTH_SHORT).show()
                     }
                     .padding(horizontal = 10.dp, vertical = 8.dp),
             ) {
@@ -208,14 +208,14 @@ fun JusrcheatAllGamesTab(
                     Spacer(Modifier.width(8.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Активен режим Hardcore - читы заблокированы",
+                            text = stringResource(R.string.v870_cheats_hardcore_blocked_title),
                             color = colors.text,
                             fontFamily = SpaceGrotesk,
                             fontSize = 11.5.sp,
                             fontWeight = FontWeight.Bold,
                         )
                         Text(
-                            text = "Нажмите здесь, чтобы переключить в Softcore и разрешить чит-коды",
+                            text = stringResource(R.string.v870_cheats_hardcore_blocked_hint),
                             color = colors.text2,
                             fontFamily = SpaceGrotesk,
                             fontSize = 10.sp,
@@ -342,7 +342,7 @@ fun JusrcheatAllGamesTab(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "${filteredGames.size} / ${allGames.size} игр",
+                    text = stringResource(R.string.v870_jusrcheat_games_counter, filteredGames.size, allGames.size),
                     color = colors.text3,
                     fontFamily = WatermelonMono,
                     fontSize = 10.sp
@@ -370,7 +370,7 @@ fun JusrcheatAllGamesTab(
                     CircularProgressIndicator(color = colors.green, modifier = Modifier.size(36.dp))
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        text = "Загрузка 4079 игр базы Jusrcheat...",
+                        text = stringResource(R.string.v870_jusrcheat_loading_db),
                         color = colors.text2,
                         fontFamily = SpaceGrotesk,
                         fontSize = 12.sp
@@ -499,7 +499,7 @@ fun JusrcheatAllGamesTab(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(
-                                            text = "${gameDetails.totalCheatsCount} кодов доступно",
+                                            text = stringResource(R.string.v870_cheats_available_for_link, gameDetails.totalCheatsCount),
                                             color = colors.text2,
                                             fontFamily = WatermelonMono,
                                             fontSize = 10.sp
@@ -530,7 +530,7 @@ fun JusrcheatAllGamesTab(
                                                     )
                                                     Spacer(Modifier.width(3.dp))
                                                     Text(
-                                                        text = "Добавить код",
+                                                        text = stringResource(R.string.v870_jusrcheat_add_code),
                                                         color = colors.green,
                                                         fontFamily = SpaceGrotesk,
                                                         fontSize = 10.sp,
@@ -563,7 +563,7 @@ fun JusrcheatAllGamesTab(
                                                         .padding(horizontal = 6.dp, vertical = 3.dp)
                                                 ) {
                                                     Text(
-                                                        text = "Подключить всё",
+                                                        text = stringResource(R.string.v870_jusrcheat_connect_all),
                                                         color = colors.green,
                                                         fontFamily = SpaceGrotesk,
                                                         fontSize = 10.sp,
@@ -735,6 +735,10 @@ fun JusrcheatAllGamesTab(
                             )
                             if (romInfo != null) {
                                 coroutineScope.launch {
+                                    settingsRepository?.setCheatsEnabled(true)
+                                    if (isHardcoreActive) {
+                                        onSwitchToSoftcore?.invoke()
+                                    }
                                     jusrcheatRepo.attachCheatToActiveRom(
                                         romInfo = romInfo,
                                         sourceGameId = editingGameId.ifBlank { "CUSTOM" },

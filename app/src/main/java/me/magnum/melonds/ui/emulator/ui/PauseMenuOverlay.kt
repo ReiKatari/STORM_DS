@@ -1,6 +1,8 @@
 package me.magnum.melonds.ui.emulator.ui
 
+import android.content.Context
 import androidx.activity.compose.BackHandler
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -160,21 +162,25 @@ private fun isDestructive(option: PauseMenuOption): Boolean {
 
 private fun needsConfirmation(option: PauseMenuOption): Boolean = isDestructive(option)
 
-private fun formatHoursLabel(duration: Duration): String {
+private fun formatHoursLabel(context: Context, duration: Duration): String {
     val totalMins = duration.inWholeMinutes
     val h = totalMins / 60
     val m = totalMins % 60
-    return if (h > 0) "${h}ч ${m}м" else "${m}м"
+    return if (h > 0) {
+        context.getString(R.string.v870_pause_time_hm, h, m)
+    } else {
+        context.getString(R.string.v870_pause_time_m, m)
+    }
 }
 
 
-private enum class PauseMenuCategory(val titleRu: String, val titleEn: String) {
-    STATES_AND_TIME("СОСТОЯНИЯ И ВРЕМЯ", "STATES AND TIME"),
-    SCREEN_AND_CONTROLS("ЭКРАН И УПРАВЛЕНИЕ", "SCREEN AND CONTROLS"),
-    TOOLS_AND_PROFILE("ИНСТРУМЕНТЫ И ПРОФИЛЬ", "TOOLS AND PROFILE"),
-    SYSTEM("СИСТЕМА", "SYSTEM");
+private enum class PauseMenuCategory(@StringRes val titleRes: Int) {
+    STATES_AND_TIME(R.string.v870_pause_sec_states),
+    SCREEN_AND_CONTROLS(R.string.v870_pause_sec_screen),
+    TOOLS_AND_PROFILE(R.string.v870_pause_sec_tools),
+    SYSTEM(R.string.v870_pause_sec_system);
 
-    fun title(isRu: Boolean): String = if (isRu) titleRu else titleEn
+    fun title(context: Context): String = context.getString(titleRes)
 }
 
 private fun getOptionCategory(option: PauseMenuOption): PauseMenuCategory {
@@ -454,7 +460,7 @@ fun PauseMenuOverlay(
                                         letterSpacing = 0.5.sp,
                                     )
                                 }
-                                val hours = rom?.totalPlayTime?.takeIf { it != Duration.ZERO }?.let { formatHoursLabel(it) }
+                                val hours = rom?.totalPlayTime?.takeIf { it != Duration.ZERO }?.let { formatHoursLabel(context, it) }
                                 if (hours != null) {
                                     Text(
                                         text = hours,
@@ -835,6 +841,7 @@ fun PauseMenuOverlay(
             PauseMenuCustomizerDialog(
                 availableOptions = pauseMenu.options,
                 store = store,
+                isExtendedEnabled = isExtendedPauseMenuEnabled,
                 onDismiss = { showCustomizer = false },
                 onApplied = { customizationVersion++ },
             )

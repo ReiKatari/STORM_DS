@@ -42,12 +42,20 @@ class RomListFragment : Fragment() {
     companion object {
         private const val KEY_ALLOW_ROM_CONFIGURATION = "allow_rom_configuration"
         private const val KEY_ROM_ENABLE_CRITERIA = "rom_enable_criteria"
+        private const val KEY_SHORTCUT_PICKER_MODE = "shortcut_picker_mode"
+        private const val KEY_PENDING_COVER_ROM = "pending_cover_rom"
+        private const val KEY_PENDING_SAVE_IMPORT_ROM = "pending_save_import_rom"
 
-        fun newInstance(allowRomConfiguration: Boolean, enableCriteria: RomEnableCriteria): RomListFragment {
+        fun newInstance(
+            allowRomConfiguration: Boolean,
+            enableCriteria: RomEnableCriteria,
+            isShortcutPickerMode: Boolean = false,
+        ): RomListFragment {
             return RomListFragment().also {
                 it.arguments = bundleOf(
                     KEY_ALLOW_ROM_CONFIGURATION to allowRomConfiguration,
                     KEY_ROM_ENABLE_CRITERIA to enableCriteria.toString(),
+                    KEY_SHORTCUT_PICKER_MODE to isShortcutPickerMode,
                 )
             }
         }
@@ -90,8 +98,31 @@ class RomListFragment : Fragment() {
         }
     }
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        if (savedInstanceState != null) {
+            pendingCoverRom = androidx.core.os.BundleCompat.getParcelable(
+                savedInstanceState,
+                KEY_PENDING_COVER_ROM,
+                RomParcelable::class.java,
+            )?.rom
+            pendingSaveImportRom = androidx.core.os.BundleCompat.getParcelable(
+                savedInstanceState,
+                KEY_PENDING_SAVE_IMPORT_ROM,
+                RomParcelable::class.java,
+            )?.rom
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        pendingCoverRom?.let { outState.putParcelable(KEY_PENDING_COVER_ROM, RomParcelable(it)) }
+        pendingSaveImportRom?.let { outState.putParcelable(KEY_PENDING_SAVE_IMPORT_ROM, RomParcelable(it)) }
+    }
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         val allowRomConfiguration = arguments?.getBoolean(KEY_ALLOW_ROM_CONFIGURATION) ?: true
+        val isShortcutPickerMode = arguments?.getBoolean(KEY_SHORTCUT_PICKER_MODE, false) ?: false
 
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
@@ -119,12 +150,14 @@ class RomListFragment : Fragment() {
                     }
 
                     val topContinueRom = state.continuePlaying.firstOrNull()
-                    androidx.compose.runtime.LaunchedEffect(topContinueRom?.uri, topContinueRom?.lastPlayed) {
-                        if (topContinueRom != null) {
-                            me.magnum.melonds.ui.quickresume.QuickResumeStore.syncFromContinuePlaying(
-                                requireContext(),
-                                topContinueRom,
-                            )
+                    if (!isShortcutPickerMode) {
+                        androidx.compose.runtime.LaunchedEffect(topContinueRom?.uri, topContinueRom?.lastPlayed) {
+                            if (topContinueRom != null) {
+                                me.magnum.melonds.ui.quickresume.QuickResumeStore.syncFromContinuePlaying(
+                                    requireContext(),
+                                    topContinueRom,
+                                )
+                            }
                         }
                     }
 
@@ -133,7 +166,8 @@ class RomListFragment : Fragment() {
                         coverByHash = raCoverByHash,
                         boxArtByUri = boxArtByUri,
                         searchQuery = searchQuery,
-                        allowConfiguration = allowRomConfiguration,
+                        allowConfiguration = allowRomConfiguration && !isShortcutPickerMode,
+                        isShortcutPickerMode = isShortcutPickerMode,
                         scanningStatus = scanningStatus,
                         confirmedAchievementHashes = confirmedAchievementHashes,
                         isRaAuthenticated = isRaAuthenticated,
@@ -142,21 +176,31 @@ class RomListFragment : Fragment() {
                             checkAndLaunch(rom)
                         },
                         onQuickResumeRom = { rom ->
-                            if (state.quickResumeHasSaveState ||
-                                me.magnum.melonds.ui.quickresume.QuickResumeStore.getQuickSaveTimestamp(requireContext(), rom.uri.toString()) != null
+                            if (!isShortcutPickerMode && (state.quickResumeHasSaveState ||
+                                me.magnum.melonds.ui.quickresume.QuickResumeStore.getQuickSaveTimestamp(requireContext(), rom.uri.toString()) != null)
                             ) {
                                 me.magnum.melonds.ui.quickresume.QuickResumeRequest.request(rom.uri)
                             }
                             checkAndLaunch(rom)
                         },
-                        onRomLongPress = { rom -> contextRomUri = rom.uri.toString() },
-                        onRomConfigClick = { rom -> contextRomUri = rom.uri.toString() },
+                        onRomLongPress = { rom ->
+                            if (!isShortcutPickerMode) {
+                                contextRomUri = rom.uri.toString()
+                            }
+                        },
+                        onRomConfigClick = { rom ->
+                            if (!isShortcutPickerMode) {
+                                contextRomUri = rom.uri.toString()
+                            }
+                        },
                         onFilterSelected = { filter -> romListViewModel.setFilter(filter) },
                         onSortSelected = { mode -> romListViewModel.setRomSorting(mode) },
                         onNavigateUp = {},
                         onRefresh = {
                             romListViewModel.refreshRoms()
-                            (activity as? RomListActivity)?.checkForUpdatesManually()
+                            if (!isShortcutPickerMode) {
+                                (activity as? RomListActivity)?.checkForUpdatesManually()
+                            }
                         },
                         onSearchQueryChanged = { query ->
                             romListViewModel.setRomSearchQuery(query)
@@ -179,27 +223,29 @@ class RomListFragment : Fragment() {
                         },
                     )
 
-                    RomContextMenu(
-                        rom = currentContextRom,
-                        onDismiss = { contextRomUri = null },
-                        onToggleFavorite = { rom -> romListViewModel.toggleFavorite(rom) },
-                        onShowDetails = { rom -> openRomDetails(rom) },
-                        onSendSaveFile = { rom -> shareSaveFile(rom) },
-                        onImportSaveFile = { rom -> requestSaveFileImport(rom) },
-                        onLaunchRom = { rom -> checkAndLaunch(rom) },
-                        onPickCustomCover = { rom ->
-                            pendingCoverRom = rom
-                            pickCustomCoverLauncher.launch("image/*")
-                        },
-                        onClearCustomCover = { rom ->
-                            viewLifecycleOwner.lifecycleScope.launch {
-                                val success = boxArtRepository.clearCustomCover(requireContext(), rom)
-                                if (success) {
-                                    android.widget.Toast.makeText(requireContext(), R.string.custom_cover_removed, android.widget.Toast.LENGTH_SHORT).show()
+                    if (!isShortcutPickerMode) {
+                        RomContextMenu(
+                            rom = currentContextRom,
+                            onDismiss = { contextRomUri = null },
+                            onToggleFavorite = { rom -> romListViewModel.toggleFavorite(rom) },
+                            onShowDetails = { rom -> openRomDetails(rom) },
+                            onSendSaveFile = { rom -> shareSaveFile(rom) },
+                            onImportSaveFile = { rom -> requestSaveFileImport(rom) },
+                            onLaunchRom = { rom -> checkAndLaunch(rom) },
+                            onPickCustomCover = { rom ->
+                                pendingCoverRom = rom
+                                pickCustomCoverLauncher.launch("image/*")
+                            },
+                            onClearCustomCover = { rom ->
+                                viewLifecycleOwner.lifecycleScope.launch {
+                                    val success = boxArtRepository.clearCustomCover(requireContext(), rom)
+                                    if (success) {
+                                        android.widget.Toast.makeText(requireContext(), R.string.custom_cover_removed, android.widget.Toast.LENGTH_SHORT).show()
+                                    }
                                 }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
             }
         }

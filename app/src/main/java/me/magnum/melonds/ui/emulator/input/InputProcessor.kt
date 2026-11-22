@@ -142,6 +142,47 @@ class InputProcessor(
         cachedTurboFrequencyHz = (prefs.getString("input_turbo_frequency_hz", "15") ?: "15").toIntOrNull() ?: 15
     }
 
+    fun resetHeldInputs() {
+        stopAllTurboPulses()
+
+        val activeChords = activeChordTriggers.values.toList()
+        activeChordTriggers.clear()
+        for (chordAction in activeChords) {
+            dispatchInputReleased(chordAction, fromController = true)
+        }
+
+        val heldKeys = heldPhysicalKeys.toList()
+        heldPhysicalKeys.clear()
+        for (keyCode in heldKeys) {
+            if (consumedChordModifiers.contains(keyCode)) {
+                continue
+            }
+            val input = controllerConfiguration.keyToInput(keyCode) ?: resolveTriggerKeyFallback(keyCode)
+            if (input != null && (input.isSystemInput || input == Input.HOLD_FAST_FORWARD)) {
+                dispatchInputReleased(input, fromController = true)
+            }
+        }
+        consumedChordModifiers.clear()
+        selectModifierHeld = false
+        selectUsedInChord = false
+
+        for (entry in axisEntries) {
+            entry.state.value = 0f
+            if (entry.state.active) {
+                entry.state.active = false
+                resolveAxisInput(entry.axis.axisCode, entry.axis.direction)?.let { input ->
+                    dispatchInputReleased(input, fromController = true)
+                }
+            }
+        }
+
+        slot2DigitalLeftPressed = false
+        slot2DigitalRightPressed = false
+        slot2DigitalUpPressed = false
+        slot2DigitalDownPressed = false
+        dispatchSlot2AnalogInput(0f, 0f)
+    }
+
     private fun isChordHotkeysEnabled(): Boolean {
         return cachedChordHotkeysEnabled
     }
@@ -176,7 +217,7 @@ class InputProcessor(
         when (keyEvent.action) {
             KeyEvent.ACTION_DOWN -> {
                 if (keyEvent.repeatCount > 0) {
-                    if (keyCode in activeChordTriggers || input?.isSystemInput == false) {
+                    if (keyCode in activeChordTriggers || input?.isSystemInput == false || isSelectKeyCode(keyCode)) {
                         return true
                     }
                 }
@@ -218,7 +259,7 @@ class InputProcessor(
                     }
                 }
 
-                if (isSelectKeyCode(keyCode)) {
+                if (keyEvent.repeatCount == 0 && isSelectKeyCode(keyCode)) {
                     selectModifierHeld = true
                     selectUsedInChord = false
                 }

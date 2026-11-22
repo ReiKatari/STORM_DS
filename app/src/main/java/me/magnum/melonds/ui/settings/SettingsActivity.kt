@@ -245,9 +245,14 @@ class SettingsActivity :
         SettingsSearchDialog(this, this).show()
     }
 
-    fun navigateToPreference(fragmentClassName: String, preferenceKey: String?) {
+    fun navigateToPreference(fragmentClassName: String, preferenceKey: String?, preferenceRootKey: String? = null) {
         val current = supportFragmentManager.fragments.lastOrNull()
-        if (current != null && current::class.java.name == fragmentClassName && current is PreferenceFragmentCompat) {
+        val currentRootKey = current?.arguments?.getString(PreferenceFragmentCompat.ARG_PREFERENCE_ROOT)
+        if (current != null &&
+            current::class.java.name == fragmentClassName &&
+            current is PreferenceFragmentCompat &&
+            currentRootKey == preferenceRootKey
+        ) {
             if (preferenceKey != null) {
                 current.scrollToPreference(preferenceKey)
             }
@@ -255,11 +260,14 @@ class SettingsActivity :
         }
 
         val fragment = supportFragmentManager.fragmentFactory.instantiate(classLoader, fragmentClassName).apply {
-            if (preferenceKey != null) {
+            if (preferenceKey != null || preferenceRootKey != null) {
                 arguments = bundleOf(
-                    PreferenceFragmentCompat.ARG_PREFERENCE_ROOT to null,
-                    "target_preference_key" to preferenceKey
-                )
+                    PreferenceFragmentCompat.ARG_PREFERENCE_ROOT to preferenceRootKey,
+                ).apply {
+                    if (preferenceKey != null) {
+                        putString("target_preference_key", preferenceKey)
+                    }
+                }
             }
         }
 
@@ -329,8 +337,6 @@ class SettingsActivity :
                 R.drawable.ic_input to getString(R.string.settings_sub_input)
             is me.magnum.melonds.ui.settings.fragments.RetroAchievementsPreferencesFragment ->
                 R.drawable.ic_trophy to getString(R.string.settings_sub_ra)
-            is me.magnum.melonds.ui.settings.fragments.RewindPreferencesFragment ->
-                R.drawable.ic_clock to getString(R.string.settings_sub_rewind)
             is me.magnum.melonds.ui.settings.fragments.TranslatorPreferencesFragment ->
                 R.drawable.ic_translate to getString(R.string.settings_sub_translator)
             is me.magnum.melonds.ui.settings.fragments.CustomFirmwarePreferencesFragment,

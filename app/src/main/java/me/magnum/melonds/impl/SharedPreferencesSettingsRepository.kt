@@ -266,6 +266,7 @@ class SharedPreferencesSettingsRepository(
     private data class RetroArchPresetReferences(
         val shaders: List<String>,
         val textures: List<String>,
+        val references: List<String> = emptyList(),
     )
     private data class CoreRenderConfigurationInputs(
         val renderer: VideoRenderer,
@@ -1599,7 +1600,7 @@ class SharedPreferencesSettingsRepository(
 
     private fun findRetroArchPresetReferenceOutsideRoot(presetFile: File, root: File): String? {
         val rootCanonical = root.canonicalFile
-        val references = parseRetroArchPresetReferences(presetFile).let { it.shaders + it.textures }
+        val references = parseRetroArchPresetReferences(presetFile).let { it.shaders + it.textures + it.references }
 
         return references.firstOrNull { reference ->
             val normalizedReference = reference.replace('\\', '/').trim()
@@ -1613,11 +1614,13 @@ class SharedPreferencesSettingsRepository(
     }
 
     private fun parseRetroArchPresetReferences(presetFile: File): RetroArchPresetReferences {
-        val assignments = RetroArchShaderPreset.parseAssignments(presetFile.readText())
+        val text = presetFile.readText()
+        val assignments = RetroArchShaderPreset.parseAssignments(text)
 
         return RetroArchPresetReferences(
             shaders = RetroArchShaderPreset.shaderReferences(assignments),
             textures = RetroArchShaderPreset.textureReferences(assignments),
+            references = RetroArchShaderPreset.referencePaths(text),
         )
     }
 
@@ -1664,7 +1667,7 @@ class SharedPreferencesSettingsRepository(
             when (target.extension.lowercase()) {
                 "slangp" -> {
                     val presetReferences = parseRetroArchPresetReferences(target)
-                    (presetReferences.shaders + presetReferences.textures).forEach { reference ->
+                    (presetReferences.shaders + presetReferences.textures + presetReferences.references).forEach { reference ->
                         pending.add(resolveRetroArchRelativePath(relativePath, reference))
                     }
                 }

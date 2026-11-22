@@ -122,11 +122,19 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
         }
 
         findPreference<Preference>("settings_import_json")?.setOnPreferenceClickListener {
+            if (isLaunchedInGame()) {
+                Toast.makeText(requireContext(), R.string.video_setting_cannot_change_ingame, Toast.LENGTH_SHORT).show()
+                return@setOnPreferenceClickListener true
+            }
             importJsonLauncher.launch(arrayOf("application/json", "text/*"))
             true
         }
 
         findPreference<Preference>("settings_reset_defaults")?.setOnPreferenceClickListener {
+            if (isLaunchedInGame()) {
+                Toast.makeText(requireContext(), R.string.video_setting_cannot_change_ingame, Toast.LENGTH_SHORT).show()
+                return@setOnPreferenceClickListener true
+            }
             showResetDefaultsConfirmationDialog()
             true
         }
@@ -156,16 +164,14 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
                 accentPreference.value = me.magnum.melonds.ui.theme.AppThemeManager.DEFAULT_ACCENT_KEY
             }
             helper.bindPreferenceSummaryToValue(accentPreference)
-            accentPreference.setOnPreferenceChangeListener { _, newValue ->
+            accentPreference.addOnPreferenceChangeListener { _, newValue ->
                 val newAccent = newValue as String
                 me.magnum.melonds.ui.theme.AppThemeManager.accentColorState.value = newAccent
                 accentPreference.sharedPreferences?.edit()?.putString("theme_accent_color", newAccent)?.apply()
-                val idx = accentPreference.findIndexOfValue(newAccent)
-                if (idx >= 0) {
-                    accentPreference.summary = accentPreference.entries?.getOrNull(idx)
+                view?.post {
+                    applyAccentColorToViews()
+                    activity?.recreate()
                 }
-                view?.post { applyAccentColorToViews() }
-                activity?.recreate()
                 true
             }
         }
@@ -173,13 +179,9 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
         val themePreference = findPreference<ListPreference>("theme")
         if (themePreference != null) {
             helper.bindPreferenceSummaryToValue(themePreference)
-            themePreference.setOnPreferenceChangeListener { _, newValue ->
+            themePreference.addOnPreferenceChangeListener { _, newValue ->
                 val newThemeKey = newValue as String
                 me.magnum.melonds.ui.theme.AppThemeManager.updateTheme(requireContext(), newThemeKey)
-                val themeIdx = themePreference.findIndexOfValue(newThemeKey)
-                if (themeIdx >= 0) {
-                    themePreference.summary = themePreference.entries?.getOrNull(themeIdx)
-                }
                 accentPreference?.let { accPref ->
                     accPref.value = me.magnum.melonds.ui.theme.AppThemeManager.DEFAULT_ACCENT_KEY
                     val accIdx = accPref.findIndexOfValue(me.magnum.melonds.ui.theme.AppThemeManager.DEFAULT_ACCENT_KEY)
@@ -187,7 +189,7 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
                         accPref.summary = accPref.entries?.getOrNull(accIdx)
                     }
                 }
-                activity?.recreate()
+                view?.post { activity?.recreate() }
                 true
             }
         }
@@ -206,6 +208,10 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
         updateFrameLimitSpeedPreferenceState()
 
         findPreference<Preference>("import_storm_folder_settings")?.setOnPreferenceClickListener {
+            if (isLaunchedInGame()) {
+                Toast.makeText(requireContext(), R.string.video_setting_cannot_change_ingame, Toast.LENGTH_SHORT).show()
+                return@setOnPreferenceClickListener true
+            }
             lifecycleScope.launch(Dispatchers.IO) {
                 val imported = runCatching { settingsBackupManager.syncExternalSettingsIfModified(force = true) }.getOrDefault(false)
                 withContext(Dispatchers.Main) {
@@ -244,6 +250,10 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
         }
 
         findPreference<Preference>("manage_setting_snapshots")?.setOnPreferenceClickListener {
+            if (isLaunchedInGame()) {
+                Toast.makeText(requireContext(), R.string.video_setting_cannot_change_ingame, Toast.LENGTH_SHORT).show()
+                return@setOnPreferenceClickListener true
+            }
             showSnapshotsDialog()
             true
         }
@@ -256,8 +266,20 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
             true
         }
         findPreference<Preference>("restore_settings")?.setOnPreferenceClickListener {
+            if (isLaunchedInGame()) {
+                Toast.makeText(requireContext(), R.string.video_setting_cannot_change_ingame, Toast.LENGTH_SHORT).show()
+                return@setOnPreferenceClickListener true
+            }
             restoreLauncher.launch(null)
             true
+        }
+
+        if (isLaunchedInGame()) {
+            lockPreferenceInGame("settings_reset_defaults")
+            lockPreferenceInGame("restore_settings")
+            lockPreferenceInGame("settings_import_json")
+            lockPreferenceInGame("import_storm_folder_settings")
+            lockPreferenceInGame("manage_setting_snapshots")
         }
     }
 
@@ -600,6 +622,7 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
                     }
                 }
                 editor.apply()
+                me.magnum.melonds.common.AppLocaleSync.syncFromPreferences(appContext)
                 appliedCount
             }
 
@@ -649,6 +672,8 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
             "dsi_nand_dir",
             "system_dsi_sd_card_dir",
             "system_dldi_sd_card_dir",
+            "last_version",
+            "pref_migrated_theme_default_accent_v811",
         )
 
         for ((key, value) in all) {
@@ -673,8 +698,14 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
                 }
             }
         }
+        runCatching {
+            val ctx = requireContext()
+            val pkgInfo = me.magnum.melonds.utils.PackageManagerCompat.getPackageInfo(ctx.packageManager, ctx.packageName, 0)
+            editor.putLong("last_version", androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(pkgInfo))
+        }
         editor.putBoolean("enable_storm_compiler", true)
         editor.apply()
+        me.magnum.melonds.common.AppLocaleSync.syncFromPreferences(requireContext())
 
         Toast.makeText(requireContext(), getString(R.string.v780_settings_reset_defaults_title), Toast.LENGTH_SHORT).show()
         activity?.recreate()

@@ -306,7 +306,7 @@ fun ExternalBootInfo(
                 modifier = Modifier.padding(top = 22.dp),
             ) {
                 Text(
-                    text = (statusText?.takeIf { it.isNotBlank() } ?: "Загрузка").uppercase(),
+                    text = (statusText?.takeIf { it.isNotBlank() } ?: stringResource(R.string.v870_external_loading)).uppercase(),
                     color = Color.White.copy(alpha = 0.75f),
                     fontFamily = WatermelonMono,
                     fontSize = 11.sp,

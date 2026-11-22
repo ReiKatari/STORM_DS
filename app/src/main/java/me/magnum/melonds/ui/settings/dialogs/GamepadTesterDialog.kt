@@ -22,6 +22,8 @@ import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.runtime.*
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,7 +57,11 @@ private data class GamepadTesterState(
     val hatX: Float = 0f,
     val hatY: Float = 0f,
     val pressedButtons: Set<String> = emptySet(),
+    val keyDpadButtons: Set<String> = emptySet(),
+    val hatDpadButtons: Set<String> = emptySet(),
 )
+
+private val DPAD_LABELS = setOf("UP", "DOWN", "LEFT", "RIGHT")
 
 fun showGamepadTesterDialog(
     context: Context,
@@ -72,15 +78,27 @@ fun showGamepadTesterDialog(
             if (label != null) {
                 val devName = event.device?.name?.takeIf { it.isNotBlank() } ?: state.value.deviceName
                 val current = state.value
-                val nextButtons = when (event.action) {
-                    KeyEvent.ACTION_DOWN -> current.pressedButtons + label
-                    KeyEvent.ACTION_UP -> current.pressedButtons - label
-                    else -> current.pressedButtons
+                if (label in DPAD_LABELS) {
+                    val nextKeyDpad = when (event.action) {
+                        KeyEvent.ACTION_DOWN -> current.keyDpadButtons + label
+                        KeyEvent.ACTION_UP -> current.keyDpadButtons - label
+                        else -> current.keyDpadButtons
+                    }
+                    state.value = current.copy(
+                        deviceName = devName,
+                        keyDpadButtons = nextKeyDpad,
+                    )
+                } else {
+                    val nextButtons = when (event.action) {
+                        KeyEvent.ACTION_DOWN -> current.pressedButtons + label
+                        KeyEvent.ACTION_UP -> current.pressedButtons - label
+                        else -> current.pressedButtons
+                    }
+                    state.value = current.copy(
+                        deviceName = devName,
+                        pressedButtons = nextButtons,
+                    )
                 }
-                state.value = current.copy(
-                    deviceName = devName,
-                    pressedButtons = nextButtons,
-                )
                 return true
             }
             return super.dispatchKeyEvent(event)
@@ -116,7 +134,6 @@ fun showGamepadTesterDialog(
                 if (hy < -0.5f) hatButtons.add("UP")
                 if (hy > 0.5f) hatButtons.add("DOWN")
 
-                val cleanedButtons = current.pressedButtons - setOf("UP", "DOWN", "LEFT", "RIGHT") + hatButtons
                 state.value = current.copy(
                     deviceName = devName,
                     leftX = lx,
@@ -127,7 +144,7 @@ fun showGamepadTesterDialog(
                     r2 = r2,
                     hatX = hx,
                     hatY = hy,
-                    pressedButtons = cleanedButtons,
+                    hatDpadButtons = hatButtons,
                 )
                 return true
             }
@@ -153,6 +170,24 @@ fun showGamepadTesterDialog(
                     onDismiss = { dialog.dismiss() },
                 )
             }
+        }
+    }
+
+    val lifecycleOwner = context as? LifecycleOwner
+    val lifecycleObserver = if (lifecycleOwner != null) {
+        object : DefaultLifecycleObserver {
+            override fun onDestroy(owner: LifecycleOwner) {
+                if (dialog.isShowing) {
+                    dialog.dismiss()
+                }
+            }
+        }.also { lifecycleOwner.lifecycle.addObserver(it) }
+    } else {
+        null
+    }
+    dialog.setOnDismissListener {
+        if (lifecycleOwner != null && lifecycleObserver != null) {
+            lifecycleOwner.lifecycle.removeObserver(lifecycleObserver)
         }
     }
 
@@ -301,6 +336,8 @@ private fun GamepadTesterDialogContent(
                     ) {
                         row.forEach { btn ->
                             val active = btn in testerState.pressedButtons ||
+                                btn in testerState.keyDpadButtons ||
+                                btn in testerState.hatDpadButtons ||
                                 (btn == "L2" && testerState.l2 > 0.25f) ||
                                 (btn == "R2" && testerState.r2 > 0.25f)
                             Box(

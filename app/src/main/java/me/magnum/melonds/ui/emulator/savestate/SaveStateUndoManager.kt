@@ -2,7 +2,10 @@ package me.magnum.melonds.ui.emulator.savestate
 
 import android.content.Context
 import android.net.Uri
+import android.os.ParcelFileDescriptor
+import android.system.Os
 import android.util.Log
+import me.magnum.melonds.MelonEmulator
 import me.magnum.melonds.domain.model.SaveStateSlot
 import me.magnum.melonds.domain.model.rom.Rom
 import java.io.File
@@ -87,6 +90,7 @@ object SaveStateUndoManager {
         customName: String?,
     ) {
         if (!slot.exists) return
+        runCatching { MelonEmulator.flushPendingSaveStateWrites() }
         val romHash = rom.uri.hashCode()
         lastRomHash = romHash
         lastActiveRom = rom
@@ -184,10 +188,18 @@ object SaveStateUndoManager {
     }
 
     private fun openTruncatedOutputStream(context: Context, uri: Uri): OutputStream? {
-        return runCatching { context.contentResolver.openOutputStream(uri, "wt") }.getOrNull()
-            ?: runCatching { context.contentResolver.openOutputStream(uri, "rwt") }.getOrNull()
-            ?: runCatching { context.contentResolver.openOutputStream(uri, "w") }.getOrNull()
-            ?: runCatching { context.contentResolver.openOutputStream(uri) }.getOrNull()
+        runCatching { context.contentResolver.openOutputStream(uri, "wt") }.getOrNull()?.let { return it }
+        runCatching { context.contentResolver.openOutputStream(uri, "rwt") }.getOrNull()?.let { return it }
+        return runCatching {
+            val pfd = context.contentResolver.openFileDescriptor(uri, "rw") ?: return@runCatching null
+            try {
+                Os.ftruncate(pfd.fileDescriptor, 0L)
+                ParcelFileDescriptor.AutoCloseOutputStream(pfd)
+            } catch (t: Throwable) {
+                runCatching { pfd.close() }
+                throw t
+            }
+        }.getOrNull()
     }
 
     @Synchronized

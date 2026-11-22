@@ -52,6 +52,23 @@ class SettingsBackupManager @Inject constructor(
             "dsi_bios_dir",
             SETTINGS_MIRROR_FALLBACK_URI,
         )
+        private val SENSITIVE_PREF_KEYS = setOf(
+            "ra_token",
+            "translator_deepl_key",
+            "translator_custom_ai_key",
+        )
+
+        private fun isSensitivePrefKey(key: String): Boolean {
+            if (key in SENSITIVE_PREF_KEYS) return true
+            val lower = key.lowercase(java.util.Locale.ROOT)
+            return lower.contains("token") ||
+                lower.contains("password") ||
+                lower.contains("cookie") ||
+                lower.contains("secret") ||
+                lower.contains("api_key") ||
+                lower.endsWith("_key") ||
+                lower.endsWith("_auth")
+        }
         private val CHEAT_TABLES = listOf(
             "cheat_database" to listOf("id", "name"),
             "game" to listOf("id", "name", "game_code", "game_checksum"),
@@ -104,14 +121,32 @@ class SettingsBackupManager @Inject constructor(
         }
     }
 
+    private fun hasStorageWriteAccess(): Boolean {
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            android.os.Environment.isExternalStorageManager()
+        } else {
+            androidx.core.content.ContextCompat.checkSelfPermission(
+                context,
+                android.Manifest.permission.WRITE_EXTERNAL_STORAGE
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+    }
+
     private fun getStorageSettingsDir(): File {
+        if (!hasStorageWriteAccess()) {
+            return context.filesDir
+        }
         val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
         return if (extRoot != null) {
             val stormRoot = File(extRoot, "STORM DS")
             val existingSettingsDir = runCatching {
                 stormRoot.listFiles()?.firstOrNull { it.isDirectory && it.name.equals("settings", ignoreCase = true) }
             }.getOrNull()
-            (existingSettingsDir ?: File(stormRoot, "settings")).apply { runCatching { mkdirs() } }
+            val targetDir = existingSettingsDir ?: File(stormRoot, "settings")
+            val ready = runCatching {
+                (targetDir.exists() || targetDir.mkdirs()) && targetDir.isDirectory && targetDir.canWrite()
+            }.getOrDefault(false)
+            if (ready) targetDir else context.filesDir
         } else {
             context.filesDir
         }
@@ -284,6 +319,7 @@ class SettingsBackupManager @Inject constructor(
                 runCatching { me.magnum.melonds.ui.theme.AppThemeManager.init(context) }
                 runCatching { me.magnum.melonds.ui.common.views.ButtonThemeManager.init(context) }
                 runCatching { me.magnum.melonds.ui.romlist.RomDisplayNameManager.init(context) }
+                runCatching { me.magnum.melonds.common.AppLocaleSync.syncFromPreferences(context) }
             } finally {
                 isRestoringMirror.set(false)
             }
@@ -328,33 +364,31 @@ class SettingsBackupManager @Inject constructor(
 
     fun backup(treeUri: Uri) {
         runCatching { createSnapshot("manual") }
-        val root = DocumentFile.fromTreeUri(context, treeUri)
+        val root = resolveTreeDocument(treeUri, createIfFileDir = true)
             ?: throw java.io.IOException("Unable to access selected backup folder")
 
         val backupDoc = getMirrorDocument(treeUri)
             ?: root.createFile("*/*", STORM_DS_OPTIONS_FILE)
             ?: throw java.io.IOException("Unable to create $STORM_DS_OPTIONS_FILE in selected folder")
-        val backupStream = context.contentResolver.openOutputStream(backupDoc.uri, "wt")
-            ?: context.contentResolver.openOutputStream(backupDoc.uri)
+        val backupStream = openTreeOutputStream(backupDoc.uri)
             ?: throw java.io.IOException("Unable to open output stream for $STORM_DS_OPTIONS_FILE")
         backupStream.use { outStream ->
-            outStream.writer().use { it.write(createBackupJson(includeLocalKeys = true).toString()) }
+            outStream.writer().use { it.write(createBackupJson(includeLocalKeys = false).toString()) }
         }
         val settingsDoc = root.findFile(SETTINGS_FILE)
             ?: root.createFile("*/*", SETTINGS_FILE)
             ?: throw java.io.IOException("Unable to create $SETTINGS_FILE in selected folder")
-        val settingsStream = context.contentResolver.openOutputStream(settingsDoc.uri, "wt")
-            ?: context.contentResolver.openOutputStream(settingsDoc.uri)
+        val settingsStream = openTreeOutputStream(settingsDoc.uri)
             ?: throw java.io.IOException("Unable to open output stream for $SETTINGS_FILE")
         settingsStream.use { outStream ->
-            outStream.writer().use { it.write(createSettingsJson(includeLocalKeys = true).toString()) }
+            outStream.writer().use { it.write(createSettingsJson(includeLocalKeys = false).toString()) }
         }
     }
 
     fun hasMirrorAt(treeUri: Uri): Boolean {
         val mirrorDocument = getMirrorDocument(treeUri)?.takeIf { it.isFile } ?: return false
         return runCatching {
-            context.contentResolver.openInputStream(mirrorDocument.uri)?.use { input ->
+            openTreeInputStream(mirrorDocument.uri)?.use { input ->
                 JSONObject(input.reader().readText())
             } != null
         }.onFailure {
@@ -365,7 +399,7 @@ class SettingsBackupManager @Inject constructor(
     fun restoreMirrorFrom(treeUri: Uri) {
         runCatching {
             val mirrorDocument = getMirrorDocument(treeUri) ?: return
-            context.contentResolver.openInputStream(mirrorDocument.uri)?.use { input ->
+            openTreeInputStream(mirrorDocument.uri)?.use { input ->
                 restoreBackupJson(JSONObject(input.reader().readText()))
             }
         }.onFailure {
@@ -403,13 +437,13 @@ class SettingsBackupManager @Inject constructor(
                 }
             }
         }
-        val mirrorJson = createBackupJson(includeLocalKeys = true).toString()
+        val mirrorJson = createBackupJson(includeLocalKeys = false).toString()
         runCatching {
             val storageSettingsDir = getStorageSettingsDir()
             val optsFile = File(storageSettingsDir, STORM_DS_OPTIONS_FILE)
             val settingsFile = File(storageSettingsDir, SETTINGS_FILE)
             writeTextAtomically(optsFile, mirrorJson)
-            writeTextAtomically(settingsFile, createSettingsJson(includeLocalKeys = true).toString())
+            writeTextAtomically(settingsFile, createSettingsJson(includeLocalKeys = false).toString())
             recordMirrorSignatures(optsFile, settingsFile)
         }
         if (isMirrorEnabled()) {
@@ -429,18 +463,53 @@ class SettingsBackupManager @Inject constructor(
         return preferences.getStringSet("rom_search_dirs", null)?.firstOrNull()?.toUri()
     }
 
+    private fun resolveTreeDocument(treeUri: Uri, createIfFileDir: Boolean = false): DocumentFile? {
+        return if (treeUri.scheme == "file") {
+            val path = treeUri.path?.let { Uri.decode(it) } ?: return null
+            val dir = File(path)
+            if (createIfFileDir && !dir.exists()) {
+                runCatching { dir.mkdirs() }
+            }
+            if (dir.isDirectory) DocumentFile.fromFile(dir) else null
+        } else {
+            DocumentFile.fromTreeUri(context, treeUri)
+        }
+    }
+
+    private fun openTreeInputStream(uri: Uri): java.io.InputStream? {
+        return if (uri.scheme == "file") {
+            val path = uri.path?.let { Uri.decode(it) } ?: return null
+            val file = File(path)
+            if (file.isFile) java.io.FileInputStream(file) else null
+        } else {
+            context.contentResolver.openInputStream(uri)
+        }
+    }
+
+    private fun openTreeOutputStream(uri: Uri): java.io.OutputStream? {
+        return if (uri.scheme == "file") {
+            val path = uri.path?.let { Uri.decode(it) } ?: return null
+            val file = File(path)
+            file.parentFile?.mkdirs()
+            FileOutputStream(file, false)
+        } else {
+            context.contentResolver.openOutputStream(uri, "wt")
+                ?: context.contentResolver.openOutputStream(uri)
+        }
+    }
+
     private fun writeMirrorToTree(treeUri: Uri, mirrorJson: String) {
-        val root = DocumentFile.fromTreeUri(context, treeUri) ?: return
+        val root = resolveTreeDocument(treeUri, createIfFileDir = true) ?: return
         val mirrorDocument = getMirrorDocument(treeUri)
             ?: root.createFile("application/octet-stream", STORM_DS_OPTIONS_FILE)
             ?: return
-        context.contentResolver.openOutputStream(mirrorDocument.uri, "wt")?.use { output ->
+        openTreeOutputStream(mirrorDocument.uri)?.use { output ->
             output.writer().use { it.write(mirrorJson) }
         }
     }
 
     private fun getMirrorDocument(treeUri: Uri): DocumentFile? {
-        val root = DocumentFile.fromTreeUri(context, treeUri) ?: return null
+        val root = resolveTreeDocument(treeUri) ?: return null
         return root.findFile(STORM_DS_OPTIONS_FILE)
             ?: root.findFile(STORM_DS_SPACE_OPTIONS_FILE)
             ?: root.findFile(LEGACY_OPTIONS_FILE)
@@ -475,6 +544,7 @@ class SettingsBackupManager @Inject constructor(
     private fun createSettingsJson(includeLocalKeys: Boolean = false): JSONObject {
         val json = JSONObject()
         for ((key, value) in preferences.all) {
+            if (isSensitivePrefKey(key)) continue
             if (!includeLocalKeys && key in EXCLUDED_PREF_KEYS) continue
             when (value) {
                 is Boolean, is Int, is Long, is Float, is String -> json.put(key, value)
@@ -532,7 +602,7 @@ class SettingsBackupManager @Inject constructor(
     }
 
     fun restore(treeUri: Uri) {
-        val root = DocumentFile.fromTreeUri(context, treeUri)
+        val root = resolveTreeDocument(treeUri)
             ?: throw java.io.IOException("Unable to access selected restore folder")
         val subSettingsDir = findDocCaseInsensitive(root, "settings")
         val searchRoots = listOfNotNull(root, subSettingsDir)
@@ -548,24 +618,24 @@ class SettingsBackupManager @Inject constructor(
                     LEGACY_OPTIONS_FILE
                 )?.takeIf { it.isFile }
                 if (backupDoc != null) {
-                    val input = context.contentResolver.openInputStream(backupDoc.uri)
+                    val input = openTreeInputStream(backupDoc.uri)
                         ?: throw java.io.IOException("Unable to read ${backupDoc.name ?: STORM_DS_OPTIONS_FILE}")
                     input.use { stream ->
-                        restoreBackupJsonInternal(JSONObject(stream.reader().readText()), includeLocalKeys = true)
+                        restoreBackupJsonInternal(JSONObject(stream.reader().readText()), includeLocalKeys = false)
                     }
                     restoredAny = true
                 }
 
                 val settingsDoc = findDocCaseInsensitive(candidateRoot, SETTINGS_FILE)?.takeIf { it.isFile }
                 if (settingsDoc != null) {
-                    val input = context.contentResolver.openInputStream(settingsDoc.uri)
+                    val input = openTreeInputStream(settingsDoc.uri)
                         ?: throw java.io.IOException("Unable to read $SETTINGS_FILE")
                     input.use { stream ->
                         val json = JSONObject(stream.reader().readText())
                         if (json.has("settings") && json.optJSONObject("settings") != null && json.has("version")) {
-                            restoreBackupJsonInternal(json, includeLocalKeys = true)
+                            restoreBackupJsonInternal(json, includeLocalKeys = false)
                         } else {
-                            restoreSettingsJson(json, includeLocalKeys = true)
+                            restoreSettingsJson(json, includeLocalKeys = false)
                         }
                     }
                     restoredAny = true
@@ -574,19 +644,22 @@ class SettingsBackupManager @Inject constructor(
                 val storageSettingsDir = getStorageSettingsDir()
                 for (auxFile in listOf(CONTROLLER_FILE, LAYOUTS_FILE, BACKGROUNDS_FILE)) {
                     findDocCaseInsensitive(candidateRoot, auxFile)?.takeIf { it.isFile }?.uri?.let { uri ->
-                        val dest = File(storageSettingsDir, auxFile)
-                        context.contentResolver.openInputStream(uri)?.use { input ->
-                            writeBytesAtomically(dest, input.readBytes())
+                        openTreeInputStream(uri)?.use { input ->
+                            val bytes = input.readBytes()
+                            val dest = File(storageSettingsDir, auxFile)
+                            runCatching { writeBytesAtomically(dest, bytes) }
+                                .onFailure { writeBytesAtomically(File(context.filesDir, auxFile), bytes) }
                             restoredAny = true
                         }
                     }
                 }
 
                 findDocCaseInsensitive(candidateRoot, ROM_DATA_FILE)?.takeIf { it.isFile }?.uri?.let { uri ->
-                    context.contentResolver.openInputStream(uri)?.use { input ->
+                    openTreeInputStream(uri)?.use { input ->
                         val text = input.reader().readText()
                         JSONArray(text)
-                        writeTextAtomically(File(storageSettingsDir, ROM_DATA_FILE), text)
+                        runCatching { writeTextAtomically(File(storageSettingsDir, ROM_DATA_FILE), text) }
+                            .onFailure { writeTextAtomically(File(context.filesDir, ROM_DATA_FILE), text) }
                         restoredAny = true
                     }
                 }
@@ -599,6 +672,7 @@ class SettingsBackupManager @Inject constructor(
             runCatching { me.magnum.melonds.ui.theme.AppThemeManager.init(context) }
             runCatching { me.magnum.melonds.ui.common.views.ButtonThemeManager.init(context) }
             runCatching { me.magnum.melonds.ui.romlist.RomDisplayNameManager.init(context) }
+            runCatching { me.magnum.melonds.common.AppLocaleSync.syncFromPreferences(context) }
         } finally {
             isRestoringMirror.set(false)
         }
@@ -612,6 +686,7 @@ class SettingsBackupManager @Inject constructor(
             runCatching { me.magnum.melonds.ui.theme.AppThemeManager.init(context) }
             runCatching { me.magnum.melonds.ui.common.views.ButtonThemeManager.init(context) }
             runCatching { me.magnum.melonds.ui.romlist.RomDisplayNameManager.init(context) }
+            runCatching { me.magnum.melonds.common.AppLocaleSync.syncFromPreferences(context) }
         } finally {
             isRestoringMirror.set(false)
         }
@@ -629,7 +704,14 @@ class SettingsBackupManager @Inject constructor(
 
     private fun restoreSettingsJson(json: JSONObject, includeLocalKeys: Boolean = false) {
         val editor = preferences.edit()
+        for (existingKey in preferences.all.keys) {
+            if (isSensitivePrefKey(existingKey)) continue
+            if (!includeLocalKeys && existingKey in EXCLUDED_PREF_KEYS) continue
+            if (includeLocalKeys && existingKey in EXCLUDED_PREF_KEYS && !json.has(existingKey)) continue
+            editor.remove(existingKey)
+        }
         for (key in json.keys()) {
+            if (isSensitivePrefKey(key)) continue
             if (!includeLocalKeys && key in EXCLUDED_PREF_KEYS) continue
             val value = json.get(key)
             when (value) {
@@ -675,6 +757,10 @@ class SettingsBackupManager @Inject constructor(
         val text = value.toString()
         runCatching {
             writeTextAtomically(File(getStorageSettingsDir(), fileName), text)
+        }.onFailure {
+            runCatching {
+                writeTextAtomically(File(context.filesDir, fileName), text)
+            }
         }
     }
 
@@ -684,11 +770,15 @@ class SettingsBackupManager @Inject constructor(
         for (i in 0 until roms.length()) {
             val rom = roms.optJSONObject(i) ?: return
             if (!rom.has("uri")) {
-                writeTextAtomically(File(storageSettingsDir, ROM_METADATA_MIRROR_FILE), roms.toString())
+                val text = roms.toString()
+                runCatching { writeTextAtomically(File(storageSettingsDir, ROM_METADATA_MIRROR_FILE), text) }
+                    .onFailure { runCatching { writeTextAtomically(File(context.filesDir, ROM_METADATA_MIRROR_FILE), text) } }
                 return
             }
         }
-        writeTextAtomically(File(storageSettingsDir, ROM_DATA_FILE), roms.toString())
+        val text = roms.toString()
+        runCatching { writeTextAtomically(File(storageSettingsDir, ROM_DATA_FILE), text) }
+            .onFailure { runCatching { writeTextAtomically(File(context.filesDir, ROM_DATA_FILE), text) } }
     }
 
     private fun createCheatsJson(): JSONObject {
@@ -984,6 +1074,7 @@ class SettingsBackupManager @Inject constructor(
                 runCatching { me.magnum.melonds.ui.theme.AppThemeManager.init(context) }
                 runCatching { me.magnum.melonds.ui.common.views.ButtonThemeManager.init(context) }
                 runCatching { me.magnum.melonds.ui.romlist.RomDisplayNameManager.init(context) }
+                runCatching { me.magnum.melonds.common.AppLocaleSync.syncFromPreferences(context) }
             } finally {
                 isRestoringMirror.set(false)
             }

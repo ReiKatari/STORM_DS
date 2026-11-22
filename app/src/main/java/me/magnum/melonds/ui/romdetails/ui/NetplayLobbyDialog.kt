@@ -51,6 +51,7 @@ import me.magnum.melonds.ui.theme.watermelon
 import java.net.Inet4Address
 import java.net.NetworkInterface
 import java.util.concurrent.atomic.AtomicBoolean
+import androidx.compose.ui.res.stringResource
 
 private fun isValidHostIp(input: String): Boolean {
     val trimmed = input.trim()
@@ -79,7 +80,7 @@ private data class WfcServerOption(
     val description: String,
 )
 
-private fun resolveLocalIpv4Address(): String {
+private fun resolveLocalIpv4Address(context: android.content.Context): String {
     return runCatching {
         val interfaces = NetworkInterface.getNetworkInterfaces() ?: return@runCatching "127.0.0.1"
         for (intf in interfaces) {
@@ -93,11 +94,11 @@ private fun resolveLocalIpv4Address(): String {
                 }
             }
         }
-        "Не подключено к Wi-Fi"
-    }.getOrDefault("Неизвестно")
+        context.getString(R.string.v870_netplay_no_wifi)
+    }.getOrDefault(context.getString(R.string.v870_netplay_unknown))
 }
 
-private fun parseDiscoveredLanRooms(rawSessions: Array<String>, fallbackTitle: String): List<NetplayRoom> {
+private fun parseDiscoveredLanRooms(context: android.content.Context, rawSessions: Array<String>, fallbackTitle: String): List<NetplayRoom> {
     return rawSessions.mapNotNull { entry ->
         val parts = entry.split("|")
         if (parts.size < 4) return@mapNotNull null
@@ -106,7 +107,7 @@ private fun parseDiscoveredLanRooms(rawSessions: Array<String>, fallbackTitle: S
         val currentPlayers = parts[2].toIntOrNull() ?: 1
         val maxPlayers = parts[3].toIntOrNull() ?: 4
         val status = parts.getOrNull(4)?.toIntOrNull() ?: 1
-        val statusLabel = if (status == 2) "В игре ($ip)" else "Ожидание ($ip)"
+        val statusLabel = if (status == 2) context.getString(R.string.v870_netplay_status_in_game, ip) else context.getString(R.string.v870_netplay_status_waiting, ip)
         NetplayRoom(
             id = ip,
             hostName = hostName,
@@ -132,6 +133,7 @@ fun NetplayLobbyDialog(
     val colors = watermelon
     var selectedTab by remember { mutableStateOf(0) } // 0 = NiFi Local Wireless, 1 = WFC Online
     val joinedSessionRef = remember { AtomicBoolean(false) }
+    val isHostingSessionRef = remember { AtomicBoolean(false) }
     var isLanConnecting by remember { mutableStateOf(false) }
 
     val defaultNickname = remember {
@@ -142,29 +144,29 @@ fun NetplayLobbyDialog(
     }
     var localIpAddress by remember { mutableStateOf("...") }
     LaunchedEffect(Unit) {
-        localIpAddress = withContext(Dispatchers.IO) { resolveLocalIpv4Address() }
+        localIpAddress = withContext(Dispatchers.IO) { resolveLocalIpv4Address(context) }
     }
     val romTitle = remember(rom) { romDisplayName(rom) }
 
-    val wfcServers = remember {
+    val wfcServers = remember(context) {
         listOf(
             WfcServerOption(
                 id = "wiimmfi",
-                title = "Wiimmfi WFC (Рекомендуется)",
+                title = context.getString(R.string.v870_netplay_wiimmfi_title),
                 dnsIp = "167.235.229.36",
-                description = "Основной глобальный сервер Nintendo WFC (Mario Kart DS, Pokémon Gen 4/5, Animal Crossing и др.)",
+                description = context.getString(R.string.v870_netplay_wiimmfi_desc),
             ),
             WfcServerOption(
                 id = "kaeru",
                 title = "Kaeru WFC",
                 dnsIp = "178.62.43.212",
-                description = "Альтернативный сервер сообщества с поддержкой классических игр DS и сетевых сервисов",
+                description = context.getString(R.string.v870_netplay_kaeru_desc),
             ),
             WfcServerOption(
                 id = "altwfc",
                 title = "AltWFC / WFCZwei",
                 dnsIp = "172.104.88.237",
-                description = "Классический сервер AltWFC для старых ревизий игр Nintendo DS",
+                description = context.getString(R.string.v870_netplay_altwfc_desc),
             ),
         )
     }
@@ -176,13 +178,13 @@ fun NetplayLobbyDialog(
     }
 
     DisposableEffect(Unit) {
-        coroutineScope.launch(Dispatchers.IO) {
-            runCatching { MelonEmulator.startLanDiscovery() }
-        }
         onDispose {
             val didJoin = joinedSessionRef.get()
+            val isHosting = isHostingSessionRef.get()
             CoroutineScope(Dispatchers.IO).launch {
-                runCatching { MelonEmulator.stopLanDiscovery() }
+                if (!didJoin || !isHosting) {
+                    runCatching { MelonEmulator.stopLanDiscovery() }
+                }
                 if (!didJoin) {
                     runCatching { MelonEmulator.stopLanSession() }
                 }
@@ -199,7 +201,7 @@ fun NetplayLobbyDialog(
                 val raw = withContext(Dispatchers.IO) {
                     runCatching { MelonEmulator.getLanDiscoveredSessions() }.getOrDefault(emptyArray())
                 }
-                discoveredRooms = parseDiscoveredLanRooms(raw, romTitle)
+                discoveredRooms = parseDiscoveredLanRooms(context, raw, romTitle)
                 delay(1200L)
             }
         }
@@ -241,7 +243,7 @@ fun NetplayLobbyDialog(
                         ) {
                             Icon(
                                 Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Назад",
+                                contentDescription = stringResource(R.string.navigate_back),
                                 tint = colors.text,
                                 modifier = Modifier.size(18.dp),
                             )
@@ -249,14 +251,14 @@ fun NetplayLobbyDialog(
                         Spacer(Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = "Сетевая и локальная игра",
+                                text = stringResource(R.string.v870_netplay_title),
                                 color = colors.text,
                                 fontFamily = SpaceGrotesk,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Локальный мультиплеер NiFi (Wi-Fi / Hotspot) и серверы WFC",
+                                text = stringResource(R.string.v870_netplay_subtitle),
                                 color = colors.text2,
                                 fontFamily = WatermelonMono,
                                 fontSize = 9.5.sp
@@ -288,7 +290,7 @@ fun NetplayLobbyDialog(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Filled.Wifi, contentDescription = null, tint = if (selectedTab == 0) Color(0xFF00E5FF) else colors.text2, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("Локальная сеть NiFi", color = if (selectedTab == 0) Color(0xFF00E5FF) else colors.text2, fontFamily = WatermelonMono, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.v870_netplay_tab_nifi), color = if (selectedTab == 0) Color(0xFF00E5FF) else colors.text2, fontFamily = WatermelonMono, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
@@ -304,7 +306,7 @@ fun NetplayLobbyDialog(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Filled.Language, contentDescription = null, tint = if (selectedTab == 1) Color(0xFF10B981) else colors.text2, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("WFC онлайн", color = if (selectedTab == 1) Color(0xFF10B981) else colors.text2, fontFamily = WatermelonMono, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.v870_netplay_tab_wfc), color = if (selectedTab == 1) Color(0xFF10B981) else colors.text2, fontFamily = WatermelonMono, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -337,7 +339,7 @@ fun NetplayLobbyDialog(
                                     Icon(Icons.Filled.Wifi, contentDescription = null, tint = Color(0xFF00E5FF), modifier = Modifier.size(18.dp))
                                     Spacer(Modifier.width(8.dp))
                                     Text(
-                                        text = "Ваш IP: $localIpAddress",
+                                        text = stringResource(R.string.v870_netplay_your_ip, localIpAddress),
                                         color = Color(0xFF00E5FF),
                                         fontFamily = WatermelonMono,
                                         fontSize = 11.sp,
@@ -345,7 +347,7 @@ fun NetplayLobbyDialog(
                                     )
                                 }
                                 Text(
-                                    text = "Игрок: $defaultNickname",
+                                    text = stringResource(R.string.v870_netplay_player_label, defaultNickname),
                                     color = colors.text2,
                                     fontFamily = WatermelonMono,
                                     fontSize = 10.sp,
@@ -353,7 +355,7 @@ fun NetplayLobbyDialog(
                             }
 
                             Text(
-                                text = "Подключите смартфоны к одной Wi-Fi сети или точке доступа. Один игрок создаёт комнату (Хост), второй подключается к найденной комнате ниже или вводит IP хоста.",
+                                text = stringResource(R.string.v870_netplay_nifi_instructions),
                                 color = colors.text2,
                                 fontSize = 11.sp,
                                 lineHeight = 15.sp,
@@ -372,10 +374,11 @@ fun NetplayLobbyDialog(
                                             }
                                             isLanConnecting = false
                                             if (ok) {
+                                                isHostingSessionRef.set(true)
                                                 joinedSessionRef.set(true)
                                                 Toast.makeText(
                                                     context,
-                                                    "Локальная комната создана ($localIpAddress). Запуск игры...",
+                                                    context.getString(R.string.v870_netplay_host_created_toast, localIpAddress),
                                                     Toast.LENGTH_LONG
                                                 ).show()
                                                 onJoinRoom(
@@ -393,7 +396,7 @@ fun NetplayLobbyDialog(
                                             } else {
                                                 Toast.makeText(
                                                     context,
-                                                    "Не удалось открыть порт локального хоста. Проверьте подключение к Wi-Fi.",
+                                                    context.getString(R.string.v870_netplay_host_failed_toast),
                                                     Toast.LENGTH_LONG
                                                 ).show()
                                             }
@@ -406,7 +409,7 @@ fun NetplayLobbyDialog(
                                     Icon(Icons.Filled.SportsEsports, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
                                     Spacer(Modifier.width(6.dp))
                                     Text(
-                                        text = "Создать комнату и запустить игру (Хост)",
+                                        text = stringResource(R.string.v870_netplay_create_host_btn),
                                         color = Color.Black,
                                         fontFamily = WatermelonMono,
                                         fontSize = 10.5.sp,
@@ -435,7 +438,7 @@ fun NetplayLobbyDialog(
                             ) {
                                 if (manualHostIp.isEmpty()) {
                                     Text(
-                                        text = "IP хоста (напр. 192.168.1.10)",
+                                        text = stringResource(R.string.v870_netplay_host_ip_label),
                                         color = colors.text3,
                                         fontFamily = WatermelonMono,
                                         fontSize = 10.5.sp
@@ -462,7 +465,7 @@ fun NetplayLobbyDialog(
                                     .clickable(enabled = !isLanConnecting) {
                                         val targetIp = manualHostIp.trim()
                                         if (!isValidHostIp(targetIp)) {
-                                            Toast.makeText(context, "Введите корректный IP-адрес хоста", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, context.getString(R.string.v870_netplay_invalid_ip_toast), Toast.LENGTH_SHORT).show()
                                             return@clickable
                                         }
                                         isLanConnecting = true
@@ -473,8 +476,9 @@ fun NetplayLobbyDialog(
                                             isLanConnecting = false
                                             if (ok) {
                                                 prefs.edit().putString("lan_last_host_ip", targetIp).apply()
+                                                isHostingSessionRef.set(false)
                                                 joinedSessionRef.set(true)
-                                                Toast.makeText(context, "Подключено к $targetIp! Запуск игры...", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, context.getString(R.string.v870_netplay_connected_ip_toast, targetIp), Toast.LENGTH_SHORT).show()
                                                 onJoinRoom(
                                                     NetplayRoom(
                                                         id = targetIp,
@@ -488,7 +492,7 @@ fun NetplayLobbyDialog(
                                                     )
                                                 )
                                             } else {
-                                                Toast.makeText(context, "Не удалось подключиться к $targetIp", Toast.LENGTH_LONG).show()
+                                                Toast.makeText(context, context.getString(R.string.v870_netplay_connect_ip_failed_toast, targetIp), Toast.LENGTH_LONG).show()
                                             }
                                         }
                                     }
@@ -496,7 +500,7 @@ fun NetplayLobbyDialog(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = "По IP",
+                                    text = stringResource(R.string.v870_netplay_join_by_ip_btn),
                                     color = Color.Black,
                                     fontFamily = WatermelonMono,
                                     fontSize = 10.sp,
@@ -512,7 +516,7 @@ fun NetplayLobbyDialog(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Найденные комнаты в локальной сети (${discoveredRooms.size})",
+                                text = stringResource(R.string.v870_netplay_found_rooms_header, discoveredRooms.size),
                                 color = colors.text,
                                 fontFamily = SpaceGrotesk,
                                 fontSize = 12.sp,
@@ -527,16 +531,16 @@ fun NetplayLobbyDialog(
                                             val raw = withContext(Dispatchers.IO) {
                                                 runCatching { MelonEmulator.getLanDiscoveredSessions() }.getOrDefault(emptyArray())
                                             }
-                                            discoveredRooms = parseDiscoveredLanRooms(raw, romTitle)
-                                            Toast.makeText(context, "Поиск комнат в сети обновлён", Toast.LENGTH_SHORT).show()
+                                            discoveredRooms = parseDiscoveredLanRooms(context, raw, romTitle)
+                                            Toast.makeText(context, context.getString(R.string.v870_netplay_rooms_refreshed_toast), Toast.LENGTH_SHORT).show()
                                         }
                                     }
                                     .padding(horizontal = 10.dp, vertical = 5.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Filled.Refresh, contentDescription = "Обновить", tint = colors.text, modifier = Modifier.size(14.dp))
+                                Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.v870_netplay_refresh), tint = colors.text, modifier = Modifier.size(14.dp))
                                 Spacer(Modifier.width(4.dp))
-                                Text("Обновить", color = colors.text, fontFamily = WatermelonMono, fontSize = 9.5.sp)
+                                Text(stringResource(R.string.v870_netplay_refresh), color = colors.text, fontFamily = WatermelonMono, fontSize = 9.5.sp)
                             }
                         }
 
@@ -551,7 +555,7 @@ fun NetplayLobbyDialog(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = "Поиск активных хостов в Wi-Fi сети...\nЕсли второй телефон раздаёт точку доступа и комната не появляется автоматически, введите его IP-адрес выше.",
+                                    text = stringResource(R.string.v870_netplay_searching_hosts_hint),
                                     color = colors.text2,
                                     fontFamily = WatermelonMono,
                                     fontSize = 10.sp,
@@ -577,11 +581,12 @@ fun NetplayLobbyDialog(
                                                 }
                                                 isLanConnecting = false
                                                 if (ok) {
+                                                    isHostingSessionRef.set(false)
                                                     joinedSessionRef.set(true)
-                                                    Toast.makeText(context, "Подключено к ${room.hostName}!", Toast.LENGTH_SHORT).show()
+                                                    Toast.makeText(context, context.getString(R.string.v870_netplay_connected_room_toast, room.hostName), Toast.LENGTH_SHORT).show()
                                                     onJoinRoom(room)
                                                 } else {
-                                                    Toast.makeText(context, "Ошибка подключения к ${room.hostIp}", Toast.LENGTH_LONG).show()
+                                                    Toast.makeText(context, context.getString(R.string.v870_netplay_connect_room_failed_toast, room.hostIp), Toast.LENGTH_LONG).show()
                                                 }
                                             }
                                         }
@@ -613,7 +618,7 @@ fun NetplayLobbyDialog(
                                     Icon(Icons.Filled.Dns, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(18.dp))
                                     Spacer(Modifier.width(8.dp))
                                     Text(
-                                        text = "Сервер Nintendo Wi-Fi Connection (WFC)",
+                                        text = stringResource(R.string.v870_netplay_wfc_title),
                                         color = colors.text,
                                         fontFamily = SpaceGrotesk,
                                         fontSize = 13.sp,
@@ -622,7 +627,7 @@ fun NetplayLobbyDialog(
                                 }
                                 Spacer(Modifier.height(6.dp))
                                 Text(
-                                    text = "Выберите онлайн-сервер WFC. STORM DS автоматически прописывает его DNS в точку доступа melonAP и перенаправляет трафик игры на выбранный сервер без ручной настройки.",
+                                    text = stringResource(R.string.v870_netplay_wfc_desc),
                                     color = colors.text2,
                                     fontSize = 11.sp,
                                     lineHeight = 15.sp
@@ -648,7 +653,7 @@ fun NetplayLobbyDialog(
                                             .clickable {
                                                 activeWfcServer = server.id
                                                 prefs.edit().putString("system_wfc_server", server.id).apply()
-                                                Toast.makeText(context, "Выбран сервер ${server.title} (DNS: ${server.dnsIp})", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, context.getString(R.string.v870_netplay_wfc_selected_toast, server.title, server.dnsIp), Toast.LENGTH_SHORT).show()
                                             }
                                             .padding(14.dp),
                                         verticalAlignment = Alignment.CenterVertically
@@ -718,6 +723,7 @@ fun NetplayLobbyDialog(
                                         withContext(Dispatchers.IO) {
                                             runCatching { MelonEmulator.stopLanSession() }
                                         }
+                                        isHostingSessionRef.set(false)
                                         joinedSessionRef.set(true)
                                         Toast.makeText(
                                             context,
@@ -745,7 +751,7 @@ fun NetplayLobbyDialog(
                                 Icon(Icons.Filled.Language, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(8.dp))
                                 Text(
-                                    text = "Запустить игру с WFC онлайн",
+                                    text = stringResource(R.string.v870_netplay_launch_wfc_btn),
                                     color = Color.White,
                                     fontFamily = WatermelonMono,
                                     fontSize = 11.sp,
@@ -803,7 +809,7 @@ private fun RoomCard(room: NetplayRoom, onJoin: () -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "Игроки: ${room.currentPlayers}/${room.maxPlayers}",
+                    text = stringResource(R.string.v870_netplay_players_count, room.currentPlayers, room.maxPlayers),
                     color = Color(0xFF10B981),
                     fontFamily = WatermelonMono,
                     fontSize = 9.sp,
@@ -819,7 +825,7 @@ private fun RoomCard(room: NetplayRoom, onJoin: () -> Unit) {
                 .clickable { onJoin() }
                 .padding(horizontal = 12.dp, vertical = 6.dp)
         ) {
-            Text("Войти", color = Color.Black, fontFamily = WatermelonMono, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.v870_netplay_join_btn), color = Color.Black, fontFamily = WatermelonMono, fontSize = 10.sp, fontWeight = FontWeight.Bold)
         }
     }
 }

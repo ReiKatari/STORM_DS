@@ -136,12 +136,8 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
 
         val appLanguagePreference = findPreference<ListPreference>("app_language")
         appLanguagePreference?.setOnPreferenceChangeListener { _, newValue ->
-            val langTag = newValue as? String ?: "default"
-            if (langTag == "default") {
-                androidx.appcompat.app.AppCompatDelegate.setApplicationLocales(androidx.core.os.LocaleListCompat.getEmptyLocaleList())
-            } else {
-                androidx.appcompat.app.AppCompatDelegate.setApplicationLocales(androidx.core.os.LocaleListCompat.forLanguageTags(langTag))
-            }
+            val langTag = newValue as? String ?: me.magnum.melonds.common.AppLocaleSync.VALUE_DEFAULT
+            me.magnum.melonds.common.AppLocaleSync.applyLanguageTag(langTag)
             true
         }
 
@@ -323,6 +319,13 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
         findPreference<Preference>("system_share_app_log")?.setOnPreferenceClickListener {
             shareSystemLogFiles()
             true
+        }
+
+        if (isLaunchedInGame()) {
+            lockPreferenceInGame("enable_storm_compiler")
+            lockPreferenceInGame("arm9_overclock")
+            lockPreferenceInGame("system_wfc_server")
+            lockPreferenceInGame("system_wfc_custom_dns")
         }
     }
 

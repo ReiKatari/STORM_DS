@@ -11,7 +11,7 @@
     <string name="pause_session_duration_format">Sesi: %s</string>
     <string name="pause_session_less_than_minute">&lt; 1 mnt</string>
     <string name="pause_session_minutes">%d mnt</string>
-    <string name="pause_session_hours_minutes">%d jam %d mnt</string>
+    <string name="pause_session_hours_minutes">%1$d jam %2$d mnt</string>
     <string name="battery_format">%d%%</string>
     <string name="fast_forward_speed_unlimited">Tanpa batas (maks.)</string>
     <string name="solar_preset_0" formatted="false">0% Bayangan</string>

@@ -93,17 +93,16 @@ fun RomTechnicalInfoDialog(
         }
     }
 
-    val isRu = remember { java.util.Locale.getDefault().language.startsWith("ru") }
-    val playTimeStr = remember(rom.totalPlayTime) {
+    val playTimeStr = remember(rom.totalPlayTime, context) {
         val hours = rom.totalPlayTime.inWholeHours
         val minutes = (rom.totalPlayTime.inWholeMinutes % 60)
         val seconds = (rom.totalPlayTime.inWholeSeconds % 60)
         if (hours > 0) {
-            "${hours}ч ${minutes}м"
+            context.getString(R.string.v870_rom_info_time_hm, hours, minutes)
         } else if (minutes > 0) {
-            "${minutes}м ${seconds}с"
+            context.getString(R.string.v870_rom_info_time_ms, minutes, seconds)
         } else {
-            "${seconds}с"
+            context.getString(R.string.v870_rom_info_time_s, seconds)
         }
     }
 
@@ -133,7 +132,7 @@ fun RomTechnicalInfoDialog(
     val copyToClipboard = {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
         val textBuilder = StringBuilder()
-        textBuilder.appendLine("STORM DS - ТЕХНИЧЕСКИЙ ПАСПОРТ ROM")
+        textBuilder.appendLine(context.getString(R.string.v870_rom_info_clipboard_header))
         textBuilder.appendLine("========================================")
         textBuilder.appendLine("${context.getString(R.string.rom_info_title_label)}: ${romDisplayName(rom)}")
         if (rom.name != romDisplayName(rom)) {
@@ -211,7 +210,7 @@ fun RomTechnicalInfoDialog(
                                 isAccent = true,
                             )
                             HardwareBadge(
-                                label = if (isRu) "РАЗМЕР ROM" else "ROM SIZE",
+                                label = stringResource(R.string.v870_rom_header_size),
                                 value = formattedSize.split(" (").first(),
                             )
                         }

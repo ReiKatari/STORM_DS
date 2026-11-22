@@ -211,7 +211,7 @@ class CheatsViewModel @Inject constructor(
                     val newGame = Game(
                         id = null,
                         name = romInfo.gameName,
-                        gameCode = romInfo.gameCode,
+                        gameCode = romInfo.cheatGameCode,
                         gameChecksum = romInfo.headerChecksumString(),
                         cheats = emptyList()
                     )

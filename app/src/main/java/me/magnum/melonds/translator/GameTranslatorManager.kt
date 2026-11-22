@@ -470,7 +470,12 @@ class GameTranslatorManager(
                             openRegionEditor()
                         },
                         onPreviewTts = {
-                            val targetLang = preferences.getString(PREF_TRANSLATOR_TARGET_LANG, "ru") ?: "ru"
+                            val ttsLangPref = preferences.getString(GameTtsManager.PREF_TRANSLATOR_TTS_LANG, "auto") ?: "auto"
+                            val targetLang = if (ttsLangPref == "auto" || ttsLangPref.isBlank()) {
+                                preferences.getString(PREF_TRANSLATOR_TARGET_LANG, "ru") ?: "ru"
+                            } else {
+                                ttsLangPref
+                            }
                             val previewText = when {
                                 targetLang.startsWith("ru", ignoreCase = true) ->
                                     "Бэтмен: Город под защитой! Джокер: Ха-ха-ха, попробуй поймай меня! Майя: Феникс, у нас появилась новая улика!"
@@ -526,8 +531,10 @@ class GameTranslatorManager(
         overlay.fontSizeScale = preferences.getInt(PREF_TRANSLATOR_FONT_SIZE_SCALE, 100) / 100f
 
         overlay.reloadFloatingButtonPositionFromPrefs()
-        val regions = loadRegionsForCurrentGame()
-        overlay.setSavedRegions(regions)
+        if (!overlay.isEditRegionsMode) {
+            val regions = loadRegionsForCurrentGame()
+            overlay.setSavedRegions(regions)
+        }
 
         if (enabled) {
             overlay.elevation = 950f
@@ -695,13 +702,20 @@ class GameTranslatorManager(
         mediaProjectionCapturer.setPermissionResult(resultCode, data)
         if (resultCode == Activity.RESULT_OK && data != null && shouldTranslate) {
             mainScope.launch {
-                withTimeoutOrNull(2500) {
+                val ready = withTimeoutOrNull(2500) {
                     while (!ScreenCaptureService.isReady) {
                         delay(50)
                     }
+                    true
+                } == true
+                if (ready && ScreenCaptureService.isReady) {
+                    delay(150)
+                    triggerTranslation()
+                } else {
+                    MediaProjectionCapturer.resetPermissionFlag()
+                    overlayView?.isTranslating = false
+                    Toast.makeText(activity, R.string.translator_capture_failed, Toast.LENGTH_SHORT).show()
                 }
-                delay(150)
-                triggerTranslation()
             }
         }
     }
@@ -814,7 +828,9 @@ class GameTranslatorManager(
         translationJob = null
         ttsManager.stop()
         overlayView?.isLassoModeActive = false
-        overlayView?.isEditRegionsMode = false
+        if (overlayView?.isEditRegionsMode == true) {
+            overlayView?.exitRegionEditMode(save = false)
+        }
         overlayView?.clearTranslations()
         overlayView?.isTranslating = false
         overlayView?.showFloatingButton = isEnabled && preferences.getBoolean(PREF_TRANSLATOR_SHOW_FLOATING_BUTTON, false)
@@ -927,12 +943,13 @@ class GameTranslatorManager(
                 }
                 val allowFullscreenFallback = customOverrideRegions == null && savedRegions.isNotEmpty()
 
-                var blocks = withTimeoutOrNull(8000) {
+                val regionBlocks = withTimeoutOrNull(8000) {
                     textRecognizer.recognizeTextBlocks(bitmap, sourceLang, customRegions)
-                } ?: emptyList()
+                }
+                var blocks = regionBlocks ?: emptyList()
 
                 // Fallback to fullscreen only for user-drawn ROI regions if they returned 0 blocks
-                if (blocks.isEmpty() && allowFullscreenFallback) {
+                if (regionBlocks != null && blocks.isEmpty() && allowFullscreenFallback) {
                     Log.i(TAG, "Custom regions returned 0 blocks, executing fullscreen fallback...")
                     blocks = withTimeoutOrNull(8000) {
                         textRecognizer.recognizeTextBlocks(bitmap, sourceLang, emptyList())
@@ -963,7 +980,6 @@ class GameTranslatorManager(
                     overlayView?.isTranslating = false
                     return@coroutineScope
                 }
-                lastTranslatedRawText = currentMerged
 
                 val (activeSpeakerName, activeSpeakerGender) = me.magnum.melonds.translator.grammar.SpeakerAndGenderResolver.resolveSpeakerAndGender(
                     blocks = blocks,
@@ -1004,6 +1020,7 @@ class GameTranslatorManager(
                     }
                 }
 
+                var translationFailed = false
                 if (uncachedBlocks.isNotEmpty()) {
                     try {
                         if (engine is MlKitOnDeviceTranslateEngine) {
@@ -1053,6 +1070,7 @@ class GameTranslatorManager(
                             ocrContextGraph.recordDialogueTurn(textToTranslate, finalTranslation)
                         }
                     } catch (e: TranslationException) {
+                        translationFailed = true
                         Log.w(TAG, "Translation failed: ${e.message}", e)
                         showThrottledErrorToast(e.userMessage.ifBlank { e.message }, isAuto)
                         for (idx in uncachedBlocks) {
@@ -1066,6 +1084,15 @@ class GameTranslatorManager(
                 if (expectedGen != activeTranslationGen || !isActive) {
                     return@coroutineScope
                 }
+                if (translationFailed) {
+                    if (uncachedBlocks.size == blocks.size) {
+                        overlayView?.clearTranslations()
+                    } else {
+                        overlayView?.setTranslatedBlocks(blocks)
+                    }
+                    return@coroutineScope
+                }
+                lastTranslatedRawText = currentMerged
                 overlayView?.setTranslatedBlocks(blocks)
 
                 // Record into 50-turn dialogue backlog store with smart deduplication
@@ -1103,9 +1130,7 @@ class GameTranslatorManager(
                 }
             } finally {
                 overlayView?.isTranslating = false
-                if (!bitmap.isRecycled) {
-                    bitmap.recycle()
-                }
+                textRecognizer.recycleBitmapSafely(bitmap)
             }
         }
     }
@@ -1192,6 +1217,11 @@ class GameTranslatorManager(
 
     fun onHostPause() {
         stopAutoTranslate()
+        activeTranslationGen++
+        translationJob?.cancel()
+        translationJob = null
+        overlayView?.isTranslating = false
+        ttsManager.stop()
     }
 
     fun onHostResume() {

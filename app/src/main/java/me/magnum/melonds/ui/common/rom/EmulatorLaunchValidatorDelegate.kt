@@ -8,6 +8,9 @@ import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import me.magnum.melonds.R
 import me.magnum.melonds.domain.model.ConfigurationDirResult
@@ -25,8 +28,11 @@ class EmulatorLaunchValidatorDelegate(
 ) {
 
     private val viewModel by context.viewModels<EmulatorLaunchValidationViewModel>()
+    private val _isInteractiveDialogActive = MutableStateFlow(false)
+    val isInteractiveDialogActive: StateFlow<Boolean> = _isInteractiveDialogActive.asStateFlow()
 
     private val firmwareSettingsLauncher = context.registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        _isInteractiveDialogActive.value = false
         viewModel.onReturnFromFirmwareSettings()
     }
 
@@ -37,7 +43,10 @@ class EmulatorLaunchValidatorDelegate(
                     when (it) {
                         is LaunchValidationResult.Firmware -> {
                             when (it.result) {
-                                is FirmwareLaunchPreconditionCheckResult.Success -> callback.onFirmwareValidated(it.result.consoleType)
+                                is FirmwareLaunchPreconditionCheckResult.Success -> {
+                                    _isInteractiveDialogActive.value = false
+                                    callback.onFirmwareValidated(it.result.consoleType)
+                                }
                                 is FirmwareLaunchPreconditionCheckResult.BiosConfigurationIncorrect -> {
                                     showIncorrectConfigurationDirectoryDialogForFirmware(it.result.configurationDirectoryResult)
                                 }
@@ -51,7 +60,10 @@ class EmulatorLaunchValidatorDelegate(
                         }
                         is LaunchValidationResult.Rom -> {
                             when (it.result) {
-                                is RomLaunchPreconditionCheckResult.Success -> callback.onRomValidated(it.result.rom)
+                                is RomLaunchPreconditionCheckResult.Success -> {
+                                    _isInteractiveDialogActive.value = false
+                                    callback.onRomValidated(it.result.rom)
+                                }
                                 is RomLaunchPreconditionCheckResult.RomEncrypted -> showRomEncryptedDialog(it.result.rom)
                                 is RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed -> showDsiWareTitleLoadIssueDialog(it.result.reason)
                                 is RomLaunchPreconditionCheckResult.BiosConfigurationIncorrect -> {
@@ -71,15 +83,23 @@ class EmulatorLaunchValidatorDelegate(
         }
     }
 
+    private fun abortValidation() {
+        _isInteractiveDialogActive.value = false
+        callback.onValidationAborted()
+    }
+
     fun validateRom(rom: Rom) {
+        _isInteractiveDialogActive.value = false
         viewModel.validateRomForLaunch(rom)
     }
 
     fun validateFirmware(consoleType: ConsoleType) {
+        _isInteractiveDialogActive.value = false
         viewModel.validateFirmwareForLaunch(consoleType)
     }
 
     private fun showIncorrectConfigurationDirectoryDialogForFirmware(configurationDirResult: ConfigurationDirResult) {
+        _isInteractiveDialogActive.value = true
         AlertDialog.Builder(context)
             .setTitle(R.string.firmware_launch_failed)
             .setMessage(R.string.firmware_launch_bad_setup)
@@ -90,14 +110,16 @@ class EmulatorLaunchValidatorDelegate(
                 firmwareSettingsLauncher.launch(intent)
             }
             .setNeutralButton(R.string.delete_bios_paths) { _, _ ->
+                _isInteractiveDialogActive.value = false
                 viewModel.clearBiosDirectoriesAndRetry()
             }
-            .setNegativeButton(R.string.cancel) { _, _ -> callback.onValidationAborted() }
-            .setOnCancelListener { callback.onValidationAborted() }
+            .setNegativeButton(R.string.cancel) { _, _ -> abortValidation() }
+            .setOnCancelListener { abortValidation() }
             .show()
     }
 
     private fun showIncorrectConfigurationDirectoryDialogForRom(configurationDirResult: ConfigurationDirResult) {
+        _isInteractiveDialogActive.value = true
         AlertDialog.Builder(context)
             .setTitle(R.string.rom_launch_failed)
             .setMessage(R.string.rom_launch_custom_bios_firmware_bad_setup)
@@ -107,12 +129,13 @@ class EmulatorLaunchValidatorDelegate(
                 }
                 firmwareSettingsLauncher.launch(intent)
             }
-            .setNegativeButton(R.string.cancel) { _, _ -> callback.onValidationAborted() }
-            .setOnCancelListener { callback.onValidationAborted() }
+            .setNegativeButton(R.string.cancel) { _, _ -> abortValidation() }
+            .setOnCancelListener { abortValidation() }
             .show()
     }
 
     private fun showDsiWareTitleLoadIssueDialog(reason: RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed.Reason) {
+        _isInteractiveDialogActive.value = true
         val message = when (reason) {
             RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed.Reason.NandError -> context.getString(R.string.failed_launch_dsiware_title_check_failed)
             RomLaunchPreconditionCheckResult.DSiWareTitleValidationFailed.Reason.RomParseError -> context.getString(R.string.failed_launch_dsiware_title_rom_failed)
@@ -122,23 +145,25 @@ class EmulatorLaunchValidatorDelegate(
         AlertDialog.Builder(context)
             .setTitle(R.string.failed_launch_dsiware_title)
             .setMessage(message)
-            .setPositiveButton(R.string.ok) { _, _ -> callback.onValidationAborted() }
+            .setPositiveButton(R.string.ok) { _, _ -> abortValidation() }
             .setOnCancelListener {
-                callback.onValidationAborted()
+                abortValidation()
             }
             .show()
     }
 
     private fun showInvalidDirectoryAccessDialog() {
+        _isInteractiveDialogActive.value = true
         AlertDialog.Builder(context)
             .setTitle(R.string.error_invalid_directory)
             .setMessage(R.string.error_invalid_directory_description)
             .setPositiveButton(R.string.ok, null)
-            .setOnDismissListener { callback.onValidationAborted() }
+            .setOnDismissListener { abortValidation() }
             .show()
     }
 
     private fun showRendererUnsupportedDialog(renderer: VideoRenderer) {
+        _isInteractiveDialogActive.value = true
         val rendererLabel = when (renderer) {
             VideoRenderer.SOFTWARE -> "Software"
             VideoRenderer.OPENGL -> "OpenGL"
@@ -153,12 +178,13 @@ class EmulatorLaunchValidatorDelegate(
                 val intent = Intent(context, SettingsActivity::class.java)
                 firmwareSettingsLauncher.launch(intent)
             }
-            .setNegativeButton(R.string.cancel) { _, _ -> callback.onValidationAborted() }
-            .setOnCancelListener { callback.onValidationAborted() }
+            .setNegativeButton(R.string.cancel) { _, _ -> abortValidation() }
+            .setOnCancelListener { abortValidation() }
             .show()
     }
 
     private fun showRendererInitFailedDialog(renderer: VideoRenderer) {
+        _isInteractiveDialogActive.value = true
         val rendererLabel = when (renderer) {
             VideoRenderer.SOFTWARE -> "Software"
             VideoRenderer.OPENGL -> "OpenGL"
@@ -173,8 +199,8 @@ class EmulatorLaunchValidatorDelegate(
                 val intent = Intent(context, SettingsActivity::class.java)
                 firmwareSettingsLauncher.launch(intent)
             }
-            .setNegativeButton(R.string.cancel) { _, _ -> callback.onValidationAborted() }
-            .setOnCancelListener { callback.onValidationAborted() }
+            .setNegativeButton(R.string.cancel) { _, _ -> abortValidation() }
+            .setOnCancelListener { abortValidation() }
             .show()
     }
 
@@ -183,14 +209,15 @@ class EmulatorLaunchValidatorDelegate(
             return
         }
 
+        _isInteractiveDialogActive.value = true
         AlertDialog.Builder(context)
             .setTitle(R.string.decrypt_rom_title)
             .setMessage(R.string.decrypt_rom_replace_description)
             .setPositiveButton(R.string.decrypt_rom_replace_confirm) { _, _ ->
                 startRomDecryptionWithProgressDialog(rom)
             }
-            .setNegativeButton(R.string.cancel) { _, _ -> callback.onValidationAborted() }
-            .setOnCancelListener { callback.onValidationAborted() }
+            .setNegativeButton(R.string.cancel) { _, _ -> abortValidation() }
+            .setOnCancelListener { abortValidation() }
             .show()
     }
 
@@ -198,6 +225,8 @@ class EmulatorLaunchValidatorDelegate(
         if (context.isFinishing || context.isDestroyed) {
             return
         }
+
+        _isInteractiveDialogActive.value = true
 
         val density = context.resources.displayMetrics.density
         val padH = (24 * density).toInt()
@@ -284,10 +313,10 @@ class EmulatorLaunchValidatorDelegate(
                     validateRom(rom)
                 }
                 .setNegativeButton(R.string.cancel) { _, _ ->
-                    callback.onValidationAborted()
+                    abortValidation()
                 }
                 .setOnCancelListener {
-                    callback.onValidationAborted()
+                    abortValidation()
                 }
                 .show()
         } else {
@@ -307,10 +336,10 @@ class EmulatorLaunchValidatorDelegate(
                 .setMessage(context.getString(R.string.decrypt_rom_result_error_message, reasonText))
                 .setCancelable(false)
                 .setPositiveButton(R.string.ok) { _, _ ->
-                    callback.onValidationAborted()
+                    abortValidation()
                 }
                 .setOnCancelListener {
-                    callback.onValidationAborted()
+                    abortValidation()
                 }
                 .show()
         }

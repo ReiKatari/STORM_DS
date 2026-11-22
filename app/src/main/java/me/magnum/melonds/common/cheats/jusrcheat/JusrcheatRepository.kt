@@ -27,6 +27,7 @@ import java.nio.ByteOrder
 import java.nio.MappedByteBuffer
 import java.nio.channels.FileChannel
 import java.util.zip.GZIPInputStream
+import me.magnum.melonds.R
 
 /**
  * Modernized Repository providing instant browsing, cross-region mapping,
@@ -225,14 +226,17 @@ class JusrcheatRepository private constructor(
     fun searchGames(query: String, regionFilter: String = "ALL"): List<JusrcheatGameMeta> {
         val q = query.trim().uppercase()
         val r = regionFilter.trim().uppercase()
+        val allLocalized = context.getString(R.string.v870_region_all).uppercase()
+        val europeLocalized = context.getString(R.string.v870_region_europe).uppercase()
+        val japanLocalized = context.getString(R.string.v870_region_japan).uppercase()
 
         val list = cachedIndex ?: gameMetaList
         return list.filter { meta ->
             val matchesRegion = when (r) {
-                "ALL", "ВСЕ" -> true
+                "ALL", allLocalized -> true
                 "USA" -> meta.region.equals("USA", ignoreCase = true)
-                "EUROPE", "ЕВРОПА" -> meta.region.equals("Europe", ignoreCase = true)
-                "JAPAN", "ЯПОНИЯ" -> meta.region.equals("Japan", ignoreCase = true)
+                "EUROPE", europeLocalized -> meta.region.equals("Europe", ignoreCase = true)
+                "JAPAN", japanLocalized -> meta.region.equals("Japan", ignoreCase = true)
                 else -> true
             }
 
@@ -321,7 +325,7 @@ class JusrcheatRepository private constructor(
         cheat: JusrcheatCode,
         enable: Boolean = true
     ): Cheat = withContext(Dispatchers.IO) {
-        val targetGameCode = romInfo.gameCode.trim().uppercase()
+        val targetGameCode = romInfo.cheatGameCode.trim().uppercase()
         val targetChecksum = romInfo.headerChecksumString().trim().uppercase()
         val targetTitle = romInfo.gameTitle.ifBlank { romInfo.gameName }
 
@@ -411,7 +415,7 @@ class JusrcheatRepository private constructor(
         jusrGame: JusrcheatGame,
         enableAll: Boolean = false
     ) = withContext(Dispatchers.IO) {
-        val targetGameCode = romInfo.gameCode.trim().uppercase()
+        val targetGameCode = romInfo.cheatGameCode.trim().uppercase()
         val targetChecksum = romInfo.headerChecksumString().trim().uppercase()
         val targetTitle = romInfo.gameTitle.ifBlank { romInfo.gameName.ifBlank { jusrGame.title } }
 

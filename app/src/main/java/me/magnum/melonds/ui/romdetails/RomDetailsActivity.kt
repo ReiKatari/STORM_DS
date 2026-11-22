@@ -87,10 +87,12 @@ class RomDetailsActivity : AppCompatActivity() {
                 )
                 else -> {
                     val boxArtUrl by produceState<String?>(initialValue = null, rom.uri) {
-                        value = runCatching {
-                            boxArtRepository.getCustomCoverFile(rom)?.let { "file://${it.absolutePath}?t=${it.lastModified()}" }
-                                ?: if (settingsRepository.isRaCoverEnabled()) boxArtRepository.getBoxArtUrl(rom) else null
-                        }.getOrNull()
+                        value = withContext(Dispatchers.IO) {
+                            runCatching {
+                                boxArtRepository.getCustomCoverFile(rom)?.let { "file://${it.absolutePath}?t=${it.lastModified()}" }
+                                    ?: if (settingsRepository.isRaCoverEnabled()) boxArtRepository.getBoxArtUrl(rom) else null
+                            }.getOrNull()
+                        }
                         boxArtRepository.coverUpdates.collect { (uri, newUrl) ->
                             if (uri == rom.uri.toString()) {
                                 value = newUrl
@@ -152,10 +154,12 @@ class RomDetailsActivity : AppCompatActivity() {
             val offlineAchievementsUiState by romRetroAchievementsViewModel.offlineAchievementsUiState.collectAsState()
 
             val boxArtUrl by produceState<String?>(initialValue = null, rom.uri) {
-                value = runCatching {
-                    boxArtRepository.getCustomCoverFile(rom)?.let { "file://${it.absolutePath}?t=${it.lastModified()}" }
-                        ?: if (settingsRepository.isRaCoverEnabled()) boxArtRepository.getBoxArtUrl(rom) else null
-                }.getOrNull()
+                value = withContext(Dispatchers.IO) {
+                    runCatching {
+                        boxArtRepository.getCustomCoverFile(rom)?.let { "file://${it.absolutePath}?t=${it.lastModified()}" }
+                            ?: if (settingsRepository.isRaCoverEnabled()) boxArtRepository.getBoxArtUrl(rom) else null
+                    }.getOrNull()
+                }
                 boxArtRepository.coverUpdates.collect { (uri, newUrl) ->
                     if (uri == rom.uri.toString()) {
                         value = newUrl

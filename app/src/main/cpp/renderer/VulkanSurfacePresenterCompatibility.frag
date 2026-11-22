@@ -1827,7 +1827,10 @@ vec3 applyLcdGridEffect(vec3 rgb, vec2 uv, uint lcdGridMode)
 {
     if (lcdGridMode == 0u)
         return rgb;
-    vec2 cellCoord = uv * vec2(256.0, 192.0);
+    vec2 localUv = isCompositeAtlasDrawMode()
+        ? screenLocalCoord(uv, resolvePresenterTopScreen(uv))
+        : uv;
+    vec2 cellCoord = localUv * vec2(256.0, 192.0);
     vec2 fw = max(fwidth(cellCoord), vec2(0.0001));
     float visibility = clamp(1.0 - max(fw.x, fw.y) * 1.45, 0.0, 1.0);
     if (visibility <= 0.01)

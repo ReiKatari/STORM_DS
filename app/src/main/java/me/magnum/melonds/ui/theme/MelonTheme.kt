@@ -14,8 +14,21 @@ import androidx.compose.ui.graphics.luminance
 val watermelon: WatermelonColors
     @Composable get() = LocalWatermelonColors.current
 
+private fun contrastRatio(foreground: Color, background: Color): Float {
+    val lum1 = foreground.luminance()
+    val lum2 = background.luminance()
+    val lighter = maxOf(lum1, lum2)
+    val darker = minOf(lum1, lum2)
+    return (lighter + 0.05f) / (darker + 0.05f)
+}
+
 private fun watermelonMaterialColors(colors: WatermelonColors): Colors {
-    val onAccent = if (colors.green.luminance() > 0.45f) Color(0xFF0A0A0F) else Color.White
+    val darkOnAccent = Color(0xFF0A0A0F)
+    val onAccent = if (contrastRatio(darkOnAccent, colors.green) >= contrastRatio(Color.White, colors.green)) {
+        darkOnAccent
+    } else {
+        Color.White
+    }
     return if (colors.isDark) {
         darkColors(
             primary = colors.green,

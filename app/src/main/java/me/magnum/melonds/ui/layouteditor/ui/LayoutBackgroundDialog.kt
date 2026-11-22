@@ -98,7 +98,7 @@ fun LayoutBackgroundDialog(
                                 fontWeight = FontWeight.Bold,
                             )
                             Text(
-                                text = "Настройка фонового изображения макета",
+                                text = stringResource(R.string.v870_layout_bg_title),
                                 color = colors.text3,
                                 fontFamily = WatermelonMono,
                                 fontSize = 11.sp,
@@ -162,7 +162,7 @@ fun LayoutBackgroundDialog(
                                 )
                             }
                             Text(
-                                text = "Выбрать",
+                                text = stringResource(R.string.v870_layout_bg_choose),
                                 color = colors.green,
                                 fontFamily = SpaceGrotesk,
                                 fontSize = 13.sp,

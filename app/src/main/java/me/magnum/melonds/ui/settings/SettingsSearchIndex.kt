@@ -6,6 +6,7 @@ import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
@@ -23,6 +24,8 @@ import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import me.magnum.melonds.R
+import me.magnum.melonds.extensions.isSustainedPerformanceModeAvailable
+import me.magnum.melonds.impl.AdrenoVulkanDriverSupport
 import me.magnum.melonds.ui.settings.fragments.AboutPreferencesFragment
 import me.magnum.melonds.ui.settings.fragments.AudioPreferencesFragment
 import me.magnum.melonds.ui.settings.fragments.CheatsPreferencesFragment
@@ -48,9 +51,37 @@ data class SearchPreferenceItem(
     val sectionTitle: String,
     val fragmentClassName: String,
     val iconRes: Int = 0,
+    val targetPreferenceKey: String? = key,
+    val preferenceRootKey: String? = null,
 )
 
 class SettingsSearchIndex(private val context: Context) {
+
+    private companion object {
+        val ALWAYS_HIDDEN_KEYS = setOf(
+            "video_hd_textures_enabled",
+            "video_ai_upscale_scale",
+            "video_60fps_patch",
+            "enable_jit",
+        )
+    }
+
+    private fun buildExcludedKeys(): Set<String> {
+        val excluded = HashSet<String>(ALWAYS_HIDDEN_KEYS)
+        if (!context.isSustainedPerformanceModeAvailable()) {
+            excluded.add("enable_sustained_performance")
+        }
+        if (Build.SUPPORTED_64_BIT_ABIS.isEmpty()) {
+            excluded.add("enable_storm_compiler")
+        }
+        if (!AdrenoVulkanDriverSupport.isSupported(context)) {
+            excluded.add("video_vulkan_driver_manager")
+            excluded.add("video_vulkan_driver_mode")
+            excluded.add("video_vulkan_driver_import")
+            excluded.add("video_vulkan_driver_remove")
+        }
+        return excluded
+    }
 
     private data class ScreenDescriptor(
         val xmlResId: Int,
@@ -87,17 +118,28 @@ class SettingsSearchIndex(private val context: Context) {
     private fun buildIndex(): List<SearchPreferenceItem> {
         val items = ArrayList<SearchPreferenceItem>()
         val seenKeys = HashSet<String>()
+        val excludedKeys = buildExcludedKeys()
 
         for (screen in screenDescriptors) {
             val parser = runCatching { context.resources.getXml(screen.xmlResId) }.getOrNull() ?: continue
             try {
                 var eventType = parser.eventType
                 var currentCategory: String? = null
+                val screenStack = ArrayDeque<String?>()
 
                 while (eventType != XmlPullParser.END_DOCUMENT) {
                     if (eventType == XmlPullParser.START_TAG) {
                         val tagName = parser.name
-                        if (tagName == "PreferenceCategory") {
+                        if (tagName == "PreferenceScreen") {
+                            var screenKey: String? = null
+                            for (i in 0 until parser.attributeCount) {
+                                if (parser.getAttributeName(i) == "key") {
+                                    screenKey = parser.getAttributeValue(i)
+                                    break
+                                }
+                            }
+                            screenStack.addLast(if (screenStack.isEmpty()) null else screenKey)
+                        } else if (tagName == "PreferenceCategory") {
                             for (i in 0 until parser.attributeCount) {
                                 if (parser.getAttributeName(i) == "title") {
                                     val resId = parser.getAttributeResourceValue(i, 0)
@@ -109,7 +151,7 @@ class SettingsSearchIndex(private val context: Context) {
                                     break
                                 }
                             }
-                        } else if (tagName != "PreferenceScreen") {
+                        } else {
                             var key: String? = null
                             var title: String? = null
                             var summary: String? = null
@@ -147,7 +189,7 @@ class SettingsSearchIndex(private val context: Context) {
                                 }
                             }
 
-                            if (isVisible && !title.isNullOrBlank() && !key.isNullOrBlank()) {
+                            if (isVisible && !title.isNullOrBlank() && !key.isNullOrBlank() && key !in excludedKeys) {
                                 val uniqueKey = "${screen.fragmentClass}::$key"
                                 if (!seenKeys.contains(uniqueKey)) {
                                     seenKeys.add(uniqueKey)
@@ -159,6 +201,7 @@ class SettingsSearchIndex(private val context: Context) {
                                     } else {
                                         baseSection
                                     }
+                                    val activeRootKey = screenStack.lastOrNull()
 
                                     items.add(
                                         SearchPreferenceItem(
@@ -168,10 +211,16 @@ class SettingsSearchIndex(private val context: Context) {
                                             sectionTitle = fullSection,
                                             fragmentClassName = targetFragment ?: screen.fragmentClass,
                                             iconRes = screen.iconResId,
+                                            targetPreferenceKey = if (targetFragment != null) null else key,
+                                            preferenceRootKey = if (targetFragment != null) null else activeRootKey,
                                         )
                                     )
                                 }
                             }
+                        }
+                    } else if (eventType == XmlPullParser.END_TAG && parser.name == "PreferenceScreen") {
+                        if (screenStack.isNotEmpty()) {
+                            screenStack.removeLast()
                         }
                     }
                     eventType = parser.next()
@@ -362,7 +411,7 @@ class SettingsSearchDialog(
 
         adapter.onItemClick = { item ->
             dismiss()
-            activity.navigateToPreference(item.fragmentClassName, item.key)
+            activity.navigateToPreference(item.fragmentClassName, item.targetPreferenceKey, item.preferenceRootKey)
         }
 
         searchInput.post {

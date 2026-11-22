@@ -419,7 +419,7 @@
     </string-array>
 
     <string-array name="app_language_options">
-        <item>🌐 System Default / По умолчанию</item>
+        <item>🌐 System Default</item>
         <item>🇷🇺 Русский</item>
         <item>🇬🇧 English</item>
         <item>🇩🇪 Deutsch</item>

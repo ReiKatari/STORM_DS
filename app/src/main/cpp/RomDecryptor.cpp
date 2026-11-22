@@ -294,7 +294,7 @@ static bool ValidateDecryptedRom(const uint8_t* rom, size_t fileSize)
     return true;
 }
 
-static void DecryptModcryptArea(
+static bool DecryptModcryptArea(
     uint8_t* rom,
     size_t fileSize,
     uint32_t areaOffset,
@@ -310,34 +310,20 @@ static void DecryptModcryptArea(
 {
     uint8_t normalKey[16];
     bool keyFound = false;
-    int bestScore = -1;
-    uint8_t bestKey[16] = {0};
 
     for (size_t c = 0; c < keyCandidateCount; c++)
     {
-        int candScore = 0;
-        if (TryDeriveAndTestKey(rom, fileSize, keyCandidates[c], areaOffset, areaSize, ivOffset, devKey, normalKey, &candScore))
+        if (TryDeriveAndTestKey(rom, fileSize, keyCandidates[c], areaOffset, areaSize, ivOffset, devKey, normalKey))
         {
             keyFound = true;
             break;
         }
-        if (candScore > bestScore)
-        {
-            bestScore = candScore;
-            memcpy(bestKey, normalKey, 16);
-        }
     }
     if (!keyFound)
-    {
-        if (bestScore >= 15)
-        {
-            memcpy(normalKey, bestKey, 16);
-        }
-        else
-        {
-            TryDeriveAndTestKey(rom, fileSize, OFFSET_DSI_ARM9I_HASH, 0, 0, ivOffset, devKey, normalKey);
-        }
-    }
+        return false;
+
+    std::vector<uint8_t> decrypted(areaSize);
+    memcpy(decrypted.data(), &rom[areaOffset], areaSize);
 
     AES_ctx ctx;
     uint8_t iv[16];
@@ -348,17 +334,23 @@ static void DecryptModcryptArea(
     {
         uint32_t blockLen = (i + 16 <= areaSize) ? 16 : (areaSize - i);
         uint8_t block[16] = {0};
-        memcpy(block, &rom[static_cast<uint64_t>(areaOffset) + i], blockLen);
+        memcpy(block, &decrypted[i], blockLen);
         uint8_t swapped[16];
         Bswap128(swapped, block);
         AES_CTR_xcrypt_buffer(&ctx, swapped, 16);
         Bswap128(block, swapped);
-        memcpy(&rom[static_cast<uint64_t>(areaOffset) + i], block, blockLen);
+        memcpy(&decrypted[i], block, blockLen);
 
         currentWork += blockLen;
         if (progressCallback && (i % 65536 == 0))
             progressCallback(currentWork, totalWork);
     }
+
+    if (!isBufferPlaintext(decrypted.data(), areaSize))
+        return false;
+
+    memcpy(&rom[areaOffset], decrypted.data(), areaSize);
+    return true;
 }
 
 namespace MelonDSAndroid {
@@ -386,6 +378,10 @@ static EncryptionStatus CheckEncryptionFromFile(FILE* f)
     uint8_t unitCode = header[OFFSET_UNIT_CODE];
     if (!(unitCode & 0x02) && unitCode != 0x03)
         return EncryptionStatus::ERROR_NOT_DSI_ROM;
+
+    // Per DSi spec, offset 0x1C bit 0 indicates Modcrypt is enabled
+    if ((header[OFFSET_DSI_CRYPTO_FLAGS] & 0x01) == 0)
+        return EncryptionStatus::NOT_ENCRYPTED;
 
     uint32_t mod1Off  = LE32(&header[OFFSET_MODCRYPT1_OFF]);
     uint32_t mod1Size = LE32(&header[OFFSET_MODCRYPT1_SIZE]);
@@ -554,12 +550,14 @@ static DecryptResult DecryptRomInMemory(
         return DecryptResult::ERROR_MODCRYPT_AREA_OUT_OF_BOUNDS;
     }
 
+    const bool modcryptEnabled = (rom[OFFSET_DSI_CRYPTO_FLAGS] & 0x01) != 0;
+
     bool mod1Encrypted = false;
-    if (mod1Active)
+    if (modcryptEnabled && mod1Active)
         mod1Encrypted = !isBufferPlaintext(&rom[mod1Off], mod1Size);
 
     bool mod2Encrypted = false;
-    if (mod2Active)
+    if (modcryptEnabled && mod2Active)
         mod2Encrypted = !isBufferPlaintext(&rom[mod2Off], mod2Size);
 
     if (!mod1Encrypted && !mod2Encrypted)
@@ -574,8 +572,9 @@ static DecryptResult DecryptRomInMemory(
             if (!ValidateDecryptedRom(rom, fileSize))
                 return DecryptResult::ERROR_VALIDATION_FAILED;
             if (outNeedsDiskWrite) *outNeedsDiskWrite = true;
+            return DecryptResult::SUCCESS;
         }
-        else if (!ValidateDecryptedRom(rom, fileSize))
+        if (!ValidateDecryptedRom(rom, fileSize))
         {
             return DecryptResult::ERROR_VALIDATION_FAILED;
         }
@@ -601,20 +600,26 @@ static DecryptResult DecryptRomInMemory(
 
     if (mod1Encrypted && mod1Active)
     {
-        DecryptModcryptArea(
-            rom, fileSize, mod1Off, mod1Size, OFFSET_DSI_ARM9_HASH,
-            devKey, keyCandidates, keyCandidateCount,
-            currentWork, totalWork, progressCallback
-        );
+        if (!DecryptModcryptArea(
+                rom, fileSize, mod1Off, mod1Size, OFFSET_DSI_ARM9_HASH,
+                devKey, keyCandidates, keyCandidateCount,
+                currentWork, totalWork, progressCallback
+            ))
+        {
+            return DecryptResult::ERROR_VALIDATION_FAILED;
+        }
     }
 
     if (mod2Encrypted && mod2Active)
     {
-        DecryptModcryptArea(
-            rom, fileSize, mod2Off, mod2Size, OFFSET_DSI_ARM7_HASH,
-            devKey, keyCandidates, keyCandidateCount,
-            currentWork, totalWork, progressCallback
-        );
+        if (!DecryptModcryptArea(
+                rom, fileSize, mod2Off, mod2Size, OFFSET_DSI_ARM7_HASH,
+                devKey, keyCandidates, keyCandidateCount,
+                currentWork, totalWork, progressCallback
+            ))
+        {
+            return DecryptResult::ERROR_VALIDATION_FAILED;
+        }
     }
 
     ApplyCompatibilityPatches(rom, fileSize);
@@ -805,12 +810,13 @@ bool DecryptRomBuffer(uint8_t* rom, size_t fileSize)
         return false;
 
     const uint64_t uFileSize = static_cast<uint64_t>(fileSize);
+    const bool modcryptEnabled = (rom[OFFSET_DSI_CRYPTO_FLAGS] & 0x01) != 0;
     bool mod1Encrypted = false;
-    if (RangeFitsInFile(mod1Off, mod1Size, uFileSize))
+    if (modcryptEnabled && RangeFitsInFile(mod1Off, mod1Size, uFileSize))
         mod1Encrypted = !isBufferPlaintext(&rom[mod1Off], mod1Size);
 
     bool mod2Encrypted = false;
-    if (RangeFitsInFile(mod2Off, mod2Size, uFileSize))
+    if (modcryptEnabled && RangeFitsInFile(mod2Off, mod2Size, uFileSize))
         mod2Encrypted = !isBufferPlaintext(&rom[mod2Off], mod2Size);
 
     if (!mod1Encrypted && !mod2Encrypted)
@@ -843,20 +849,26 @@ bool DecryptRomBuffer(uint8_t* rom, size_t fileSize)
 
     if (mod1Encrypted && RangeFitsInFile(mod1Off, mod1Size, uFileSize))
     {
-        DecryptModcryptArea(
-            rom, fileSize, mod1Off, mod1Size, OFFSET_DSI_ARM9_HASH,
-            devKey, keyCandidates, keyCandidateCount,
-            dummyWork, 0, nullptr
-        );
+        if (!DecryptModcryptArea(
+                rom, fileSize, mod1Off, mod1Size, OFFSET_DSI_ARM9_HASH,
+                devKey, keyCandidates, keyCandidateCount,
+                dummyWork, 0, nullptr
+            ))
+        {
+            return false;
+        }
     }
 
     if (mod2Encrypted && RangeFitsInFile(mod2Off, mod2Size, uFileSize))
     {
-        DecryptModcryptArea(
-            rom, fileSize, mod2Off, mod2Size, OFFSET_DSI_ARM7_HASH,
-            devKey, keyCandidates, keyCandidateCount,
-            dummyWork, 0, nullptr
-        );
+        if (!DecryptModcryptArea(
+                rom, fileSize, mod2Off, mod2Size, OFFSET_DSI_ARM7_HASH,
+                devKey, keyCandidates, keyCandidateCount,
+                dummyWork, 0, nullptr
+            ))
+        {
+            return false;
+        }
     }
 
     ApplyCompatibilityPatches(rom, fileSize);

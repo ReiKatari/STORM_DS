@@ -6,6 +6,7 @@ import android.os.Environment
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import me.magnum.melonds.MelonEmulator
 import me.magnum.melonds.domain.model.SaveStateSlot
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.domain.repositories.SaveStatesRepository
@@ -35,6 +36,7 @@ object RomDataBundleExporter {
         saveStatesRepository: SaveStatesRepository? = null,
     ): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
+            runCatching { MelonEmulator.flushPendingSaveStateWrites() }
             val effectiveRom = rom ?: SramProvider.lastRom ?: SaveStateUndoManager.lastActiveRom
             val rawName = effectiveRom?.config?.customName ?: effectiveRom?.name ?: "NDS_Game"
             val sanitizedRomName = rawName.replace(Regex("[\\\\/:*?\"<>|\\s]+"), "_").trim('_').ifEmpty { "nds_game" }

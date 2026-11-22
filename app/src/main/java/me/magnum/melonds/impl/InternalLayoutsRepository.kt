@@ -98,6 +98,9 @@ class InternalLayoutsRepository(
     }
 
     override suspend fun saveLayout(layout: LayoutConfiguration) {
+        if (layout.type == LayoutConfiguration.LayoutType.DEFAULT || layout.id == LayoutConfiguration.DEFAULT_ID) {
+            return
+        }
         ensureLayoutsAreLoaded()
         if (layout.id == null) {
             val newLayout = layout.copy(

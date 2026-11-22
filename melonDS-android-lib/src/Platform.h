@@ -249,7 +249,7 @@ enum LogLevel
 
 void Log(LogLevel level, const char* fmt, ...);
 
-// Boot diagnostic capture — collects native log output during DSi boot
+// Boot diagnostic capture - collects native log output during DSi boot
 void StartBootDiagnosticCapture();
 std::string StopAndGetBootDiagnostic();
 

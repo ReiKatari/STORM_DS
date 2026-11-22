@@ -213,6 +213,7 @@ public:
     int32_t discardPendingRetroAchievementsSubmissions(
         const std::vector<uint64_t>& expectedSubmissionIds);
     void setRetroAchievementsSubmissionTransportSuspended(bool suspended);
+    void setRetroAchievementsHardcoreEnabled(bool enabled);
     std::string getDetailedEmulationDiagnostic();
 
 private:

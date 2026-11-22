@@ -139,7 +139,7 @@ fun LayoutComponentsVisibilityDialog(
                                 fontWeight = FontWeight.Bold,
                             )
                             Text(
-                                text = "Включение и скрытие элементов на экране",
+                                text = stringResource(R.string.v870_layout_vis_desc),
                                 color = colors.text3,
                                 fontFamily = Manrope,
                                 fontSize = 11.sp,
@@ -205,35 +205,35 @@ fun LayoutComponentsVisibilityDialog(
                                 val isChecked = instantiatedComponents.contains(component)
 
                                 val name = when (component) {
-                                    LayoutComponent.DPAD -> "Крестовина (D-Pad) / Левый стик"
-                                    LayoutComponent.BUTTON_TOGGLE_ANALOG_STICK -> "Сменить D-Pad / Стик"
+                                    LayoutComponent.DPAD -> stringResource(R.string.v870_comp_dpad_or_stick)
+                                    LayoutComponent.BUTTON_TOGGLE_ANALOG_STICK -> stringResource(R.string.v870_comp_toggle_stick)
                                     else -> stringResource(getLayoutComponentName(component))
                                 }
 
                                 val description = when (component) {
-                                    LayoutComponent.TOP_SCREEN -> "Основной верхний экран Nintendo DS"
-                                    LayoutComponent.BOTTOM_SCREEN -> "Нижний сенсорный экран Nintendo DS"
-                                    LayoutComponent.HYBRID_SCREEN -> "Основной большой экран с миниатюрой второго экрана сбоку"
-                                    LayoutComponent.DPAD -> "Крестовина управления (D-Pad) или аналоговый стик"
-                                    LayoutComponent.BUTTONS -> "Основные кнопки действия (A, B, X, Y)"
-                                    LayoutComponent.BUTTON_START -> "Кнопка Start (Пауза и меню в игре)"
-                                    LayoutComponent.BUTTON_SELECT -> "Кнопка Select"
-                                    LayoutComponent.BUTTON_L -> "Левый шифт (L)"
-                                    LayoutComponent.BUTTON_R -> "Правый шифт (R)"
-                                    LayoutComponent.BUTTON_HINGE -> "Имитация закрытия крышки консоли"
-                                    LayoutComponent.BUTTON_FAST_FORWARD_TOGGLE -> "Включение и отключение ускоренной перемотки (Fast Forward)"
-                                    LayoutComponent.BUTTON_TOGGLE_SOFT_INPUT -> "Скрыть или показать виртуальные кнопки на экране"
-                                    LayoutComponent.BUTTON_RESET -> "Сброс и перезапуск текущей игры"
-                                    LayoutComponent.BUTTON_PAUSE -> "Приостановка и возобновление эмуляции"
-                                    LayoutComponent.BUTTON_SWAP_SCREENS -> "Мгновенное переключение верхнего и нижнего экранов местами"
-                                    LayoutComponent.BUTTON_QUICK_SAVE -> "Быстрое сохранение состояния в текущий слот"
-                                    LayoutComponent.BUTTON_QUICK_LOAD -> "Быстрая загрузка состояния из текущего слота"
-                                    LayoutComponent.BUTTON_REWIND -> "Перемотка игрового процесса назад во времени"
-                                    LayoutComponent.BUTTON_MICROPHONE_TOGGLE -> "Активация микрофона (шум или голос)"
-                                    LayoutComponent.BUTTON_TOGGLE_EXTRA_BUTTONS -> "Панель дополнительных быстрых кнопок"
-                                    LayoutComponent.BUTTON_LOCK_ROTATION -> "Фиксация ориентации экрана (портретная или альбомная)"
-                                    LayoutComponent.BUTTON_TRANSLATE -> "Экранный переводчик текста и диалогов"
-                                    LayoutComponent.BUTTON_TOGGLE_ANALOG_STICK -> "Переключение между D-Pad и аналоговым стиком"
+                                    LayoutComponent.TOP_SCREEN -> stringResource(R.string.v870_comp_desc_top)
+                                    LayoutComponent.BOTTOM_SCREEN -> stringResource(R.string.v870_comp_desc_bottom)
+                                    LayoutComponent.HYBRID_SCREEN -> stringResource(R.string.v870_comp_desc_hybrid)
+                                    LayoutComponent.DPAD -> stringResource(R.string.v870_comp_desc_dpad)
+                                    LayoutComponent.BUTTONS -> stringResource(R.string.v870_comp_desc_buttons)
+                                    LayoutComponent.BUTTON_START -> stringResource(R.string.v870_comp_desc_start)
+                                    LayoutComponent.BUTTON_SELECT -> stringResource(R.string.v870_comp_desc_select)
+                                    LayoutComponent.BUTTON_L -> stringResource(R.string.v870_comp_desc_l)
+                                    LayoutComponent.BUTTON_R -> stringResource(R.string.v870_comp_desc_r)
+                                    LayoutComponent.BUTTON_HINGE -> stringResource(R.string.v870_comp_desc_hinge)
+                                    LayoutComponent.BUTTON_FAST_FORWARD_TOGGLE -> stringResource(R.string.v870_comp_desc_ff)
+                                    LayoutComponent.BUTTON_TOGGLE_SOFT_INPUT -> stringResource(R.string.v870_comp_desc_soft_toggle)
+                                    LayoutComponent.BUTTON_RESET -> stringResource(R.string.v870_comp_desc_reset)
+                                    LayoutComponent.BUTTON_PAUSE -> stringResource(R.string.v870_comp_desc_pause)
+                                    LayoutComponent.BUTTON_SWAP_SCREENS -> stringResource(R.string.v870_comp_desc_swap)
+                                    LayoutComponent.BUTTON_QUICK_SAVE -> stringResource(R.string.v870_comp_desc_qsave)
+                                    LayoutComponent.BUTTON_QUICK_LOAD -> stringResource(R.string.v870_comp_desc_qload)
+                                    LayoutComponent.BUTTON_REWIND -> stringResource(R.string.v870_comp_desc_rewind)
+                                    LayoutComponent.BUTTON_MICROPHONE_TOGGLE -> stringResource(R.string.v870_comp_desc_mic)
+                                    LayoutComponent.BUTTON_TOGGLE_EXTRA_BUTTONS -> stringResource(R.string.v870_comp_desc_extra)
+                                    LayoutComponent.BUTTON_LOCK_ROTATION -> stringResource(R.string.v870_comp_desc_lock_rot)
+                                    LayoutComponent.BUTTON_TRANSLATE -> stringResource(R.string.v870_comp_desc_translate)
+                                    LayoutComponent.BUTTON_TOGGLE_ANALOG_STICK -> stringResource(R.string.v870_comp_desc_toggle_stick)
                                 }
 
                                 Box(

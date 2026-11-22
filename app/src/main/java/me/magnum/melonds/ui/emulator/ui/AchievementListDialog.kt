@@ -125,7 +125,7 @@ fun AchievementListDialog(
                         Spacer(Modifier.width(10.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             androidx.compose.material.Text(
-                                text = "Достижения",
+                                text = stringResource(R.string.v870_ra_achievements_title),
                                 color = colors.text,
                                 fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
                                 fontSize = 16.sp,
@@ -157,7 +157,7 @@ fun AchievementListDialog(
                                     )
                                     Spacer(Modifier.width(4.dp))
                                     androidx.compose.material.Text(
-                                        text = "В игру",
+                                        text = stringResource(R.string.v870_overlay_resume_game),
                                         color = colors.green,
                                         fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
                                         fontSize = 11.5.sp,

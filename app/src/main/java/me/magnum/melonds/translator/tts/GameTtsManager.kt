@@ -13,6 +13,7 @@ import android.speech.tts.Voice
 import android.util.Log
 import androidx.preference.PreferenceManager
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -33,6 +34,7 @@ import me.magnum.melonds.translator.model.TranslatedTextBlock
 import java.io.File
 import java.io.FileOutputStream
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 import kotlin.math.abs
@@ -105,7 +107,7 @@ class GameTtsManager(private val context: Context) {
 
     private fun cleanOldDiskCache() {
         try {
-            val files = diskCacheDir.listFiles() ?: return
+            val files = diskCacheDir.listFiles { f -> f.isFile && f.extension.equals("mp3", ignoreCase = true) } ?: return
             if (files.size > 40) {
                 files.sortedBy { it.lastModified() }
                     .take(files.size - 40)
@@ -380,6 +382,8 @@ class GameTtsManager(private val context: Context) {
     private var availableVoices: List<Voice> = emptyList()
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var studioQueueJob: Job? = null
+    private val mediaPlayerLock = Any()
+    private val diskCacheLock = Any()
     private var mediaPlayer: MediaPlayer? = null
     private var activeEqualizer: Equalizer? = null
     private var activeReverb: PresetReverb? = null
@@ -387,6 +391,7 @@ class GameTtsManager(private val context: Context) {
     private var audioFocusRequest: android.media.AudioFocusRequest? = null
     private val pendingNativeSpeechActionsLock = Any()
     private val pendingNativeSpeechActions = mutableListOf<() -> Unit>()
+    private val utteranceWaiters = ConcurrentHashMap<String, CompletableDeferred<Unit>>()
 
     private fun requestAudioDucking() {
         try {
@@ -426,6 +431,12 @@ class GameTtsManager(private val context: Context) {
     }
 
     private fun releaseAudioEffects() {
+        synchronized(mediaPlayerLock) {
+            releaseAudioEffectsLocked()
+        }
+    }
+
+    private fun releaseAudioEffectsLocked() {
         try {
             activeEqualizer?.enabled = false
             activeEqualizer?.release()
@@ -455,9 +466,28 @@ class GameTtsManager(private val context: Context) {
                 }
                 override fun onDone(utteranceId: String?) {
                     abandonAudioDucking()
+                    if (utteranceId != null) {
+                        utteranceWaiters.remove(utteranceId)?.complete(Unit)
+                    }
                 }
+                @Deprecated("Deprecated in Java")
                 override fun onError(utteranceId: String?) {
                     abandonAudioDucking()
+                    if (utteranceId != null) {
+                        utteranceWaiters.remove(utteranceId)?.complete(Unit)
+                    }
+                }
+                override fun onError(utteranceId: String?, errorCode: Int) {
+                    abandonAudioDucking()
+                    if (utteranceId != null) {
+                        utteranceWaiters.remove(utteranceId)?.complete(Unit)
+                    }
+                }
+                override fun onStop(utteranceId: String?, interrupted: Boolean) {
+                    abandonAudioDucking()
+                    if (utteranceId != null) {
+                        utteranceWaiters.remove(utteranceId)?.complete(Unit)
+                    }
                 }
             })
         } catch (e: Throwable) {
@@ -930,18 +960,16 @@ class GameTtsManager(private val context: Context) {
             studioQueueJob = scope.launch {
                 for ((idx, turn) in turns.withIndex()) {
                     if (!isActive) break
-                    withContext(Dispatchers.Main) {
-                        speakNativeMultiVoice(
-                            text = turn.speechText,
-                            persona = turn.persona,
-                            profile = turn.profile,
-                            baseSpeed = baseSpeed,
-                            targetLang = targetLang,
-                            pitchVariance = pitchVariance,
-                            isSingleMode = false,
-                            queueAdd = idx > 0
-                        )
-                    }
+                    speakNativeMultiVoiceAndWait(
+                        text = turn.speechText,
+                        persona = turn.persona,
+                        profile = turn.profile,
+                        baseSpeed = baseSpeed,
+                        targetLang = targetLang,
+                        pitchVariance = pitchVariance,
+                        isSingleMode = false,
+                        queueAdd = idx > 0
+                    )
                 }
             }
             return
@@ -972,17 +1000,16 @@ class GameTtsManager(private val context: Context) {
                             delay(130L) // Natural studio breath pause between character turns
                         }
                     } else {
-                        withContext(Dispatchers.Main) {
-                            speakNativeMultiVoice(
-                                text = turn.speechText,
-                                persona = turn.persona,
-                                profile = turn.profile,
-                                baseSpeed = baseSpeed,
-                                targetLang = targetLang,
-                                pitchVariance = pitchVariance,
-                                isSingleMode = false
-                            )
-                        }
+                        speakNativeMultiVoiceAndWait(
+                            text = turn.speechText,
+                            persona = turn.persona,
+                            profile = turn.profile,
+                            baseSpeed = baseSpeed,
+                            targetLang = targetLang,
+                            pitchVariance = pitchVariance,
+                            isSingleMode = false,
+                            queueAdd = idx > 0
+                        )
                     }
                 }
             } catch (_: CancellationException) {
@@ -1017,27 +1044,31 @@ class GameTtsManager(private val context: Context) {
         val ssmlPitch = "${if (scaledPitchHz >= 0) "+" else ""}${scaledPitchHz}Hz"
         val ssmlRate = "${if (effectiveRatePct >= 0) "+" else ""}${effectiveRatePct}%"
 
-        val cacheKey = "$primaryVoice|$ssmlRate|$ssmlPitch|${turn.speechText}"
+        val cacheKey = "$langCode|$primaryVoice|$ssmlRate|$ssmlPitch|${turn.emotion.volumeAttr}|${turn.emotion.ssmlContour}|${turn.speechText}"
         synchronized(memoryAudioCache) {
             val mem = memoryAudioCache.get(cacheKey)
             if (mem != null) return mem
         }
 
         val diskFile = File(diskCacheDir, "${sha256Hex(cacheKey)}.mp3")
-        if (diskFile.exists() && diskFile.length() > 0) {
-            try {
-                val bytes = diskFile.readBytes()
-                synchronized(memoryAudioCache) {
-                    memoryAudioCache.put(cacheKey, bytes)
-                }
-                return bytes
-            } catch (_: Throwable) {}
+        val diskBytes = synchronized(diskCacheLock) {
+            if (diskFile.exists() && diskFile.length() > 0) {
+                runCatching { diskFile.readBytes() }.getOrNull()
+            } else {
+                null
+            }
+        }
+        if (diskBytes != null && diskBytes.isNotEmpty()) {
+            synchronized(memoryAudioCache) {
+                memoryAudioCache.put(cacheKey, diskBytes)
+            }
+            return diskBytes
         }
 
         val customAiKey = preferences.getString("translator_custom_ai_key", "").orEmpty()
         val customAiEndpoint = preferences.getString("translator_custom_ai_endpoint", "").orEmpty()
 
-        val audio = withTimeoutOrNull(5500L) {
+        val audio = withTimeoutOrNull(12000L) {
             EdgeNeuralTtsClient.synthesize(
                 text = turn.speechText,
                 voiceName = primaryVoice,
@@ -1056,10 +1087,21 @@ class GameTtsManager(private val context: Context) {
             synchronized(memoryAudioCache) {
                 memoryAudioCache.put(cacheKey, audio)
             }
-            try {
-                diskFile.writeBytes(audio)
-                cleanOldDiskCache()
-            } catch (_: Throwable) {}
+            synchronized(diskCacheLock) {
+                runCatching {
+                    val tmpFile = File(diskCacheDir, "${diskFile.name}.${System.nanoTime()}.tmp")
+                    FileOutputStream(tmpFile).use { fos ->
+                        fos.write(audio)
+                        fos.flush()
+                        runCatching { fos.fd.sync() }
+                    }
+                    if (!tmpFile.renameTo(diskFile)) {
+                        tmpFile.copyTo(diskFile, overwrite = true)
+                        tmpFile.delete()
+                    }
+                    cleanOldDiskCache()
+                }
+            }
         }
 
         return audio
@@ -1183,44 +1225,60 @@ class GameTtsManager(private val context: Context) {
             FileOutputStream(tempFile).use { it.write(audioBytes) }
             withContext(Dispatchers.Main) {
                 suspendCancellableCoroutine<Unit> { cont ->
+                    var player: MediaPlayer? = null
                     try {
-                        stopMediaPlayerOnly()
-                        val player = MediaPlayer()
-                        mediaPlayer = player
-                        player.setAudioAttributes(
-                            AudioAttributes.Builder()
-                                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                                .setUsage(AudioAttributes.USAGE_GAME)
-                                .build()
-                        )
-                        player.setDataSource(tempFile.absolutePath)
-                        player.prepare()
+                        synchronized(mediaPlayerLock) {
+                            stopMediaPlayerOnlyLocked()
+                            val created = MediaPlayer()
+                            player = created
+                            mediaPlayer = created
+                            created.setAudioAttributes(
+                                AudioAttributes.Builder()
+                                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                                    .setUsage(AudioAttributes.USAGE_GAME)
+                                    .build()
+                            )
+                            created.setDataSource(tempFile.absolutePath)
+                            created.prepare()
 
-                        // Apply Studio Acoustic Timbre (Formant Pitch + Parametric EQ + Reverb)
-                        applyStudioTimbreDsp(player, turn.profile, baseSpeed, pitchVariance)
+                            // Apply Studio Acoustic Timbre (Formant Pitch + Parametric EQ + Reverb)
+                            applyStudioTimbreDsp(created, turn.profile, baseSpeed, pitchVariance)
 
-                        requestAudioDucking()
-                        player.setOnCompletionListener {
-                            releaseAudioEffects()
-                            abandonAudioDucking()
-                            tempFile.delete()
-                            if (cont.isActive) cont.resume(Unit)
-                        }
-                        player.setOnErrorListener { _, _, _ ->
-                            releaseAudioEffects()
-                            abandonAudioDucking()
-                            tempFile.delete()
-                            if (cont.isActive) cont.resume(Unit)
-                            true
-                        }
-                        cont.invokeOnCancellation {
-                            CoroutineScope(Dispatchers.Main.immediate).launch {
-                                stopMediaPlayerOnly()
+                            requestAudioDucking()
+                            created.setOnCompletionListener {
+                                synchronized(mediaPlayerLock) {
+                                    if (mediaPlayer === created) {
+                                        releaseAudioEffectsLocked()
+                                        mediaPlayer = null
+                                    }
+                                    runCatching { created.release() }
+                                }
+                                abandonAudioDucking()
+                                tempFile.delete()
+                                if (cont.isActive) cont.resume(Unit)
                             }
-                            tempFile.delete()
+                            created.setOnErrorListener { _, _, _ ->
+                                synchronized(mediaPlayerLock) {
+                                    if (mediaPlayer === created) {
+                                        releaseAudioEffectsLocked()
+                                        mediaPlayer = null
+                                    }
+                                    runCatching { created.release() }
+                                }
+                                abandonAudioDucking()
+                                tempFile.delete()
+                                if (cont.isActive) cont.resume(Unit)
+                                true
+                            }
+                            cont.invokeOnCancellation {
+                                stopSpecificMediaPlayer(created)
+                                abandonAudioDucking()
+                                tempFile.delete()
+                            }
+                            created.start()
                         }
-                        player.start()
                     } catch (e: Throwable) {
+                        player?.let { stopSpecificMediaPlayer(it) }
                         tempFile.delete()
                         if (cont.isActive) cont.resume(Unit)
                     }
@@ -1360,7 +1418,7 @@ class GameTtsManager(private val context: Context) {
         }
     }
 
-    private fun speakNativeMultiVoice(
+    private suspend fun speakNativeMultiVoiceAndWait(
         text: String,
         persona: CharacterPersona,
         profile: SpeakerVoiceProfile?,
@@ -1369,6 +1427,42 @@ class GameTtsManager(private val context: Context) {
         pitchVariance: Float = 1.0f,
         isSingleMode: Boolean = false,
         queueAdd: Boolean = false
+    ) {
+        val utteranceId = "game_tts_multi_${System.nanoTime()}"
+        val doneDeferred = CompletableDeferred<Unit>()
+        utteranceWaiters[utteranceId] = doneDeferred
+        try {
+            withContext(Dispatchers.Main) {
+                speakNativeMultiVoice(
+                    text = text,
+                    persona = persona,
+                    profile = profile,
+                    baseSpeed = baseSpeed,
+                    targetLang = targetLang,
+                    pitchVariance = pitchVariance,
+                    isSingleMode = isSingleMode,
+                    queueAdd = queueAdd,
+                    utteranceId = utteranceId
+                )
+            }
+            withTimeoutOrNull(30_000L) {
+                doneDeferred.await()
+            }
+        } finally {
+            utteranceWaiters.remove(utteranceId)
+        }
+    }
+
+    private fun speakNativeMultiVoice(
+        text: String,
+        persona: CharacterPersona,
+        profile: SpeakerVoiceProfile?,
+        baseSpeed: Float,
+        targetLang: String,
+        pitchVariance: Float = 1.0f,
+        isSingleMode: Boolean = false,
+        queueAdd: Boolean = false,
+        utteranceId: String = "game_tts_multi_${System.nanoTime()}"
     ) {
         val action = {
             val locale = localeForCode(targetLang)
@@ -1382,7 +1476,10 @@ class GameTtsManager(private val context: Context) {
                 applyPersonaVoice(persona, profile, baseSpeed, locale, pitchVariance, userPitchFactor)
             }
             val queueMode = if (queueAdd) TextToSpeech.QUEUE_ADD else TextToSpeech.QUEUE_FLUSH
-            tts?.speak(text, queueMode, null, "game_tts_multi_${System.nanoTime()}")
+            val spoken = tts?.speak(text, queueMode, null, utteranceId)
+            if (spoken != TextToSpeech.SUCCESS) {
+                utteranceWaiters.remove(utteranceId)?.complete(Unit)
+            }
             Unit
         }
         if (tts == null || !isReady) {
@@ -1549,7 +1646,13 @@ class GameTtsManager(private val context: Context) {
     }
 
     private fun stopMediaPlayerOnly() {
-        releaseAudioEffects()
+        synchronized(mediaPlayerLock) {
+            stopMediaPlayerOnlyLocked()
+        }
+    }
+
+    private fun stopMediaPlayerOnlyLocked() {
+        releaseAudioEffectsLocked()
         try {
             mediaPlayer?.stop()
         } catch (_: Throwable) {}
@@ -1559,6 +1662,17 @@ class GameTtsManager(private val context: Context) {
         mediaPlayer = null
     }
 
+    private fun stopSpecificMediaPlayer(targetPlayer: MediaPlayer) {
+        synchronized(mediaPlayerLock) {
+            if (mediaPlayer === targetPlayer) {
+                stopMediaPlayerOnlyLocked()
+            } else {
+                runCatching { targetPlayer.stop() }
+                runCatching { targetPlayer.release() }
+            }
+        }
+    }
+
     fun stop() {
         try {
             studioQueueJob?.cancel()
@@ -1566,6 +1680,8 @@ class GameTtsManager(private val context: Context) {
             synchronized(pendingNativeSpeechActionsLock) {
                 pendingNativeSpeechActions.clear()
             }
+            utteranceWaiters.values.forEach { it.complete(Unit) }
+            utteranceWaiters.clear()
             abandonAudioDucking()
             stopMediaPlayerOnly()
             tts?.stop()
@@ -1582,6 +1698,8 @@ class GameTtsManager(private val context: Context) {
             synchronized(pendingNativeSpeechActionsLock) {
                 pendingNativeSpeechActions.clear()
             }
+            utteranceWaiters.values.forEach { it.complete(Unit) }
+            utteranceWaiters.clear()
             abandonAudioDucking()
             stopMediaPlayerOnly()
             tts?.stop()

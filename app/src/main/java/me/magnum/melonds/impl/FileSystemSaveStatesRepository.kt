@@ -2,7 +2,11 @@ package me.magnum.melonds.impl
 
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.ParcelFileDescriptor
+import android.system.Os
 import androidx.documentfile.provider.DocumentFile
+import me.magnum.melonds.MelonEmulator
+import me.magnum.melonds.R
 import me.magnum.melonds.common.uridelegates.UriHandler
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.domain.model.SaveStateSlot
@@ -128,6 +132,7 @@ class FileSystemSaveStatesRepository(
 
     override fun duplicateRomSaveState(rom: Rom, sourceSlot: SaveStateSlot, targetSlotNumber: Int) {
         if (!sourceSlot.exists) return
+        runCatching { MelonEmulator.flushPendingSaveStateWrites() }
         val saveStateDirectoryDocument = getSaveStateDirectoryDocument(rom) ?: throw SaveSlotLoadException("Could not create parent directory document")
         val romFileName = getRomFileNameWithoutExtension(rom) ?: throw SaveSlotLoadException("Could not determine ROM file name")
 
@@ -140,8 +145,16 @@ class FileSystemSaveStatesRepository(
         context.contentResolver.openInputStream(sourceFile.uri)?.use { input ->
             val outStream = runCatching { context.contentResolver.openOutputStream(targetFile.uri, "wt") }.getOrNull()
                 ?: runCatching { context.contentResolver.openOutputStream(targetFile.uri, "rwt") }.getOrNull()
-                ?: runCatching { context.contentResolver.openOutputStream(targetFile.uri, "w") }.getOrNull()
-                ?: runCatching { context.contentResolver.openOutputStream(targetFile.uri) }.getOrNull()
+                ?: runCatching {
+                    val pfd = context.contentResolver.openFileDescriptor(targetFile.uri, "rw") ?: return@runCatching null
+                    try {
+                        Os.ftruncate(pfd.fileDescriptor, 0L)
+                        ParcelFileDescriptor.AutoCloseOutputStream(pfd)
+                    } catch (t: Throwable) {
+                        runCatching { pfd.close() }
+                        throw t
+                    }
+                }.getOrNull()
             outStream?.use { output ->
                 input.copyTo(output)
             }
@@ -151,7 +164,9 @@ class FileSystemSaveStatesRepository(
 
         val srcName = getSaveStateCustomName(rom, sourceSlot.slot)
         if (!srcName.isNullOrBlank()) {
-            setSaveStateCustomName(rom, targetSlotNumber, "$srcName (Копия)")
+            setSaveStateCustomName(rom, targetSlotNumber, context.getString(R.string.v870_save_copy_suffix, srcName))
+        } else {
+            setSaveStateCustomName(rom, targetSlotNumber, null)
         }
     }
 

@@ -64,6 +64,7 @@ class VulkanDriverManagerViewModel @Inject constructor(
         val repoGroups: List<VulkanDriverRepoGroup> = emptyList(),
         val recommendedRepoIds: List<String> = emptyList(),
         val isSyncingRepos: Boolean = false,
+        val isImportingLocal: Boolean = false,
         val searchQuery: String = "",
         val selectedCategory: DriverRepoCategory = DriverRepoCategory.ALL,
         val activeDownloadKey: String? = null,
@@ -254,7 +255,7 @@ class VulkanDriverManagerViewModel @Inject constructor(
     }
 
     fun installStormDriver() {
-        if (!_uiState.value.isSupported || _uiState.value.activeDownloadKey != null || isImportingUri) return
+        if (!_uiState.value.isSupported || _uiState.value.activeDownloadKey != null || _uiState.value.isImportingLocal) return
 
         val liveStormRelease = _uiState.value.repoGroups
             .firstOrNull { it.spec.id == "storm_driver" }
@@ -290,7 +291,7 @@ class VulkanDriverManagerViewModel @Inject constructor(
         release: VulkanDriverRelease,
         asset: VulkanDriverAsset,
     ) {
-        if (!_uiState.value.isSupported || _uiState.value.activeDownloadKey != null || isImportingUri) return
+        if (!_uiState.value.isSupported || _uiState.value.activeDownloadKey != null || _uiState.value.isImportingLocal) return
 
         val cleanAssetName = asset.name
             .removeSuffix(".adpkg.zip")
@@ -385,8 +386,9 @@ class VulkanDriverManagerViewModel @Inject constructor(
     }
 
     fun importFromUri(uri: Uri) {
-        if (!_uiState.value.isSupported || _uiState.value.activeDownloadKey != null || isImportingUri) return
+        if (!_uiState.value.isSupported || _uiState.value.activeDownloadKey != null || isImportingUri || _uiState.value.isImportingLocal) return
         isImportingUri = true
+        _uiState.update { it.copy(isImportingLocal = true) }
         viewModelScope.launch {
             try {
                 val result = withContext(Dispatchers.IO) {
@@ -407,6 +409,7 @@ class VulkanDriverManagerViewModel @Inject constructor(
                 }
             } finally {
                 isImportingUri = false
+                _uiState.update { it.copy(isImportingLocal = false) }
             }
         }
     }

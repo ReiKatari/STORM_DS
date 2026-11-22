@@ -451,7 +451,7 @@ MelonDSAndroid::EmulatorConfiguration MelonDSAndroidConfiguration::buildEmulator
     auto sdSettings = buildSdCardSettings(env, dldiSdCardConfigurationObject);
     if (consoleType == 1) {
         finalEmulatorConfiguration.dsiSdCardSettings = sdSettings;
-        finalEmulatorConfiguration.dldiSdCardSettings = sdSettings;
+        finalEmulatorConfiguration.dldiSdCardSettings = MelonDSAndroid::SdCardSettings { .enabled = false };
     } else {
         finalEmulatorConfiguration.dsiSdCardSettings = MelonDSAndroid::SdCardSettings { .enabled = false };
         finalEmulatorConfiguration.dldiSdCardSettings = sdSettings;

@@ -141,17 +141,16 @@ fun RomContextMenu(
                         )
                     }
                 }
-                val isRu = remember { java.util.Locale.getDefault().language.startsWith("ru") }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(colors.line))
                 Spacer(Modifier.height(6.dp))
 
                 // Group 1: Launch and Game Profile
-                ContextMenuGroup(title = if (isRu) "Запуск и профиль игры" else "Launch and Profile") {
+                ContextMenuGroup(title = stringResource(R.string.v870_ctx_group_launch)) {
                     ContextItem(
                         icon = Icons.Filled.PlayArrow,
                         iconTint = colors.red,
                         label = stringResource(R.string.play),
-                        subtitle = if (isRu) "Запустить игру в эмуляторе" else "Launch game in emulator",
+                        subtitle = stringResource(R.string.v870_ctx_sub_launch),
                         onClick = {
                             onLaunchRom(rom)
                             onDismiss()
@@ -164,7 +163,7 @@ fun RomContextMenu(
                             if (rom.isFavorite) R.string.rom_action_unfavorite
                             else R.string.rom_action_favorite,
                         ),
-                        subtitle = if (isRu) "Закрепить в начале библиотеки" else "Pin to top of library",
+                        subtitle = stringResource(R.string.v870_ctx_sub_pin),
                         onClick = {
                             onToggleFavorite(rom)
                         },
@@ -173,7 +172,7 @@ fun RomContextMenu(
                         icon = Icons.Filled.Info,
                         iconTint = colors.green,
                         label = stringResource(R.string.rom_action_details),
-                        subtitle = if (isRu) "Конфигурация, читы и достижения" else "Config, cheats and achievements",
+                        subtitle = stringResource(R.string.v870_ctx_sub_config),
                         onClick = {
                             onShowDetails(rom)
                             onDismiss()
@@ -184,12 +183,12 @@ fun RomContextMenu(
                 Spacer(Modifier.height(4.dp))
 
                 // Group 2: Cover and Save Data
-                ContextMenuGroup(title = if (isRu) "Обложка и данные" else "Cover and Save Data") {
+                ContextMenuGroup(title = stringResource(R.string.v870_ctx_group_data)) {
                     ContextItem(
                         icon = Icons.Filled.Share,
                         iconTint = colors.text2,
                         label = stringResource(R.string.rom_action_send_save_file),
-                        subtitle = if (isRu) "Поделиться или бэкап .sav" else "Share or backup .sav file",
+                        subtitle = stringResource(R.string.v870_ctx_sub_backup_sav),
                         onClick = {
                             onSendSaveFile(rom)
                             onDismiss()
@@ -199,7 +198,7 @@ fun RomContextMenu(
                         icon = Icons.Filled.FileDownload,
                         iconTint = colors.text2,
                         label = stringResource(R.string.rom_action_import_save_file),
-                        subtitle = if (isRu) "Восстановить .sav из файла" else "Restore .sav from external file",
+                        subtitle = stringResource(R.string.v870_ctx_sub_restore_sav),
                         onClick = {
                             onImportSaveFile(rom)
                             onDismiss()
@@ -210,7 +209,7 @@ fun RomContextMenu(
                             icon = Icons.Filled.Image,
                             iconTint = colors.text2,
                             label = stringResource(R.string.custom_cover_pick),
-                            subtitle = if (isRu) "Установить свою обложку" else "Set custom cover image",
+                            subtitle = stringResource(R.string.v870_ctx_sub_set_cover),
                             onClick = {
                                 onPickCustomCover(rom)
                                 onDismiss()
@@ -222,7 +221,7 @@ fun RomContextMenu(
                             icon = Icons.Filled.Delete,
                             iconTint = colors.red,
                             label = stringResource(R.string.custom_cover_reset),
-                            subtitle = if (isRu) "Вернуть стандартную обложку" else "Reset to default cover",
+                            subtitle = stringResource(R.string.v870_ctx_sub_reset_cover),
                             onClick = {
                                 onClearCustomCover(rom)
                                 onDismiss()
@@ -234,12 +233,12 @@ fun RomContextMenu(
                 Spacer(Modifier.height(4.dp))
 
                 // Group 3: Technical Specs & Export
-                ContextMenuGroup(title = if (isRu) "Технический паспорт и экспорт" else "Technical Specs and Export") {
+                ContextMenuGroup(title = stringResource(R.string.v870_ctx_group_tech)) {
                     ContextItem(
                         icon = Icons.Filled.Info,
                         iconTint = colors.green,
                         label = stringResource(R.string.rom_technical_info_title),
-                        subtitle = if (isRu) "GameCode, CRC, размер и путь" else "GameCode, CRC, size and path",
+                        subtitle = stringResource(R.string.v870_ctx_sub_tech),
                         onClick = {
                             showTechnicalInfo = true
                         },

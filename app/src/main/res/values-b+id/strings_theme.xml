@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <string-array name="theme_options" tools:ignore="InconsistentArrays">
+        <item>STORM NIGHT (OLED Gelap)</item>
+        <item>STORM DAY (Terang)</item>
+        <item>STORM MIDNIGHT (Ungu Tua)</item>
+        <item>STORM CYBERPUNK (Cyberpunk 2077)</item>
+        <item>STORM GOTHIC (Hitam dan Merah)</item>
+        <item>STORM MATRIX (Kode Siber Zamrud)</item>
+        <item>STORM SOLAR (Emas Plasma Cerah)</item>
+        <item>STORM SAKURA (Bunga Sakura Terang)</item>
+    </string-array>
+</resources>

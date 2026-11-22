@@ -70,7 +70,7 @@ class DialogueBacklogStore(
                         sourceLang = sourceLang,
                         targetLang = targetLang,
                         speakerName = if (speakerName.isNotBlank()) speakerName else top.speakerName,
-                        speakerGender = if (speakerGender != "N" && speakerGender.isNotBlank()) speakerGender else top.speakerGender
+                        speakerGender = if (speakerGender != "N" && !speakerGender.equals("NEUTRAL", ignoreCase = true) && speakerGender.isNotBlank()) speakerGender else top.speakerGender
                     )
                     buffer.removeFirst()
                     buffer.addFirst(updated)

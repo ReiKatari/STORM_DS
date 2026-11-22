@@ -97,7 +97,17 @@ internal suspend fun OkHttpClient.executeAsync(request: Request): HttpResult = s
 
 internal fun String.hasLetters(): Boolean = any { it.isLetter() }
 
-internal fun String.hasCyrillic(): Boolean = any { it in '\u0400'..'\u04FF' }
+internal fun String.isPurelyCyrillic(): Boolean {
+    var hasCyrillic = false
+    for (ch in this) {
+        if (ch in '\u0400'..'\u052F') {
+            hasCyrillic = true
+        } else if (ch.isLetter()) {
+            return false
+        }
+    }
+    return hasCyrillic
+}
 
 internal fun normalizeLangCode(lang: String): String = when (val l = lang.lowercase().trim()) {
     "", "auto" -> "auto"
@@ -165,7 +175,7 @@ class GoogleTranslateEngine(
             val clean = raw.replace('\n', ' ').trim()
             when {
                 clean.isBlank() || !clean.hasLetters() -> results[i] = clean
-                clean.hasCyrillic() && tl == "ru" -> results[i] = clean
+                clean.isPurelyCyrillic() && tl == "ru" -> results[i] = clean
                 else -> pending += i
             }
         }

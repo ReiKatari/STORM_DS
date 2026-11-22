@@ -72,7 +72,7 @@ object EdgeNeuralTtsClient {
         val clean = text.trim()
         if (clean.isBlank()) return null
 
-        val cacheKey = "$voiceName|$pitch|$rate|$volume|$contour|$clean"
+        val cacheKey = "$targetLangHint|$voiceName|$pitch|$rate|$volume|$contour|$clean"
         synchronized(audioCache) {
             val cached = audioCache.get(cacheKey)
             if (cached != null) return cached
@@ -334,10 +334,13 @@ object EdgeNeuralTtsClient {
         voiceName: String
     ): ByteArray? = withContext(Dispatchers.IO) {
         try {
-            val targetUrl = if (endpoint.contains("/v1/")) {
-                endpoint.substringBefore("/v1/") + "/v1/audio/speech"
-            } else {
-                "https://api.openai.com/v1/audio/speech"
+            val trimmedEndpoint = endpoint.trim()
+            val targetUrl = when {
+                trimmedEndpoint.isBlank() -> "https://api.openai.com/v1/audio/speech"
+                trimmedEndpoint.contains("/v1/") -> trimmedEndpoint.substringBefore("/v1/") + "/v1/audio/speech"
+                trimmedEndpoint.endsWith("/audio/speech") -> trimmedEndpoint
+                trimmedEndpoint.endsWith("/chat/completions") -> trimmedEndpoint.removeSuffix("/chat/completions") + "/audio/speech"
+                else -> trimmedEndpoint.trimEnd('/') + "/v1/audio/speech"
             }
             val openAiVoice = when {
                 voiceName.contains("Svetlana", true) || voiceName.contains("Ava", true) -> "nova"

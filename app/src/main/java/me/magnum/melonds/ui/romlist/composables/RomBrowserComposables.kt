@@ -581,7 +581,7 @@ fun ContinuePlayingShelf(
             ) {
                 Icon(
                     imageVector = if (isCollapsed) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowUp,
-                    contentDescription = if (isCollapsed) "Развернуть" else "Свернуть",
+                    contentDescription = stringResource(if (isCollapsed) R.string.v870_action_expand else R.string.v870_action_collapse),
                     tint = colors.text2,
                     modifier = Modifier.size(18.dp),
                 )
@@ -1094,7 +1094,7 @@ fun CompactLandscapeSidebar(
             fontWeight = FontWeight.Bold,
         )
         Text(
-            text = "Всего игр: $totalRoms",
+            text = stringResource(R.string.v870_total_games_count, totalRoms),
             color = colors.text2,
             fontFamily = WatermelonMono,
             fontSize = 11.sp,
@@ -1108,7 +1108,7 @@ fun CompactLandscapeSidebar(
                 .padding(horizontal = 12.dp, vertical = 7.dp),
         ) {
             Text(
-                text = "★ Избранное",
+                text = stringResource(R.string.v870_favorites_star_label),
                 color = if (filter == RomFilter.FAVORITES) Color.White else colors.text2,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,

@@ -90,20 +90,32 @@ class PauseMenuCustomizationStore(
     }
 
     fun isOptionVisible(option: PauseMenuOption, isExtendedEnabled: Boolean): Boolean {
+        return isOptionVisible(
+            option = option,
+            isExtendedEnabled = isExtendedEnabled,
+            hiddenItems = getHiddenItems(),
+            individuallyPinned = getIndividuallyPinned(),
+        )
+    }
+
+    fun isOptionVisible(
+        option: PauseMenuOption,
+        isExtendedEnabled: Boolean,
+        hiddenItems: Set<String>,
+        individuallyPinned: Set<String>,
+    ): Boolean {
         val name = (option as? Enum<*>)?.name ?: option.toString()
         // Protection: SETTINGS is always visible
         if (isProtectedOption(option)) return true
 
-        val hidden = getHiddenItems()
-        if (name in hidden) return false
+        if (name in hiddenItems) return false
 
         val isExt = isExtendedOption(option)
         if (!isExt) return true
 
         if (isExtendedEnabled) return true
 
-        val pinned = getIndividuallyPinned()
-        return name in pinned
+        return name in individuallyPinned
     }
 
     fun getVisibleOrderedOptions(

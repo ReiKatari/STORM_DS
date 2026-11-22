@@ -1143,6 +1143,19 @@ Java_me_magnum_melonds_MelonEmulator_setRetroAchievementsSubmissionTransportSusp
     );
 }
 
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_setRetroAchievementsHardcoreEnabled(
+    JNIEnv* env,
+    jobject thiz,
+    jboolean enabled)
+{
+    (void)env;
+    (void)thiz;
+    MelonDSAndroid::setRetroAchievementsHardcoreEnabled(
+        enabled == JNI_TRUE
+    );
+}
+
 JNIEXPORT jint JNICALL
 Java_me_magnum_melonds_MelonEmulator_loadRomInternal(JNIEnv* env, jobject thiz, jstring romPath, jstring sramPath, jint gbaSlotType, jstring gbaRomPath, jstring gbaSramPath)
 {
@@ -2189,6 +2202,14 @@ Java_me_magnum_melonds_MelonEmulator_resetEmulation(JNIEnv* env, jobject thiz) {
     }
 }
 
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_flushPendingSaveStateWrites(JNIEnv* env, jobject thiz)
+{
+    (void)env;
+    (void)thiz;
+    MelonDSAndroid::flushPendingSaveStateWrites();
+}
+
 JNIEXPORT jboolean JNICALL
 Java_me_magnum_melonds_MelonEmulator_saveStateInternal(JNIEnv* env, jobject thiz, jstring path)
 {
@@ -2845,14 +2866,19 @@ JNIEXPORT jboolean JNICALL
 Java_me_magnum_melonds_MelonEmulator_startLanHost(JNIEnv* env, jobject thiz, jstring playerName, jint maxPlayers)
 {
     const char* name = playerName ? env->GetStringUTFChars(playerName, nullptr) : "Player";
-    if (melonDS::MPInterface::GetType() != melonDS::MPInterface_LAN)
+    const char* safeName = name ? name : "Player";
+    bool ok = false;
     {
-        melonDS::MPInterface::Set(melonDS::MPInterface_LAN);
+        std::lock_guard<std::mutex> lock(MelonDSAndroid::mpInterfaceMutex);
+        if (melonDS::MPInterface::GetType() != melonDS::MPInterface_LAN)
+        {
+            melonDS::MPInterface::Set(melonDS::MPInterface_LAN);
+        }
+        auto& lan = static_cast<melonDS::LAN&>(melonDS::MPInterface::Get());
+        lan.EndSession();
+        lan.StartDiscovery();
+        ok = lan.StartHost(safeName, std::clamp(static_cast<int>(maxPlayers), 2, 16));
     }
-    auto& lan = static_cast<melonDS::LAN&>(melonDS::MPInterface::Get());
-    lan.EndSession();
-    lan.StartDiscovery();
-    const bool ok = lan.StartHost(name, std::clamp(static_cast<int>(maxPlayers), 2, 16));
     if (playerName && name)
         env->ReleaseStringUTFChars(playerName, name);
     return ok ? JNI_TRUE : JNI_FALSE;
@@ -2862,14 +2888,23 @@ JNIEXPORT jboolean JNICALL
 Java_me_magnum_melonds_MelonEmulator_startLanClient(JNIEnv* env, jobject thiz, jstring playerName, jstring hostIp)
 {
     const char* name = playerName ? env->GetStringUTFChars(playerName, nullptr) : "Player";
+    const char* safeName = name ? name : "Player";
     const char* host = hostIp ? env->GetStringUTFChars(hostIp, nullptr) : "";
-    if (melonDS::MPInterface::GetType() != melonDS::MPInterface_LAN)
     {
-        melonDS::MPInterface::Set(melonDS::MPInterface_LAN);
+        std::lock_guard<std::mutex> lock(MelonDSAndroid::mpInterfaceMutex);
+        if (melonDS::MPInterface::GetType() != melonDS::MPInterface_LAN)
+        {
+            melonDS::MPInterface::Set(melonDS::MPInterface_LAN);
+        }
+        auto& lan = static_cast<melonDS::LAN&>(melonDS::MPInterface::Get());
+        lan.EndSession();
     }
-    auto& lan = static_cast<melonDS::LAN&>(melonDS::MPInterface::Get());
-    lan.EndSession();
-    const bool ok = (host != nullptr && host[0] != '\0') && lan.StartClient(name, host);
+    bool ok = false;
+    if (host != nullptr && host[0] != '\0' && melonDS::MPInterface::GetType() == melonDS::MPInterface_LAN)
+    {
+        auto& lan = static_cast<melonDS::LAN&>(melonDS::MPInterface::Get());
+        ok = lan.StartClient(safeName, host);
+    }
     if (playerName && name)
         env->ReleaseStringUTFChars(playerName, name);
     if (hostIp && host)
@@ -2880,6 +2915,9 @@ Java_me_magnum_melonds_MelonEmulator_startLanClient(JNIEnv* env, jobject thiz, j
 JNIEXPORT void JNICALL
 Java_me_magnum_melonds_MelonEmulator_stopLanSession(JNIEnv* env, jobject thiz)
 {
+    (void)env;
+    (void)thiz;
+    std::lock_guard<std::mutex> lock(MelonDSAndroid::mpInterfaceMutex);
     if (melonDS::MPInterface::GetType() == melonDS::MPInterface_LAN)
     {
         auto& lan = static_cast<melonDS::LAN&>(melonDS::MPInterface::Get());
@@ -2892,6 +2930,9 @@ Java_me_magnum_melonds_MelonEmulator_stopLanSession(JNIEnv* env, jobject thiz)
 JNIEXPORT jboolean JNICALL
 Java_me_magnum_melonds_MelonEmulator_startLanDiscovery(JNIEnv* env, jobject thiz)
 {
+    (void)env;
+    (void)thiz;
+    std::lock_guard<std::mutex> lock(MelonDSAndroid::mpInterfaceMutex);
     if (melonDS::MPInterface::GetType() != melonDS::MPInterface_LAN)
     {
         melonDS::MPInterface::Set(melonDS::MPInterface_LAN);
@@ -2903,6 +2944,9 @@ Java_me_magnum_melonds_MelonEmulator_startLanDiscovery(JNIEnv* env, jobject thiz
 JNIEXPORT void JNICALL
 Java_me_magnum_melonds_MelonEmulator_stopLanDiscovery(JNIEnv* env, jobject thiz)
 {
+    (void)env;
+    (void)thiz;
+    std::lock_guard<std::mutex> lock(MelonDSAndroid::mpInterfaceMutex);
     if (melonDS::MPInterface::GetType() == melonDS::MPInterface_LAN)
     {
         auto& lan = static_cast<melonDS::LAN&>(melonDS::MPInterface::Get());
@@ -2913,20 +2957,25 @@ Java_me_magnum_melonds_MelonEmulator_stopLanDiscovery(JNIEnv* env, jobject thiz)
 JNIEXPORT jobjectArray JNICALL
 Java_me_magnum_melonds_MelonEmulator_getLanDiscoveredSessions(JNIEnv* env, jobject thiz)
 {
+    (void)thiz;
     jclass stringClass = env->FindClass("java/lang/String");
     if (stringClass == nullptr)
     {
         return nullptr;
     }
-    if (melonDS::MPInterface::GetType() != melonDS::MPInterface_LAN)
+    std::map<melonDS::u32, melonDS::LAN::DiscoveryData> list;
     {
-        jobjectArray empty = env->NewObjectArray(0, stringClass, nullptr);
-        env->DeleteLocalRef(stringClass);
-        return empty;
+        std::lock_guard<std::mutex> lock(MelonDSAndroid::mpInterfaceMutex);
+        if (melonDS::MPInterface::GetType() != melonDS::MPInterface_LAN)
+        {
+            jobjectArray empty = env->NewObjectArray(0, stringClass, nullptr);
+            env->DeleteLocalRef(stringClass);
+            return empty;
+        }
+        auto& lan = static_cast<melonDS::LAN&>(melonDS::MPInterface::Get());
+        lan.Process();
+        list = lan.GetDiscoveryList();
     }
-    auto& lan = static_cast<melonDS::LAN&>(melonDS::MPInterface::Get());
-    lan.Process();
-    auto list = lan.GetDiscoveryList();
     jobjectArray result = env->NewObjectArray(static_cast<jsize>(list.size()), stringClass, nullptr);
     if (result != nullptr)
     {

@@ -41,13 +41,16 @@ open class BaseMirrorUpdatesRepository(
         }
     }
 
-    override suspend fun checkNewUpdate(): Result<AppUpdate?> {
+    override suspend fun checkNewUpdate(ignorePreferences: Boolean): Result<AppUpdate?> {
+        if (ignorePreferences) {
+            sessionSkippedVersion = null
+        }
         statePreferences.edit {
             remove(KEY_SKIP_VERSION)
             remove(KEY_LAST_UPDATE_CHECK)
         }
 
-        val updatesEnabled = settingsPreferences.getBoolean(PREF_KEY_GITHUB_CHECK_FOR_UPDATES, true)
+        val updatesEnabled = ignorePreferences || settingsPreferences.getBoolean(PREF_KEY_GITHUB_CHECK_FOR_UPDATES, true)
         if (!updatesEnabled) {
             return Result.success(null)
         }
@@ -101,7 +104,7 @@ open class BaseMirrorUpdatesRepository(
 
     override suspend fun checkNewUpdateManually(): Result<AppUpdate?> {
         sessionSkippedVersion = null
-        return checkNewUpdate()
+        return checkNewUpdate(ignorePreferences = true)
     }
 
     override fun skipUpdate(update: AppUpdate) {

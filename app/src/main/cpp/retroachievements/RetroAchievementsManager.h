@@ -85,6 +85,7 @@ public:
     int32_t DiscardPendingSubmissions(
         const std::vector<uint64_t>& expectedSubmissionIds);
     void SetSubmissionTransportSuspended(bool suspended);
+    void SetHardcoreEnabled(bool enabled);
 
     static void RcClientEventHandler(const rc_client_event_t* event, rc_client_t* client);
     static void NoopRcClientEventHandler(const rc_client_event_t* event, rc_client_t* client);

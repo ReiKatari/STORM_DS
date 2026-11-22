@@ -76,12 +76,21 @@ class SaveFilesPreferencesFragment : BasePreferenceFragment(), PreferenceFragmen
         }
 
         updateAutoLoadStateSummary()
+        applyInGameLocks()
     }
 
     override fun onResume() {
         super.onResume()
         syncSramDirVisibility(useRomDirPref?.isChecked ?: false)
         updateAutoLoadStateSummary()
+        applyInGameLocks()
+    }
+
+    private fun applyInGameLocks() {
+        if (!isLaunchedInGame()) return
+        lockPreferenceInGame("use_rom_dir")
+        lockPreferenceInGame("sram_dir")
+        lockPreferenceInGame("save_file_use_srm_extension")
     }
 
     private fun syncSramDirVisibility(useRomDir: Boolean) {

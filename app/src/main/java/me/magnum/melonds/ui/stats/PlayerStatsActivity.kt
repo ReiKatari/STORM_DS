@@ -244,6 +244,8 @@ class PlayerStatsActivity : AppCompatActivity() {
             }
             val chooser = Intent.createChooser(shareIntent, getString(R.string.stats_export_share_chooser))
             startActivity(chooser)
+        }.onFailure {
+            Toast.makeText(this, R.string.feature_stats_export_error, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -1992,12 +1994,7 @@ private fun DailySessionsView(
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         items(dailySessions, key = { it.dayKey }) { dayGroup ->
-            val isRu = me.magnum.melonds.utils.RussianPlurals.isRussian(context.resources)
-            val sessionCountText = if (isRu) {
-                me.magnum.melonds.utils.RussianPlurals.format(dayGroup.sessionCount, "сессия", "сессии", "сессий")
-            } else {
-                context.getString(if (dayGroup.sessionCount == 1) R.string.feature_stats_session_single else R.string.feature_stats_sessions_count, dayGroup.sessionCount)
-            }
+            val sessionCountText = context.resources.getQuantityString(R.plurals.v870_stats_session_count, dayGroup.sessionCount, dayGroup.sessionCount)
 
             Column(
                 modifier = Modifier
