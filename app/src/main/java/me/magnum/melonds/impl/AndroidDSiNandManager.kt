@@ -63,7 +63,7 @@ class AndroidDSiNandManager(
         override suspend fun <T> withNand(configuration: EmulatorConfiguration, block: suspend DSiNandManager.() -> T): T? {
             return try {
                 operationLock.withLock {
-                    check(!closed.get())
+                    if (closed.get()) return@withLock null
                     if (configuration.dsiBios7Uri == null || configuration.dsiNandUri == null) return@withLock null
                     val started = SystemClock.elapsedRealtimeNanos()
                     backupNandFileIfNeeded(configuration)

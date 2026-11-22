@@ -1659,23 +1659,24 @@ bool MelonInstance::loadRom(std::string romPath, std::string sramPath)
         }
     }
 
-    // SRAM file loading
+    // SRAM file loading (optional for DSiWare titles without save files)
     FileHandle* sramFile = Platform::OpenFile(sramPath, FileMode::Read);
-    if (!sramFile)
+    if (sramFile)
     {
-        return false;
+        if (!Platform::CheckFileWritable(sramPath))
+        {
+            CloseFile(sramFile);
+            return false;
+        }
+        sramFileLength = (u32) Platform::FileLength(sramFile);
+        if (sramFileLength > 0)
+        {
+            FileRewind(sramFile);
+            sramData = std::make_unique<u8[]>(sramFileLength);
+            FileRead(sramData.get(), sramFileLength, 1, sramFile);
+        }
+        CloseFile(sramFile);
     }
-    else if (!Platform::CheckFileWritable(sramPath))
-    {
-        return false;
-    }
-
-    sramFileLength = (u32) Platform::FileLength(sramFile);
-
-    FileRewind(sramFile);
-    sramData = std::make_unique<u8[]>(sramFileLength);
-    FileRead(sramData.get(), sramFileLength, 1, sramFile);
-    CloseFile(sramFile);
 
     NDSCart::NDSCartArgs cartargs{
         // Don't load the SD card itself yet, because we don't know if
@@ -1800,6 +1801,7 @@ bool MelonInstance::bootFirmware()
     if (nds->NeedsDirectBoot())
         return false;
 
+    nds->Reset();
     return true;
 }
 
@@ -1916,14 +1918,23 @@ void MelonInstance::start()
 {
     auto cart = nds->NDSCartSlot.GetCart();
     Multiplayer::GameStarted(this, cart == nullptr);
-    if (nds->ConsoleType == 1 && cart != nullptr && cart->GetHeader().IsDSiWare() && !currentConfiguration->showBootScreen)
+    if (nds->ConsoleType == 1 && currentConfiguration && currentConfiguration->dsiWareAutoloadTitleId != 0)
     {
         auto dsi = (DSi*) nds;
-        DSiSupport::SetupDSiDirectBoot(dsi);
+        uint32_t titleIdLow = currentConfiguration->dsiWareAutoloadTitleId;
+        uint32_t titleIdHigh = melonDS::DSiWareTitleIDHigh;
+        DSiSupport::SetupDSiWareDirectBoot(dsi, titleIdLow, titleIdHigh);
     }
-    else if (cart != nullptr && (!currentConfiguration->showBootScreen || nds->NeedsDirectBoot()))
+    else if (cart != nullptr || nds->GetNDSCart() != nullptr)
     {
-        // This seems to be unused, but it's required
+        if (nds->ConsoleType == 1 || !currentConfiguration || !currentConfiguration->showBootScreen || nds->NeedsDirectBoot())
+        {
+            std::string romName;
+            nds->SetupDirectBoot(romName);
+        }
+    }
+    else if (!currentConfiguration || !currentConfiguration->showBootScreen || nds->NeedsDirectBoot())
+    {
         std::string romName;
         nds->SetupDirectBoot(romName);
     }
@@ -1966,15 +1977,26 @@ void MelonInstance::reset()
     setBatteryLevels();
     setDateTime();
 
-    // If there is a cart inserted, check if direct boot is required
-    if (nds->GetNDSCart())
+    auto cart = nds->NDSCartSlot.GetCart();
+    if (nds->ConsoleType == 1 && currentConfiguration && currentConfiguration->dsiWareAutoloadTitleId != 0)
     {
-        if (!currentConfiguration->showBootScreen || nds->NeedsDirectBoot())
+        auto dsi = (DSi*) nds;
+        uint32_t titleIdLow = currentConfiguration->dsiWareAutoloadTitleId;
+        uint32_t titleIdHigh = melonDS::DSiWareTitleIDHigh;
+        DSiSupport::SetupDSiWareDirectBoot(dsi, titleIdLow, titleIdHigh);
+    }
+    else if (cart != nullptr || nds->GetNDSCart() != nullptr)
+    {
+        if (nds->ConsoleType == 1 || !currentConfiguration || !currentConfiguration->showBootScreen || nds->NeedsDirectBoot())
         {
-            // This seems to be unused, but it's required
             std::string romName;
             nds->SetupDirectBoot(romName);
         }
+    }
+    else if (!currentConfiguration || !currentConfiguration->showBootScreen || nds->NeedsDirectBoot())
+    {
+        std::string romName;
+        nds->SetupDirectBoot(romName);
     }
 
     rewindManager.Reset();

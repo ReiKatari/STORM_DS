@@ -312,6 +312,9 @@ class SharedPreferencesSettingsRepository(
         val coverageFix: CoverageFixConfigurationInputs,
     )
 
+    @Volatile
+    private var isSyncingDsiProfilePref = false
+
     init {
         preferences.registerOnSharedPreferenceChangeListener(this)
         setDefaultThemeIfRequired()
@@ -518,10 +521,11 @@ class SharedPreferencesSettingsRepository(
         val dsiFirmware = resolveBiosFileUri(dsiBiosDirUri, dsiDirDocument, "dsi_firmware.bin", "firmware.bin", "firmware_dsi.bin", "dsi_bios.bin")
             ?: resolveBiosFileUri(dsBiosDirUri, dsDirDocument, "dsi_firmware.bin", "firmware.bin", "firmware_dsi.bin")
 
-        // Strict NAND isolation when an explicit DSi profile is selected: never leak another profile's or fallback NAND
         val dsiNand = if (dsiProfile != null) {
             val profileDirIndex = getBiosDirectoryFileIndex(dsiBiosDirUri, dsiDirDocument)
             lookupBiosInIndex(profileDirIndex, "dsi_nand.bin", "nand.bin", "nand_dsi.bin")
+                ?: resolveBiosFileUri(dsiBiosDirUri, dsiDirDocument, "dsi_nand.bin", "nand.bin", "nand_dsi.bin")
+                ?: resolveBiosFileUri(dsBiosDirUri, dsDirDocument, "dsi_nand.bin", "nand.bin", "nand_dsi.bin")
         } else {
             resolveBiosFileUri(dsiBiosDirUri, dsiDirDocument, "dsi_nand.bin", "nand.bin", "nand_dsi.bin")
                 ?: resolveBiosFileUri(dsBiosDirUri, dsDirDocument, "dsi_nand.bin", "nand.bin", "nand_dsi.bin")
@@ -977,7 +981,9 @@ class SharedPreferencesSettingsRepository(
                 directoryUri = it,
             )
         }
-        writeDsiProfileSettings(DSiProfileSettings(listOfNotNull(profile), profile?.id))
+        if (profile != null) {
+            writeDsiProfileSettings(DSiProfileSettings(listOf(profile), profile.id))
+        }
     }
 
     override fun getDsiProfileSettings(): DSiProfileSettings {
@@ -998,7 +1004,7 @@ class SharedPreferencesSettingsRepository(
         val profiles = current.profiles.toMutableList()
         val index = profiles.indexOfFirst { it.id == profile.id }
         if (index < 0) profiles.add(profile) else profiles[index] = profile
-        writeDsiProfileSettings(current.copy(profiles = profiles, defaultProfileId = current.defaultProfileId ?: profile.id.takeIf { current.profiles.isEmpty() }))
+        writeDsiProfileSettings(current.copy(profiles = profiles, defaultProfileId = current.defaultProfileId ?: profile.id))
     }
 
     @Synchronized
@@ -1018,11 +1024,16 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun clearBiosDirectories() {
-        preferences.edit {
-            remove("bios_dir")
-            remove("dsi_bios_dir")
+        isSyncingDsiProfilePref = true
+        try {
+            preferences.edit {
+                remove("bios_dir")
+                remove("dsi_bios_dir")
+                remove("dsi_profiles")
+            }
+        } finally {
+            isSyncingDsiProfilePref = false
         }
-        setDefaultDsiProfile(null)
     }
 
     override fun isDldiSdCardEnabled(): Boolean {
@@ -2374,16 +2385,21 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun setDsiBiosDirectory(directoryUri: Uri) {
-        val profile = getDsiProfile()
-        saveDsiProfile(
-            DSiProfile(
-                id = profile?.id ?: UUID.randomUUID().toString(),
-                name = profile?.name ?: context.getString(me.magnum.melonds.R.string.dsi_profile_initial),
-                directoryUri = directoryUri.toString(),
+        isSyncingDsiProfilePref = true
+        try {
+            val profile = getDsiProfile() ?: getDsiProfileSettings().profiles.firstOrNull()
+            saveDsiProfile(
+                DSiProfile(
+                    id = profile?.id ?: UUID.randomUUID().toString(),
+                    name = profile?.name ?: context.getString(me.magnum.melonds.R.string.dsi_profile_initial),
+                    directoryUri = directoryUri.toString(),
+                )
             )
-        )
-        preferences.edit {
-            putStringSet("dsi_bios_dir", setOf(directoryUri.toString()))
+            preferences.edit {
+                putStringSet("dsi_bios_dir", setOf(directoryUri.toString()))
+            }
+        } finally {
+            isSyncingDsiProfilePref = false
         }
     }
 
@@ -2526,9 +2542,34 @@ class SharedPreferencesSettingsRepository(
         return preferenceFlow.map { mapper() }
     }
 
+    private fun syncDsiProfileFromDirPref() {
+        if (isSyncingDsiProfilePref) return
+        isSyncingDsiProfilePref = true
+        try {
+            val dirUri = preferences.getStringSet("dsi_bios_dir", null)
+                ?.firstOrNull()
+                ?.takeIf { it.isNotBlank() && !it.contains("data/user/0") && !it.contains("files/bios") }
+            if (dirUri != null) {
+                val existing = getDsiProfile() ?: getDsiProfileSettings().profiles.firstOrNull()
+                saveDsiProfile(
+                    DSiProfile(
+                        id = existing?.id ?: UUID.randomUUID().toString(),
+                        name = existing?.name ?: context.getString(me.magnum.melonds.R.string.dsi_profile_initial),
+                        directoryUri = dirUri,
+                    )
+                )
+            } else if (preferences.contains("dsi_profiles")) {
+                preferences.edit { remove("dsi_profiles") }
+            }
+        } finally {
+            isSyncingDsiProfilePref = false
+        }
+    }
+
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences, key: String?) {
         preferenceSharedFlows[key]?.tryEmit(Unit)
         when (key) {
+            "dsi_bios_dir" -> syncDsiProfileFromDirPref()
             "video_vulkan_driver_mode",
             "video_vulkan_selected_driver_id",
             "video_vulkan_custom_drivers" -> {

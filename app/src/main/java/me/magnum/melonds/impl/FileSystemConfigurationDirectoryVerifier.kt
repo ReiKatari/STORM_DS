@@ -33,16 +33,14 @@ class FileSystemConfigurationDirectoryVerifier(private val context: Context, set
         if (directory != null) {
             candidateUris.add(directory)
         }
-        if (directory == null || consoleType != ConsoleType.DSi) {
-            val subFolder = if (consoleType == ConsoleType.DSi) "bios/dsi" else "bios/ds"
-            val extStorage = android.os.Environment.getExternalStorageDirectory()
-            listOf(
-                java.io.File(extStorage, "STORM DS/$subFolder"),
-                java.io.File(extStorage, "STORM DS/bios"),
-            ).forEach { dir ->
-                if (dir != null && dir.exists() && dir.isDirectory) {
-                    candidateUris.add(Uri.fromFile(dir))
-                }
+        val subFolder = if (consoleType == ConsoleType.DSi) "bios/dsi" else "bios/ds"
+        val extStorage = android.os.Environment.getExternalStorageDirectory()
+        listOf(
+            java.io.File(extStorage, "STORM DS/$subFolder"),
+            java.io.File(extStorage, "STORM DS/bios"),
+        ).forEach { dir ->
+            if (dir != null && dir.exists() && dir.isDirectory) {
+                candidateUris.add(Uri.fromFile(dir))
             }
         }
 

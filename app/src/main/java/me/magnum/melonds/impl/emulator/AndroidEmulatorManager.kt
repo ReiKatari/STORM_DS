@@ -384,16 +384,28 @@ class AndroidEmulatorManager(
             ?: rom.isDsiWareTitle
     }
 
-    private fun beginNandSession(profile: DSiProfile?): Boolean = synchronized(sessionControlLock) {
+    private fun beginNandSession(profile: DSiProfile?) = synchronized(sessionControlLock) {
         if (activeNandSession != null) {
             runCatching { activeNandSession?.close() }
             activeNandSession = null
             activeDsiProfile = null
         }
-        val session = dsiNandManager.acquireSession() ?: return false
-        activeNandSession = session
         activeDsiProfile = profile
-        true
+        activeNandSession = dsiNandManager.acquireSession()
+    }
+
+    private suspend fun <T> withNandSession(
+        configuration: EmulatorConfiguration,
+        block: suspend DSiNandManager.() -> T,
+    ): T? {
+        val session = synchronized(sessionControlLock) {
+            activeNandSession ?: dsiNandManager.acquireSession()?.also { activeNandSession = it }
+        }
+        return if (session != null) {
+            session.withNand(configuration, block)
+        } else {
+            dsiNandManager.withNand(configuration, block)
+        }
     }
 
     private fun releaseNandSession() {
@@ -408,9 +420,7 @@ class AndroidEmulatorManager(
         return withContext(Dispatchers.IO) {
             nativeLifecycleMutex.withLock {
                 val effectiveProfile = rom.resolvedDsiProfile ?: settingsRepository.getDsiProfile()
-                if (!beginNandSession(effectiveProfile)) {
-                    return@withLock RomLaunchResult.LaunchFailed(MelonEmulator.LoadResult.NDS_FAILED)
-                }
+                beginNandSession(effectiveProfile)
                 var successful = false
                 try {
                     val result = loadRomInternal(rom, cheats)
@@ -482,7 +492,7 @@ class AndroidEmulatorManager(
                         if (titleId != null) {
                             val header = NdsHeaderParser.readHeader(context, romUri, maxBytes = 0x1000, minBytes = 0x160)
                             if (header != null) {
-                                activeNandSession?.withNand(emulatorConfiguration) {
+                                withNandSession(emulatorConfiguration) {
                                     val tmd = NusDSiWareMetadataRepository.createTmd(
                                         categoryId = 0x00030004u,
                                         titleId = titleId.toUInt(),
@@ -667,7 +677,7 @@ class AndroidEmulatorManager(
                 .withPreparedDldiConfiguration()
 
             val header = NdsHeaderParser.readHeader(context, playableRomUri, maxBytes = 0x1000, minBytes = 0x160)
-            val nandOpened = activeNandSession?.withNand(emulatorConfiguration) {
+            val nandOpened = withNandSession(emulatorConfiguration) {
                 if (header != null) {
                     val pubSav = header.publicSaveSize
                     val privSav = header.privateSaveSize
@@ -889,7 +899,7 @@ class AndroidEmulatorManager(
 
         var initialCacheSaveModified = 0L
         var initialCacheSaveCrc32: Long? = null
-        val prepResult = activeNandSession?.withNand(emulatorConfiguration) {
+        val prepResult = withNandSession(emulatorConfiguration) {
             val installedTitle = listTitles().firstOrNull { it.titleId == titleId }
             val installedPrimaryType = if (installedTitle != null) {
                 if (installedTitle.hasPublicSavFile()) DSiWareTitleFileType.PUBLIC_SAV
@@ -933,7 +943,7 @@ class AndroidEmulatorManager(
                 runCatching { executableFile.delete() }
                 runCatching { saveFile.delete() }
                 writeGameExecutionLog(rom, titleIdHex, false, "Failed to prepare executable for title", "loadDsiWare")
-                return@withNand false
+                return@withNandSession false
             }
 
             val titleNow = listTitles().firstOrNull { it.titleId == titleId }
@@ -1318,9 +1328,7 @@ class AndroidEmulatorManager(
                 } else {
                     null
                 }
-                if (!beginNandSession(effectiveProfile)) {
-                    return@withLock FirmwareLaunchResult.LaunchFailed(MelonEmulator.FirmwareLoadResult.FIRMWARE_BAD)
-                }
+                beginNandSession(effectiveProfile)
                 var successful = false
                 try {
                     currentCoroutineContext().ensureActive()
@@ -1718,7 +1726,7 @@ class AndroidEmulatorManager(
             }
 
             // Step 2: Sync save with NAND
-            val synced = activeNandSession?.withNand(session.configuration) {
+            val synced = withNandSession(session.configuration) {
                 try {
                     if (cacheSaveWasModified && cacheSave != null) {
                         val imported = importTitleFileFromPath(

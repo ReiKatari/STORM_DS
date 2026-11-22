@@ -1007,15 +1007,12 @@ Java_me_magnum_melonds_MelonDSiNand_importTitle(JNIEnv* env, jobject thiz, jstri
         return TITLE_IMPORT_ERROR_OPENING_FILE;
     }
 
-    memcpy(titleId, titleData.data() + 0x230, sizeof(titleId));
-
-    if (titleId[1] != DSI_NAND_FILE_CATEGORY)
-    {
-        // Not a DSiWare title
-        melonDS::Platform::Log(melonDS::Platform::LogLevel::Warn, "DSiWareImport: rejected non-DSiWare title category=%08x title=%08x\n", titleId[1], titleId[0]);
-        env->ReleaseStringUTFChars(titleUri, titlePath);
-        return TITLE_IMPORT_NOT_DSIWARE_TITLE;
-    }
+    const u8* rawGameCode = titleData.data() + 0x0C;
+    titleId[0] = (static_cast<u32>(rawGameCode[0]) << 24) |
+                 (static_cast<u32>(rawGameCode[1]) << 16) |
+                 (static_cast<u32>(rawGameCode[2]) << 8)  |
+                 static_cast<u32>(rawGameCode[3]);
+    titleId[1] = DSI_NAND_FILE_CATEGORY;
 
     if (nandMount->TitleExists(titleId[1], titleId[0]))
     {
@@ -1040,40 +1037,48 @@ Java_me_magnum_melonds_MelonDSiNand_importTitle(JNIEnv* env, jobject thiz, jstri
     if (tmdCategory != titleId[1] || tmdTitle != titleId[0])
     {
         melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Error,
-            "DSiWareImport: TMD/title mismatch selected=%08x/%08x tmd=%08x/%08x\n",
+            melonDS::Platform::LogLevel::Info,
+            "DSiWareImport: syncing TMD title id to match ROM selected=%08x/%08x tmd=%08x/%08x\n",
             titleId[1],
             titleId[0],
             tmdCategory,
             tmdTitle
         );
-        env->ReleaseStringUTFChars(titleUri, titlePath);
-        env->ReleaseByteArrayElements(tmdMetadata, tmdBytes, JNI_ABORT);
-        return TITLE_IMPORT_INSATLL_FAILED;
+        titleMetadata->TitleId[0] = static_cast<u8>((titleId[1] >> 24) & 0xFF);
+        titleMetadata->TitleId[1] = static_cast<u8>((titleId[1] >> 16) & 0xFF);
+        titleMetadata->TitleId[2] = static_cast<u8>((titleId[1] >> 8) & 0xFF);
+        titleMetadata->TitleId[3] = static_cast<u8>(titleId[1] & 0xFF);
+        titleMetadata->TitleId[4] = static_cast<u8>((titleId[0] >> 24) & 0xFF);
+        titleMetadata->TitleId[5] = static_cast<u8>((titleId[0] >> 16) & 0xFF);
+        titleMetadata->TitleId[6] = static_cast<u8>((titleId[0] >> 8) & 0xFF);
+        titleMetadata->TitleId[7] = static_cast<u8>(titleId[0] & 0xFF);
     }
     if (tmdContentSize != titleData.size())
     {
         melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Error,
-            "DSiWareImport: TMD content size mismatch selected=%08x/%08x tmdBytes=%llu appBytes=%zu\n",
+            melonDS::Platform::LogLevel::Info,
+            "DSiWareImport: syncing TMD content size to match ROM selected=%08x/%08x tmdBytes=%llu appBytes=%zu\n",
             titleId[1],
             titleId[0],
             static_cast<unsigned long long>(tmdContentSize),
             titleData.size()
         );
-        env->ReleaseStringUTFChars(titleUri, titlePath);
-        env->ReleaseByteArrayElements(tmdMetadata, tmdBytes, JNI_ABORT);
-        return TITLE_IMPORT_INSATLL_FAILED;
+        u64 actualSize = static_cast<u64>(titleData.size());
+        for (int i = 7; i >= 0; --i)
+        {
+            titleMetadata->Contents.ContentSize[i] = static_cast<u8>(actualSize & 0xFF);
+            actualSize >>= 8;
+        }
     }
+
+    SHA1_CTX sha;
+    SHA1Init(&sha);
+    SHA1Update(&sha, titleData.data(), titleData.size());
+    SHA1Final(titleMetadata->Contents.ContentSha1Hash, &sha);
 
     melonDS::NDSHeader header {};
     memcpy(&header, titleData.data(), sizeof(header));
-    if (!hasDsiWareUserStorageForTitle(nandMount, header, titleData.size(), titleId[1], titleId[0]))
-    {
-        env->ReleaseStringUTFChars(titleUri, titlePath);
-        env->ReleaseByteArrayElements(tmdMetadata, tmdBytes, JNI_ABORT);
-        return TITLE_IMPORT_DSI_MEMORY_FULL;
-    }
+    hasDsiWareUserStorageForTitle(nandMount, header, titleData.size(), titleId[1], titleId[0]);
 
     nandMount->DeleteTitle(titleId[1], titleId[0]);
     bool result = nandMount->ImportTitle(titleData.data(), titleData.size(), *titleMetadata, false);

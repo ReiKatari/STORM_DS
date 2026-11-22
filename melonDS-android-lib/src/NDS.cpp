@@ -373,6 +373,7 @@ void NDS::SetupDirectBoot()
     ARM7BIOSProt = 0x1204;
 
     SPI.GetFirmwareMem()->SetupDirectBoot();
+    NDSCartSlot.WriteSPICnt(0x8000);
 
     ARM9.CP15Write(0x100, 0x00012078);
     ARM9.CP15Write(0x200, 0x00000042);
@@ -407,20 +408,23 @@ void NDS::SetupDirectBoot(const std::string& romname)
 
     NDSCartSlot.SetupDirectBoot(romname);
 
-    ARM9.R[12] = header.ARM9EntryAddress;
-    ARM9.R[13] = 0x03002F7C;
-    ARM9.R[14] = header.ARM9EntryAddress;
-    ARM9.R_IRQ[0] = 0x03003F80;
-    ARM9.R_SVC[0] = 0x03003FC0;
+    if (ConsoleType != 1)
+    {
+        ARM9.R[12] = header.ARM9EntryAddress;
+        ARM9.R[13] = 0x03002F7C;
+        ARM9.R[14] = header.ARM9EntryAddress;
+        ARM9.R_IRQ[0] = 0x03003F80;
+        ARM9.R_SVC[0] = 0x03003FC0;
 
-    ARM7.R[12] = header.ARM7EntryAddress;
-    ARM7.R[13] = 0x0380FD80;
-    ARM7.R[14] = header.ARM7EntryAddress;
-    ARM7.R_IRQ[0] = 0x0380FF80;
-    ARM7.R_SVC[0] = 0x0380FFC0;
+        ARM7.R[12] = header.ARM7EntryAddress;
+        ARM7.R[13] = 0x0380FD80;
+        ARM7.R[14] = header.ARM7EntryAddress;
+        ARM7.R_IRQ[0] = 0x0380FF80;
+        ARM7.R_SVC[0] = 0x0380FFC0;
 
-    ARM9.JumpTo(header.ARM9EntryAddress);
-    ARM7.JumpTo(header.ARM7EntryAddress);
+        ARM9.JumpTo(header.ARM9EntryAddress);
+        ARM7.JumpTo(header.ARM7EntryAddress);
+    }
 
     PostFlag9 = 0x01;
     PostFlag7 = 0x01;

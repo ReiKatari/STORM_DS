@@ -761,7 +761,10 @@ class EmulatorViewModel @Inject constructor(
     fun onRomLaunchValidated(rom: Rom) {
         launchJob?.cancel()
         launchJob = sessionCoroutineScope.launch {
-            launchRom(refreshRomForLaunch(rom))
+            val refreshed = refreshRomForLaunch(rom).copy(
+                resolvedDsiProfile = rom.resolvedDsiProfile ?: settingsRepository.getDsiProfile(),
+            )
+            launchRom(refreshed)
         }
     }
 

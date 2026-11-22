@@ -14,8 +14,15 @@ abstract class ConfigurationDirectoryVerifier(val settingsRepository: SettingsRe
 
     fun checkDsiConfigurationDirectory(profile: DSiProfile? = settingsRepository.getDsiProfile()): ConfigurationDirResult {
         // DSi requires the DS custom BIOS and firmware to be configured
-        val targetDirectory = profile?.directoryUri?.toUri() ?: settingsRepository.getDsiBiosDirectory()
-        val dsiConfigurationResult = checkDsiConfigurationDirectory(targetDirectory)
+        val fallbackDirectory = settingsRepository.getDsiBiosDirectory()
+        val targetDirectory = profile?.directoryUri?.toUri() ?: fallbackDirectory
+        var dsiConfigurationResult = checkDsiConfigurationDirectory(targetDirectory)
+        if (dsiConfigurationResult.status != ConfigurationDirResult.Status.VALID &&
+            fallbackDirectory != null &&
+            fallbackDirectory != targetDirectory
+        ) {
+            dsiConfigurationResult = checkDsiConfigurationDirectory(fallbackDirectory)
+        }
         return if (dsiConfigurationResult.status != ConfigurationDirResult.Status.VALID) {
             dsiConfigurationResult
         } else {

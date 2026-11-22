@@ -1730,6 +1730,13 @@ void NDSCartSlot::DecryptSecureArea(u8* out) noexcept
 
     memcpy(out, &cartrom[arm9base], 0x800);
 
+    // If the secure area is already decrypted (e.g. starts with 0xE7FFDEFF or is DSiWare/homebrew/plaintext):
+    if (*(u32*)&out[0] == 0xE7FFDEFF && *(u32*)&out[4] == 0xE7FFDEFF)
+    {
+        Log(LogLevel::Info, "Secure area already decrypted\n");
+        return;
+    }
+
     Key1_InitKeycode(false, gamecode, 2, 2);
     Key1_Decrypt((u32*)&out[0]);
 
@@ -1745,9 +1752,8 @@ void NDSCartSlot::DecryptSecureArea(u8* out) noexcept
     }
     else
     {
-        Log(LogLevel::Warn, "Secure area decryption failed\n");
-        for (u32 i = 0; i < 0x800; i += 4)
-            *(u32*)&out[i] = 0xE7FFDEFF;
+        Log(LogLevel::Info, "Secure area not KEY1-encrypted or already plaintext, preserving original ROM data\n");
+        memcpy(out, &cartrom[arm9base], 0x800);
     }
 }
 
@@ -1944,7 +1950,7 @@ void NDSCartSlot::ResetCart() noexcept
 {
     // CHECKME: what if there is a transfer in progress?
 
-    SPICnt = 0;
+    SPICnt = 0x8000;
     ROMCnt = 0;
 
     SPIData = 0;
@@ -2057,8 +2063,11 @@ void NDSCartSlot::WriteROMCnt(u32 val) noexcept
         Log(LogLevel::Debug, "key2 Y: %02X%08X\n", (u32)(Key2_Y>>32), (u32)Key2_Y);
     }
 
-    // transfers will only start when bit31 changes from 0 to 1
-    // and if AUXSPICNT is configured correctly
+    if (xferstart && !(SPICnt & (1<<15)))
+    {
+        // Direct boot / hardware compatibility: ensure slot is enabled when transfer initiated
+        SPICnt |= (1<<15);
+    }
     if (!(SPICnt & (1<<15))) return;
     if (SPICnt & (1<<13)) return;
     if (!xferstart) return;
