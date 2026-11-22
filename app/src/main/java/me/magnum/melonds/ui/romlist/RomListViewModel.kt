@@ -210,14 +210,20 @@ class RomListViewModel @Inject constructor(
 
     /**
      * (rom.retroAchievementsHash -> RA badge URL) for every game whose RA data is cached locally.
-     * Returns an empty map when the user has disabled RA covers in settings - that way every ROM
-     * falls back to its embedded cartridge icon without further plumbing.
+     * Returns an empty map when the user has disabled RA covers in settings or when the game is
+     * known to have no achievements - that way every ROM falls back to its embedded cartridge icon.
      */
     val raCoverByHash: StateFlow<Map<String, String>> = combine(
         retroAchievementsRepository.observeRomCoverIcons(),
         settingsRepository.observeRaCoverEnabled(),
     ) { covers, enabled ->
-        if (enabled) covers else emptyMap()
+        if (!enabled) {
+            emptyMap()
+        } else {
+            covers.mapNotNull { (hash, icon) ->
+                icon.url.takeIf { icon.hasAchievements != false }?.let { hash to it }
+            }.toMap()
+        }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
     private val _hasSearchDirectories = SubjectSharedFlow<Boolean>()

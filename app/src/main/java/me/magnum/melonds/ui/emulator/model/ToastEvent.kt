@@ -84,4 +84,6 @@ sealed class ToastEvent {
     data object RendererDebugCaptureFailed : ToastEvent()
     data object GbaModeNotSupported : ToastEvent()
     data object InternalError : ToastEvent()
+    data object WirelessUnsupported : ToastEvent()
+    data object MultiplayerOperationUnavailable : ToastEvent()
 }

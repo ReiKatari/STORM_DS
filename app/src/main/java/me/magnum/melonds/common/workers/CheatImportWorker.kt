@@ -18,22 +18,18 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CancellationException
 import me.magnum.melonds.MelonDSApplication
 import me.magnum.melonds.R
 import me.magnum.melonds.common.cheats.CheatDatabaseParser
-import me.magnum.melonds.common.cheats.CheatDatabaseParserListener
 import me.magnum.melonds.common.cheats.ProgressTrackerInputStream
-import me.magnum.melonds.common.cheats.UsrCheatDatParser
+import me.magnum.melonds.common.cheats.UsrCheatDatabaseParser
 import me.magnum.melonds.common.cheats.XmlCheatDatabaseParser
-import me.magnum.melonds.domain.model.CheatDatabase
-import me.magnum.melonds.domain.model.Game
 import me.magnum.melonds.domain.repositories.CheatsRepository
-import me.magnum.melonds.impl.RoomCheatsRepository
+import java.io.File
+import java.io.FileInputStream
 import java.io.InputStream
 import java.util.zip.ZipInputStream
-import kotlin.coroutines.resume
-import kotlin.coroutines.suspendCoroutine
 
 @HiltWorker
 class CheatImportWorker @AssistedInject constructor(
@@ -50,7 +46,6 @@ class CheatImportWorker @AssistedInject constructor(
         const val PREF_CHEATS_DB_LAST_UPDATED_MS = "cheats_db_last_updated_ms"
 
         private const val NOTIFICATION_ID_CHEATS_IMPORT = 100
-        private const val GAME_IMPORT_BATCH_SIZE = 100
         private const val PROGRESS_THROTTLE_MS = 250L
     }
 
@@ -64,8 +59,8 @@ class CheatImportWorker @AssistedInject constructor(
     private fun openInputStreamForUri(uri: Uri): InputStream? {
         return if (uri.scheme == "file") {
             val path = uri.path ?: return null
-            val file = java.io.File(path)
-            if (file.exists() && file.isFile) java.io.FileInputStream(file) else null
+            val file = File(path)
+            if (file.exists() && file.isFile) FileInputStream(file) else null
         } else {
             applicationContext.contentResolver.openInputStream(uri)
         }
@@ -78,7 +73,7 @@ class CheatImportWorker @AssistedInject constructor(
 
         try {
             val databaseDocument = if (uri.scheme == "file") {
-                uri.path?.let { DocumentFile.fromFile(java.io.File(it)) }
+                uri.path?.let { DocumentFile.fromFile(File(it)) }
             } else {
                 DocumentFile.fromSingleUri(applicationContext, uri)
             }
@@ -87,7 +82,7 @@ class CheatImportWorker @AssistedInject constructor(
             }
 
             val totalFileSize = if (uri.scheme == "file") {
-                uri.path?.let { java.io.File(it).length().takeIf { len -> len > 0L } }
+                uri.path?.let { File(it).length().takeIf { len -> len > 0L } }
             } else {
                 runCatching {
                     applicationContext.contentResolver.openAssetFileDescriptor(uri, "r")?.use {
@@ -101,11 +96,10 @@ class CheatImportWorker @AssistedInject constructor(
             Log.i(TAG, "Importing cheat file '${databaseDocument.name}', ext='$databaseExtension', size=$totalFileSize")
 
             return when (databaseExtension) {
-                "dat" -> parseStreamDocument(uri, UsrCheatDatParser(applicationContext.cacheDir), totalFileSize)
+                "dat" -> parseStreamDocument(uri, UsrCheatDatabaseParser(), totalFileSize)
                 "xml" -> parseStreamDocument(uri, XmlCheatDatabaseParser(), totalFileSize)
                 "zip" -> parseZipDocument(uri)
                 else -> {
-                    // Sniff format from the first bytes
                     val sniffedParser = sniffParserFromStream(uri)
                     if (sniffedParser != null) {
                         parseStreamDocument(uri, sniffedParser, totalFileSize)
@@ -115,6 +109,8 @@ class CheatImportWorker @AssistedInject constructor(
                     }
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "Exception during cheat database import: ${e.message}", e)
             return Result.failure()
@@ -127,7 +123,7 @@ class CheatImportWorker @AssistedInject constructor(
                 val header = ByteArray(16)
                 val read = stream.read(header)
                 if (read >= 12 && String(header, 0, 12, Charsets.US_ASCII).startsWith("R4 CheatCode")) {
-                    UsrCheatDatParser(applicationContext.cacheDir)
+                    UsrCheatDatabaseParser()
                 } else if (read >= 5 && (header[0] == '<'.code.toByte() || String(header, 0, read, Charsets.UTF_8).contains("<?xml"))) {
                     XmlCheatDatabaseParser()
                 } else {
@@ -137,140 +133,79 @@ class CheatImportWorker @AssistedInject constructor(
         }.getOrNull()
     }
 
-    private suspend fun parseZipDocument(uri: Uri) = suspendCoroutine { continuation ->
-        try {
-            openInputStreamForUri(uri)?.use { rawIn ->
-                val zipIn = ZipInputStream(rawIn.buffered())
-                var entry = zipIn.nextEntry
-                var matchingEntryName: String? = null
-                var isDat = false
+    private suspend fun parseZipDocument(uri: Uri): Result {
+        openInputStreamForUri(uri)?.use { rawIn ->
+            val zipIn = ZipInputStream(rawIn.buffered())
+            var entry = zipIn.nextEntry
+            var matchingEntryName: String? = null
+            var entrySize: Long? = null
+            var isDat = false
 
-                while (entry != null) {
-                    val entryName = entry.name.lowercase()
-                    if (entryName.endsWith(".dat") || entryName.endsWith(".xml")) {
-                        matchingEntryName = entry.name
-                        isDat = entryName.endsWith(".dat")
-                        break
-                    }
-                    zipIn.closeEntry()
-                    entry = zipIn.nextEntry
+            while (entry != null) {
+                val entryName = entry.name.lowercase()
+                if (!entry.isDirectory && (entryName.endsWith(".dat") || entryName.endsWith(".xml"))) {
+                    matchingEntryName = entry.name
+                    entrySize = entry.size.takeIf { it > 0L }
+                    isDat = entryName.endsWith(".dat")
+                    break
                 }
-
-                if (matchingEntryName != null) {
-                    val parser: CheatDatabaseParser = if (isDat) UsrCheatDatParser(applicationContext.cacheDir) else XmlCheatDatabaseParser()
-                    Log.i(TAG, "Found valid cheat entry in zip: '$matchingEntryName', using ${parser::class.simpleName}")
-
-                    val progressTrackerStream = ProgressTrackerInputStream(zipIn)
-                    parser.parseCheatDatabase(
-                        progressTrackerStream,
-                        createImportListener(
-                            totalFileSize = null,
-                            progressTrackerStream = progressTrackerStream,
-                            isIndeterminate = true,
-                            logDescription = "zip cheat database parse: '$matchingEntryName'",
-                            continuation = continuation,
-                        )
-                    )
-                } else {
-                    Log.w(TAG, "No .dat or .xml entries found inside zip archive $uri")
-                    continuation.resume(Result.failure())
-                }
-            } ?: continuation.resume(Result.failure())
-        } catch (e: Throwable) {
-            Log.e(TAG, "Failed to parse zip cheat document: ${e.message}", e)
-            continuation.resume(Result.failure())
-        }
-    }
-
-    private suspend fun parseStreamDocument(uri: Uri, parser: CheatDatabaseParser, totalFileSize: Long?) = suspendCoroutine { continuation ->
-        try {
-            openInputStreamForUri(uri)?.use {
-                val progressTrackerStream = ProgressTrackerInputStream(it)
-                parser.parseCheatDatabase(
-                    progressTrackerStream,
-                    createImportListener(
-                        totalFileSize = totalFileSize,
-                        progressTrackerStream = progressTrackerStream,
-                        isIndeterminate = totalFileSize == null,
-                        logDescription = "direct cheat database parse with ${parser::class.simpleName}",
-                        continuation = continuation,
-                    )
-                )
-            } ?: continuation.resume(Result.failure())
-        } catch (e: Throwable) {
-            Log.e(TAG, "Failed to parse direct cheat document: ${e.message}", e)
-            continuation.resume(Result.failure())
-        }
-    }
-
-    private fun createImportListener(
-        totalFileSize: Long?,
-        progressTrackerStream: ProgressTrackerInputStream,
-        isIndeterminate: Boolean,
-        logDescription: String,
-        continuation: kotlin.coroutines.Continuation<Result>,
-    ): CheatDatabaseParserListener {
-        val pendingGames = ArrayList<Game>(GAME_IMPORT_BATCH_SIZE)
-        var lastProgressUpdateMs = 0L
-
-        fun flushPendingGames() {
-            if (pendingGames.isEmpty()) return
-            val batch = ArrayList(pendingGames)
-            pendingGames.clear()
-            runBlocking {
-                if (cheatsRepository is RoomCheatsRepository) {
-                    cheatsRepository.addGameCheatsBatch(batch)
-                } else {
-                    for (game in batch) {
-                        cheatsRepository.addGameCheats(game)
-                    }
-                }
-            }
-        }
-
-        return object : CheatDatabaseParserListener {
-            override fun onDatabaseParseStart(databaseName: String): CheatDatabase = runBlocking {
-                cheatsRepository.deleteCheatDatabaseIfExists(databaseName)
-                cheatsRepository.addCheatDatabase(databaseName)
+                zipIn.closeEntry()
+                entry = zipIn.nextEntry
             }
 
-            override fun onGameParseStart(gameName: String) {
-                val now = System.currentTimeMillis()
-                if (now - lastProgressUpdateMs < PROGRESS_THROTTLE_MS) {
-                    return
-                }
-                lastProgressUpdateMs = now
-                val readProgress = if (!isIndeterminate && totalFileSize != null && totalFileSize > 0) {
-                    (progressTrackerStream.totalReadBytes.toDouble() / totalFileSize * 100).toInt().coerceIn(0, 100)
-                } else {
-                    50
-                }
-
-                setForegroundAsync(createForegroundInfo(gameName, readProgress, isIndeterminate))
-                setProgressAsync(
-                    workDataOf(
-                        KEY_PROGRESS_RELATIVE to readProgress / 100f,
-                        KEY_PROGRESS_ITEM to gameName
-                    )
-                )
-            }
-
-            override fun onGameParsed(game: Game) {
-                pendingGames.add(game)
-                if (pendingGames.size >= GAME_IMPORT_BATCH_SIZE) {
-                    flushPendingGames()
-                }
-            }
-
-            override fun onParseComplete() {
-                flushPendingGames()
-                if (cheatsRepository is RoomCheatsRepository) {
-                    cheatsRepository.notifyCheatsUpdated()
-                }
-                Log.i(TAG, "Completed $logDescription")
+            if (matchingEntryName != null) {
+                val parser: CheatDatabaseParser = if (isDat) UsrCheatDatabaseParser() else XmlCheatDatabaseParser()
+                Log.i(TAG, "Found valid cheat entry in zip: '$matchingEntryName', using ${parser::class.simpleName}")
+                val stream = ProgressTrackerInputStream(zipIn)
+                importWithProgress(stream, parser, entrySize)
+                Log.i(TAG, "Completed zip cheat database parse: '$matchingEntryName'")
                 markDatabaseUpdated()
-                continuation.resume(Result.success())
+                return Result.success()
+            } else {
+                Log.w(TAG, "No .dat or .xml entries found inside zip archive $uri")
+                return Result.failure()
             }
+        }
+        return Result.failure()
+    }
+
+    private suspend fun parseStreamDocument(uri: Uri, parser: CheatDatabaseParser, totalFileSize: Long?): Result {
+        val input = openInputStreamForUri(uri) ?: return Result.failure()
+        input.use {
+            val stream = ProgressTrackerInputStream(it.buffered())
+            importWithProgress(stream, parser, totalFileSize)
+        }
+        Log.i(TAG, "Completed direct cheat database parse with ${parser::class.simpleName}")
+        markDatabaseUpdated()
+        return Result.success()
+    }
+
+    private suspend fun importWithProgress(
+        stream: ProgressTrackerInputStream,
+        parser: CheatDatabaseParser,
+        totalFileSize: Long?,
+    ) {
+        var lastProgressUpdateMs = 0L
+        val isIndeterminate = totalFileSize == null || totalFileSize <= 0L
+        cheatsRepository.replaceImportedCheats(stream, parser) { gameName ->
+            val now = System.currentTimeMillis()
+            if (now - lastProgressUpdateMs < PROGRESS_THROTTLE_MS) {
+                return@replaceImportedCheats
+            }
+            lastProgressUpdateMs = now
+            val readProgress = if (totalFileSize != null && totalFileSize > 0L) {
+                (stream.totalReadBytes.toDouble() / totalFileSize * 100).toInt().coerceIn(0, 100)
+            } else {
+                0
+            }
+
+            setForegroundAsync(createForegroundInfo(gameName, readProgress, isIndeterminate))
+            setProgressAsync(
+                workDataOf(
+                    KEY_PROGRESS_RELATIVE to readProgress / 100f,
+                    KEY_PROGRESS_ITEM to gameName,
+                )
+            )
         }
     }
 

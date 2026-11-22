@@ -16,6 +16,7 @@ class GameAchievementData private constructor(
         DISABLED_BY_SETTING,
         DISABLED_LOGIN_EXPIRED,
         DISABLED_LOAD_ERROR,
+        DISABLED_LOAD_ERROR_RESPONSE_TOO_LARGE,
         DISABLED_GAME_NOT_FOUND,
         ENABLED_NO_ACHIEVEMENTS,
         ENABLED_FULL,

@@ -23,6 +23,8 @@ abstract class FrontendInputHandler : IInputListener {
             Input.SLOW_MOTION -> onSlowMotion()
             Input.FRAME_ADVANCE -> onFrameAdvance()
             Input.TAKE_SCREENSHOT -> onTakeScreenshot()
+            Input.CYCLE_LAYOUT -> onCycleLayout()
+            Input.EXIT_GAME -> onExitGame()
             else -> {}
         }
     }
@@ -55,4 +57,6 @@ abstract class FrontendInputHandler : IInputListener {
     open fun onSlowMotion() {}
     open fun onFrameAdvance() {}
     open fun onTakeScreenshot() {}
+    open fun onCycleLayout() {}
+    open fun onExitGame() {}
 }

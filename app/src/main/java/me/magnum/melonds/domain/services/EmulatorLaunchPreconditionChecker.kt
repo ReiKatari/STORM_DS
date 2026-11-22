@@ -1,4 +1,5 @@
 package me.magnum.melonds.domain.services
+import me.magnum.melonds.multiplayer.MultiplayerSession
 
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
@@ -28,13 +29,18 @@ class EmulatorLaunchPreconditionChecker(
     private val settingsRepository: SettingsRepository,
 ) {
 
-    suspend fun checkRomLaunchPreconditions(rom: Rom): RomLaunchPreconditionCheckResult {
+    suspend fun checkRomLaunchPreconditions(candidate: Rom): RomLaunchPreconditionCheckResult {
+        val rom = candidate.copy(resolvedDsiProfile = settingsRepository.getDsiProfile())
         settingsRepository.setActiveRomContext(
             gameCode = rom.gameCode,
             romName = rom.config.customName ?: rom.name,
             fileName = rom.fileName,
         )
-        val renderer = settingsRepository.getEffectiveVideoRenderer(rom.config)
+        val renderer = if (MultiplayerSession.active) {
+            VideoRenderer.VULKAN
+        } else {
+            settingsRepository.getEffectiveVideoRenderer(rom.config)
+        }
         getRendererValidationFailureOrNull(renderer, rom.config.customVulkanDriverName)?.let {
             val fallbackRenderer = GameCompatibilityManager.resolveSupportedFallbackRenderer(context)
             GameCompatibilityManager.markDeviceVulkanUnavailable(context)
@@ -73,7 +79,9 @@ class EmulatorLaunchPreconditionChecker(
     }
 
     suspend fun checkFirmwareLaunchPreconditions(consoleType: ConsoleType): FirmwareLaunchPreconditionCheckResult {
-        getRendererValidationFailureOrNull(settingsRepository.getCurrentVideoRenderer())?.let {
+        val profile = if (consoleType == ConsoleType.DSi) settingsRepository.getDsiProfile() else null
+        val renderer = if (MultiplayerSession.active) VideoRenderer.VULKAN else settingsRepository.getCurrentVideoRenderer()
+        getRendererValidationFailureOrNull(renderer)?.let {
             val fallbackRenderer = GameCompatibilityManager.resolveSupportedFallbackRenderer(context)
             GameCompatibilityManager.markDeviceVulkanUnavailable(context)
             GameCompatibilityManager.recordCapabilityFallbackNotice(
@@ -81,15 +89,21 @@ class EmulatorLaunchPreconditionChecker(
                 requested = VideoRenderer.VULKAN,
                 fallback = fallbackRenderer,
             )
-            settingsRepository.setCurrentVideoRenderer(fallbackRenderer)
+            if (!MultiplayerSession.active) {
+                settingsRepository.setCurrentVideoRenderer(fallbackRenderer)
+            }
         }
 
-        val configurationDirResult = configurationDirectoryVerifier.checkConsoleConfigurationDirectory(consoleType)
+        val configurationDirResult = if (consoleType == ConsoleType.DSi) {
+            configurationDirectoryVerifier.checkDsiConfigurationDirectory(profile)
+        } else {
+            configurationDirectoryVerifier.checkDsConfigurationDirectory()
+        }
         if (configurationDirResult.status != ConfigurationDirResult.Status.VALID) {
             return FirmwareLaunchPreconditionCheckResult.BiosConfigurationIncorrect(configurationDirResult)
         }
 
-        return FirmwareLaunchPreconditionCheckResult.Success(consoleType)
+        return FirmwareLaunchPreconditionCheckResult.Success(consoleType, profile)
     }
 
     private suspend fun checkDsiWarePreconditions(rom: Rom): RomLaunchPreconditionCheckResult {
@@ -105,7 +119,11 @@ class EmulatorLaunchPreconditionChecker(
             return ConfigurationDirResult(ConsoleType.DS, ConfigurationDirResult.Status.VALID, emptyArray(), emptyArray())
         }
 
-        val result = configurationDirectoryVerifier.checkConsoleConfigurationDirectory(romTargetConsoleType)
+        val result = if (romTargetConsoleType == ConsoleType.DSi) {
+            configurationDirectoryVerifier.checkDsiConfigurationDirectory(rom.resolvedDsiProfile)
+        } else {
+            configurationDirectoryVerifier.checkDsConfigurationDirectory()
+        }
         if (result.status != ConfigurationDirResult.Status.VALID) {
             // Built-in FreeBIOS (DS) and Direct DSi Boot (DSi) handle missing custom BIOS files automatically
             return ConfigurationDirResult(romTargetConsoleType, ConfigurationDirResult.Status.VALID, emptyArray(), emptyArray())

@@ -67,12 +67,15 @@ class RomDetailsRetroAchievementsViewModel @Inject constructor(
     fun refreshOfflineAchievementsStatus() {
         viewModelScope.launch {
             val isSyncing = _offlineAchievementsUiState.value.isSyncing
-            _offlineAchievementsUiState.value = buildOfflineAchievementsUiState(isSyncing)
+            val refreshed = buildOfflineAchievementsUiState(isSyncing)
+            _offlineAchievementsUiState.value = refreshed.copy(
+                isSyncing = _offlineAchievementsUiState.value.isSyncing,
+            )
         }
     }
 
     fun syncOfflineAchievementsNow() {
-        if (_offlineAchievementsUiState.value.isSyncing) return
+        if (!_offlineAchievementsUiState.value.canSyncNow) return
 
         viewModelScope.launch {
             val userAuth = retroAchievementsRepository.getUserAuthentication() ?: return@launch

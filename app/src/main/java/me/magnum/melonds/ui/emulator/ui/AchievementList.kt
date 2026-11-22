@@ -1,5 +1,6 @@
 package me.magnum.melonds.ui.emulator.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animate
 import me.magnum.melonds.ui.theme.Manrope
 import androidx.compose.foundation.background
@@ -42,6 +43,7 @@ import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Leaderboard
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -124,6 +126,7 @@ fun AchievementList(
     onRetry: () -> Unit,
     onDismiss: () -> Unit,
     onAchievementFocused: (AchievementUiModel) -> Unit = {},
+    onSelectedLeaderboardBackChanged: ((() -> Unit)?) -> Unit = {},
 ) {
     val coroutineScope = rememberCoroutineScope()
     val lazyListState = rememberLazyListState()
@@ -153,6 +156,7 @@ fun AchievementList(
                     onLoadLeaderboardRanking = onLoadLeaderboardRanking,
                     lazyListState = lazyListState,
                     onAchievementFocused = onAchievementFocused,
+                    onSelectedLeaderboardBackChanged = onSelectedLeaderboardBackChanged,
                 )
             }
             RomRetroAchievementsUiState.AchievementLoadError,
@@ -178,6 +182,7 @@ private fun Content(
     onLoadLeaderboardRanking: suspend (RALeaderboard) -> Result<RALeaderboardRanking>,
     lazyListState: LazyListState,
     onAchievementFocused: (AchievementUiModel) -> Unit = {},
+    onSelectedLeaderboardBackChanged: ((() -> Unit)?) -> Unit = {},
 ) {
     if (sets.isEmpty()) {
         EmptyAchievements(modifier)
@@ -186,6 +191,21 @@ private fun Content(
 
     var selectedLeaderboard by remember {
         mutableStateOf<RALeaderboard?>(null)
+    }
+    BackHandler(enabled = selectedLeaderboard != null) {
+        selectedLeaderboard = null
+    }
+    DisposableEffect(selectedLeaderboard) {
+        onSelectedLeaderboardBackChanged(
+            if (selectedLeaderboard != null) {
+                { selectedLeaderboard = null }
+            } else {
+                null
+            },
+        )
+        onDispose {
+            onSelectedLeaderboardBackChanged(null)
+        }
     }
     selectedLeaderboard?.let { leaderboard ->
         var reloadToken by remember(leaderboard.id) {

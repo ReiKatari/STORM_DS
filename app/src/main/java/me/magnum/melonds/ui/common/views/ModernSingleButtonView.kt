@@ -133,6 +133,10 @@ class ModernSingleButtonView @JvmOverloads constructor(
 
     private fun getLabel(): String {
         return when (component) {
+            LayoutComponent.BUTTON_A -> "A"
+            LayoutComponent.BUTTON_B -> "B"
+            LayoutComponent.BUTTON_X -> "X"
+            LayoutComponent.BUTTON_Y -> "Y"
             LayoutComponent.BUTTON_L -> "L"
             LayoutComponent.BUTTON_R -> "R"
             LayoutComponent.BUTTON_START -> "START"
@@ -256,10 +260,16 @@ class ModernSingleButtonView @JvmOverloads constructor(
         activeGlowPaint.color = glowColor
         activeStrokePaint.color = activeStroke
 
+        val isFaceButton = component == LayoutComponent.BUTTON_A ||
+            component == LayoutComponent.BUTTON_B ||
+            component == LayoutComponent.BUTTON_X ||
+            component == LayoutComponent.BUTTON_Y
         val isShoulder = component == LayoutComponent.BUTTON_L || component == LayoutComponent.BUTTON_R
         val isStartSelect = component == LayoutComponent.BUTTON_START || component == LayoutComponent.BUTTON_SELECT
 
-        if (isShoulder) {
+        if (isFaceButton) {
+            drawFaceButtonCap(canvas, cx, cy, w, h, component!!, style)
+        } else if (isShoulder) {
             val cornerRadius = min(w, h) * 0.45f
             val shoulderPath = Path()
             if (component == LayoutComponent.BUTTON_L) {
@@ -414,6 +424,248 @@ class ModernSingleButtonView @JvmOverloads constructor(
             }
         }
         canvas.drawText(text, cx, textY, textPaint)
+    }
+
+    private fun drawFaceButtonCap(
+        canvas: Canvas,
+        cx: Float,
+        cy: Float,
+        w: Float,
+        h: Float,
+        faceComponent: LayoutComponent,
+        style: ButtonColorStyle,
+    ) {
+        val faceInput = when (faceComponent) {
+            LayoutComponent.BUTTON_A -> Input.A
+            LayoutComponent.BUTTON_B -> Input.B
+            LayoutComponent.BUTTON_X -> Input.X
+            else -> Input.Y
+        }
+        val radius = min(w, h) * 0.44f
+
+        canvas.drawCircle(cx + 1.5f, cy + radius * 0.14f + 2f, radius * 1.03f, shadowPaint)
+
+        if (buttonGlow > 0f) {
+            val glowCol = when (style) {
+                ButtonColorStyle.CLASSIC_WHITE -> Color.parseColor("#6638BDF8")
+                ButtonColorStyle.CLASSIC_GREY -> Color.parseColor("#6694A3B8")
+                ButtonColorStyle.CRIMSON_RUBY -> Color.parseColor("#66FF1744")
+                ButtonColorStyle.MIDNIGHT_PURPLE -> Color.parseColor("#66C084FC")
+                ButtonColorStyle.GOLD_LUXURY -> Color.parseColor("#66FFD700")
+                ButtonColorStyle.EMERALD_MATRIX -> Color.parseColor("#6600E676")
+                ButtonColorStyle.WII_CRYSTAL -> Color.parseColor("#6600D2FF")
+                ButtonColorStyle.WII_U_DARK -> Color.parseColor("#6638BDF8")
+                ButtonColorStyle.SWITCH_NEON -> when (faceInput) {
+                    Input.A, Input.B -> Color.parseColor("#66FF3E3E")
+                    else -> Color.parseColor("#660AB9E6")
+                }
+                ButtonColorStyle.SWITCH_OLED -> Color.parseColor("#6694A3B8")
+                ButtonColorStyle.VIRTUAL_BOY -> Color.parseColor("#80FF0033")
+                ButtonColorStyle.GAMECUBE_INDIGO -> when (faceInput) {
+                    Input.A -> Color.parseColor("#6600B894")
+                    Input.B -> Color.parseColor("#66D63031")
+                    else -> Color.parseColor("#66A4B0BE")
+                }
+                ButtonColorStyle.GAMEBOY_DMG -> Color.parseColor("#66C70039")
+                ButtonColorStyle.GBA_GLACIER -> Color.parseColor("#66706FD3")
+                ButtonColorStyle.FAMICOM_RETRO -> Color.parseColor("#66FFD700")
+                ButtonColorStyle.NINTENDO_3DS_AQUA -> Color.parseColor("#6600D2D3")
+                ButtonColorStyle.SNES_SUPER -> when (faceInput) {
+                    Input.A -> Color.parseColor("#66FF7675")
+                    Input.B -> Color.parseColor("#66FFEAA7")
+                    Input.X -> Color.parseColor("#6674B9FF")
+                    else -> Color.parseColor("#6655EFC4")
+                }
+                ButtonColorStyle.STORM_ARCADE_RETRO -> when (faceInput) {
+                    Input.A -> Color.parseColor("#663B82F6")
+                    Input.B -> Color.parseColor("#66FBBF24")
+                    Input.X -> Color.parseColor("#66EF4444")
+                    else -> Color.parseColor("#6610B981")
+                }
+                ButtonColorStyle.STORM_AURORA_SPECTRUM -> when (faceInput) {
+                    Input.A -> Color.parseColor("#80FB7185")
+                    Input.B -> Color.parseColor("#8034D399")
+                    Input.X -> Color.parseColor("#8038BDF8")
+                    else -> Color.parseColor("#80FCD34D")
+                }
+                ButtonColorStyle.STORM_CYBERPUNK_NEON -> when (faceInput) {
+                    Input.A -> Color.parseColor("#80FCEE0A")
+                    Input.B -> Color.parseColor("#80FF003C")
+                    Input.X -> Color.parseColor("#8000F0FF")
+                    else -> Color.parseColor("#80B026FF")
+                }
+                ButtonColorStyle.STORM_FROST_GLACIER -> when (faceInput) {
+                    Input.A -> Color.parseColor("#800EA5E9")
+                    Input.B -> Color.parseColor("#8014B8A6")
+                    Input.X -> Color.parseColor("#8006B6D4")
+                    else -> Color.parseColor("#8038BDF8")
+                }
+                ButtonColorStyle.STORM_SAKURA_BLOSSOM -> when (faceInput) {
+                    Input.A -> Color.parseColor("#80E11D48")
+                    Input.B -> Color.parseColor("#80F472B6")
+                    Input.X -> Color.parseColor("#80C084FC")
+                    else -> Color.parseColor("#80FB7185")
+                }
+                ButtonColorStyle.STORM_SOLAR_FUSION -> when (faceInput) {
+                    Input.A -> Color.parseColor("#80D97706")
+                    Input.B -> Color.parseColor("#80F59E0B")
+                    Input.X -> Color.parseColor("#80EA580C")
+                    else -> Color.parseColor("#80FB923C")
+                }
+                else -> Color.parseColor("#6600E5FF")
+            }
+            activeGlowPaint.color = glowCol
+            activeGlowPaint.alpha = (buttonGlow * 200).toInt()
+            canvas.drawCircle(cx, cy, radius * 1.12f, activeGlowPaint)
+        }
+
+        val (cTop, cBottom) = when (style) {
+            ButtonColorStyle.CLASSIC_WHITE -> Pair(Color.parseColor("#FFFFFF"), Color.parseColor("#CBD5E1"))
+            ButtonColorStyle.CLASSIC_GREY -> Pair(Color.parseColor("#64748B"), Color.parseColor("#334155"))
+            ButtonColorStyle.CRIMSON_RUBY -> Pair(Color.parseColor("#DC2626"), Color.parseColor("#5B090E"))
+            ButtonColorStyle.MIDNIGHT_PURPLE -> Pair(Color.parseColor("#9333EA"), Color.parseColor("#3B0764"))
+            ButtonColorStyle.GOLD_LUXURY -> Pair(Color.parseColor("#D97706"), Color.parseColor("#5C2B05"))
+            ButtonColorStyle.EMERALD_MATRIX -> Pair(Color.parseColor("#059669"), Color.parseColor("#022C22"))
+            ButtonColorStyle.WII_CRYSTAL -> Pair(Color.parseColor("#FFFFFF"), Color.parseColor("#DDE3EA"))
+            ButtonColorStyle.WII_U_DARK -> Pair(Color.parseColor("#2C3240"), Color.parseColor("#151922"))
+            ButtonColorStyle.SWITCH_NEON -> when (faceInput) {
+                Input.A, Input.B -> Pair(Color.parseColor("#FF3E3E"), Color.parseColor("#B91C1C"))
+                else -> Pair(Color.parseColor("#0AB9E6"), Color.parseColor("#0284C7"))
+            }
+            ButtonColorStyle.SWITCH_OLED -> Pair(Color.parseColor("#F8FAFC"), Color.parseColor("#CBD5E1"))
+            ButtonColorStyle.VIRTUAL_BOY -> Pair(Color.parseColor("#2B0008"), Color.parseColor("#0A0002"))
+            ButtonColorStyle.GAMECUBE_INDIGO -> when (faceInput) {
+                Input.A -> Pair(Color.parseColor("#00B894"), Color.parseColor("#006266"))
+                Input.B -> Pair(Color.parseColor("#D63031"), Color.parseColor("#740E10"))
+                else -> Pair(Color.parseColor("#747D8C"), Color.parseColor("#2F3542"))
+            }
+            ButtonColorStyle.GAMEBOY_DMG -> Pair(Color.parseColor("#801336"), Color.parseColor("#4A0E17"))
+            ButtonColorStyle.GBA_GLACIER -> Pair(Color.parseColor("#575FCF"), Color.parseColor("#2C2C54"))
+            ButtonColorStyle.FAMICOM_RETRO -> Pair(Color.parseColor("#8B0000"), Color.parseColor("#4A0000"))
+            ButtonColorStyle.NINTENDO_3DS_AQUA -> Pair(Color.parseColor("#00838F"), Color.parseColor("#004D40"))
+            ButtonColorStyle.SNES_SUPER -> when (faceInput) {
+                Input.A -> Pair(Color.parseColor("#DC2626"), Color.parseColor("#7F1D1D"))
+                Input.B -> Pair(Color.parseColor("#F59E0B"), Color.parseColor("#78350F"))
+                Input.X -> Pair(Color.parseColor("#2563EB"), Color.parseColor("#1E3A8A"))
+                else -> Pair(Color.parseColor("#059669"), Color.parseColor("#064E3B"))
+            }
+            ButtonColorStyle.STORM_ARCADE_RETRO -> when (faceInput) {
+                Input.A -> Pair(Color.parseColor("#2563EB"), Color.parseColor("#1E3A8A"))
+                Input.B -> Pair(Color.parseColor("#D97706"), Color.parseColor("#78350F"))
+                Input.X -> Pair(Color.parseColor("#DC2626"), Color.parseColor("#7F1D1D"))
+                else -> Pair(Color.parseColor("#059669"), Color.parseColor("#064E3B"))
+            }
+            ButtonColorStyle.STORM_AURORA_SPECTRUM -> when (faceInput) {
+                Input.A -> Pair(Color.parseColor("#FDA4AF"), Color.parseColor("#E11D48"))
+                Input.B -> Pair(Color.parseColor("#6EE7B7"), Color.parseColor("#059669"))
+                Input.X -> Pair(Color.parseColor("#7DD3FC"), Color.parseColor("#0284C7"))
+                else -> Pair(Color.parseColor("#FDE047"), Color.parseColor("#D97706"))
+            }
+            ButtonColorStyle.STORM_CYBERPUNK_NEON -> when (faceInput) {
+                Input.A -> Pair(Color.parseColor("#FCEE0A"), Color.parseColor("#857E02"))
+                Input.B -> Pair(Color.parseColor("#FF003C"), Color.parseColor("#8A001F"))
+                Input.X -> Pair(Color.parseColor("#00F0FF"), Color.parseColor("#007D85"))
+                else -> Pair(Color.parseColor("#B026FF"), Color.parseColor("#5A008A"))
+            }
+            ButtonColorStyle.STORM_FROST_GLACIER -> when (faceInput) {
+                Input.A -> Pair(Color.parseColor("#BAE6FD"), Color.parseColor("#0284C7"))
+                Input.B -> Pair(Color.parseColor("#99F6E4"), Color.parseColor("#0D9488"))
+                Input.X -> Pair(Color.parseColor("#A5F3FC"), Color.parseColor("#0891B2"))
+                else -> Pair(Color.parseColor("#E0F2FE"), Color.parseColor("#0369A1"))
+            }
+            ButtonColorStyle.STORM_SAKURA_BLOSSOM -> when (faceInput) {
+                Input.A -> Pair(Color.parseColor("#FB7185"), Color.parseColor("#BE123C"))
+                Input.B -> Pair(Color.parseColor("#F472B6"), Color.parseColor("#DB2777"))
+                Input.X -> Pair(Color.parseColor("#E879F9"), Color.parseColor("#A21CAF"))
+                else -> Pair(Color.parseColor("#FBCFE8"), Color.parseColor("#E11D48"))
+            }
+            ButtonColorStyle.STORM_SOLAR_FUSION -> when (faceInput) {
+                Input.A -> Pair(Color.parseColor("#FDE68A"), Color.parseColor("#D97706"))
+                Input.B -> Pair(Color.parseColor("#FCD34D"), Color.parseColor("#B45309"))
+                Input.X -> Pair(Color.parseColor("#FCA5A5"), Color.parseColor("#DC2626"))
+                else -> Pair(Color.parseColor("#FED7AA"), Color.parseColor("#EA580C"))
+            }
+            else -> Pair(Color.parseColor("#334155"), Color.parseColor("#0F172A"))
+        }
+
+        val capPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.style = Paint.Style.FILL
+            shader = RadialGradient(
+                cx - radius * 0.30f,
+                cy - radius * 0.35f,
+                radius * 1.35f,
+                if (buttonGlow > 0f) cBottom else cTop,
+                cBottom,
+                Shader.TileMode.CLAMP,
+            )
+        }
+        canvas.drawCircle(cx, cy, radius, capPaint)
+
+        val bevelRect = RectF(cx - radius, cy - radius, cx + radius, cy + radius)
+        val bevelLight = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.style = Paint.Style.STROKE
+            strokeWidth = 3.5f
+            color = Color.parseColor("#99FFFFFF")
+        }
+        val bevelDark = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.style = Paint.Style.STROKE
+            strokeWidth = 3.5f
+            color = Color.parseColor("#99000000")
+        }
+        canvas.drawArc(bevelRect, 135f, 180f, false, bevelLight)
+        canvas.drawArc(bevelRect, -45f, 180f, false, bevelDark)
+
+        if (buttonGlow > 0f) {
+            activeStrokePaint.color = when (style) {
+                ButtonColorStyle.SWITCH_NEON -> when (faceInput) {
+                    Input.A, Input.B -> Color.parseColor("#FF3E3E")
+                    else -> Color.parseColor("#0AB9E6")
+                }
+                ButtonColorStyle.GAMECUBE_INDIGO -> when (faceInput) {
+                    Input.A -> Color.parseColor("#00B894")
+                    Input.B -> Color.parseColor("#D63031")
+                    else -> Color.parseColor("#A4B0BE")
+                }
+                ButtonColorStyle.SNES_SUPER -> when (faceInput) {
+                    Input.A -> Color.parseColor("#FF1744")
+                    Input.B -> Color.parseColor("#FBBF24")
+                    Input.X -> Color.parseColor("#60A5FA")
+                    else -> Color.parseColor("#34D399")
+                }
+                ButtonColorStyle.STORM_ARCADE_RETRO -> when (faceInput) {
+                    Input.A -> Color.parseColor("#3B82F6")
+                    Input.B -> Color.parseColor("#FBBF24")
+                    Input.X -> Color.parseColor("#EF4444")
+                    else -> Color.parseColor("#10B981")
+                }
+                ButtonColorStyle.STORM_AURORA_SPECTRUM, ButtonColorStyle.STORM_SAKURA_BLOSSOM -> Color.parseColor("#FB7185")
+                ButtonColorStyle.STORM_CYBERPUNK_NEON -> Color.parseColor("#FCEE0A")
+                ButtonColorStyle.STORM_FROST_GLACIER -> Color.parseColor("#38BDF8")
+                ButtonColorStyle.STORM_SOLAR_FUSION -> Color.parseColor("#F59E0B")
+                else -> activeStrokePaint.color
+            }
+            canvas.drawCircle(cx, cy, radius, activeStrokePaint)
+        }
+
+        val label = getLabel()
+        textPaint.textSize = radius * 0.95f
+        textShadowPaint.textSize = textPaint.textSize
+        val textY = cy - (textPaint.descent() + textPaint.ascent()) / 2f
+        canvas.drawText(label, cx, textY + 2f, textShadowPaint)
+        textPaint.color = when (style) {
+            ButtonColorStyle.CLASSIC_WHITE, ButtonColorStyle.WII_CRYSTAL -> if (buttonGlow > 0f) Color.parseColor("#0284C7") else Color.parseColor("#0F172A")
+            ButtonColorStyle.SWITCH_OLED -> Color.parseColor("#0F172A")
+            ButtonColorStyle.VIRTUAL_BOY -> Color.parseColor("#FF0033")
+            ButtonColorStyle.FAMICOM_RETRO -> Color.parseColor("#FFD700")
+            ButtonColorStyle.NINTENDO_3DS_AQUA -> Color.parseColor("#00FFFF")
+            ButtonColorStyle.GAMEBOY_DMG -> if (buttonGlow > 0f) Color.WHITE else Color.parseColor("#F2C9D8")
+            ButtonColorStyle.SNES_SUPER, ButtonColorStyle.STORM_ARCADE_RETRO -> if (faceInput == Input.B) Color.parseColor("#0F172A") else Color.WHITE
+            ButtonColorStyle.STORM_CYBERPUNK_NEON -> if (faceInput == Input.A) Color.parseColor("#0F172A") else Color.WHITE
+            ButtonColorStyle.STORM_AURORA_SPECTRUM, ButtonColorStyle.STORM_FROST_GLACIER,
+            ButtonColorStyle.STORM_SAKURA_BLOSSOM, ButtonColorStyle.STORM_SOLAR_FUSION -> Color.parseColor("#0F172A")
+            else -> Color.WHITE
+        }
+        canvas.drawText(label, cx, textY, textPaint)
     }
 
     private fun drawFastForwardIcon(canvas: Canvas, cx: Float, cy: Float, size: Float) {

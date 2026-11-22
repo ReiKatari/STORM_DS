@@ -15,6 +15,7 @@ class RuntimeLayoutComponentViewBuilderFactory : LayoutComponentViewBuilderFacto
                 LayoutComponent.TOP_SCREEN -> RuntimeScreenLayoutComponentViewBuilder()
                 LayoutComponent.BOTTOM_SCREEN -> RuntimeScreenLayoutComponentViewBuilder()
                 LayoutComponent.HYBRID_SCREEN -> RuntimeScreenLayoutComponentViewBuilder(256f / (192f * 2f))
+                LayoutComponent.SLOT2_ANALOG -> Slot2AnalogLayoutComponentViewBuilder()
                 LayoutComponent.DPAD -> DpadLayoutComponentViewBuilder()
                 LayoutComponent.BUTTONS -> ButtonsLayoutComponentViewBuilder()
                 else -> SingleButtonLayoutComponentViewBuilder(layoutComponent)

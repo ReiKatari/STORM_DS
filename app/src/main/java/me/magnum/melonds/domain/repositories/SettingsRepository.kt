@@ -13,8 +13,14 @@ import me.magnum.melonds.ui.Theme
 import java.util.UUID
 
 interface SettingsRepository {
-    suspend fun getEmulatorConfiguration(): EmulatorConfiguration
-    suspend fun getEmulatorConfiguration(romConfig: RomConfig): EmulatorConfiguration
+    suspend fun getEmulatorConfiguration(dsiProfile: DSiProfile? = getDsiProfile()): EmulatorConfiguration
+    suspend fun getEmulatorConfiguration(romConfig: RomConfig, dsiProfile: DSiProfile? = getDsiProfile()): EmulatorConfiguration
+    fun getDsiProfileSettings(): DSiProfileSettings
+    fun observeDsiProfileSettings(): Flow<DSiProfileSettings>
+    fun getDsiProfile(profileId: String? = null): DSiProfile? = getDsiProfileSettings().resolve(profileId)
+    fun saveDsiProfile(profile: DSiProfile)
+    fun removeDsiProfile(profileId: String)
+    fun setDefaultDsiProfile(profileId: String?)
 
     fun getTheme(): Theme
     fun getFastForwardSpeedMultiplier(): Float
@@ -156,6 +162,7 @@ interface SettingsRepository {
 
     fun getControllerConfiguration(): ControllerConfiguration
     fun observeControllerConfiguration(): StateFlow<ControllerConfiguration>
+    fun getLayoutCycleIds(): Set<UUID>?
     fun getSelectedLayoutId(): UUID
     fun getSoftInputBehaviour(): Flow<SoftInputBehaviour>
     fun isTouchHapticFeedbackEnabled(): Flow<Boolean>

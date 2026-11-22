@@ -324,10 +324,10 @@ fun PauseMenuOverlay(
     }
 
     BackHandler {
-        if (confirmingOption != null) {
-            confirmingOption = null
-        } else {
-            onResume()
+        when {
+            showCustomizer -> showCustomizer = false
+            confirmingOption != null -> confirmingOption = null
+            else -> onResume()
         }
     }
 
@@ -342,10 +342,10 @@ fun PauseMenuOverlay(
             ) { onResume() }
             .onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown && (event.key == Key.ButtonB || event.key == Key.Back || event.key == Key.Escape)) {
-                    if (confirmingOption != null) {
-                        confirmingOption = null
-                    } else {
-                        onResume()
+                    when {
+                        showCustomizer -> showCustomizer = false
+                        confirmingOption != null -> confirmingOption = null
+                        else -> onResume()
                     }
                     true
                 } else {

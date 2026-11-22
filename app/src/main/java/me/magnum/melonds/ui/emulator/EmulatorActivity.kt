@@ -1,4 +1,9 @@
 package me.magnum.melonds.ui.emulator
+import android.net.wifi.WifiManager
+import me.magnum.melonds.domain.model.DSiProfile
+import me.magnum.melonds.multiplayer.MultiplayerSession
+import me.magnum.melonds.multiplayer.phantom.PhantomPlayer
+import me.magnum.melonds.ui.emulator.input.Slot2AnalogInput
 
 import kotlin.math.roundToInt
 
@@ -199,13 +204,14 @@ import javax.inject.Inject
 import kotlin.math.max
 
 @AndroidEntryPoint
-class EmulatorActivity : AppCompatActivity() {
+open class EmulatorActivity : AppCompatActivity() {
     companion object {
         const val KEY_ROM = "rom"
         const val KEY_PATH = "PATH"
         const val KEY_URI = "uri"
         const val KEY_BOOT_FIRMWARE_CONSOLE = "boot_firmware_console"
         const val KEY_BOOT_FIRMWARE_ONLY = "boot_firmware_only"
+        const val KEY_START_MULTIPLAYER_FIRMWARE = "start_multiplayer_firmware"
         const val ACTION_DEBUG_CAPTURE = "me.magnum.melonds.DEBUG_CAPTURE"
         private const val DEFAULT_VULKAN_DEBUG_DIR = "/storage/emulated/0/STORM DS/debug"
         private val STARTUP_PRESENTATION_REFRESH_DELAYS_MS = longArrayOf(0L, 120L, 350L, 800L)
@@ -225,15 +231,24 @@ class EmulatorActivity : AppCompatActivity() {
             }
         }
 
-        fun getFirmwareEmulatorActivityIntent(context: Context, consoleType: ConsoleType): Intent {
+        fun getFirmwareEmulatorActivityIntent(
+            context: Context,
+            consoleType: ConsoleType,
+            startMultiplayerSession: Boolean = false,
+        ): Intent {
             return Intent(context, EmulatorActivity::class.java).apply {
                 putExtra(KEY_BOOT_FIRMWARE_ONLY, true)
                 putExtra(KEY_BOOT_FIRMWARE_CONSOLE, consoleType.ordinal)
+                if (startMultiplayerSession) {
+                    putExtra(KEY_START_MULTIPLAYER_FIRMWARE, true)
+                }
             }
         }
     }
 
     private lateinit var binding: ActivityEmulatorBinding
+    private val slot2AnalogInput = Slot2AnalogInput(MelonEmulator::setSlot2AnalogInput)
+    private var phantomPlayerResumed = false
     private var lowBatteryReceiverRegistered = false
     private var isLowBatteryPowerSaverActive = false
     private var lowBatterySavedScale: Int? = null
@@ -325,6 +340,7 @@ class EmulatorActivity : AppCompatActivity() {
     private var currentRuntimeRendererConfiguration: RuntimeRendererConfiguration? = null
     private var lastOpenGlRetroArchFilterKey: String? = null
     private var prewarmedOpenGlRetroArchFilterKey: String? = null
+    private var openGlPrewarmJob: kotlinx.coroutines.Job? = null
     private var shaderDiagnosticsRunnable: Runnable? = null
     @Inject lateinit var shaderCompatibilityLog: ShaderCompatibilityLog
     @Inject lateinit var shaderCompileTimeStore: ShaderCompileTimeStore
@@ -467,6 +483,14 @@ class EmulatorActivity : AppCompatActivity() {
             viewModel.onOpenRewind()
         }
 
+        override fun onCycleLayout() {
+            viewModel.cycleLayout()
+        }
+
+        override fun onExitGame() {
+            viewModel.exitEmulator()
+        }
+
         override fun onTranslate() {
             translatorManager.triggerTranslation()
         }
@@ -497,6 +521,16 @@ class EmulatorActivity : AppCompatActivity() {
             updateFastForwardState()
         }
 
+        fun disableFastForward() {
+            if (fastForwardEnabled) {
+                fastForwardEnabled = false
+                binding.viewLayoutControls.setLayoutComponentToggleState(LayoutComponent.BUTTON_FAST_FORWARD_TOGGLE, false)
+                presentation?.layoutView?.setLayoutComponentToggleState(LayoutComponent.BUTTON_FAST_FORWARD_TOGGLE, false)
+            }
+            fastForwardHoldPressed = false
+            updateFastForwardState()
+        }
+
         private fun updateFastForwardState() {
             MelonEmulator.setMuteOnFastForwardEnabled(viewModel.isMuteOnFastForwardEnabled())
             MelonEmulator.setFastForwardEnabled(fastForwardEnabled || fastForwardHoldPressed)
@@ -509,7 +543,11 @@ class EmulatorActivity : AppCompatActivity() {
             surfaceProvider = { binding.surfaceMain },
             screenshotProvider = { viewModel.captureScreenshot() },
             onPauseEmulator = { viewModel.pauseEmulator(false) },
-            onResumeEmulator = { viewModel.resumeEmulator() }
+            onResumeEmulator = {
+                if (!isFrameAdvanceHudVisible.value) {
+                    viewModel.resumeEmulator()
+                }
+            }
         )
     }
 
@@ -543,7 +581,7 @@ class EmulatorActivity : AppCompatActivity() {
             resumeGameDirectly()
         } else {
             val pauseMenuStillOpen = pauseMenuState.value != null || activeOverlays.hasActiveOverlays()
-            viewModel.onSettingsChanged(resumeWhenFinished = !pauseMenuStillOpen)
+            viewModel.onSettingsChanged(resumeWhenFinished = (MultiplayerSession.active || !pauseMenuStillOpen) && !isFrameAdvanceHudVisible.value)
             if (pauseMenuStillOpen) {
                 requestOverlayHostFocus()
             }
@@ -580,7 +618,9 @@ class EmulatorActivity : AppCompatActivity() {
     }
     private val cheatsLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         viewModel.onCheatsChanged()
-        viewModel.resumeEmulator()
+        if (!isFrameAdvanceHudVisible.value) {
+            viewModel.resumeEmulator()
+        }
     }
     private val permissionRequestLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         lifecycleScope.launch {
@@ -692,7 +732,10 @@ class EmulatorActivity : AppCompatActivity() {
     private val consoleSkinEnabledState = mutableStateOf(false)
     private val consoleSkinThemeState = mutableStateOf(me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.AURORA_AUTO_THEME)
     private val activeSlot2AddonState = mutableStateOf(0)
+    private val showSlot2PeripheralOverlayState = mutableStateOf(false)
     private var solarSensorOverrideLevel = -1 // -1 = Auto (phone ambient light sensor), 0..10 = manual bars
+    private var quickSlotCarouselOpenedFromPauseMenu = false
+    private var hybridTouchOverrideApplied = false
 
     private sealed interface ConsoleOverlayNode {
         val title: String
@@ -745,7 +788,7 @@ class EmulatorActivity : AppCompatActivity() {
         if (!hasComposeOverlayOpen()) {
             if (reopenMenu) {
                 reopenPauseMenu()
-            } else {
+            } else if (!isFrameAdvanceHudVisible.value) {
                 viewModel.resumeEmulator()
             }
         }
@@ -793,6 +836,40 @@ class EmulatorActivity : AppCompatActivity() {
         binding = ActivityEmulatorBinding.inflate(layoutInflater)
         supportRequestWindowFeature(Window.FEATURE_NO_TITLE)
         setContentView(binding.root)
+        if (MultiplayerSession.active) {
+            lifecycleScope.launch {
+                var notified = false
+                lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                    withContext(Dispatchers.IO) {
+                        val wifiLock = acquireMultiplayerWifiLock()
+                        try {
+                            while (true) {
+                                if (MultiplayerSession.status().optBoolean("interrupted")) {
+                                    if (!notified) {
+                                        notified = true
+                                        withContext(Dispatchers.Main) {
+                                            Toast.makeText(
+                                                this@EmulatorActivity,
+                                                R.string.multiplayer_interrupted_message,
+                                                Toast.LENGTH_LONG,
+                                            ).show()
+                                        }
+                                    }
+                                    break
+                                }
+                                delay(500)
+                            }
+                        } finally {
+                            try {
+                                if (wifiLock?.isHeld == true) wifiLock.release()
+                            } catch (error: RuntimeException) {
+                                android.util.Log.e("Multiplayer", "Wi-Fi low latency release failed", error)
+                            }
+                        }
+                    }
+                }
+            }
+        }
         setupFullscreen()
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, windowInsets ->
             val insets = windowInsets.getInsets(WindowInsetsCompat.Type.displayCutout())
@@ -815,8 +892,8 @@ class EmulatorActivity : AppCompatActivity() {
                 viewModel.onRomLaunchValidated(rom)
             }
 
-            override fun onFirmwareValidated(consoleType: ConsoleType) {
-                viewModel.onFirmwareLaunchValidated(consoleType)
+            override fun onFirmwareValidated(consoleType: ConsoleType, dsiProfile: DSiProfile?) {
+                viewModel.onFirmwareLaunchValidated(consoleType, dsiProfile)
             }
 
             override fun onValidationAborted() {
@@ -921,7 +998,8 @@ class EmulatorActivity : AppCompatActivity() {
         binding.viewLayoutControls.apply {
             setFrontendInputHandler(frontendInputHandler)
             setSystemInputHandler(melonTouchHandler)
-            onQuickSlotCarouselRequested = { openQuickSlotCarousel() }
+            setSlot2AnalogInput(slot2AnalogInput)
+            onQuickSlotCarouselRequested = { openQuickSlotCarousel(fromPauseMenu = false) }
         }
         translatorManager.attachOverlay(binding.viewTranslationOverlay)
         translatorManager.requestMediaProjectionPermission = { captureIntent ->
@@ -1197,12 +1275,19 @@ class EmulatorActivity : AppCompatActivity() {
                                 }
                             },
                             onLoadFromSlot = { slot ->
+                                val returnToPauseMenu = quickSlotCarouselOpenedFromPauseMenu
                                 dismissQuickSlotCarousel()
+                                raHardcoreConfirmOpenedFromPauseMenu = returnToPauseMenu
                                 requestLoadStateWithHardcoreCheck(slot)
                             },
                             onDismiss = {
+                                val returnToPauseMenu = quickSlotCarouselOpenedFromPauseMenu
                                 dismissQuickSlotCarousel()
-                                reopenPauseMenu()
+                                if (returnToPauseMenu) {
+                                    reopenPauseMenu()
+                                } else if (!isFrameAdvanceHudVisible.value) {
+                                    viewModel.resumeEmulator()
+                                }
                             },
                         )
                     }
@@ -1311,9 +1396,20 @@ class EmulatorActivity : AppCompatActivity() {
                             slowMotionSpeed = if (isSlowMotionActive) slowMotionMultiplier else 1.0f,
                             onQuickSlotCarouselClick = {
                                 dismissPauseMenu()
-                                openQuickSlotCarousel()
+                                openQuickSlotCarousel(fromPauseMenu = true)
                             },
                             onOptionSelected = { option ->
+                                if (option == me.magnum.melonds.ui.emulator.rom.RomPauseMenuOption.QUICK_SLOT_CAROUSEL) {
+                                    dismissPauseMenu()
+                                    openQuickSlotCarousel(fromPauseMenu = true)
+                                    return@PauseMenuOverlay
+                                }
+                                if (option == me.magnum.melonds.ui.emulator.rom.RomPauseMenuOption.LOAD_STATE &&
+                                    viewModel.isRetroAchievementsHardcoreActive()
+                                ) {
+                                    viewModel.onPauseMenuOptionSelected(option)
+                                    return@PauseMenuOverlay
+                                }
                                 if (option == me.magnum.melonds.ui.emulator.rom.RomPauseMenuOption.CALIBRATE_GYRO) {
                                     motionSensorManager.calibrateCenter()
                                     android.widget.Toast.makeText(this@EmulatorActivity, R.string.input_gyro_recenter_quick_action, android.widget.Toast.LENGTH_SHORT).show()
@@ -1419,7 +1515,9 @@ class EmulatorActivity : AppCompatActivity() {
                         onDismiss = {
                             activeOverlays.removeActiveOverlay(EmulatorOverlay.SLOW_MOTION_DIALOG)
                             showSlowMotionSpeedDialog.value = false
-                            viewModel.resumeEmulator()
+                            if (!isFrameAdvanceHudVisible.value) {
+                                viewModel.resumeEmulator()
+                            }
                         },
                     )
                 }
@@ -1497,6 +1595,7 @@ class EmulatorActivity : AppCompatActivity() {
                 }
 
                 if (
+                    showSlot2PeripheralOverlayState.value &&
                     activeSlot2AddonState.value in listOf(3, 5, 6) &&
                     !hasComposeOverlayOpen() &&
                     !showBootAnimation.value
@@ -1528,10 +1627,7 @@ class EmulatorActivity : AppCompatActivity() {
                             runCatching { MelonEmulator.setSlot2AnalogInput(deltaX, 0f) }
                         },
                         onDismissOverlay = {
-                            peripheralSensorBridge.stopLightSensor()
-                            motionSensorManager.solarSensorAutoEnabled = false
-                            activeSlot2AddonState.value = 0
-                            runCatching { MelonEmulator.setSlot2AddonType(0) }
+                            showSlot2PeripheralOverlayState.value = false
                         },
                     )
                 }
@@ -1574,6 +1670,16 @@ class EmulatorActivity : AppCompatActivity() {
         }
         lifecycleScope.launch {
             lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                connectedControllerManager.managedControllers.collect {
+                    slot2AnalogInput.clearPhysical()
+                    if (::nativeInputListener.isInitialized) {
+                        nativeInputListener.releaseChordInputs()
+                    }
+                }
+            }
+        }
+        lifecycleScope.launch {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 connectedControllerManager.controllersState.collect {
                     binding.viewLayoutControls.setConnectedControllersState(it)
                     presentation?.layoutView?.setConnectedControllersState(it)
@@ -1602,6 +1708,9 @@ class EmulatorActivity : AppCompatActivity() {
                     currentRuntimeRendererConfiguration = it
                     ensurePresentationBackend(it?.renderer ?: viewModel.getConfiguredVideoRenderer())
                     updateOpenGlRetroArchFilterConfiguration(it)
+                    if (viewModel.emulatorState.value.isRunning()) {
+                        scheduleOpenGlShaderPrewarm()
+                    }
                     mainScreenRenderer.updateRendererConfiguration(it)
                     presentation?.updateRendererConfiguration(it)
                     updateRendererScreenAreas()
@@ -1621,10 +1730,16 @@ class EmulatorActivity : AppCompatActivity() {
         lifecycleScope.launch {
             lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.currentFps.collectLatest {
+                    val wasFpsEmpty = binding.textFps.text.isNullOrEmpty()
                     if (it == null) {
                         binding.textFps.text = null
                     } else {
                         binding.textFps.text = getString(R.string.info_fps, it)
+                    }
+                    val isFpsEmpty = binding.textFps.text.isNullOrEmpty()
+                    if (wasFpsEmpty != isFpsEmpty) {
+                        setupRenderedIrOverlay()
+                        setupResolutionHud()
                     }
                     updateResolutionHudText(it)
                 }
@@ -1694,6 +1809,8 @@ class EmulatorActivity : AppCompatActivity() {
                         ToastEvent.CannotSwitchRetroAchievementsMode -> getString(R.string.retro_achievements_relaunch_to_apply_settings) to Toast.LENGTH_LONG
                         ToastEvent.GbaModeNotSupported -> getString(R.string.emulator_stop_gba_mode_unsupported) to Toast.LENGTH_SHORT
                         ToastEvent.InternalError -> getString(R.string.emulator_stop_internal_error) to Toast.LENGTH_LONG
+                        ToastEvent.WirelessUnsupported -> getString(R.string.emulator_stop_wireless_unsupported) to Toast.LENGTH_LONG
+                        ToastEvent.MultiplayerOperationUnavailable -> getString(R.string.multiplayer_operation_unavailable) to Toast.LENGTH_LONG
                         ToastEvent.OfflineAchievementsLedgerTampered -> getString(R.string.offline_ra_ledger_tampered_toast) to Toast.LENGTH_LONG
                         ToastEvent.OfflineAchievementsSyncFailed -> getString(R.string.offline_ra_sync_failed_toast) to Toast.LENGTH_LONG
                         ToastEvent.PendingRaStateVerificationFailed ->
@@ -1928,6 +2045,7 @@ class EmulatorActivity : AppCompatActivity() {
                                 }
                                 if (isActive && !bootRomReady.value && !isFinishing && !isDestroyed) {
                                     android.util.Log.e("EmulatorActivity", "ROM launch timed out after 90s")
+                                    runCatching { viewModel.abortLaunchAndStopEmulator() }
                                     binding.textLoading.isGone = true
                                     binding.progressLoading.isGone = true
                                     binding.textLoadingDetail.isGone = true
@@ -1997,7 +2115,7 @@ class EmulatorActivity : AppCompatActivity() {
                         is EmulatorState.RunningFirmware -> {
                             progressLoadingWatchdogJob?.cancel()
                             progressLoadingWatchdogJob = null
-                            prewarmOpenGlShadersIfNeeded()
+                            scheduleOpenGlShaderPrewarm()
                             (it as? EmulatorState.RunningRom)?.let { running ->
                                 bootIsDsi.value = running.rom.isDsiWareTitle
                                 bootRomTitle.value = running.rom.config.customName ?: running.rom.name
@@ -2026,6 +2144,7 @@ class EmulatorActivity : AppCompatActivity() {
                             if (
                                 lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
                                 !activeOverlays.hasActiveOverlays() &&
+                                !isFrameAdvanceHudVisible.value &&
                                 viewModel.canResumeEmulatorFromLifecycle()
                             ) {
                                 viewModel.resumeEmulator()
@@ -2420,7 +2539,22 @@ class EmulatorActivity : AppCompatActivity() {
         val displays = deviceLayoutDisplayMapper.mapDisplaysToLayoutDisplays(currentDisplay, secondaryDisplay)
         viewModel.setConnectedDisplays(displays)
 
-        showExternalDisplay(secondaryDisplay)
+        showExternalDisplay(secondaryDisplay.takeIf { PhantomPlayer.current == null || phantomPlayerResumed })
+    }
+
+    private fun acquireMultiplayerWifiLock(): WifiManager.WifiLock? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || !MultiplayerSession.active) return null
+        return try {
+            applicationContext.getSystemService<WifiManager>()
+                ?.createWifiLock(WifiManager.WIFI_MODE_FULL_LOW_LATENCY, "stormds-multiplayer")
+                ?.apply {
+                    setReferenceCounted(false)
+                    acquire()
+                }
+        } catch (error: RuntimeException) {
+            android.util.Log.e("Multiplayer", "Wi-Fi low latency unavailable", error)
+            null
+        }
     }
 
     private fun dismissExternalPresentation() {
@@ -2452,6 +2586,7 @@ class EmulatorActivity : AppCompatActivity() {
                     setLayoutComponentViewBuilderFactory(RuntimeLayoutComponentViewBuilderFactory())
                     setFrontendInputHandler(frontendInputHandler)
                     setSystemInputHandler(melonTouchHandler)
+                    setSlot2AnalogInput(slot2AnalogInput)
                     viewModel.runtimeLayout.value?.let {
                         updateLayout(it)
                     }
@@ -2524,8 +2659,16 @@ class EmulatorActivity : AppCompatActivity() {
 
         val launchArgs = LaunchArgs.fromIntent(intent)
         // Invalid arguments. Ignore completely
-        if (launchArgs == null)
+        if (launchArgs == null || isDestroyed)
             return
+
+        if (isClosingEmulator || isFinishing) {
+            dismissActiveErrorDialogs()
+            setIntent(intent)
+            viewModel.relaunchWithNewArgs(launchArgs)
+            recreate()
+            return
+        }
 
         if (viewModel.emulatorState.value.isRunning()) {
             viewModel.pauseEmulator(false)
@@ -2562,6 +2705,10 @@ class EmulatorActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             window.decorView.viewTreeObserver.addOnGlobalFocusChangeListener(joystickFocusListener)
             updateJoystickUnbufferedDispatch(resumed = true)
+        }
+        if (PhantomPlayer.current != null) {
+            phantomPlayerResumed = true
+            updateDisplays()
         }
         if (isTranslatorManagerInitialized) {
             translatorManager.onHostResume()
@@ -2644,6 +2791,7 @@ class EmulatorActivity : AppCompatActivity() {
         if (
             lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
             !activeOverlays.hasActiveOverlays() &&
+            !isFrameAdvanceHudVisible.value &&
             viewModel.canResumeEmulatorFromLifecycle()
         ) {
             disableScreenTimeOut()
@@ -2715,7 +2863,7 @@ class EmulatorActivity : AppCompatActivity() {
             return
         }
         val density = resources.displayMetrics.density
-        val isFpsVisible = binding.textFps.isVisible && binding.textFps.text?.isNotEmpty() == true
+        val isFpsVisible = binding.textFps.isVisible
         val fpsPos = viewModel.getFpsCounterPosition()
         val extraOffset = if (isFpsVisible && fpsPos == position) (26 * density).toInt() else 0
         applyOverlayPosition(
@@ -2847,7 +2995,7 @@ class EmulatorActivity : AppCompatActivity() {
         }
 
         val density = resources.displayMetrics.density
-        val isFpsVisible = binding.textFps.isVisible && binding.textFps.text?.isNotEmpty() == true
+        val isFpsVisible = binding.textFps.isVisible
         val fpsPos = viewModel.getFpsCounterPosition()
         val parsedPos = when (position) {
             "top_left" -> FpsCounterPosition.TOP_LEFT
@@ -2924,6 +3072,7 @@ class EmulatorActivity : AppCompatActivity() {
         if (layoutConfiguration != null) {
             lastKnownGoodTopRect = null
             lastKnownGoodBottomRect = null
+            hybridTouchOverrideApplied = false
             instantiatedLayoutIsCustom = layoutConfiguration.isCustomLayout
             setLayoutOrientation(layoutConfiguration.layoutOrientation)
             with(binding.viewLayoutControls) {
@@ -3202,7 +3351,7 @@ class EmulatorActivity : AppCompatActivity() {
         val (hybridTopRect, hybridBottomRect) = if (isExplicitScreenLayoutMode) {
             null to null
         } else {
-            hybridView?.let { splitHybridScreenRect(it.getRect()) } ?: (null to null)
+            hybridView?.let { splitHybridScreenRect(it.initialRect ?: it.getRect()) } ?: (null to null)
         }
 
         val isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -3508,6 +3657,31 @@ class EmulatorActivity : AppCompatActivity() {
             binding.viewLayoutControls.updateComponentRect(LayoutComponent.BOTTOM_SCREEN, bottomCompRect)
         }
 
+        if (hybridView != null) {
+            if (isExplicitScreenLayoutMode) {
+                if (topView == null && bottomView == null) {
+                    val activeTouchRect = bottomRect?.takeIf { it.width > 0 && it.height > 0 && bottomAlpha > 0f }
+                    binding.viewLayoutControls.updateComponentRect(LayoutComponent.HYBRID_SCREEN, activeTouchRect)
+                    hybridView.view.setOnTouchListener(
+                        if (activeTouchRect != null) {
+                            me.magnum.melonds.ui.emulator.input.TouchscreenInputHandler(melonTouchHandler)
+                        } else {
+                            null
+                        }
+                    )
+                    hybridTouchOverrideApplied = true
+                } else {
+                    binding.viewLayoutControls.updateComponentRect(LayoutComponent.HYBRID_SCREEN, null)
+                }
+            } else if (hybridTouchOverrideApplied) {
+                binding.viewLayoutControls.updateComponentRect(LayoutComponent.HYBRID_SCREEN, hybridView.initialRect ?: hybridView.getRect())
+                hybridView.view.setOnTouchListener(
+                    me.magnum.melonds.ui.emulator.input.HybridScreenTouchscreenInputHandler(melonTouchHandler)
+                )
+                hybridTouchOverrideApplied = false
+            }
+        }
+
         if (!usedFallbackForStaleOrientation) {
             lastKnownGoodTopRect = topRect
             lastKnownGoodBottomRect = bottomRect
@@ -3671,6 +3845,22 @@ class EmulatorActivity : AppCompatActivity() {
         }
     }
 
+    private fun scheduleOpenGlShaderPrewarm() {
+        val configuration = currentRuntimeRendererConfiguration ?: return
+        if (configuration.videoFiltering != VideoFiltering.RETROARCH || configuration.renderer == VideoRenderer.VULKAN) {
+            return
+        }
+        if (configuration.retroArchShader.presetPath.isNullOrEmpty()) {
+            return
+        }
+        if (openGlPrewarmJob?.isActive == true) {
+            return
+        }
+        openGlPrewarmJob = lifecycleScope.launch {
+            prewarmOpenGlShadersIfNeeded()
+        }
+    }
+
     private suspend fun prewarmOpenGlShadersIfNeeded() {
         val configuration = currentRuntimeRendererConfiguration ?: return
         if (configuration.videoFiltering != VideoFiltering.RETROARCH || configuration.renderer == VideoRenderer.VULKAN) {
@@ -3691,7 +3881,6 @@ class EmulatorActivity : AppCompatActivity() {
         if (key == prewarmedOpenGlRetroArchFilterKey) {
             return
         }
-        prewarmedOpenGlRetroArchFilterKey = key
 
         val scale = if (configuration.renderer == VideoRenderer.SOFTWARE) 1 else configuration.resolutionScaling.coerceAtLeast(1)
         val atlasWidth = DS_SCREEN_WIDTH * scale
@@ -3703,16 +3892,27 @@ class EmulatorActivity : AppCompatActivity() {
         binding.textLoadingDetail.isVisible = true
         binding.textLoadingDetail.setText(R.string.info_vulkan_compiling_stage_retroarch)
         bootStatus.value = getString(R.string.info_retroarch_compiling_wait)
-        delay(SHADER_PREWARM_MESSAGE_SETTLE_MS)
+        try {
+            delay(SHADER_PREWARM_MESSAGE_SETTLE_MS)
 
-        val elapsedMillis = withContext(Dispatchers.Default) {
-            runCatching { frameRenderCoordinator.prewarmShaders(atlasWidth, atlasHeight) }.getOrDefault(0L)
+            val prewarmResult = withContext(Dispatchers.Default) {
+                runCatching { frameRenderCoordinator.prewarmShaders(atlasWidth, atlasHeight) }
+            }
+            prewarmResult.onSuccess { elapsedMillis ->
+                prewarmedOpenGlRetroArchFilterKey = key
+                configuration.retroArchShader.presetPath?.let {
+                    shaderCompileTimeStore.record(it, ShaderCompileTimeStore.Backend.OPEN_GL, elapsedMillis)
+                }
+            }
+            drainShaderDiagnostics()
+        } finally {
+            bootStatus.value = getString(R.string.info_loading)
+            if (bootRomReady.value || viewModel.emulatorState.value.isRunning()) {
+                binding.textLoading.isGone = true
+                binding.progressLoading.isGone = true
+                binding.textLoadingDetail.isGone = true
+            }
         }
-        bootStatus.value = getString(R.string.info_loading)
-        configuration.retroArchShader.presetPath?.let {
-            shaderCompileTimeStore.record(it, ShaderCompileTimeStore.Backend.OPEN_GL, elapsedMillis)
-        }
-        drainShaderDiagnostics()
     }
 
     private fun startShaderDiagnosticsPolling() {
@@ -3852,8 +4052,14 @@ class EmulatorActivity : AppCompatActivity() {
         }
 
         isClosingEmulator = true
+        releaseVirtualButtonInputs()
         releaseEmulatorUiResources()
-        finish()
+        val player = PhantomPlayer.current
+        if (player == null) {
+            finish()
+        } else {
+            player.notify(PhantomPlayer.CLOSE)
+        }
     }
 
     private fun releaseEmulatorUiResources() {
@@ -3909,7 +4115,13 @@ class EmulatorActivity : AppCompatActivity() {
     }
 
     private fun setupInputHandling(controllerConfiguration: ControllerConfiguration) {
-        nativeInputListener = InputProcessor(controllerConfiguration, melonTouchHandler, frontendInputHandler, applicationContext)
+        nativeInputListener = InputProcessor(
+            controllerConfiguration,
+            melonTouchHandler,
+            frontendInputHandler,
+            applicationContext,
+            slot2AnalogInput,
+        )
     }
 
     private fun handleBackPressed() {
@@ -3923,8 +4135,13 @@ class EmulatorActivity : AppCompatActivity() {
             return
         }
         if (showQuickSlotCarousel.value) {
+            val returnToPauseMenu = quickSlotCarouselOpenedFromPauseMenu
             dismissQuickSlotCarousel()
-            reopenPauseMenu()
+            if (returnToPauseMenu) {
+                reopenPauseMenu()
+            } else if (!isFrameAdvanceHudVisible.value) {
+                viewModel.resumeEmulator()
+            }
             return
         }
         if (raHardcoreLoadConfirmTarget.value != null || raHardcorePeriodicLoadConfirm.value) {
@@ -3954,6 +4171,7 @@ class EmulatorActivity : AppCompatActivity() {
         showAchievementList.value = false
         cheatsOverlayRomInfo.value = null
         showQuickSlotCarousel.value = false
+        quickSlotCarouselOpenedFromPauseMenu = false
         raHardcoreLoadConfirmTarget.value = null
         raHardcorePeriodicLoadConfirm.value = false
         showSlowMotionSpeedDialog.value = false
@@ -4207,7 +4425,9 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
             (nativeInputListener as? InputProcessor)?.refreshPreferences()
         }
         if (!refreshRomSettingsMenuIfOpen()) {
-            viewModel.resumeEmulator()
+            if (!isFrameAdvanceHudVisible.value) {
+                viewModel.resumeEmulator()
+            }
         } else {
             requestOverlayHostFocus()
         }
@@ -4457,6 +4677,7 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
         }
         if (autoSlot2 != 0 && activeSlot2AddonState.value == 0) {
             activeSlot2AddonState.value = autoSlot2
+            showSlot2PeripheralOverlayState.value = autoSlot2 in listOf(3, 5, 6)
             motionSensorManager.motionPakEnabled = (autoSlot2 == 4)
             motionSensorManager.solarSensorAutoEnabled = (autoSlot2 == 3 && solarSensorOverrideLevel == -1)
             if (autoSlot2 == 3 || autoSlot2 == 4) {
@@ -4609,6 +4830,7 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
                         peripheralSensorBridge.stopLightSensor()
                     }
                     activeSlot2AddonState.value = addonType
+                    showSlot2PeripheralOverlayState.value = addonType in listOf(3, 5, 6)
                     motionSensorManager.motionPakEnabled = (addonType == 4)
                     motionSensorManager.solarSensorAutoEnabled = (addonType == 3 && solarSensorOverrideLevel == -1)
                     if (addonType == 3 || addonType == 4) {
@@ -6244,13 +6466,18 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
         }
     }
 
-    private fun openQuickSlotCarousel() {
+    private fun openQuickSlotCarousel(fromPauseMenu: Boolean = false) {
+        quickSlotCarouselOpenedFromPauseMenu = fromPauseMenu
+        if (!fromPauseMenu) {
+            viewModel.pauseEmulator(showPauseMenu = false)
+        }
         activeOverlays.addActiveOverlay(EmulatorOverlay.QUICK_SLOT_CAROUSEL)
         showQuickSlotCarousel.value = true
         requestOverlayHostFocus()
     }
 
     private fun dismissQuickSlotCarousel() {
+        quickSlotCarouselOpenedFromPauseMenu = false
         if (showQuickSlotCarousel.value) {
             showQuickSlotCarousel.value = false
             activeOverlays.removeActiveOverlay(EmulatorOverlay.QUICK_SLOT_CAROUSEL)
@@ -6357,6 +6584,9 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
             isSlowMotionActive = !isSlowMotionActive
         }
         val mult = if (isSlowMotionActive) slowMotionMultiplier else 1.0f
+        if (isSlowMotionActive) {
+            frontendInputHandler.disableFastForward()
+        }
         viewModel.setSlowMotionMultiplier(if (isSlowMotionActive) slowMotionMultiplier else null)
         MelonEmulator.setFrameLimitSpeedMultiplier(mult)
         val formattedMult = String.format(java.util.Locale.US, "%.2fx", mult)
@@ -6446,10 +6676,12 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
             .setPositiveButton(R.string.ok) { _, _ ->
                 finish()
             }
+            .setOnCancelListener {
+                finish()
+            }
             .setOnDismissListener {
                 romNotFoundDialog = null
                 activeOverlays.removeActiveOverlay(EmulatorOverlay.ROM_NOT_FOUND_DIALOG)
-                finish()
             }
             .show()
     }
@@ -6495,7 +6727,7 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
         if (rewindOpenedFromPauseMenu) {
             rewindOpenedFromPauseMenu = false
             reopenPauseMenu()
-        } else {
+        } else if (!isFrameAdvanceHudVisible.value) {
             viewModel.resumeEmulator()
         }
     }
@@ -6612,12 +6844,19 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
         motionSensorManager.stopListening()
         cancelStartupPresentationRefreshes()
         stopShaderDiagnosticsPolling()
+        releaseVirtualButtonInputs()
+        if (PhantomPlayer.current != null) {
+            phantomPlayerResumed = false
+            showExternalDisplay(null)
+        }
         frontendInputHandler.clearFastForwardHold()
         melonTouchHandler.stopAllTurbo()
         enableScreenTimeOut()
-        choreographerFrameRenderer.stopRendering()
-        if (!isClosingEmulator && !isFinishing) {
-            viewModel.pauseEmulator(false)
+        if (!MultiplayerSession.active) {
+            choreographerFrameRenderer.stopRendering()
+            if (!isClosingEmulator && !isFinishing) {
+                viewModel.pauseEmulator(false)
+            }
         }
     }
 
@@ -6647,6 +6886,9 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
 
     override fun onStop() {
         super.onStop()
+        if (viewModel.emulatorState.value.isRunning()) {
+            viewModel.flushSramSavesAsync()
+        }
         viewModel.setHostActivityRunning(false)
         cancelStartupPresentationRefreshes()
         getSystemService<DisplayManager>()?.unregisterDisplayListener(displayListener)
@@ -6659,6 +6901,14 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
         return super.dispatchTouchEvent(event)
+    }
+
+    private fun releaseVirtualButtonInputs() {
+        if (!::binding.isInitialized) return
+        if (::nativeInputListener.isInitialized) {
+            nativeInputListener.releaseChordInputs()
+        }
+        slot2AnalogInput.clear()
     }
 
     override fun onDestroy() {

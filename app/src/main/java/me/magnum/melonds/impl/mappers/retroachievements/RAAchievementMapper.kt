@@ -21,6 +21,7 @@ fun RAAchievement.mapToEntity(): RAAchievementEntity {
         badgeUrlLocked.toString(),
         memoryAddress,
         type.toEntityType(),
+        achievementType,
     )
 }
 
@@ -39,6 +40,7 @@ fun RAAchievementEntity.mapToModel(): RAAchievement {
         URL(badgeUrlLocked),
         memoryAddress,
         parseAchievementType(type),
+        achievementType,
     )
 }
 

@@ -67,7 +67,7 @@ class InputAssignmentDtoTypeAdapter : JsonSerializer<InputConfigDto.AssignmentDt
             TYPE_CHORD -> InputConfigDto.AssignmentDto.Chord(
                 deviceId = obj.optionalInt(DEVICE_ID_FIELD),
                 modifierKeyCode = obj.requiredInt(MODIFIER_KEY_CODE_FIELD),
-                triggerKeyCode = obj.requiredInt(TRIGGER_KEY_CODE_FIELD),
+                triggerKeyCode = obj.optionalInt(TRIGGER_KEY_CODE_FIELD) ?: obj.requiredInt(KEY_CODE_FIELD),
             )
             else -> throw JsonParseException("Unknown input assignment type")
         }

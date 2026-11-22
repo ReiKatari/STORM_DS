@@ -8,6 +8,7 @@ import me.magnum.melonds.domain.model.retroachievements.RASimpleRuntimeAchieveme
 import me.magnum.melonds.domain.model.retroachievements.RARuntimeUserAchievement
 import me.magnum.melonds.domain.model.retroachievements.RAUserAchievement
 import me.magnum.melonds.domain.model.retroachievements.RAUserGameData
+import me.magnum.melonds.domain.model.retroachievements.RomCoverIcon
 import me.magnum.rcheevosapi.model.RAAchievement
 import me.magnum.rcheevosapi.model.RAAwardAchievementResponse
 import me.magnum.rcheevosapi.model.RAGameId
@@ -21,7 +22,7 @@ import me.magnum.rcheevosapi.model.RAUserProfile
 interface RetroAchievementsRepository {
     fun observeKnownAchievementHashes(): Flow<List<String>>
 
-    fun observeRomCoverIcons(): Flow<Map<String, String>>
+    fun observeRomCoverIcons(): Flow<Map<String, RomCoverIcon>>
 
     fun observeUserProfile(): Flow<RAUserProfile?>
     suspend fun refreshUserProfile()

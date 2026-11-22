@@ -32,8 +32,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
@@ -50,7 +48,6 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import me.magnum.melonds.R
-import me.magnum.melonds.ui.common.RequestInitialFocus
 import me.magnum.melonds.ui.theme.watermelon
 import kotlin.math.roundToInt
 
@@ -112,7 +109,6 @@ private fun SolarSensorOverlay(
     }
     val colors = watermelon
     val isAutoMode = currentLevel < 0
-    val firstPresetFocusRequester = remember { FocusRequester() }
 
     Box(
         modifier = Modifier
@@ -179,7 +175,6 @@ private fun SolarSensorOverlay(
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .then(if (level == -2) Modifier.focusRequester(firstPresetFocusRequester) else Modifier)
                             .clip(RoundedCornerShape(8.dp))
                             .background(if (isSelected) colors.greenDim else colors.surface2)
                             .border(
@@ -242,8 +237,6 @@ private fun SolarSensorOverlay(
                 )
             }
         }
-
-        RequestInitialFocus(firstPresetFocusRequester)
     }
 }
 

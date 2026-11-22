@@ -47,14 +47,18 @@ fun AchievementListDialog(
     var detailAchievement by remember {
         mutableStateOf<Pair<me.magnum.melonds.ui.common.achievements.ui.model.AchievementUiModel, Boolean>?>(null)
     }
-
-    BackHandler {
-        if (detailAchievement != null) {
-            detailAchievement = null
-        } else {
-            onDismiss()
+    var closeSelectedLeaderboard by remember {
+        mutableStateOf<(() -> Unit)?>(null)
+    }
+    val handleBack: () -> Unit = {
+        when {
+            detailAchievement != null -> detailAchievement = null
+            closeSelectedLeaderboard != null -> closeSelectedLeaderboard?.invoke()
+            else -> onDismiss()
         }
     }
+
+    BackHandler(onBack = handleBack)
 
     LaunchedEffect(Unit) {
         viewModel.retryLoadAchievements()
@@ -71,11 +75,7 @@ fun AchievementListDialog(
             ) { onDismiss() }
             .onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown && (event.key == Key.ButtonB || event.key == Key.Back)) {
-                    if (detailAchievement != null) {
-                        detailAchievement = null
-                    } else {
-                        onDismiss()
-                    }
+                    handleBack()
                     true
                 } else {
                     false
@@ -178,13 +178,14 @@ fun AchievementListDialog(
                         onRetry = viewModel::retryLoadAchievements,
                         onDismiss = onDismiss,
                         onAchievementFocused = onAchievementFocused,
+                        onSelectedLeaderboardBackChanged = { closeSelectedLeaderboard = it },
                     )
                 }
             }
 
             // Unified Bottom Center Back Arrow
             me.magnum.melonds.ui.common.UnifiedBackButton(
-                onClick = onDismiss,
+                onClick = handleBack,
                 modifier = Modifier.focusRequester(backButtonFocusRequester),
             )
         }

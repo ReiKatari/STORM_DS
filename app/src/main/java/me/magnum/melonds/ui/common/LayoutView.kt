@@ -26,7 +26,7 @@ open class LayoutView(context: Context, attrs: AttributeSet?) : FrameLayout(cont
         loadLayout(layoutConfiguration, layoutTarget)
     }
 
-    fun destroyLayout() {
+    open fun destroyLayout() {
         views.clear()
         removeAllViews()
     }
@@ -73,6 +73,8 @@ open class LayoutView(context: Context, attrs: AttributeSet?) : FrameLayout(cont
             onTop = layoutComponent.onTop
             locked = layoutComponent.locked
             initialRect = layoutComponent.rect
+            buttonMode = layoutComponent.buttonMode
+            screenAspectRatio = layoutComponent.screenAspectRatio
         }
 
         if (layoutComponent.isScreen()) {

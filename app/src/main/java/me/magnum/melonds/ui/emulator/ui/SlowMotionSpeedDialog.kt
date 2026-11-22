@@ -254,8 +254,8 @@ fun SlowMotionSpeedDialog(
                 Slider(
                     value = sliderValue,
                     onValueChange = { newVal ->
-                        // Step quantization to nearest 0.05
-                        sliderValue = (newVal * 20f).roundToInt() / 20f
+                        // Step quantization to nearest 0.05 within 0.10..1.00
+                        sliderValue = ((newVal * 20f).roundToInt() / 20f).coerceIn(0.10f, 1.00f)
                     },
                     valueRange = 0.10f..1.00f,
                     steps = 17,
@@ -309,7 +309,7 @@ fun SlowMotionSpeedDialog(
                         .background(colors.green)
                         .border(1.dp, colors.green, applyShape)
                         .bouncingClickable {
-                            onSelectSpeed(sliderValue)
+                            onSelectSpeed(sliderValue.coerceIn(0.10f, 1.00f))
                             onDismiss()
                         }
                         .padding(vertical = 10.dp),

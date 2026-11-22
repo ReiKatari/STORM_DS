@@ -35,8 +35,9 @@ import me.magnum.melonds.R
 import me.magnum.melonds.databinding.ViewLayoutEditorManagerBinding
 import me.magnum.melonds.domain.model.Input
 import me.magnum.melonds.domain.model.RuntimeBackground
-import me.magnum.melonds.domain.model.consoleAspectRatio
 import me.magnum.melonds.domain.model.layout.LayoutComponent
+import me.magnum.melonds.domain.model.layout.ScreenAspectRatio
+import me.magnum.melonds.domain.model.layout.VirtualButtonMode
 import me.magnum.melonds.extensions.setBackgroundMode
 import me.magnum.melonds.impl.dpToPixels
 import me.magnum.melonds.ui.common.component.dialog.TextInputDialog
@@ -77,12 +78,6 @@ class LayoutEditorManagerView(
         fun hasUnsavedChanges(): Boolean
     }
 
-    private enum class ScreenAspectRatio(val ratio: Float?) {
-        RATIO_4_3(consoleAspectRatio),
-        RATIO_16_9(16 / 9f),
-        UNRESTRICTED(null)
-    }
-
     private enum class AspectRatioEnforcementPriority {
         WIDTH, HEIGHT,
     }
@@ -101,10 +96,7 @@ class LayoutEditorManagerView(
     private var currentHeightScale = 0f
     private var selectedViewIsScreen = false
     private var selectedViewSupportsAspectRatio = false
-    private var selectedScreenComponent: LayoutComponent? = null
     private var selectedAspectRatio = ScreenAspectRatio.RATIO_4_3
-    private var topAspectRatio = ScreenAspectRatio.RATIO_4_3
-    private var bottomAspectRatio = ScreenAspectRatio.RATIO_4_3
     private var updatingAspectSpinner = false
     private var updatingScalingControls = false
 
@@ -327,7 +319,6 @@ class LayoutEditorManagerView(
         binding.buttonUndo.setOnClickListener {
             if (binding.viewLayoutEditor.canUndo()) {
                 binding.viewLayoutEditor.undo()
-                syncScreenAspectRatiosFromEditor()
                 instantiatedComponentsState = binding.viewLayoutEditor.getInstantiatedComponents().toSet()
                 listener?.onStoreLayoutChanges()
             }
@@ -335,9 +326,6 @@ class LayoutEditorManagerView(
         binding.viewLayoutEditor.setOnUndoAvailabilityChangedListener { canUndo ->
             binding.buttonUndo.isEnabled = canUndo
             binding.buttonUndo.alpha = if (canUndo) 1.0f else 0.45f
-        }
-        binding.viewLayoutEditor.setOnLayoutInstantiatedListener {
-            syncScreenAspectRatiosFromEditor()
         }
         binding.viewLayoutEditor.setOnButtonClusterAppearanceRestoredListener { spread, innerScale ->
             viewModel.setPendingButtonSpread(spread)
@@ -362,6 +350,10 @@ class LayoutEditorManagerView(
         binding.buttonEditPosition.captureEditTargetOnTouchDown()
         binding.buttonEditPosition.setOnClickListener {
             openSelectedViewPositionDialog()
+        }
+        binding.buttonInputMode.captureEditTargetOnTouchDown()
+        binding.buttonInputMode.setOnClickListener {
+            openButtonModeDialog()
         }
         binding.buttonCenterHorizontal.setOnClickListener {
             binding.viewLayoutEditor.centerSelectedViewHorizontally()
@@ -430,11 +422,12 @@ class LayoutEditorManagerView(
             hideScalingControls(false)
             selectedViewIsScreen = view.component.isScreen()
             selectedViewSupportsAspectRatio = view.component.supportsAspectRatioSelection()
-            selectedScreenComponent = view.component
-            selectedAspectRatio = when (view.component) {
-                LayoutComponent.TOP_SCREEN -> topAspectRatio
-                LayoutComponent.BOTTOM_SCREEN -> bottomAspectRatio
-                else -> ScreenAspectRatio.UNRESTRICTED
+            binding.buttonInputMode.isVisible = view.component.supportsButtonMode()
+            binding.buttonInputMode.text = resources.getString(R.string.button_mode_value, buttonModeLabel(view.buttonMode))
+            selectedAspectRatio = if (selectedViewSupportsAspectRatio) {
+                view.screenAspectRatio ?: ScreenAspectRatio.fromRect(view.getRect())
+            } else {
+                ScreenAspectRatio.UNRESTRICTED
             }
             showScalingControls(
                 widthScale,
@@ -558,25 +551,23 @@ class LayoutEditorManagerView(
         binding.spinnerAspectRatio.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
                 if (!selectedViewSupportsAspectRatio || updatingAspectSpinner) return
-                val targetComponent = selectedScreenComponent ?: return
-                val nextAspectRatio = ScreenAspectRatio.entries[position]
-                if (nextAspectRatio == selectedAspectRatio) return
-                selectedAspectRatio = nextAspectRatio
-                when (targetComponent) {
-                    LayoutComponent.TOP_SCREEN -> topAspectRatio = selectedAspectRatio
-                    LayoutComponent.BOTTOM_SCREEN -> bottomAspectRatio = selectedAspectRatio
-                    else -> { }
-                }
-                binding.viewLayoutEditor.pushUndoSnapshot()
+                val mode = ScreenAspectRatio.entries[position]
+                if (mode == selectedAspectRatio) return
+                val editor = binding.viewLayoutEditor
+                val component = editor.getSelectedComponent() ?: return
+                val selected = editor.getLayoutComponentView(component) ?: return
+                editor.pushUndoSnapshot()
+                selected.screenAspectRatio = mode
+                selectedAspectRatio = mode
                 updatingScalingControls = true
                 try {
                     enforceAspectRatio(selectedAspectRatio, WIDTH)
                 } finally {
                     updatingScalingControls = false
                 }
-                binding.viewLayoutEditor.scaleSelectedView(currentWidthScale, currentHeightScale)
+                editor.scaleSelectedView(currentWidthScale, currentHeightScale)
                 binding.spinnerAspectRatio.post {
-                    binding.viewLayoutEditor.selectComponent(targetComponent)
+                    editor.selectComponent(component)
                 }
             }
 
@@ -672,6 +663,8 @@ class LayoutEditorManagerView(
             Input.FRAME_ADVANCE -> context.getString(R.string.input_frame_advance)
             Input.TAKE_SCREENSHOT -> context.getString(R.string.input_take_screenshot)
             Input.TOGGLE_HARDWARE_TURBO -> context.getString(R.string.input_toggle_hardware_turbo)
+            Input.CYCLE_LAYOUT -> context.getString(R.string.input_cycle_layout)
+            Input.EXIT_GAME -> context.getString(R.string.input_exit_game)
             else -> input.name
         }
     }
@@ -777,13 +770,16 @@ class LayoutEditorManagerView(
             return
         }
 
-        val actionLabels = listOf(
+        val actionLabels = mutableListOf(
             R.string.label_position,
             R.string.label_size,
             R.string.center_horizontal,
             R.string.center_vertical,
             R.string.delete,
         )
+        if (editor.getSelectedComponent()?.supportsButtonMode() == true) {
+            actionLabels.add(R.string.button_mode)
+        }
         val themedContext = android.view.ContextThemeWrapper(context, R.style.AppTheme)
         AlertDialog.Builder(themedContext)
             .setTitle(R.string.edit)
@@ -794,7 +790,37 @@ class LayoutEditorManagerView(
                     R.string.center_horizontal -> editor.centerSelectedViewHorizontally()
                     R.string.center_vertical -> editor.centerSelectedViewVertically()
                     R.string.delete -> editor.deleteSelectedView()
+                    R.string.button_mode -> openButtonModeDialog()
                 }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .showInCurrentWindow()
+    }
+
+    private fun buttonModeLabel(mode: VirtualButtonMode): String {
+        return resources.getString(
+            when (mode) {
+                VirtualButtonMode.NORMAL -> R.string.button_mode_normal
+                VirtualButtonMode.TOGGLE -> R.string.button_mode_toggle
+                VirtualButtonMode.TURBO -> R.string.button_mode_turbo
+            }
+        )
+    }
+
+    private fun openButtonModeDialog() {
+        val editor = binding.viewLayoutEditor
+        val component = consumeEditTargetComponent() ?: return
+        if (!component.supportsButtonMode()) return
+        val componentView = editor.getLayoutComponentView(component) ?: return
+        val modes = VirtualButtonMode.entries
+        val themedContext = android.view.ContextThemeWrapper(context, R.style.AppTheme)
+        AlertDialog.Builder(themedContext)
+            .setTitle(R.string.button_mode)
+            .setSingleChoiceItems(modes.map { buttonModeLabel(it) }.toTypedArray(), modes.indexOf(componentView.buttonMode)) { dialog, which ->
+                editor.setComponentButtonMode(component, modes[which])
+                binding.buttonInputMode.text = resources.getString(R.string.button_mode_value, buttonModeLabel(modes[which]))
+                listener?.onStoreLayoutChanges()
+                dialog.dismiss()
             }
             .setNegativeButton(R.string.cancel, null)
             .showInCurrentWindow()
@@ -1083,7 +1109,6 @@ class LayoutEditorManagerView(
             MenuOption.UNDO -> {
                 if (binding.viewLayoutEditor.canUndo()) {
                     binding.viewLayoutEditor.undo()
-                    syncScreenAspectRatiosFromEditor()
                     instantiatedComponentsState = binding.viewLayoutEditor.getInstantiatedComponents().toSet()
                     listener?.onStoreLayoutChanges()
                 }
@@ -1260,7 +1285,7 @@ class LayoutEditorManagerView(
                 binding.textHeight.text = currentHeight.toString()
             }
 
-            val isButtonsCluster = (selectedScreenComponent == LayoutComponent.BUTTONS)
+            val isButtonsCluster = (binding.viewLayoutEditor.getSelectedComponent() == LayoutComponent.BUTTONS)
             binding.layoutSpreadLabels.isVisible = isButtonsCluster
             binding.seekBarSpread.isVisible = isButtonsCluster
             binding.layoutButtonScaleLabels.isVisible = isButtonsCluster
@@ -1406,28 +1431,6 @@ class LayoutEditorManagerView(
         currentHeightScale = ((height - selectedViewMinSize) / binding.seekBarHeight.max.toFloat()).coerceIn(0f, 1f)
         binding.seekBarHeight.progress = (currentHeightScale * binding.seekBarHeight.max).toInt()
         binding.textHeight.text = (binding.seekBarHeight.max * currentHeightScale + selectedViewMinSize).toInt().toString()
-    }
-
-    private fun syncScreenAspectRatiosFromEditor() {
-        binding.viewLayoutEditor.getLayoutComponentView(LayoutComponent.TOP_SCREEN)?.let {
-            topAspectRatio = inferScreenAspectRatio(it)
-        }
-        binding.viewLayoutEditor.getLayoutComponentView(LayoutComponent.BOTTOM_SCREEN)?.let {
-            bottomAspectRatio = inferScreenAspectRatio(it)
-        }
-    }
-
-    private fun inferScreenAspectRatio(view: me.magnum.melonds.ui.common.LayoutComponentView): ScreenAspectRatio {
-        val rect = view.getRect()
-        val w = rect.width.takeIf { it > 0 } ?: view.getWidth()
-        val h = rect.height.takeIf { it > 0 } ?: view.getHeight()
-        if (w <= 0 || h <= 0) return ScreenAspectRatio.RATIO_4_3
-        val ratio = w.toFloat() / h.toFloat()
-        return when {
-            kotlin.math.abs(ratio - consoleAspectRatio) < 0.04f -> ScreenAspectRatio.RATIO_4_3
-            kotlin.math.abs(ratio - (16f / 9f)) < 0.04f -> ScreenAspectRatio.RATIO_16_9
-            else -> ScreenAspectRatio.UNRESTRICTED
-        }
     }
 
     private fun LayoutComponent.supportsAspectRatioSelection(): Boolean {

@@ -14,7 +14,10 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -24,6 +27,7 @@ import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.domain.model.rom.config.RomConfig
 import me.magnum.melonds.domain.model.rom.config.RomInputMode
 import me.magnum.melonds.domain.model.rom.config.RomGbaSlotConfig
+import me.magnum.melonds.domain.repositories.RetroAchievementsRepository
 import me.magnum.melonds.domain.repositories.RomsRepository
 import me.magnum.melonds.domain.repositories.SettingsRepository
 import me.magnum.melonds.impl.RomIconProvider
@@ -40,6 +44,7 @@ class RomDetailsViewModel @Inject constructor(
     private val romDetailsUiMapper: RomDetailsUiMapper,
     private val romsRepository: RomsRepository,
     private val settingsRepository: SettingsRepository,
+    private val retroAchievementsRepository: RetroAchievementsRepository,
     private val romIconProvider: RomIconProvider,
     private val uriPermissionManager: UriPermissionManager,
     savedStateHandle: SavedStateHandle,
@@ -59,6 +64,20 @@ class RomDetailsViewModel @Inject constructor(
     val rom = _rom.asStateFlow()
 
     private val _romConfig = MutableStateFlow(_rom.value.config)
+
+    val raCoverUrl: StateFlow<String?> = combine(
+        _rom,
+        retroAchievementsRepository.observeRomCoverIcons(),
+        settingsRepository.observeRaCoverEnabled(),
+    ) { rom, covers, enabled ->
+        if (!enabled) {
+            null
+        } else {
+            covers[rom.retroAchievementsHash]
+                ?.takeIf { it.hasAchievements != false }
+                ?.url
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     init {
         refreshRom()

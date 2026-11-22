@@ -10,6 +10,7 @@ import androidx.core.graphics.drawable.IconCompat
 import me.magnum.melonds.R
 import me.magnum.melonds.domain.model.ConsoleType
 import me.magnum.melonds.ui.emulator.EmulatorActivity
+import me.magnum.melonds.ui.romlist.RomListActivity
 
 abstract class FirmwareShortcutSetupActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -18,7 +19,7 @@ abstract class FirmwareShortcutSetupActivity : AppCompatActivity() {
 
         val console = getConsoleType()
         val intent = Intent("${packageName}.LAUNCH_FIRMWARE").apply {
-            setPackage(packageName)
+            setClass(this@FirmwareShortcutSetupActivity, RomListActivity::class.java)
             putExtra(EmulatorActivity.KEY_BOOT_FIRMWARE_ONLY, true)
             putExtra(EmulatorActivity.KEY_BOOT_FIRMWARE_CONSOLE, console.ordinal)
         }

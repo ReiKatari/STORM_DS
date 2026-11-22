@@ -3,6 +3,7 @@ package me.magnum.melonds.ui.emulator.input
 import android.annotation.SuppressLint
 import android.view.MotionEvent
 import android.view.View
+import me.magnum.melonds.MelonEmulator
 import me.magnum.melonds.MelonEmulator.onScreenRelease
 import me.magnum.melonds.domain.model.Input
 import me.magnum.melonds.domain.model.Point
@@ -24,6 +25,9 @@ class HybridScreenTouchscreenInputHandler(inputListener: IInputListener) : BaseI
                 v.parent?.requestDisallowInterceptTouchEvent(true)
                 val pointerIndex = getBestPointerIndex(event, bottomScreenTop)
                 if (pointerIndex != -1 && event.getY(pointerIndex) >= bottomScreenTop) {
+                    if (event.actionMasked == MotionEvent.ACTION_DOWN && MelonEmulator.isLowLatencyEnabled) {
+                        v.requestUnbufferedDispatch(event)
+                    }
                     activePointerId = event.getPointerId(pointerIndex)
                     if (!touchActive) {
                         touchActive = true

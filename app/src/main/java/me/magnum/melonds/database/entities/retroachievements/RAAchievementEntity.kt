@@ -25,4 +25,5 @@ data class RAAchievementEntity(
     @ColumnInfo(name = "badge_url_locked") val badgeUrlLocked: String,
     @ColumnInfo(name = "memory_address") val memoryAddress: String,
     @ColumnInfo(name = "type") val type: Int,
+    @ColumnInfo(name = "achievement_type") val achievementType: String? = null,
 )

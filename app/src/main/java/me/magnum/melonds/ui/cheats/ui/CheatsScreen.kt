@@ -31,9 +31,11 @@ import androidx.compose.material.Scaffold
 import androidx.compose.material.SnackbarHostState
 import androidx.compose.material.SnackbarResult
 import androidx.compose.material.Text
-import androidx.compose.material.TopAppBar
+import androidx.compose.material.TextField
+import androidx.compose.material.TextFieldDefaults
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.CheckBox
 import androidx.compose.material.rememberScaffoldState
 import androidx.compose.runtime.Composable
@@ -44,6 +46,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
@@ -70,6 +74,9 @@ fun CheatsScreen(
     val enabledCheatsTitle = stringResource(R.string.enabled_cheats)
     val navController = rememberNavController()
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
+    val route = currentBackStackEntry?.destination?.route?.substringBefore("/")
+    val searching = route == CheatsNavigation.Search.serializer().descriptor.serialName
+    val query by viewModel.searchQuery.collectAsStateWithLifecycle()
     val showEnabledCheatsButton by remember(currentBackStackEntry) {
         derivedStateOf {
             val currentRoute = currentBackStackEntry?.destination?.route?.substringBefore("/")
@@ -92,7 +99,9 @@ fun CheatsScreen(
     val scaffoldState = rememberScaffoldState(snackbarHostState = snackbarHostState)
     val coroutineScope = rememberCoroutineScope()
     val navigateBack = {
-        if (navController.previousBackStackEntry == null) {
+        if (searching && query.isNotEmpty()) {
+            viewModel.clearSearchQuery()
+        } else if (navController.previousBackStackEntry == null) {
             // The first screen (the loading screen) is not considered as an entry. So, previousBackStackEntry will be null
             viewModel.commitCheatChanges()
         } else {
@@ -139,24 +148,88 @@ fun CheatsScreen(
                         .fillMaxWidth()
                         .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 10.dp),
                 ) {
-                    Icon(
-                        painter = androidx.compose.ui.res.painterResource(R.drawable.ic_cheat),
-                        contentDescription = null,
-                        tint = colors.green,
-                        modifier = Modifier.size(22.dp),
-                    )
-                    androidx.compose.foundation.layout.Spacer(androidx.compose.ui.Modifier.width(10.dp))
-                    Text(
-                        text = appBarTitle ?: stringResource(R.string.cheats),
-                        color = colors.text,
-                        fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
-                        fontSize = 16.sp,
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
+                    if (searching) {
+                        val focus = remember { FocusRequester() }
+                        TextField(
+                            value = query,
+                            onValueChange = viewModel::setSearchQuery,
+                            modifier = Modifier.weight(1f).focusRequester(focus),
+                            placeholder = {
+                                Text(
+                                    text = stringResource(R.string.hint_search_cheats),
+                                    color = colors.text3,
+                                )
+                            },
+                            singleLine = true,
+                            colors = TextFieldDefaults.textFieldColors(
+                                textColor = colors.text,
+                                cursorColor = colors.green,
+                                focusedIndicatorColor = colors.green,
+                                unfocusedIndicatorColor = colors.line,
+                                backgroundColor = colors.surface2,
+                            ),
+                            trailingIcon = {
+                                if (query.isNotEmpty()) {
+                                    IconButton(onClick = viewModel::clearSearchQuery) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Close,
+                                            contentDescription = stringResource(R.string.clear),
+                                            tint = colors.text2,
+                                        )
+                                    }
+                                }
+                            },
+                        )
+                        LaunchedEffect(Unit) { focus.requestFocus() }
+                    } else {
+                        Icon(
+                            painter = androidx.compose.ui.res.painterResource(R.drawable.ic_cheat),
+                            contentDescription = null,
+                            tint = colors.green,
+                            modifier = Modifier.size(22.dp),
+                        )
+                        androidx.compose.foundation.layout.Spacer(androidx.compose.ui.Modifier.width(10.dp))
+                        Text(
+                            text = appBarTitle ?: stringResource(R.string.cheats),
+                            color = colors.text,
+                            fontFamily = me.magnum.melonds.ui.theme.SpaceGrotesk,
+                            fontSize = 16.sp,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                     if (showEnabledCheatsButton) {
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(androidx.compose.foundation.shape.CircleShape)
+                                .background(colors.surface2)
+                                .border(1.dp, colors.line, androidx.compose.foundation.shape.CircleShape)
+                                .clickable {
+                                    viewModel.clearSearchQuery()
+                                    navController.navigate(
+                                        CheatsNavigation.Search(
+                                            route == CheatsNavigation.FolderCheats.serializer().descriptor.serialName
+                                        )
+                                    )
+                                },
+                            contentAlignment = androidx.compose.ui.Alignment.Center,
+                        ) {
+                            Icon(
+                                painter = rememberVectorPainter(Icons.Filled.Search),
+                                contentDescription = stringResource(R.string.hint_search_cheats),
+                                tint = colors.text,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                        androidx.compose.foundation.layout.Spacer(androidx.compose.ui.Modifier.width(8.dp))
+                    }
+                    if (showEnabledCheatsButton || searching) {
+                        if (searching) {
+                            androidx.compose.foundation.layout.Spacer(androidx.compose.ui.Modifier.width(8.dp))
+                        }
                         Box(
                             modifier = Modifier
                                 .size(38.dp)
@@ -249,6 +322,31 @@ fun CheatsScreen(
                             }
                         }
                         viewModel.deleteCheat(it)
+                    },
+                )
+            }
+            composable<CheatsNavigation.Search> { entry ->
+                val onlyCurrentFolder = entry.toRoute<CheatsNavigation.Search>().searchOnlyInCurrentFolder
+                val results = remember(viewModel, onlyCurrentFolder) {
+                    viewModel.getFilteredCheatsFlow(onlyCurrentFolder)
+                }
+                val matches by results.collectAsStateWithLifecycle(CheatsScreenUiState.Loading())
+                CheatSearchScreen(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = padding,
+                    searchResults = matches,
+                    query = query,
+                    onCheatClick = viewModel::toggleCheat,
+                    onUpdateCheat = viewModel::updateCheat,
+                    onDeleteCheatClick = { folder, cheat ->
+                        viewModel.deleteCheat(cheat, folder)
+                        coroutineScope.launch {
+                            val result = snackbarHostState.showSnackbar(
+                                message = resources.getString(R.string.cheat_deleted, cheat.name),
+                                actionLabel = resources.getString(R.string.undo),
+                            )
+                            if (result == SnackbarResult.ActionPerformed) viewModel.undoCheatDeletion(cheat)
+                        }
                     },
                 )
             }

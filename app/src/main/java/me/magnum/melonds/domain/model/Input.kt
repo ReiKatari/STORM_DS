@@ -41,7 +41,9 @@ enum class Input(val keyCode: Int) {
     SLOW_MOTION(-1),
     FRAME_ADVANCE(-1),
     TAKE_SCREENSHOT(-1),
-    TOGGLE_HARDWARE_TURBO(-1);
+    TOGGLE_HARDWARE_TURBO(-1),
+    CYCLE_LAYOUT(-1),
+    EXIT_GAME(-1);
 
     val isSystemInput: Boolean
         get() = keyCode != -1

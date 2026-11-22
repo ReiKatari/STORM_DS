@@ -3,6 +3,7 @@ package me.magnum.melonds.parcelables
 import android.os.Parcel
 import android.os.Parcelable
 import androidx.core.net.toUri
+import me.magnum.melonds.domain.model.DSiProfile
 import me.magnum.melonds.domain.model.rom.Rom
 import me.magnum.melonds.extensions.parcelable
 import java.util.*
@@ -32,6 +33,7 @@ class RomParcelable : Parcelable {
         val isDsiEnhanced = parcel.readInt() == 1
         val gameCode = parcel.readString() ?: ""
         val isFavorite = parcel.readInt() == 1
+        val resolvedDsiProfile = parcel.parcelable<DSiProfile>()
         rom = Rom(
             name!!,
             developerName,
@@ -48,6 +50,7 @@ class RomParcelable : Parcelable {
             installedDsiWareIcon = installedDsiWareIcon,
             isDsiEnhanced = isDsiEnhanced,
             gameCode = gameCode,
+            resolvedDsiProfile = resolvedDsiProfile,
         )
     }
 
@@ -67,6 +70,7 @@ class RomParcelable : Parcelable {
         dest.writeInt(if (rom.isDsiEnhanced) 1 else 0)
         dest.writeString(rom.gameCode)
         dest.writeInt(if (rom.isFavorite) 1 else 0)
+        dest.writeParcelable(rom.resolvedDsiProfile, flags)
     }
 
     override fun describeContents(): Int {

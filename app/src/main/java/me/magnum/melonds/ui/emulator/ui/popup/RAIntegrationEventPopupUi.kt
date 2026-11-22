@@ -66,8 +66,14 @@ fun RAIntegrationEventUi(
                 eyebrowIcon = Icons.Filled.Warning,
                 eyebrow = stringResource(R.string.ra_welcome_eyebrow),
                 title = stringResource(R.string.achievements_failed_load),
-                subtitle = stringResource(R.string.achievements_failed_load_tip),
-                subtitleMaxLines = 2,
+                subtitle = stringResource(
+                    if (event.responseTooLarge) {
+                        R.string.achievements_failed_load_tip_response_too_large
+                    } else {
+                        R.string.achievements_failed_load_tip
+                    },
+                ),
+                subtitleMaxLines = if (event.responseTooLarge) 3 else 2,
                 accent = DarkWatermelonColors.red,
                 isCompact = isCompact,
             )

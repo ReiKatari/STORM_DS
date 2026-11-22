@@ -4,6 +4,7 @@ import android.net.Uri
 import kotlinx.coroutines.flow.Flow
 import me.magnum.melonds.domain.model.Cheat
 import me.magnum.melonds.domain.model.ConsoleType
+import me.magnum.melonds.domain.model.DSiProfile
 import me.magnum.melonds.domain.model.FrameskipConfiguration
 import me.magnum.melonds.domain.model.emulator.EmulatorEvent
 import me.magnum.melonds.domain.model.emulator.FirmwareLaunchResult
@@ -22,7 +23,7 @@ interface EmulatorManager {
 
     suspend fun loadRom(rom: Rom, cheats: List<Cheat>): RomLaunchResult
 
-    suspend fun loadFirmware(consoleType: ConsoleType): FirmwareLaunchResult
+    suspend fun loadFirmware(consoleType: ConsoleType, dsiProfile: DSiProfile? = null): FirmwareLaunchResult
 
     suspend fun updateRomEmulatorConfiguration(rom: Rom)
 

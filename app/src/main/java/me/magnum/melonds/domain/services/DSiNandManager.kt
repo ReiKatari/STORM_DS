@@ -2,11 +2,27 @@ package me.magnum.melonds.domain.services
 
 import android.net.Uri
 import me.magnum.melonds.domain.model.DSiWareTitle
+import me.magnum.melonds.domain.model.EmulatorConfiguration
 import me.magnum.melonds.domain.model.dsinand.ImportDSiWareTitleResult
 import me.magnum.melonds.domain.model.dsinand.OpenDSiNandResult
 import me.magnum.melonds.domain.model.dsinand.DSiWareTitleFileType
 
 interface DSiNandManager {
+    interface Session : AutoCloseable {
+        suspend fun <T> withNand(configuration: EmulatorConfiguration, block: suspend DSiNandManager.() -> T): T?
+    }
+
+    fun acquireSession(): Session?
+
+    suspend fun <T> withNand(configuration: EmulatorConfiguration, block: suspend DSiNandManager.() -> T): T? {
+        val session = acquireSession() ?: return null
+        return try {
+            session.withNand(configuration, block)
+        } finally {
+            session.close()
+        }
+    }
+
     suspend fun openNand(): OpenDSiNandResult
     suspend fun listTitles(): List<DSiWareTitle>
     suspend fun importTitle(titleUri: Uri): ImportDSiWareTitleResult

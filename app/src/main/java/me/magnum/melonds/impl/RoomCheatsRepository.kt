@@ -8,15 +8,21 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.runBlocking
 import java.util.UUID
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import me.magnum.melonds.common.cheats.CheatDatabaseParser
+import me.magnum.melonds.common.cheats.CheatDatabaseParserListener
+import me.magnum.melonds.common.cheats.ProgressTrackerInputStream
 import me.magnum.melonds.common.cheats.jusrcheat.JusrcheatRepository
 import me.magnum.melonds.common.workers.CheatImportWorker
 import me.magnum.melonds.database.MelonDatabase
@@ -210,13 +216,60 @@ class RoomCheatsRepository(
     }
 
     override suspend fun addCheatFolder(folderName: String, game: Game) {
+        val gameId = if (game.id == null) {
+            val gameEntity = GameEntity(
+                id = null,
+                name = game.name,
+                gameCode = game.gameCode,
+                gameChecksum = game.gameChecksum,
+            )
+            database.gameDao().insertGame(gameEntity)
+        } else {
+            game.id
+        }
+
         val cheatFolderEntity = CheatFolderEntity(
             id = null,
-            gameId = game.id!!,
+            gameId = gameId,
             name = folderName,
         )
 
         database.cheatFolderDao().insertCheatFolder(cheatFolderEntity)
+        settingsBackupManager.requestMirrorWrite()
+    }
+
+    override suspend fun replaceImportedCheats(stream: ProgressTrackerInputStream, parser: CheatDatabaseParser, onGameStart: (String) -> Unit) {
+        database.withTransaction {
+            val transactionContext = currentCoroutineContext()
+            var databaseStarted = false
+            parser.parseCheatDatabase(stream, object : CheatDatabaseParserListener {
+                override fun onDatabaseParseStart(databaseName: String): CheatDatabase = runBlocking(transactionContext) {
+                    require(databaseName.isNotBlank() && databaseName != CheatDatabaseEntity.CUSTOM_CHEATS_DATABASE_NAME)
+                    check(!databaseStarted)
+                    val dao = database.cheatDatabaseDao()
+                    dao.deleteAllImportedCheatDatabases(CheatDatabaseEntity.CUSTOM_CHEATS_DATABASE_ID)
+                    database.cheatFolderDao().deleteEmptyFolders()
+                    database.gameDao().deleteEmptyGames()
+                    val id = dao.insertCheatDatabase(CheatDatabaseEntity(null, databaseName))
+                    databaseStarted = true
+                    CheatDatabase(id, databaseName)
+                }
+
+                override fun onGameParseStart(gameName: String) {
+                    transactionContext.ensureActive()
+                    onGameStart(gameName)
+                }
+
+                override fun onGameParsed(game: Game) {
+                    runBlocking(transactionContext) { insertGameCheatsInternal(game) }
+                }
+
+                override fun onParseComplete() {
+                    check(databaseStarted)
+                    transactionContext.ensureActive()
+                }
+            })
+        }
         settingsBackupManager.requestMirrorWrite()
     }
 
@@ -311,27 +364,30 @@ class RoomCheatsRepository(
             )
         }
 
-        game.cheats.forEach { folder ->
-            val folderEntity = CheatFolderEntity(
-                id = null,
-                gameId = gameId,
-                name = folder.name,
-            )
-
-            val folderId = database.cheatFolderDao().insertCheatFolder(folderEntity)
-            val newCheats = folder.cheats.map {
-                CheatEntity(
+        if (game.cheats.isNotEmpty()) {
+            val categoryEntities = game.cheats.map { folder ->
+                CheatFolderEntity(
                     id = null,
-                    cheatFolderId = folderId,
-                    cheatDatabaseId = it.cheatDatabaseId,
-                    name = it.name,
-                    description = it.description,
-                    code = it.code,
-                    enabled = false
+                    gameId = gameId,
+                    name = folder.name,
                 )
             }
-            if (newCheats.isNotEmpty()) {
-                database.cheatDao().insertCheats(newCheats)
+            val categoryIds = database.cheatFolderDao().insertCheatFolders(categoryEntities)
+            val cheatEntities = game.cheats.zip(categoryIds).flatMap { (folder, folderId) ->
+                folder.cheats.map {
+                    CheatEntity(
+                        id = null,
+                        cheatFolderId = folderId,
+                        cheatDatabaseId = it.cheatDatabaseId,
+                        name = it.name,
+                        description = it.description,
+                        code = it.code,
+                        enabled = false
+                    )
+                }
+            }
+            if (cheatEntities.isNotEmpty()) {
+                database.cheatDao().insertCheats(cheatEntities)
             }
         }
 

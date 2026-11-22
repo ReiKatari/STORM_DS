@@ -1,6 +1,7 @@
 package me.magnum.rcheevosapi
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.InternalSerializationApi
@@ -90,7 +91,7 @@ class RAApi(
         private const val REQUEST_LEADERBOARD_INFO = "lbinfo"
         private const val REQUEST_PING = "ping"
 
-        private const val RCHEEVOS_VERSION = "11.6.0"
+        private const val RCHEEVOS_VERSION = "12.3.0"
         private const val MAX_AWARD_OFFSET_SECONDS = 14L * 24L * 60L * 60L
     }
 
@@ -372,10 +373,10 @@ class RAApi(
         errorHandler: (String?) -> Unit = { throw UnsuccessfulRequestException(it ?: "Unknown reason") },
         clearTokenOnUnauthorized: Boolean = true,
     ): Result<T> = withContext(Dispatchers.IO) {
-        val request = buildGetRequest(parameters)
-        val requestAuthentication = getRequestAuthentication(parameters)
         suspendRunCatching {
-            executeAuthorizedRequest(request, requestAuthentication, clearTokenOnUnauthorized)
+            val request = buildGetRequest(parameters)
+            val requestAuthentication = getRequestAuthentication(parameters)
+            executeRequest(request, requestAuthentication, clearTokenOnUnauthorized)
         }.suspendMapCatching { response ->
             response.use {
                 parseResponse(responseClass, response, errorHandler)
@@ -396,29 +397,14 @@ class RAApi(
         parameters: Map<String, String>,
         errorHandler: (String?) -> Unit = { throw UnsuccessfulRequestException(it ?: "Unknown reason") },
     ): Result<T> = withContext(Dispatchers.IO) {
-        val request = buildPostRequest(parameters)
-        val requestAuthentication = getRequestAuthentication(parameters)
         suspendRunCatching {
-            executeAuthorizedRequest(request, requestAuthentication)
+            val request = buildPostRequest(parameters)
+            val requestAuthentication = getRequestAuthentication(parameters)
+            executeRequest(request, requestAuthentication)
         }.suspendMapCatching { response ->
             response.use {
                 parseResponse(responseClass, response, errorHandler)
             }
-        }
-    }
-
-    private suspend fun executeAuthorizedRequest(
-        request: Request,
-        requestAuthentication: RAUserAuth.Authenticated?,
-        clearTokenOnUnauthorized: Boolean = true,
-    ): Response {
-        return try {
-            executeRequest(request, clearTokenOnUnauthorized)
-        } catch (e: UserTokenExpiredException) {
-            requestAuthentication?.let {
-                userAuthStore.clearUserTokenIfMatches(it.username, it.token)
-            }
-            throw e
         }
     }
 
@@ -481,6 +467,7 @@ class RAApi(
 
     private suspend fun executeRequest(
         request: Request,
+        requestAuthentication: RAUserAuth.Authenticated?,
         clearTokenOnUnauthorized: Boolean = true,
     ): Response = suspendCancellableCoroutine { continuation ->
         val call = okHttpClient.newCall(request)
@@ -492,6 +479,11 @@ class RAApi(
             override fun onResponse(call: Call, response: Response) {
                 if (response.code == 401 && clearTokenOnUnauthorized) {
                     response.close()
+                    runBlocking {
+                        requestAuthentication?.let {
+                            userAuthStore.clearUserTokenIfMatches(it.username, it.token)
+                        }
+                    }
                     continuation.resumeWithException(UserTokenExpiredException())
                 } else {
                     continuation.resume(response)

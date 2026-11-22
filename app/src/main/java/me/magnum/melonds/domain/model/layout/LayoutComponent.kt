@@ -25,9 +25,18 @@ enum class LayoutComponent(val matchingInputs: List<Input>) {
     BUTTON_TRANSLATE(listOf(Input.TRANSLATE)),
     BUTTON_TOGGLE_EXTRA_BUTTONS(listOf(Input.TOGGLE_EXTRA_BUTTONS)),
     BUTTON_LOCK_ROTATION(listOf(Input.LOCK_ROTATION)),
-    BUTTON_TOGGLE_ANALOG_STICK(listOf(Input.TOGGLE_ANALOG_STICK));
+    BUTTON_TOGGLE_ANALOG_STICK(listOf(Input.TOGGLE_ANALOG_STICK)),
+    BUTTON_A(listOf(Input.A)),
+    BUTTON_B(listOf(Input.B)),
+    BUTTON_X(listOf(Input.X)),
+    BUTTON_Y(listOf(Input.Y)),
+    SLOT2_ANALOG(emptyList());
 
     fun isScreen(): Boolean {
         return this == TOP_SCREEN || this == BOTTOM_SCREEN || this == HYBRID_SCREEN
+    }
+
+    fun supportsButtonMode(): Boolean {
+        return this == BUTTON_A || this == BUTTON_B || this == BUTTON_X || this == BUTTON_Y
     }
 }

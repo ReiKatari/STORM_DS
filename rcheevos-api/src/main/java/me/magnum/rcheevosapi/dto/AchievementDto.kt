@@ -27,4 +27,6 @@ internal data class AchievementDto(
     val displayOrder: String?,
     @SerialName("MemAddr")
     val memoryAddress: String,
+    @SerialName("Type")
+    val achievementType: String? = null,
 )

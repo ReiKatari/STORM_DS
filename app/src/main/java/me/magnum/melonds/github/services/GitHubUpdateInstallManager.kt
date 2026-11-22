@@ -192,7 +192,10 @@ class GitHubUpdateInstallManager(private val context: Context) : UpdateInstallMa
     @Suppress("DEPRECATION")
     private fun signerDigests(packageInfo: PackageInfo): Set<String> {
         val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            packageInfo.signingInfo?.signingCertificateHistory.orEmpty()
+            val signingInfo = packageInfo.signingInfo
+            signingInfo?.apkContentsSigners?.takeIf { it.isNotEmpty() }
+                ?: signingInfo?.signingCertificateHistory
+                ?: emptyArray()
         } else {
             packageInfo.signatures.orEmpty()
         }

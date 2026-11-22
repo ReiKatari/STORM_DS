@@ -119,6 +119,7 @@ class ShortcutSetupActivity : AppCompatActivity() {
     private fun onRomSelected(rom: Rom) {
         val intent = Intent("${packageName}.LAUNCH_ROM").apply {
             setPackage(packageName)
+            setClass(this@ShortcutSetupActivity, me.magnum.melonds.ui.romlist.RomListActivity::class.java)
             putExtra(EmulatorActivity.KEY_URI, rom.uri.toString())
         }
 

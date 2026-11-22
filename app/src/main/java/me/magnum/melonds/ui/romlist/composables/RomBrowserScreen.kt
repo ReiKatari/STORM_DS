@@ -11,7 +11,12 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -113,9 +118,15 @@ import me.magnum.melonds.domain.model.RomScanningStatus
 import me.magnum.melonds.domain.model.RomViewMode
 import me.magnum.melonds.domain.model.SortingMode
 import me.magnum.melonds.domain.model.rom.Rom
+import me.magnum.melonds.multiplayer.MultiplayerActivity
+import me.magnum.melonds.multiplayer.MultiplayerInvitePill
+import me.magnum.melonds.multiplayer.MultiplayerNearby
+import me.magnum.melonds.multiplayer.MultiplayerNearbyWatch
+import me.magnum.melonds.multiplayer.Pulse
 import me.magnum.melonds.ui.common.WatermelonMark
 import me.magnum.melonds.ui.romlist.RomBrowserEntry
 import me.magnum.melonds.ui.romlist.RomBrowserUiState
+import me.magnum.melonds.ui.romlist.RomListActivity
 import me.magnum.melonds.ui.theme.SpaceGrotesk
 import me.magnum.melonds.ui.theme.watermelon
 
@@ -150,11 +161,33 @@ fun RomBrowserScreen(
     onOpenSettings: () -> Unit,
     onOpenPlayerStats: () -> Unit = {},
     onReportProblem: () -> Unit = {},
+    onOpenMultiplayer: (() -> Unit)? = null,
+    onJoinNearby: ((String) -> Unit)? = null,
     onRomVisible: (Rom) -> Unit = {},
     onFocusedRomChanged: (Rom?) -> Unit = {},
     onDpadDownGateChanged: ((() -> Boolean)?) -> Unit = {},
 ) {
     val colors = watermelon
+    val screenContext = androidx.compose.ui.platform.LocalContext.current
+    val openMultiplayerAction: () -> Unit = onOpenMultiplayer ?: {
+        val activity = screenContext as? RomListActivity
+        if (activity != null) {
+            activity.openMultiplayer()
+        } else {
+            screenContext.startActivity(android.content.Intent(screenContext, MultiplayerActivity::class.java))
+        }
+    }
+    val joinNearbyAction: (String) -> Unit = onJoinNearby ?: { key ->
+        val activity = screenContext as? RomListActivity
+        if (activity != null) {
+            activity.openMultiplayer(key)
+        } else {
+            screenContext.startActivity(
+                android.content.Intent(screenContext, MultiplayerActivity::class.java)
+                    .putExtra(MultiplayerActivity.EXTRA_JOIN, key)
+            )
+        }
+    }
     val coroutineScope = rememberCoroutineScope()
     val gridState = remember { LazyGridState(0, 0) }
     val listState = remember { LazyListState(0, 0) }
@@ -464,6 +497,19 @@ fun RomBrowserScreen(
                         onOpenPlayerStats = onOpenPlayerStats,
                         onReportProblem = onReportProblem,
                     )
+                    if (!state.isSearchActive) {
+                        MultiplayerNearbyWatch()
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            MultiplayerEntryButton(onClick = openMultiplayerAction)
+                            MultiplayerInvitePill(onJoin = joinNearbyAction)
+                        }
+                    }
                 }
 
                 if (scanningStatus == RomScanningStatus.SCANNING) {
@@ -1364,5 +1410,38 @@ private fun EmptyState(filter: RomFilter, isScanning: Boolean = false) {
                 textAlign = TextAlign.Center,
             )
         }
+    }
+}
+
+@Composable
+private fun MultiplayerEntryButton(onClick: () -> Unit) {
+    val colors = watermelon
+    val shape = RoundedCornerShape(16.dp)
+    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+    val nearby by MultiplayerNearby.rooms.collectAsState()
+    Row(
+        modifier = Modifier
+            .height(32.dp)
+            .clip(shape)
+            .background(if (colors.isDark) colors.surface2 else colors.surface3)
+            .let {
+                if (isFocused) it.border(2.dp, colors.red, shape) else it
+            }
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
+            .padding(start = 10.dp, end = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        if (nearby.isNotEmpty()) {
+            Pulse()
+        }
+        Text(
+            text = stringResource(R.string.multiplayer_title),
+            color = colors.text,
+            fontFamily = SpaceGrotesk,
+            fontSize = 12.5.sp,
+            fontWeight = FontWeight.Bold,
+        )
     }
 }

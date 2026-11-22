@@ -406,6 +406,19 @@ class MelonDSApplication : Application(), Configuration.Provider {
     override fun onCreate() {
         appContext = this
         super.onCreate()
+        val processName = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) getProcessName() else {
+            getSystemService(android.app.ActivityManager::class.java)?.runningAppProcesses
+                ?.firstOrNull { it.pid == android.os.Process.myPid() }?.processName
+        }
+        if (processName == "${packageName}:phantom_primary" || processName == "${packageName}:phantom_peer") {
+            runCatching {
+                MelonDSAndroidInterface.setup(
+                    UriFileHandler(this, uriHandler),
+                    settingsRepository.getVulkanDriverConfiguration(applicationInfo.nativeLibraryDir),
+                )
+            }
+            return
+        }
         runCatching { me.magnum.melonds.common.AppLocaleSync.syncFromPreferences(this) }
         runCatching { System.setProperty("http.agent", "melonDS/0.9.5") }
         installCrashHandler()

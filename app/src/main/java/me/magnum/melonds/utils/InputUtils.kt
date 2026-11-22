@@ -8,8 +8,13 @@ fun getLayoutComponentName(layoutComponent: LayoutComponent): Int {
         LayoutComponent.TOP_SCREEN -> R.string.top_screen
         LayoutComponent.BOTTOM_SCREEN -> R.string.bottom_screen
         LayoutComponent.HYBRID_SCREEN -> R.string.hybrid_screen
+        LayoutComponent.SLOT2_ANALOG -> R.string.input_slot2_analog
         LayoutComponent.DPAD -> R.string.input_dpad
         LayoutComponent.BUTTONS -> R.string.input_abxy_buttons
+        LayoutComponent.BUTTON_A -> R.string.input_a
+        LayoutComponent.BUTTON_B -> R.string.input_b
+        LayoutComponent.BUTTON_X -> R.string.input_x
+        LayoutComponent.BUTTON_Y -> R.string.input_y
         LayoutComponent.BUTTON_L -> R.string.input_l
         LayoutComponent.BUTTON_R -> R.string.input_r
         LayoutComponent.BUTTON_START -> R.string.input_start

@@ -2,6 +2,7 @@ package me.magnum.melonds.impl
 
 import android.content.Context
 import android.net.Uri
+import android.os.SystemClock
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -12,6 +13,7 @@ import me.magnum.melonds.MelonDSiNand
 import me.magnum.melonds.common.suspendRunCatching
 import me.magnum.melonds.domain.model.ConfigurationDirResult
 import me.magnum.melonds.domain.model.DSiWareTitle
+import me.magnum.melonds.domain.model.EmulatorConfiguration
 import me.magnum.melonds.domain.model.dsinand.DSiWareTitleFileType
 import me.magnum.melonds.domain.model.dsinand.ImportDSiWareTitleResult
 import me.magnum.melonds.domain.model.dsinand.OpenDSiNandResult
@@ -43,15 +45,76 @@ class AndroidDSiNandManager(
     }
 
     private val nandControlLock = Mutex()
+    private val nandSessionLock = Mutex()
+    private val legacySessionOwner = Any()
     private val nandUsageCount = AtomicInteger(0)
     private val isNandOpen = AtomicBoolean(false)
 
-    private fun getNandGoldenBackupFile(): File {
+    override fun acquireSession(): DSiNandManager.Session? {
+        val session = NandSession()
+        return session.takeIf { nandSessionLock.tryLock(it) }
+    }
+
+    private inner class NandSession : DSiNandManager.Session {
+        private val closed = AtomicBoolean(false)
+        private val released = AtomicBoolean(false)
+        private val operationLock = Mutex()
+
+        override suspend fun <T> withNand(configuration: EmulatorConfiguration, block: suspend DSiNandManager.() -> T): T? {
+            return try {
+                operationLock.withLock {
+                    check(!closed.get())
+                    if (configuration.dsiBios7Uri == null || configuration.dsiNandUri == null) return@withLock null
+                    val started = SystemClock.elapsedRealtimeNanos()
+                    backupNandFileIfNeeded(configuration)
+                    var mapped = mapOpenNandReturnCodeToResult(MelonDSiNand.openNand(configuration))
+                    if (mapped.isFailure() && restoreNandFileFromBackupIfNeeded(configuration)) {
+                        mapped = mapOpenNandReturnCodeToResult(MelonDSiNand.openNand(configuration))
+                    }
+                    if (mapped != OpenDSiNandResult.SUCCESS) {
+                        Log.w(TAG, "Unable to open selected NAND: $mapped")
+                        return@withLock null
+                    }
+                    isNandOpen.set(true)
+                    ensureSystemFontTableOnNand()
+                    try {
+                        block(this@AndroidDSiNandManager)
+                    } finally {
+                        isNandOpen.set(false)
+                        MelonDSiNand.closeNand()
+                        Log.i(TAG, "DSiProfileNand: uri=${configuration.dsiNandUri} durationUs=${(SystemClock.elapsedRealtimeNanos() - started) / 1000}")
+                    }
+                }
+            } finally {
+                if (closed.get()) release()
+            }
+        }
+
+        private fun release() {
+            if (released.compareAndSet(false, true)) nandSessionLock.unlock(this)
+        }
+
+        override fun close() {
+            closed.set(true)
+            if (operationLock.tryLock()) {
+                try {
+                    release()
+                } finally {
+                    operationLock.unlock()
+                }
+            }
+        }
+    }
+
+    private fun getNandGoldenBackupFile(nandUri: Uri): File {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(nandUri.toString().toByteArray(Charsets.UTF_8))
+        val hashPrefix = digest.take(8).joinToString("") { "%02x".format(it) }
         val extRoot = runCatching { android.os.Environment.getExternalStorageDirectory() }.getOrNull()
         return if (extRoot != null) {
-            File(extRoot, "STORM DS/bios/dsi/nand_golden_backup.bin").apply { parentFile?.mkdirs() }
+            File(extRoot, "STORM DS/bios/dsi/nand_backups/nand_golden_$hashPrefix.bin").apply { parentFile?.mkdirs() }
         } else {
-            File(context.filesDir, "nand_golden_backup.bin")
+            File(context.filesDir, "nand_backups/nand_golden_$hashPrefix.bin").apply { parentFile?.mkdirs() }
         }
     }
 
@@ -64,10 +127,10 @@ class AndroidDSiNandManager(
         }
     }
 
-    private fun backupNandFileIfNeeded(config: me.magnum.melonds.domain.model.EmulatorConfiguration) {
+    private fun backupNandFileIfNeeded(config: EmulatorConfiguration) {
         val nandUri = config.dsiNandUri ?: return
         try {
-            val backupFile = getNandGoldenBackupFile()
+            val backupFile = getNandGoldenBackupFile(nandUri)
             if (!backupFile.exists() || backupFile.length() < 512 * 1024) {
                 context.contentResolver.openInputStream(nandUri)?.use { input ->
                     backupFile.outputStream().use { output ->
@@ -96,10 +159,10 @@ class AndroidDSiNandManager(
         }.getOrNull()
     }
 
-    private fun restoreNandFileFromBackupIfNeeded(config: me.magnum.melonds.domain.model.EmulatorConfiguration): Boolean {
+    private fun restoreNandFileFromBackupIfNeeded(config: EmulatorConfiguration): Boolean {
         val nandUri = config.dsiNandUri ?: return false
         try {
-            val backupFile = getNandGoldenBackupFile()
+            val backupFile = getNandGoldenBackupFile(nandUri)
             if (backupFile.exists() && backupFile.length() >= 512 * 1024) {
                 openTruncatedOutputStream(nandUri)?.use { output ->
                     backupFile.inputStream().use { input ->
@@ -118,11 +181,17 @@ class AndroidDSiNandManager(
     override suspend fun openNand(): OpenDSiNandResult {
         return nandControlLock.withLock {
             if (isNandOpen.get()) {
-                nandUsageCount.incrementAndGet()
+                if (nandSessionLock.holdsLock(legacySessionOwner)) {
+                    nandUsageCount.incrementAndGet()
+                }
+                return OpenDSiNandResult.NAND_ALREADY_OPEN
+            }
+            if (!nandSessionLock.tryLock(legacySessionOwner)) {
                 return OpenDSiNandResult.NAND_ALREADY_OPEN
             }
             val dsiDirectoryStatus = biosDirectoryVerifier.checkDsiConfigurationDirectory()
             if (dsiDirectoryStatus.status != ConfigurationDirResult.Status.VALID) {
+                nandSessionLock.unlock(legacySessionOwner)
                 return OpenDSiNandResult.INVALID_DSI_SETUP
             }
 
@@ -138,6 +207,8 @@ class AndroidDSiNandManager(
                 isNandOpen.set(true)
                 nandUsageCount.set(1)
                 ensureSystemFontTableOnNand()
+            } else {
+                nandSessionLock.unlock(legacySessionOwner)
             }
             mapped
         }
@@ -440,6 +511,9 @@ class AndroidDSiNandManager(
                     nandUsageCount.set(0)
                     isNandOpen.set(false)
                     MelonDSiNand.closeNand()
+                    if (nandSessionLock.holdsLock(legacySessionOwner)) {
+                        nandSessionLock.unlock(legacySessionOwner)
+                    }
                 }
             }
         }

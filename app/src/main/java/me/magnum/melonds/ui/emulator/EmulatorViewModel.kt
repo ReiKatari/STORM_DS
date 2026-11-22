@@ -1,4 +1,8 @@
 package me.magnum.melonds.ui.emulator
+import me.magnum.melonds.domain.model.DSiProfile
+import me.magnum.melonds.multiplayer.MultiplayerRoom
+import me.magnum.melonds.multiplayer.MultiplayerSession
+import me.magnum.melonds.multiplayer.phantom.PhantomPlayer
 
 import android.content.Context
 import android.content.pm.ApplicationInfo
@@ -357,6 +361,8 @@ class EmulatorViewModel @Inject constructor(
     private var activeRuntimeBridgeConfig: RARuntimeBridgeConfig? = null
     private var activeAchievementData: GameAchievementData? = null
     private var launchJob: Job? = null
+    private var relaunchJob: Job? = null
+    private val relaunchMutex = Mutex()
     private var activeRuntimePath: RetroAchievementsRuntimePath = RetroAchievementsRuntimePath.DISABLED
     private val runtimeAuthenticationLeaseMonitor = Any()
     private var activeRuntimeAuthenticationLeaseId: String? = null
@@ -651,87 +657,104 @@ class EmulatorViewModel @Inject constructor(
 
         val launchArgs = LaunchArgs.fromSavedStateHandle(savedStateHandle)
         if (launchArgs != null) {
-            launchEmulator(launchArgs)
+            val player = PhantomPlayer.current
+            if (player == null) {
+                launchEmulator(launchArgs)
+            } else {
+                viewModelScope.launch {
+                    try {
+                        player.connect()
+                        launchEmulator(launchArgs)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        player.notify(PhantomPlayer.ERROR, e.localizedMessage)
+                        _emulatorState.value = EmulatorState.RomLoadError
+                    }
+                }
+            }
         } else {
             _uiEvent.tryEmit(EmulatorUiEvent.CloseEmulator)
         }
     }
 
     fun relaunchWithNewArgs(args: LaunchArgs) {
-        if (!_emulatorState.value.isRunning()) {
-            launchJob?.cancel()
-            viewModelScope.launch {
+        val previousRelaunchJob = relaunchJob
+        relaunchJob = viewModelScope.launch {
+            previousRelaunchJob?.cancelAndJoin()
+            relaunchMutex.withLock {
+                launchJob?.cancelAndJoin()
+                if (!_emulatorState.value.isRunning()) {
+                    stopEmulatorSuspend()
+                    launchEmulator(args)
+                    return@withLock
+                }
+
+                val runningRom = _emulatorState.value as? EmulatorState.RunningRom
+                val exitContext = effectivePendingExitContext()
+                if (runningRom != null) {
+                    emulatorManager.pauseEmulator()
+                    if (!refreshPendingRaSubmissionMirror()) {
+                        _toastEvent.tryEmit(ToastEvent.PendingRaStateVerificationFailed)
+                        if (exitContext == RaPendingExitContext.RESUMABLE_SESSION) {
+                            resumeEmulatorIfSessionCanRun()
+                        }
+                        return@withLock
+                    }
+                    if ((pendingRaSubmissionStore?.snapshot?.value?.counts?.total ?: 0) > 0) {
+                        when (handleRcClientPendingBeforeExit(exitContext)) {
+                            RaPendingExitFollowUp.EXIT -> Unit
+                            RaPendingExitFollowUp.RESUME_SESSION -> {
+                                if (exitContext == RaPendingExitContext.RESUMABLE_SESSION) {
+                                    resumeEmulatorIfSessionCanRun()
+                                }
+                                return@withLock
+                            }
+                            RaPendingExitFollowUp.KEEP_SESSION_PAUSED -> return@withLock
+                        }
+                    }
+
+                    val userAuth = retroAchievementsRepository.getUserAuthentication()
+                    if (userAuth != null) {
+                        val userId = userAuth.username
+                        val contentId = runningRom.rom.retroAchievementsHash
+                        val ledgerStatus = withContext(Dispatchers.IO) {
+                            offlineLedgerRepository.getStatus(userId, contentId)
+                        }
+
+                        if (hardcoreSubmissionQueue.pendingCount() > 0) {
+                            val shouldExit = handleHardcorePendingBeforeExit(
+                                userId = userId,
+                                contentId = contentId,
+                                exitContext = exitContext,
+                            )
+                            if (!shouldExit) {
+                                if (exitContext == RaPendingExitContext.RESUMABLE_SESSION) {
+                                    resumeEmulatorIfSessionCanRun()
+                                }
+                                return@withLock
+                            }
+                        } else if (ledgerStatus.integrity == OfflineLedgerIntegrity.OK) {
+                            hardcoreOfflineLossTracker.clearPendingUnlocks(userId, contentId)
+                            if (ledgerStatus.pendingSoftcoreUnlockCount > 0) {
+                                _toastEvent.tryEmit(
+                                    ToastEvent.OfflineSoftcorePendingNotice(
+                                        pendingSoftcoreCount = ledgerStatus.pendingSoftcoreUnlockCount,
+                                        ledgerExpiresInMs = ledgerStatus.ledgerExpiresInMs,
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+
+                runningRom?.let {
+                    maybeAutoSaveStateOnExit(it.rom)
+                }
+                discardHardcoreSubmissions()
                 stopEmulatorSuspend()
                 launchEmulator(args)
             }
-            return
-        }
-
-        sessionCoroutineScope.launch {
-            val runningRom = _emulatorState.value as? EmulatorState.RunningRom
-            val exitContext = effectivePendingExitContext()
-            if (runningRom != null) {
-                emulatorManager.pauseEmulator()
-                if (!refreshPendingRaSubmissionMirror()) {
-                    _toastEvent.tryEmit(ToastEvent.PendingRaStateVerificationFailed)
-                    if (exitContext == RaPendingExitContext.RESUMABLE_SESSION) {
-                        resumeEmulatorIfSessionCanRun()
-                    }
-                    return@launch
-                }
-                if ((pendingRaSubmissionStore?.snapshot?.value?.counts?.total ?: 0) > 0) {
-                    when (handleRcClientPendingBeforeExit(exitContext)) {
-                        RaPendingExitFollowUp.EXIT -> Unit
-                        RaPendingExitFollowUp.RESUME_SESSION -> {
-                            if (exitContext == RaPendingExitContext.RESUMABLE_SESSION) {
-                                resumeEmulatorIfSessionCanRun()
-                            }
-                            return@launch
-                        }
-                        RaPendingExitFollowUp.KEEP_SESSION_PAUSED -> return@launch
-                    }
-                }
-
-                val userAuth = retroAchievementsRepository.getUserAuthentication()
-                if (userAuth != null) {
-                    val userId = userAuth.username
-                    val contentId = runningRom.rom.retroAchievementsHash
-                    val ledgerStatus = withContext(Dispatchers.IO) {
-                        offlineLedgerRepository.getStatus(userId, contentId)
-                    }
-
-                    if (hardcoreSubmissionQueue.pendingCount() > 0) {
-                        val shouldExit = handleHardcorePendingBeforeExit(
-                            userId = userId,
-                            contentId = contentId,
-                            exitContext = exitContext,
-                        )
-                        if (!shouldExit) {
-                            if (exitContext == RaPendingExitContext.RESUMABLE_SESSION) {
-                                resumeEmulatorIfSessionCanRun()
-                            }
-                            return@launch
-                        }
-                    } else if (ledgerStatus.integrity == OfflineLedgerIntegrity.OK) {
-                        hardcoreOfflineLossTracker.clearPendingUnlocks(userId, contentId)
-                        if (ledgerStatus.pendingSoftcoreUnlockCount > 0) {
-                            _toastEvent.tryEmit(
-                                ToastEvent.OfflineSoftcorePendingNotice(
-                                    pendingSoftcoreCount = ledgerStatus.pendingSoftcoreUnlockCount,
-                                    ledgerExpiresInMs = ledgerStatus.ledgerExpiresInMs,
-                                )
-                            )
-                        }
-                    }
-                }
-            }
-
-            runningRom?.let {
-                maybeAutoSaveStateOnExit(it.rom)
-            }
-            discardHardcoreSubmissions()
-            stopEmulatorSuspend()
-            launchEmulator(args)
         }
     }
 
@@ -742,10 +765,10 @@ class EmulatorViewModel @Inject constructor(
         }
     }
 
-    fun onFirmwareLaunchValidated(consoleType: ConsoleType) {
+    fun onFirmwareLaunchValidated(consoleType: ConsoleType, dsiProfile: DSiProfile? = null) {
         launchJob?.cancel()
         launchJob = viewModelScope.launch {
-            launchFirmware(consoleType)
+            launchFirmware(consoleType, dsiProfile)
         }
     }
 
@@ -807,7 +830,7 @@ class EmulatorViewModel @Inject constructor(
             rom.config.dualScreenPreset?.let { _dualScreenPreset.value = it }
             rom.config.dualScreenKeepAspectRatio?.let { _externalDisplayKeepAspectRatioEnabled.value = it }
             rom.config.dualScreenIntegerScale?.let { _dualScreenIntegerScaleEnabled.value = it }
-            val isRetroAchievementsEnabledForLaunch = isRetroAchievementsEnabledForLaunch(rom)
+            val isRetroAchievementsEnabledForLaunch = PhantomPlayer.current == null && isRetroAchievementsEnabledForLaunch(rom)
             val endpointSnapshot = if (isRetroAchievementsEnabledForLaunch) {
                 retroAchievementsEndpointProvider.beginSession()
             } else {
@@ -1001,7 +1024,9 @@ class EmulatorViewModel @Inject constructor(
                     maybeAutoLoadStateOnLaunch(rom)
                     DebugCommandStateStore.onRunningRomReady(rom.uri, rom.name)
                     startTrackingFps()
-                    startTrackingPlayTime(rom)
+                    if (PhantomPlayer.current == null) {
+                        startTrackingPlayTime(rom)
+                    }
                 }
             }
         } catch (exception: Throwable) {
@@ -1325,7 +1350,7 @@ class EmulatorViewModel @Inject constructor(
         }
     }
 
-    private suspend fun launchFirmware(consoleType: ConsoleType) {
+    private suspend fun launchFirmware(consoleType: ConsoleType, dsiProfile: DSiProfile? = null) {
         resetEmulatorState(EmulatorState.LoadingFirmware(consoleType))
         startEmulatorSession(
             sessionType = EmulatorSession.SessionType.FirmwareSession(consoleType),
@@ -1341,7 +1366,7 @@ class EmulatorViewModel @Inject constructor(
 
             confirmRetroArchShaderCompile(romConfig = null)
             isNativeEmulationActive = true
-            val result = emulatorManager.loadFirmware(consoleType)
+            val result = emulatorManager.loadFirmware(consoleType, dsiProfile)
             when (result) {
                 is FirmwareLaunchResult.LaunchFailed -> {
                     isNativeEmulationActive = false
@@ -1445,7 +1470,17 @@ class EmulatorViewModel @Inject constructor(
         settingsRepository.setDualScreenExternalVerticalAlignmentOverride(alignment)
     }
 
+    fun flushSramSavesAsync() {
+        if (!isNativeEmulationActive && !_emulatorState.value.isRunning()) {
+            return
+        }
+        viewModelScope.launch(Dispatchers.IO + NonCancellable) {
+            runCatching { MelonEmulator.flushSramSaves() }
+        }
+    }
+
     fun onAppMovedToBackground() {
+        flushSramSavesAsync()
         sessionCoroutineScope.launch {
             val runningRom = _emulatorState.value as? EmulatorState.RunningRom ?: return@launch
             val userAuth = retroAchievementsRepository.getUserAuthentication() ?: return@launch
@@ -1792,8 +1827,29 @@ class EmulatorViewModel @Inject constructor(
         updateRunningRomConfig { it.copy(retroArchShaderParameters = parameters) }
     }
 
+    fun cycleLayout() {
+        if (!_emulatorState.value.isRunning()) return
+        sessionCoroutineScope.launch {
+            val includedIds = settingsRepository.getLayoutCycleIds()
+            val candidates = layoutsRepository.getLayouts().first().filter {
+                it.id != null && (includedIds == null || it.id in includedIds)
+            }
+            if (candidates.isEmpty()) return@launch
+            val currentId = (_emulatorState.value as? EmulatorState.RunningRom)?.rom?.config?.layoutId
+                ?: settingsRepository.getSelectedLayoutId()
+            val currentIndex = candidates.indexOfFirst { it.id == currentId }
+            val nextId = candidates[(currentIndex + 1) % candidates.size].id ?: return@launch
+            if (nextId == currentId) return@launch
+            if (_emulatorState.value is EmulatorState.RunningRom) {
+                onRunningRomLayoutSelected(nextId)
+            } else if (_emulatorState.value is EmulatorState.RunningFirmware) {
+                settingsRepository.setSelectedLayoutId(nextId)
+            }
+        }
+    }
+
     fun onRunningRomLayoutSelected(layoutId: UUID?) {
-        updateRunningRomConfig { it.copy(layoutId = layoutId) }
+        updateRunningRomConfig(updateNativeConfiguration = false) { it.copy(layoutId = layoutId) }
     }
 
     fun getActiveLayoutId(): java.util.UUID {
@@ -1814,13 +1870,18 @@ class EmulatorViewModel @Inject constructor(
         }
     }
 
-    private fun updateRunningRomConfig(update: (me.magnum.melonds.domain.model.rom.config.RomConfig) -> me.magnum.melonds.domain.model.rom.config.RomConfig) {
+    private fun updateRunningRomConfig(
+        updateNativeConfiguration: Boolean = true,
+        update: (me.magnum.melonds.domain.model.rom.config.RomConfig) -> me.magnum.melonds.domain.model.rom.config.RomConfig,
+    ) {
         val runningRom = (_emulatorState.value as? EmulatorState.RunningRom)?.rom ?: return
         val updatedRom = runningRom.copy(config = update(runningRom.config))
         romsRepository.updateRomConfig(runningRom, updatedRom.config)
         updateRunningRom(updatedRom)
-        sessionCoroutineScope.launch {
-            emulatorManager.updateRomEmulatorConfiguration(updatedRom)
+        if (updateNativeConfiguration) {
+            sessionCoroutineScope.launch {
+                emulatorManager.updateRomEmulatorConfiguration(updatedRom)
+            }
         }
     }
 
@@ -1840,13 +1901,20 @@ class EmulatorViewModel @Inject constructor(
             GameCompatibilityManager.clearAllActiveLaunchMarkers(context)
         }
         sessionCoroutineScope.launch {
-            emulatorManager.pauseEmulator()
+            val shouldPause = !showPauseMenu || !MultiplayerSession.active
+            if (shouldPause) {
+                emulatorManager.pauseEmulator()
+            }
             if (showPauseMenu) {
                 val rendererDebugToolsEnabled = settingsRepository.isRendererDebugToolsEnabled().firstOrNull() == true
                 val pauseOptions = when (_emulatorState.value) {
                     is EmulatorState.RunningRom -> {
-                        RomPauseMenuOption.entries.filter {
-                            filterRomPauseMenuOption(it, rendererDebugToolsEnabled)
+                        if (PhantomPlayer.current != null) {
+                            listOf(RomPauseMenuOption.EXIT)
+                        } else {
+                            RomPauseMenuOption.entries.filter {
+                                filterRomPauseMenuOption(it, rendererDebugToolsEnabled)
+                            }
                         }
                     }
                     is EmulatorState.RunningFirmware -> {
@@ -1946,6 +2014,7 @@ class EmulatorViewModel @Inject constructor(
     }
 
     fun abortLaunchAndStopEmulator() {
+        relaunchJob?.cancel()
         launchJob?.cancel()
         sessionCoroutineScope.cancel()
         viewModelScope.launch(NonCancellable) {
@@ -1954,6 +2023,11 @@ class EmulatorViewModel @Inject constructor(
     }
 
     private suspend fun stopEmulatorSuspend() {
+        if (isNativeEmulationActive || _emulatorState.value.isRunning()) {
+            withContext(Dispatchers.IO + NonCancellable) {
+                runCatching { MelonEmulator.flushSramSaves() }
+            }
+        }
         resetSessionStateOnStop()
         (emulatorManager as? AndroidEmulatorManager)?.stopEmulatorSuspend() ?: emulatorManager.stopEmulator()
         screenshotFrameBufferProvider.clearBuffer()
@@ -2271,6 +2345,11 @@ class EmulatorViewModel @Inject constructor(
     }
 
     fun onPauseMenuOptionSelected(option: PauseMenuOption) {
+        if ((option == RomPauseMenuOption.SAVE_STATE || option == RomPauseMenuOption.LOAD_STATE ||
+                option == RomPauseMenuOption.REWIND) && multiplayerOperationBlocked()
+        ) {
+            return
+        }
         when (option) {
             is RomPauseMenuOption -> {
                 when (option) {
@@ -2395,7 +2474,14 @@ class EmulatorViewModel @Inject constructor(
         }
     }
 
+    private fun multiplayerOperationBlocked(): Boolean {
+        if (!MultiplayerSession.active) return false
+        _toastEvent.tryEmit(ToastEvent.MultiplayerOperationUnavailable)
+        return true
+    }
+
     fun onOpenRewind() {
+        if (multiplayerOperationBlocked()) return
         if (!settingsRepository.isRewindEnabled()) {
             _toastEvent.tryEmit(ToastEvent.RewindNotEnabled)
             return
@@ -2414,10 +2500,11 @@ class EmulatorViewModel @Inject constructor(
     }
 
     fun onFastForwardToggleRequested(): Boolean {
-        return true
+        return !multiplayerOperationBlocked()
     }
 
     fun rewindToState(rewindSaveState: RewindSaveState) {
+        if (multiplayerOperationBlocked()) return
         if (!emulatorSession.areSaveStateLoadsAllowed()) {
             _toastEvent.tryEmit(ToastEvent.RewindNotAvailableWhileRAHardcoreModeEnabled)
             return
@@ -2433,6 +2520,7 @@ class EmulatorViewModel @Inject constructor(
     }
 
     fun saveStateToSlot(slot: SaveStateSlot, resumeAfter: Boolean = true): Job {
+        if (multiplayerOperationBlocked()) return Job().apply { complete() }
         return sessionCoroutineScope.launch {
             (_emulatorState.value as? EmulatorState.RunningRom)?.let {
                 emulatorManager.pauseEmulator()
@@ -2450,6 +2538,7 @@ class EmulatorViewModel @Inject constructor(
     }
 
     fun loadStateFromSlot(slot: SaveStateSlot) {
+        if (multiplayerOperationBlocked()) return
         if (!emulatorSession.areSaveStateLoadsAllowed()) {
             _toastEvent.tryEmit(ToastEvent.CannotLoadSaveStatesWhenRAHardcoreIsEnabled)
             return
@@ -2470,6 +2559,7 @@ class EmulatorViewModel @Inject constructor(
     }
 
     fun doQuickSave(targetSlotNumber: Int? = null) {
+        if (multiplayerOperationBlocked()) return
         val currentState = _emulatorState.value
         when (currentState) {
             is EmulatorState.RunningRom -> {
@@ -2497,6 +2587,7 @@ class EmulatorViewModel @Inject constructor(
     }
 
     fun doQuickLoad(targetSlotNumber: Int? = null) {
+        if (multiplayerOperationBlocked()) return
         val currentState = _emulatorState.value
         when (currentState) {
             is EmulatorState.RunningRom -> {
@@ -2697,6 +2788,7 @@ class EmulatorViewModel @Inject constructor(
     }
 
     private suspend fun saveRomState(rom: Rom, slot: SaveStateSlot): Boolean {
+        if (MultiplayerSession.active) return false
         val slotUri = getRomSaveStateUri(rom, slot)
         withContext(Dispatchers.IO) {
             val existingSlot = saveStatesRepository.getRomSaveStates(rom).firstOrNull { it.slot == slot.slot }
@@ -2739,6 +2831,7 @@ class EmulatorViewModel @Inject constructor(
     }
 
     private suspend fun loadRomState(rom: Rom, slot: SaveStateSlot): Boolean {
+        if (MultiplayerSession.active) return false
         if (!slot.exists) {
             return false
         }
@@ -3174,6 +3267,12 @@ class EmulatorViewModel @Inject constructor(
                                     _toastEvent.tryEmit(ToastEvent.InternalError)
                                 }
                             }
+                            EmulatorEvent.Stop.Reason.WirelessUnsupported -> {
+                                runCatching { MultiplayerRoom.leave() }.onFailure {
+                                    Log.e("Multiplayer", "Could not close unsupported wireless room", it)
+                                }
+                                _toastEvent.tryEmit(ToastEvent.WirelessUnsupported)
+                            }
                             EmulatorEvent.Stop.Reason.PowerOff -> { /* no-op */ }
                         }
                         when (_emulatorState.value) {
@@ -3306,7 +3405,8 @@ class EmulatorViewModel @Inject constructor(
                 }
             }.combine(isRetroArchShaderDeclinedForSession) { configuration, declined ->
                 configuration to declined
-            }.collectLatest { (it, declined) ->
+            }.collectLatest { (requested, declined) ->
+                val it = MultiplayerSession.configureRenderer(requested)
                 val dropShader = declined && it.videoFiltering == VideoFiltering.RETROARCH
                 _runtimeRendererConfiguration.value = RuntimeRendererConfiguration(
                     renderer = it.renderer,
@@ -3329,7 +3429,7 @@ class EmulatorViewModel @Inject constructor(
             } else {
                 settingsRepository.observeRenderConfiguration(romConfig).first()
             }
-        }.getOrNull() ?: return
+        }.getOrNull()?.let(MultiplayerSession::configureRenderer) ?: return
 
         if (configuration.videoFiltering != VideoFiltering.RETROARCH) {
             return
@@ -6154,8 +6254,13 @@ class EmulatorViewModel @Inject constructor(
                 if (!achievementData.isRetroAchievementsIntegrationEnabled) {
                     if (networkMode == RetroAchievementsNetworkMode.OFFLINE_ACCUMULATING && offlineContext?.missingCache == true) {
                         _raIntegrationEvent.tryEmit(RAIntegrationEvent.OfflineDisabledNoCache(achievementData.icon))
-                    } else if (achievementData.retroAchievementsIntegrationStatus == GameAchievementData.IntegrationStatus.DISABLED_LOAD_ERROR) {
-                        _raIntegrationEvent.tryEmit(RAIntegrationEvent.Failed(achievementData.icon))
+                    } else if (
+                        achievementData.retroAchievementsIntegrationStatus == GameAchievementData.IntegrationStatus.DISABLED_LOAD_ERROR ||
+                        achievementData.retroAchievementsIntegrationStatus == GameAchievementData.IntegrationStatus.DISABLED_LOAD_ERROR_RESPONSE_TOO_LARGE
+                    ) {
+                        val responseTooLarge =
+                            achievementData.retroAchievementsIntegrationStatus == GameAchievementData.IntegrationStatus.DISABLED_LOAD_ERROR_RESPONSE_TOO_LARGE
+                        _raIntegrationEvent.tryEmit(RAIntegrationEvent.Failed(achievementData.icon, responseTooLarge))
                     } else if (achievementData.retroAchievementsIntegrationStatus == GameAchievementData.IntegrationStatus.DISABLED_GAME_NOT_FOUND) {
                         _raIntegrationEvent.tryEmit(RAIntegrationEvent.LoadedNoAchievements(achievementData.icon))
                     } else if (achievementData.retroAchievementsIntegrationStatus == GameAchievementData.IntegrationStatus.DISABLED_LOGIN_EXPIRED) {
@@ -6261,8 +6366,16 @@ class EmulatorViewModel @Inject constructor(
                                     "runtime_path" to activeRuntimePath.name,
                                     "error" to throwable.javaClass.simpleName,
                                 )
-                                emulatorSession.updateRetroAchievementsIntegrationStatus(GameAchievementData.IntegrationStatus.DISABLED_LOAD_ERROR)
-                                _raIntegrationEvent.tryEmit(RAIntegrationEvent.Failed(achievementData.icon))
+                                val responseTooLarge =
+                                    (throwable as? AndroidEmulatorManager.RetroAchievementsSetupException)?.isResponseTooLarge == true
+                                emulatorSession.updateRetroAchievementsIntegrationStatus(
+                                    if (responseTooLarge) {
+                                        GameAchievementData.IntegrationStatus.DISABLED_LOAD_ERROR_RESPONSE_TOO_LARGE
+                                    } else {
+                                        GameAchievementData.IntegrationStatus.DISABLED_LOAD_ERROR
+                                    },
+                                )
+                                _raIntegrationEvent.tryEmit(RAIntegrationEvent.Failed(achievementData.icon, responseTooLarge))
                                 return@launch
                             }
                             emulatorSession.updateRetroAchievementsOfflineModeEnabled(false)
@@ -6487,8 +6600,16 @@ class EmulatorViewModel @Inject constructor(
                                     "runtime_path" to activeRuntimePath.name,
                                     "error" to throwable.javaClass.simpleName,
                                 )
-                                emulatorSession.updateRetroAchievementsIntegrationStatus(GameAchievementData.IntegrationStatus.DISABLED_LOAD_ERROR)
-                                _raIntegrationEvent.tryEmit(RAIntegrationEvent.Failed(achievementData.icon))
+                                val responseTooLarge =
+                                    (throwable as? AndroidEmulatorManager.RetroAchievementsSetupException)?.isResponseTooLarge == true
+                                emulatorSession.updateRetroAchievementsIntegrationStatus(
+                                    if (responseTooLarge) {
+                                        GameAchievementData.IntegrationStatus.DISABLED_LOAD_ERROR_RESPONSE_TOO_LARGE
+                                    } else {
+                                        GameAchievementData.IntegrationStatus.DISABLED_LOAD_ERROR
+                                    },
+                                )
+                                _raIntegrationEvent.tryEmit(RAIntegrationEvent.Failed(achievementData.icon, responseTooLarge))
                                 return@launch
                             }
                             emulatorSession.updateRetroAchievementsOfflineModeEnabled(true)
@@ -7134,6 +7255,7 @@ class EmulatorViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
+        relaunchJob?.cancel()
         launchJob?.cancel()
         GameCompatibilityManager.clearAllActiveLaunchMarkers(context)
         detachPendingRaSubmissionSession()

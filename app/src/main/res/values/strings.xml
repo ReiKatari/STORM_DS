@@ -1814,4 +1814,30 @@
         <item>3 (draw 1, skip 3)</item>
         <item>4 (draw 1, skip 4)</item>
     </string-array>
+    <!-- Wave 4: VirtualButtonMode, Input Combos, NDZ, Cheat Search, RA Too Large, Multiplayer -->
+    <string name="achievements_failed_load_tip_response_too_large">Achievements could not be loaded: the server response for this game is larger than the app\'s limit (16 MiB).</string>
+    <string name="button_mode">Button mode</string>
+    <string name="button_mode_normal">Normal (hold)</string>
+    <string name="button_mode_toggle">Toggle (tap to hold or release)</string>
+    <string name="button_mode_turbo">Turbo (hold for 10 presses/s)</string>
+    <string name="button_mode_value">Mode: %1</string>
+    <string name="cycle_layouts">Layouts for cycling</string>
+    <string name="cycle_layouts_summary">Choose the layouts used by the Cycle layout shortcut, in library order. No selection disables cycling.</string>
+    <string name="dsi_profile_initial">Current DSi setup</string>
+    <string name="emulator_stop_wireless_unsupported">This wireless mode is not supported in this multiplayer room.</string>
+    <string name="hint_search_cheats">Search cheats</string>
+    <string name="input_combo">Combo</string>
+    <string name="input_combo_conflict">This combination is already assigned to %1. Clear that assignment first, or choose a different pair.</string>
+    <string name="input_cycle_layout">Cycle layout</string>
+    <string name="input_exit_game">Exit game</string>
+    <string name="input_slot2_analog">Slot-2 analog stick</string>
+    <string name="no_cheats_found_from_search">No matching cheats</string>
+    <string name="rom_ndz_unsupported_base_patch">.ndz patch against a base ROM (.delta.ndz). Not supported yet.</string>
+    <string name="rom_ndz_unsupported_corrupt">Damaged or truncated .ndz file.</string>
+    <string name="rom_ndz_unsupported_legacy">Old .ndz layout (LZ4 or flat). Repack it with ndz-studio (zstd).</string>
+    <string name="rom_ndz_unsupported_pair">.ndz container with several ROMs. Not supported yet.</string>
+    <string name="rom_ndz_unsupported_trained_dict">.ndz with a trained dictionary (retired variant). Repack it with ndz-studio.</string>
+    <string name="v882_comp_desc_button_single">Individual face button (A, B, X, or Y) for flexible standalone placement and Toggle or Turbo modes</string>
+    <string name="v882_comp_desc_slot2_analog">Virtual GBA Slot-2 analog stick for compatible homebrew and analog motion patches</string>
+    <string name="waiting_for_combo">Hold two different buttons on the same controller. The first button can act before the combo is complete; use an unassigned button as the modifier to avoid this.</string>
 </resources>

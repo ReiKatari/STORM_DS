@@ -3,7 +3,12 @@ package me.magnum.melonds.database.daos
 import androidx.room.*
 import kotlinx.coroutines.flow.Flow
 import me.magnum.melonds.database.entities.retroachievements.*
-import me.magnum.melonds.database.entities.retroachievements.HashIconRow
+
+data class RomCoverIconRow(
+    @ColumnInfo(name = "hash") val hash: String,
+    @ColumnInfo(name = "iconUrl") val iconUrl: String,
+    @ColumnInfo(name = "hasAchievements") val hasAchievements: Boolean?,
+)
 
 @Dao
 abstract class RetroAchievementsDao {
@@ -129,15 +134,18 @@ abstract class RetroAchievementsDao {
     @Query("SELECT game_hash FROM ra_game_hash_library WHERE game_id = :gameId LIMIT 1")
     abstract suspend fun getAnyGameHashForGameId(gameId: Long): String?
 
-    @Query("SELECT game_hash FROM ra_game_hash_library")
-    abstract fun observeAllGameHashes(): Flow<List<String>>
+    @Query("SELECT game_hash FROM ra_game_hash_library WHERE game_id IN (SELECT game_id FROM ra_achievement)")
+    abstract fun observeGameHashesWithAchievements(): Flow<List<String>>
 
     @Query("""
-        SELECT gh.game_hash AS hash, g.icon AS iconUrl
+        SELECT gh.game_hash AS hash, g.icon AS iconUrl,
+            CASE WHEN m.last_achievement_set_updated IS NULL THEN NULL
+                ELSE g.game_id IN (SELECT game_id FROM ra_achievement) END AS hasAchievements
         FROM ra_game_hash_library gh
         INNER JOIN ra_game g ON g.game_id = gh.game_id
+        LEFT JOIN ra_game_set_metadata m ON m.game_id = g.game_id
     """)
-    abstract fun observeRomCoverIcons(): Flow<List<HashIconRow>>
+    abstract fun observeRomCoverIcons(): Flow<List<RomCoverIconRow>>
 
     @Transaction
     open suspend fun updateGameHashLibrary(hashLibrary: List<RAGameHashEntity>) {

@@ -18,10 +18,12 @@ import me.magnum.melonds.domain.model.*
 import me.magnum.melonds.domain.model.layout.LayoutComponent
 import me.magnum.melonds.domain.model.layout.PositionedLayoutComponent
 import me.magnum.melonds.domain.model.layout.UILayout
+import me.magnum.melonds.domain.model.layout.VirtualButtonMode
 import me.magnum.melonds.impl.dpToPixels
 import me.magnum.melonds.ui.common.LayoutComponentView
 import me.magnum.melonds.ui.common.LayoutView
 import me.magnum.melonds.ui.common.views.IAnimatedInputView
+import me.magnum.melonds.ui.emulator.input.view.Slot2AnalogView
 import me.magnum.melonds.ui.layouteditor.model.LayoutComponentPositionEditorState
 import me.magnum.melonds.ui.layouteditor.model.LayoutTarget
 import kotlin.math.*
@@ -412,6 +414,8 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
         pushUndoSnapshot()
         val baseWidth = when (component) {
             LayoutComponent.DPAD, LayoutComponent.BUTTONS -> context.dpToPixels(140f).toInt()
+            LayoutComponent.SLOT2_ANALOG -> context.dpToPixels(110f).toInt()
+            LayoutComponent.BUTTON_A, LayoutComponent.BUTTON_B, LayoutComponent.BUTTON_X, LayoutComponent.BUTTON_Y -> context.dpToPixels(52f).toInt()
             LayoutComponent.BUTTON_L, LayoutComponent.BUTTON_R -> context.dpToPixels(56f).toInt()
             LayoutComponent.BUTTON_SELECT, LayoutComponent.BUTTON_START -> context.dpToPixels(54f).toInt()
             LayoutComponent.TOP_SCREEN, LayoutComponent.BOTTOM_SCREEN -> (width * 0.5f).toInt().coerceAtLeast(defaultComponentWidth)
@@ -437,7 +441,15 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
 
     fun buildCurrentLayout(): List<PositionedLayoutComponent> {
         return views.values.map {
-            PositionedLayoutComponent(it.getRect(), it.component, it.baseAlpha, it.onTop, it.locked)
+            PositionedLayoutComponent(
+                it.getRect(),
+                it.component,
+                it.baseAlpha,
+                it.onTop,
+                it.locked,
+                it.buttonMode,
+                it.screenAspectRatio,
+            )
         }
     }
 
@@ -743,6 +755,7 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
             when (component) {
                 LayoutComponent.BUTTONS -> handleLiveTestButtons(v, event)
                 LayoutComponent.DPAD -> handleLiveTestDpad(v, event)
+                LayoutComponent.SLOT2_ANALOG -> handleLiveTestSlot2Analog(v, event)
                 else -> handleLiveTestSingleButton(v, event, component)
             }
             true
@@ -847,6 +860,22 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
         onLiveTestInputsChangedListener?.invoke(liveTestActiveInputs.toSet())
     }
 
+    private fun handleLiveTestSlot2Analog(v: View, event: MotionEvent) {
+        val stick = v as? Slot2AnalogView ?: return
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
+                val radius = stick.travelRadius.coerceAtLeast(1f)
+                val x = (event.x - stick.width / 2f) / radius
+                val y = (event.y - stick.height / 2f) / radius
+                val length = hypot(x, y).coerceAtLeast(1f)
+                stick.setAxes(x / length, y / length)
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                stick.setAxes(0f, 0f)
+            }
+        }
+    }
+
     private fun handleLiveTestSingleButton(v: View, event: MotionEvent, component: LayoutComponent) {
         val input = componentToInput(component) ?: return
         when (event.actionMasked) {
@@ -868,6 +897,10 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
 
     private fun componentToInput(component: LayoutComponent): Input? {
         return when (component) {
+            LayoutComponent.BUTTON_A -> Input.A
+            LayoutComponent.BUTTON_B -> Input.B
+            LayoutComponent.BUTTON_X -> Input.X
+            LayoutComponent.BUTTON_Y -> Input.Y
             LayoutComponent.BUTTON_L -> Input.L
             LayoutComponent.BUTTON_R -> Input.R
             LayoutComponent.BUTTON_START -> Input.START
@@ -1023,6 +1056,16 @@ class LayoutEditorView(context: Context, attrs: AttributeSet?) : LayoutView(cont
             modifiedByUser = true
             notifyLayoutChanged()
         }
+    }
+
+    fun setComponentButtonMode(component: LayoutComponent, mode: VirtualButtonMode) {
+        if (!component.supportsButtonMode()) return
+        val view = views[component] ?: return
+        if (view.buttonMode == mode) return
+        pushUndoSnapshot()
+        view.buttonMode = mode
+        modifiedByUser = true
+        notifyLayoutChanged()
     }
 
     fun setSelectedScreenOnTop(onTop: Boolean) {

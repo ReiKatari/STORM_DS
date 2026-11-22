@@ -15,6 +15,7 @@ sealed class EmulatorEvent {
         enum class Reason {
             GBAModeNotSupported,
             BadExceptionRegion,
+            WirelessUnsupported,
             PowerOff,
         }
     }

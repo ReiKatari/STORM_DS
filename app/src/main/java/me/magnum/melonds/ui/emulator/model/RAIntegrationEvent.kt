@@ -6,7 +6,7 @@ sealed class RAIntegrationEvent(open val icon: URL?) {
     data class Welcome(override val icon: URL?, val username: String, val hardcore: Boolean) : RAIntegrationEvent(icon)
     data class Loaded(override val icon: URL?, val unlockedAchievements: Int, val totalAchievements: Int) : RAIntegrationEvent(icon)
     data class LoadedNoAchievements(override val icon: URL?) : RAIntegrationEvent(icon)
-    data class Failed(override val icon: URL?) : RAIntegrationEvent(icon)
+    data class Failed(override val icon: URL?, val responseTooLarge: Boolean = false) : RAIntegrationEvent(icon)
     data class LoginExpired(override val icon: URL?) : RAIntegrationEvent(icon)
     data class OfflineDisabledNoCache(override val icon: URL?) : RAIntegrationEvent(icon)
 }

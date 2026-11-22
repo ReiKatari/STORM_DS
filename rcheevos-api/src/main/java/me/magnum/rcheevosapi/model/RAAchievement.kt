@@ -16,6 +16,7 @@ data class RAAchievement(
     val badgeUrlLocked: URL,
     val memoryAddress: String,
     val type: Type,
+    val achievementType: String? = null,
 ) {
 
     enum class Type {
@@ -28,6 +29,6 @@ data class RAAchievement(
     }
 
     fun isMissable(): Boolean {
-        return title.endsWith("[m]")
+        return achievementType == "missable" || title.endsWith("[m]")
     }
 }

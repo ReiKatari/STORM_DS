@@ -163,6 +163,13 @@ class InputSetupActivity : AppCompatActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (viewModel.assigningCombo.value && event.keyCode != KeyEvent.KEYCODE_BACK) {
+            pendingChordModifierKey = null
+            if (event.repeatCount == 0 && (event.action == KeyEvent.ACTION_DOWN || event.action == KeyEvent.ACTION_UP)) {
+                viewModel.updateComboKey(event.keyCode, event.deviceId, event.action == KeyEvent.ACTION_DOWN)
+            }
+            return true
+        }
         if (viewModel.inputUnderAssignment.value != null) {
             @SuppressLint("GestureBackNavigation")
             if (event.keyCode == KeyEvent.KEYCODE_BACK) {
@@ -193,6 +200,12 @@ class InputSetupActivity : AppCompatActivity() {
             pendingChordModifierKey = null
         }
         return super.dispatchKeyEvent(event)
+    }
+
+    override fun onPause() {
+        pendingChordModifierKey = null
+        viewModel.stopAnyAssignment()
+        super.onPause()
     }
 
     fun autoMapStandardGamepadWithFeedback() {

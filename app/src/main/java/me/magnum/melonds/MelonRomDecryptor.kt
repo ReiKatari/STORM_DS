@@ -81,6 +81,11 @@ object MelonRomDecryptor {
         fun onProgress(current: Int, total: Int)
     }
 
+    data class DecryptOutcome(
+        val result: DecryptResult,
+        val outputUri: Uri? = null,
+    )
+
     private data class ContainerSlice(
         val offset: Long,
         val size: Long,
@@ -142,14 +147,22 @@ object MelonRomDecryptor {
     }
 
     fun decryptRom(context: Context, uri: Uri, progressCallback: DecryptProgressCallback? = null): DecryptResult {
+        return decryptRomWithOutput(context, uri, progressCallback).result
+    }
+
+    fun decryptRomWithOutput(
+        context: Context,
+        uri: Uri,
+        progressCallback: DecryptProgressCallback? = null,
+    ): DecryptOutcome {
         if (uri.scheme == Rom.INSTALLED_DSIWARE_URI_SCHEME) {
-            return DecryptResult.ALREADY_DECRYPTED
+            return DecryptOutcome(DecryptResult.ALREADY_DECRYPTED, uri)
         }
 
         val path = FileUtils.getAbsolutePathFromSAFUri(context, uri)
         val ext = resolveExtension(context, uri, path)
         if (ext in SKIPPED_ARCHIVE_EXTENSIONS) {
-            return DecryptResult.ERROR_NOT_DSI_ROM
+            return DecryptOutcome(DecryptResult.ERROR_NOT_DSI_ROM)
         }
 
         if (ext == "cia" || ext == "tad") {
@@ -157,7 +170,9 @@ object MelonRomDecryptor {
         }
 
         if (ext == "zip" || ext == "ndz") {
-            return decryptZipRom(context, uri, path, progressCallback)
+            val zipResult = decryptZipRom(context, uri, path, progressCallback)
+            val resolvedUri = if (zipResult == DecryptResult.SUCCESS || zipResult == DecryptResult.ALREADY_DECRYPTED) uri else null
+            return DecryptOutcome(zipResult, resolvedUri)
         }
 
         // Raw DSi ROM: prefer atomic sibling temp replacement on direct path
@@ -166,7 +181,8 @@ object MelonRomDecryptor {
             if (targetFile.isFile && targetFile.canRead() && targetFile.canWrite()) {
                 val atomicResult = decryptDirectFileAtomically(targetFile, progressCallback)
                 if (atomicResult != null) {
-                    return atomicResult
+                    val resolvedUri = if (atomicResult == DecryptResult.SUCCESS || atomicResult == DecryptResult.ALREADY_DECRYPTED) uri else null
+                    return DecryptOutcome(atomicResult, resolvedUri)
                 }
             }
         }
@@ -178,27 +194,27 @@ object MelonRomDecryptor {
                 FileOutputStream(cacheFile).use { output ->
                     input.copyTo(output)
                 }
-            } ?: return DecryptResult.ERROR_READING_FILE
+            } ?: return DecryptOutcome(DecryptResult.ERROR_READING_FILE)
 
             val tempResult = decryptRom(cacheFile.absolutePath, progressCallback)
             if (tempResult == DecryptResult.ALREADY_DECRYPTED) {
-                return DecryptResult.ALREADY_DECRYPTED
+                return DecryptOutcome(DecryptResult.ALREADY_DECRYPTED, uri)
             }
             if (tempResult != DecryptResult.SUCCESS) {
-                return tempResult
+                return DecryptOutcome(tempResult)
             }
             if (!validateDecryptedRomFile(cacheFile)) {
-                return DecryptResult.ERROR_VALIDATION_FAILED
+                return DecryptOutcome(DecryptResult.ERROR_VALIDATION_FAILED)
             }
 
             if (writeFileToTarget(context, uri, path, cacheFile)) {
-                DecryptResult.SUCCESS
+                DecryptOutcome(DecryptResult.SUCCESS, uri)
             } else {
-                DecryptResult.ERROR_WRITING_FILE
+                DecryptOutcome(DecryptResult.ERROR_WRITING_FILE)
             }
         } catch (e: Throwable) {
             Log.e(TAG, "Fallback decryption failed: ${e.message}")
-            DecryptResult.ERROR_READING_FILE
+            DecryptOutcome(DecryptResult.ERROR_READING_FILE)
         } finally {
             runCatching { cacheFile.delete() }
         }
@@ -275,30 +291,31 @@ object MelonRomDecryptor {
         path: String?,
         ext: String,
         progressCallback: DecryptProgressCallback?,
-    ): DecryptResult {
+    ): DecryptOutcome {
         val tempRom = File(context.cacheDir, "modcrypt_container_${ext}_${System.currentTimeMillis()}.nds")
         return try {
             val extracted = extractContainerPayloadToTemp(context, uri, path, ext, tempRom)
             if (!extracted) {
-                return DecryptResult.ERROR_NOT_DSI_ROM
+                return DecryptOutcome(DecryptResult.ERROR_NOT_DSI_ROM)
             }
 
             val result = decryptRom(tempRom.absolutePath, progressCallback)
             if (result != DecryptResult.SUCCESS && result != DecryptResult.ALREADY_DECRYPTED) {
-                return result
+                return DecryptOutcome(result)
             }
             if (!validateDecryptedRomFile(tempRom)) {
-                return DecryptResult.ERROR_VALIDATION_FAILED
+                return DecryptOutcome(DecryptResult.ERROR_VALIDATION_FAILED)
             }
 
-            if (writeSiblingNdsFromContainer(context, uri, path, tempRom)) {
-                DecryptResult.SUCCESS
+            val siblingUri = writeSiblingNdsFromContainer(context, uri, path, tempRom)
+            if (siblingUri != null) {
+                DecryptOutcome(DecryptResult.SUCCESS, siblingUri)
             } else {
-                DecryptResult.ERROR_WRITING_FILE
+                DecryptOutcome(DecryptResult.ERROR_WRITING_FILE)
             }
         } catch (e: Throwable) {
             Log.e(TAG, "Container decryption failed ($ext): ${e.message}")
-            DecryptResult.ERROR_READING_FILE
+            DecryptOutcome(DecryptResult.ERROR_READING_FILE)
         } finally {
             runCatching { tempRom.delete() }
         }
@@ -430,10 +447,10 @@ object MelonRomDecryptor {
     private fun checkZipEncryption(context: Context, uri: Uri, path: String?): EncryptionStatus {
         val tempEntry = File(context.cacheDir, "modcrypt_zip_check_${System.currentTimeMillis()}.nds")
         return try {
-            val singleEntryName = findSingleZipRomEntryName(context, uri, path)
+            val targetEntryName = findFirstZipRomEntryName(context, uri, path)
                 ?: return EncryptionStatus.NOT_ENCRYPTED
 
-            val extracted = extractZipEntryToFile(context, uri, path, singleEntryName, tempEntry)
+            val extracted = extractZipEntryToFile(context, uri, path, targetEntryName, tempEntry)
             if (!extracted) {
                 return EncryptionStatus.ERROR_READING_FILE
             }
@@ -455,10 +472,10 @@ object MelonRomDecryptor {
         val tempEntry = File(context.cacheDir, "modcrypt_zip_entry_${System.currentTimeMillis()}.nds")
         val tempZip = File(context.cacheDir, "modcrypt_zip_repack_${System.currentTimeMillis()}.zip")
         return try {
-            val singleEntryName = findSingleZipRomEntryName(context, uri, path)
+            val targetEntryName = findFirstZipRomEntryName(context, uri, path)
                 ?: return DecryptResult.ERROR_NOT_DSI_ROM
 
-            if (!extractZipEntryToFile(context, uri, path, singleEntryName, tempEntry)) {
+            if (!extractZipEntryToFile(context, uri, path, targetEntryName, tempEntry)) {
                 return DecryptResult.ERROR_READING_FILE
             }
 
@@ -484,7 +501,7 @@ object MelonRomDecryptor {
                             val newEntry = ZipEntry(entry.name)
                             zos.putNextEntry(newEntry)
                             if (!entry.isDirectory) {
-                                if (entry.name == singleEntryName) {
+                                if (entry.name == targetEntryName) {
                                     FileInputStream(tempEntry).use { decryptedIn ->
                                         decryptedIn.copyTo(zos)
                                     }
@@ -523,26 +540,22 @@ object MelonRomDecryptor {
         }
     }
 
-    private fun findSingleZipRomEntryName(context: Context, uri: Uri, path: String?): String? {
+    private fun findFirstZipRomEntryName(context: Context, uri: Uri, path: String?): String? {
         val stream = openSourceInputStream(context, uri, path) ?: return null
         stream.use { src ->
             ZipInputStream(BufferedInputStream(src)).use { zis ->
-                val romEntries = mutableListOf<String>()
                 var entry = zis.nextEntry
                 while (entry != null) {
                     if (!entry.isDirectory) {
                         val entryExt = entry.name.substringAfterLast('.', "").lowercase(Locale.ROOT)
                         if (entryExt in ZIP_ROM_EXTENSIONS) {
-                            romEntries.add(entry.name)
-                            if (romEntries.size > 1) {
-                                return null
-                            }
+                            return entry.name
                         }
                     }
                     zis.closeEntry()
                     entry = zis.nextEntry
                 }
-                return romEntries.singleOrNull()
+                return null
             }
         }
     }
@@ -629,9 +642,9 @@ object MelonRomDecryptor {
         uri: Uri,
         path: String?,
         validatedSource: File,
-    ): Boolean {
+    ): Uri? {
         if (!validatedSource.exists() || validatedSource.length() == 0L) {
-            return false
+            return null
         }
 
         val baseName = resolveBaseName(context, uri, path)
@@ -653,7 +666,7 @@ object MelonRomDecryptor {
                     replaceFileAtomically(siblingTemp, targetFile)
                 }.getOrDefault(false)
                 if (staged) {
-                    return true
+                    return Uri.fromFile(targetFile)
                 }
                 runCatching { siblingTemp.delete() }
             }
@@ -679,14 +692,14 @@ object MelonRomDecryptor {
                         false
                     }
                     if (wrote) {
-                        return true
+                        return targetDoc.uri
                     }
                 }
             }
         }
 
         Log.e(TAG, "Cannot create sibling $siblingName for container URI $uri; refusing to overwrite container")
-        return false
+        return null
     }
 
     private fun resolveSafParentDirectory(context: Context, uri: Uri): DocumentFile? {

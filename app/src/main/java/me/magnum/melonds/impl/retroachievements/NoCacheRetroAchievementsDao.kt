@@ -1,6 +1,7 @@
 package me.magnum.melonds.impl.retroachievements
 
 import me.magnum.melonds.database.daos.RetroAchievementsDao
+import me.magnum.melonds.database.daos.RomCoverIconRow
 import me.magnum.melonds.database.entities.retroachievements.RAAchievementEntity
 import me.magnum.melonds.database.entities.retroachievements.RAAchievementSetEntity
 import me.magnum.melonds.database.entities.retroachievements.RAGameEntity
@@ -149,11 +150,11 @@ class NoCacheRetroAchievementsDao(private val actualAchievementsDao: RetroAchiev
         return actualAchievementsDao.getAnyGameHashForGameId(gameId)
     }
 
-    override fun observeAllGameHashes(): kotlinx.coroutines.flow.Flow<List<String>> {
-        return actualAchievementsDao.observeAllGameHashes()
+    override fun observeGameHashesWithAchievements(): kotlinx.coroutines.flow.Flow<List<String>> {
+        return actualAchievementsDao.observeGameHashesWithAchievements()
     }
 
-    override fun observeRomCoverIcons(): kotlinx.coroutines.flow.Flow<List<me.magnum.melonds.database.entities.retroachievements.HashIconRow>> {
+    override fun observeRomCoverIcons(): kotlinx.coroutines.flow.Flow<List<RomCoverIconRow>> {
         return actualAchievementsDao.observeRomCoverIcons()
     }
 

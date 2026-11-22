@@ -20,13 +20,19 @@ class SecondaryDisplaySelector @Inject constructor() {
     fun getSecondaryDisplay(context: Context): Display? {
         val currentDisplay = ContextCompat.getDisplayOrDefault(context)
         return context.getSystemService<DisplayManager>()?.let { displayManager ->
-            displayManager.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION).firstOrNull { display ->
+            val presentationDisplays = displayManager.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION)
+            val presentationDisplayIds = presentationDisplays.mapTo(mutableSetOf()) { it.displayId }
+            val candidates = presentationDisplays.asSequence() + displayManager.displays.asSequence()
+            candidates.firstOrNull { display ->
                 val name = display.name ?: ""
-                display.displayId != currentDisplay.displayId &&
+                (display.displayId != Display.DEFAULT_DISPLAY || display.displayId in presentationDisplayIds) &&
+                    display.displayId != currentDisplay.displayId &&
                     name !in ExcludedDisplays &&
                     !name.contains("ScreenCapture", ignoreCase = true) &&
                     !name.contains("Virtual", ignoreCase = true) &&
-                    !name.contains("Record", ignoreCase = true)
+                    !name.contains("Record", ignoreCase = true) &&
+                    display.state != Display.STATE_OFF &&
+                    display.isValid
             }
         }
     }

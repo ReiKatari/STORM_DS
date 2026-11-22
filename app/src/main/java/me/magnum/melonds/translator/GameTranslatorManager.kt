@@ -537,16 +537,10 @@ class GameTranslatorManager(
         }
 
         if (enabled) {
-            overlay.elevation = 950f
-            overlay.bringToFront()
+            overlay.elevation = 950f * overlay.resources.displayMetrics.density
             overlay.requestLayout()
             overlay.invalidate()
             (overlay.parent as? View)?.requestLayout()
-            overlay.post {
-                overlay.bringToFront()
-                overlay.requestLayout()
-                overlay.invalidate()
-            }
             startAutoTranslateIfEnabled()
         } else {
             stopAutoTranslate()
@@ -1087,6 +1081,10 @@ class GameTranslatorManager(
                 if (translationFailed) {
                     if (uncachedBlocks.size == blocks.size) {
                         overlayView?.clearTranslations()
+                        if (isPausedByTranslator) {
+                            isPausedByTranslator = false
+                            try { onResumeEmulator() } catch (_: Throwable) {}
+                        }
                     } else {
                         overlayView?.setTranslatedBlocks(blocks)
                     }

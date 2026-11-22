@@ -21,6 +21,7 @@ internal fun AchievementDto.mapToModel(gameId: RAGameId, setId: RASetId): RAAchi
         badgeUrlLocked = URI(badgeUrlLocked).toURL(),
         memoryAddress = memoryAddress,
         type = achievementFlagsToType(flags),
+        achievementType = achievementType,
     )
 }
 

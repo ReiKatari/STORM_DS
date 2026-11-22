@@ -24,6 +24,7 @@ class InputProcessor(
     private val systemInputListener: IInputListener,
     private val frontendInputListener: IInputListener,
     private val context: Context? = null,
+    private val slot2AnalogInput: Slot2AnalogInput = Slot2AnalogInput { x, y -> MelonEmulator.setSlot2AnalogInput(x, y) },
 ) : INativeInputListener {
 
     companion object {
@@ -178,7 +179,20 @@ class InputProcessor(
         slot2DigitalRightPressed = false
         slot2DigitalUpPressed = false
         slot2DigitalDownPressed = false
-        dispatchSlot2AnalogInput(0f, 0f)
+        lastSentSlot2AnalogX = 0f
+        lastSentSlot2AnalogY = 0f
+        slot2AnalogInput.clearPhysical()
+    }
+
+    override fun releaseChordInputs() {
+        val activeChords = activeChordTriggers.values.toList()
+        activeChordTriggers.clear()
+        for (chordAction in activeChords) {
+            dispatchInputReleased(chordAction, fromController = true)
+        }
+        consumedChordModifiers.clear()
+        selectModifierHeld = false
+        selectUsedInChord = false
     }
 
     private fun isChordHotkeysEnabled(): Boolean {
@@ -222,7 +236,7 @@ class InputProcessor(
 
                 // 1. Check user custom chords first
                 for (modKey in heldPhysicalKeys) {
-                    val customChordInput = controllerConfiguration.chordToInput(modKey, keyCode)
+                    val customChordInput = controllerConfiguration.chordToInput(modKey, keyCode, keyEvent.deviceId)
                     if (customChordInput != null) {
                         activeChordTriggers[keyCode] = customChordInput
                         consumedChordModifiers.add(modKey)
@@ -268,6 +282,9 @@ class InputProcessor(
                 heldPhysicalKeys.add(keyCode)
 
                 if (input == null) return false
+                if (keyEvent.repeatCount > 0 && (input == Input.CYCLE_LAYOUT || input == Input.EXIT_GAME)) {
+                    return true
+                }
 
                 dispatchInputPressed(input, fromController)
                 return true
@@ -566,7 +583,7 @@ class InputProcessor(
         }
         lastSentSlot2AnalogX = x
         lastSentSlot2AnalogY = y
-        MelonEmulator.setSlot2AnalogInput(x, y)
+        slot2AnalogInput.setPhysical(x, y)
     }
 
     private fun isControllerMotionEvent(motionEvent: MotionEvent): Boolean {

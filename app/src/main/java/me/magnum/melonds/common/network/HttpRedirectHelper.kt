@@ -36,11 +36,7 @@ object HttpRedirectHelper {
                     if (location.isNullOrBlank()) {
                         throw IOException("HTTP redirect $responseCode with missing Location header")
                     }
-                    currentUrl = if (location.startsWith("http://") || location.startsWith("https://")) {
-                        location
-                    } else {
-                        URL(url, location).toString()
-                    }
+                    currentUrl = resolveSafeRedirectUrl(url, location)
                     redirects++
                 } else if (responseCode in 200..299) {
                     return connection
@@ -77,7 +73,7 @@ object HttpRedirectHelper {
                 val code = conn.responseCode
                 val location = conn.getHeaderField("Location")
                 if (code in 300..399 && !location.isNullOrBlank()) {
-                    currentUrl = URL(url, location).toString()
+                    currentUrl = resolveSafeRedirectUrl(url, location)
                     redirects++
                 } else {
                     break
@@ -87,5 +83,18 @@ object HttpRedirectHelper {
             }
         }
         return currentUrl
+    }
+
+    internal fun resolveSafeRedirectUrl(currentUrl: URL, location: String): String {
+        val nextUrl = URL(currentUrl, location)
+        val currentScheme = currentUrl.protocol.lowercase()
+        val nextScheme = nextUrl.protocol.lowercase()
+        if (nextScheme != "http" && nextScheme != "https") {
+            throw IOException("Unsupported redirect protocol: $nextScheme")
+        }
+        if (currentScheme == "https" && nextScheme == "http") {
+            throw IOException("Refusing HTTPS to HTTP downgrade redirect to $nextUrl")
+        }
+        return nextUrl.toString()
     }
 }

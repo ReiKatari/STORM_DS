@@ -19,6 +19,12 @@
                 android:summary="@string/layouts_summary"
                 app:iconSpaceReserved="false" />
 
+        <MultiSelectListPreference
+                android:key="input_cycle_layout_ids"
+                android:title="@string/cycle_layouts"
+                android:summary="@string/cycle_layouts_summary"
+                app:iconSpaceReserved="false" />
+
         <me.magnum.melonds.ui.settings.preferences.SoftwareInputBehaviourPreference
                 android:key="soft_input_behaviour"
                 android:title="@string/soft_input_behaviour"

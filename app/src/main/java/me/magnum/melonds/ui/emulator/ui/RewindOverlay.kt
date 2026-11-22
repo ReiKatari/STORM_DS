@@ -96,6 +96,7 @@ fun RewindOverlay(
     val context = LocalContext.current
     val accentColor = Color(me.magnum.melonds.ui.theme.AppThemeManager.getAccentColor())
     val firstFocusRequester = remember { FocusRequester() }
+    val closeFocusRequester = remember { FocusRequester() }
     val states = remember(window) { window.rewindStates.sortedByDescending { it.frame } }
     var selectedIndex by remember(states) { mutableIntStateOf(0) }
     val selectedState = states.getOrNull(selectedIndex) ?: states.firstOrNull()
@@ -103,7 +104,7 @@ fun RewindOverlay(
     val scope = rememberCoroutineScope()
 
     BackHandler { onDismiss() }
-    RequestInitialFocus(firstFocusRequester)
+    RequestInitialFocus(if (states.isEmpty()) closeFocusRequester else firstFocusRequester)
 
     Box(
         modifier = Modifier
@@ -115,10 +116,6 @@ fun RewindOverlay(
                     when (event.key) {
                         Key.ButtonB, Key.Back, Key.Escape -> {
                             onDismiss()
-                            true
-                        }
-                        Key.ButtonA, Key.Enter, Key.NumPadEnter -> {
-                            selectedState?.let { onStateSelected(it) }
                             true
                         }
                         Key.DirectionLeft -> {
@@ -238,6 +235,7 @@ fun RewindOverlay(
                         Box(
                             modifier = Modifier
                                 .size(32.dp)
+                                .focusRequester(closeFocusRequester)
                                 .clip(CircleShape)
                                 .clickable(onClick = onDismiss),
                             contentAlignment = Alignment.Center,
@@ -378,6 +376,7 @@ fun RewindOverlay(
                                 selectedIndex = index
                                 scope.launch { listState.animateScrollToItem(index) }
                             },
+                            onRestoreState = { onStateSelected(state) },
                         )
                     }
                 }
@@ -462,6 +461,7 @@ private fun RewindTimelineCard(
     accentColor: Color,
     focusRequester: FocusRequester?,
     onClick: () -> Unit,
+    onRestoreState: () -> Unit,
 ) {
     val colors = watermelon
     val context = LocalContext.current
@@ -484,6 +484,16 @@ private fun RewindTimelineCard(
             .width(96.dp)
             .aspectRatio(4f / 3f)
             .let { if (focusRequester != null) it.focusRequester(focusRequester) else it }
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown &&
+                    (event.key == Key.ButtonA || event.key == Key.Enter || event.key == Key.NumPadEnter)
+                ) {
+                    onRestoreState()
+                    true
+                } else {
+                    false
+                }
+            }
             .shadow(if (isSelected) 8.dp else 2.dp, shape)
             .clip(shape)
             .background(colors.surface2)

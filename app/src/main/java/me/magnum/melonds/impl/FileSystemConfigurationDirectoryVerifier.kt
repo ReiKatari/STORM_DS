@@ -33,14 +33,16 @@ class FileSystemConfigurationDirectoryVerifier(private val context: Context, set
         if (directory != null) {
             candidateUris.add(directory)
         }
-        val subFolder = if (consoleType == ConsoleType.DSi) "bios/dsi" else "bios/ds"
-        val extStorage = android.os.Environment.getExternalStorageDirectory()
-        listOf(
-            java.io.File(extStorage, "STORM DS/$subFolder"),
-            java.io.File(extStorage, "STORM DS/bios"),
-        ).forEach { dir ->
-            if (dir != null && dir.exists() && dir.isDirectory) {
-                candidateUris.add(Uri.fromFile(dir))
+        if (directory == null || consoleType != ConsoleType.DSi) {
+            val subFolder = if (consoleType == ConsoleType.DSi) "bios/dsi" else "bios/ds"
+            val extStorage = android.os.Environment.getExternalStorageDirectory()
+            listOf(
+                java.io.File(extStorage, "STORM DS/$subFolder"),
+                java.io.File(extStorage, "STORM DS/bios"),
+            ).forEach { dir ->
+                if (dir != null && dir.exists() && dir.isDirectory) {
+                    candidateUris.add(Uri.fromFile(dir))
+                }
             }
         }
 
@@ -60,7 +62,12 @@ class FileSystemConfigurationDirectoryVerifier(private val context: Context, set
 
         if (validDocuments.isEmpty()) {
             val missingResults = requiredFiles.map { it.key to ConfigurationDirResult.FileStatus.MISSING }
-            return ConfigurationDirResult(consoleType, ConfigurationDirResult.Status.UNSET, requiredFiles.keys.toTypedArray(), missingResults.toTypedArray())
+            val emptyStatus = if (directory == null) {
+                ConfigurationDirResult.Status.UNSET
+            } else {
+                ConfigurationDirResult.Status.INVALID
+            }
+            return ConfigurationDirResult(consoleType, emptyStatus, requiredFiles.keys.toTypedArray(), missingResults.toTypedArray())
         }
 
         // Index each candidate directory ONCE instead of running repeated SAF findFile/listFiles queries per BIOS file

@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.graphics.RectF
 import android.view.MotionEvent
 import android.view.View
+import me.magnum.melonds.MelonEmulator
 import me.magnum.melonds.MelonEmulator.onScreenRelease
 import me.magnum.melonds.domain.model.Input
 import me.magnum.melonds.domain.model.Point
@@ -24,6 +25,9 @@ class TouchscreenInputHandler(
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
+                if (event.actionMasked == MotionEvent.ACTION_DOWN && MelonEmulator.isLowLatencyEnabled) {
+                    v.requestUnbufferedDispatch(event)
+                }
                 v.parent?.requestDisallowInterceptTouchEvent(true)
                 val pointerIndex = getBestPointerIndex(event)
                 activePointerId = event.getPointerId(pointerIndex)

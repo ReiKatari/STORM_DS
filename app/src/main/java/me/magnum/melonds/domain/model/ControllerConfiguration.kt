@@ -39,6 +39,8 @@ class ControllerConfiguration(
             Input.FRAME_ADVANCE,
             Input.TAKE_SCREENSHOT,
             Input.TOGGLE_HARDWARE_TURBO,
+            Input.CYCLE_LAYOUT,
+            Input.EXIT_GAME,
         )
 
         private val standardGamepadAssignments: Map<Input, Pair<InputConfig.Assignment, InputConfig.Assignment>> by lazy {
@@ -166,13 +168,14 @@ class ControllerConfiguration(
         }?.input
     }
 
-    fun chordToInput(modifierKey: Int, triggerKey: Int): Input? {
+    fun chordToInput(modifierKey: Int, triggerKey: Int, deviceId: Int? = null): Input? {
         for (config in inputMapper) {
             val assignments = listOf(config.assignment, config.altAssignment)
             for (assignment in assignments) {
                 if (assignment is InputConfig.Assignment.Chord &&
-                    assignment.modifierKeyCode == modifierKey &&
-                    assignment.triggerKeyCode == triggerKey
+                    (assignment.deviceId == null || deviceId == null || assignment.deviceId == deviceId) &&
+                    ((assignment.modifierKeyCode == modifierKey && assignment.triggerKeyCode == triggerKey) ||
+                        (assignment.modifierKeyCode == triggerKey && assignment.triggerKeyCode == modifierKey))
                 ) {
                     return config.input
                 }

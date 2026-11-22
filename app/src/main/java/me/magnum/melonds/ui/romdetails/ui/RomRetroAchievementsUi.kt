@@ -52,6 +52,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.Placeholder
 import androidx.compose.ui.text.PlaceholderVerticalAlign
@@ -554,7 +555,7 @@ fun OfflineAchievementsStatusUi(
                 }
 
                 // Expiration Indicator
-                val expirationText = rememberLedgerExpirationText(state.ledgerExpiresInMs)
+                val expirationText = ledgerExpirationText(state.ledgerExpiresInMs)
                 if (expirationText != null) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -632,20 +633,16 @@ fun OfflineAchievementsStatusUi(
 }
 
 @Composable
-private fun rememberLedgerExpirationText(expiresInMs: Long?): String? {
+private fun ledgerExpirationText(expiresInMs: Long?): String? {
     if (expiresInMs == null) return null
 
-    val context = LocalContext.current
-    return remember(expiresInMs, context) {
-        if (expiresInMs <= 0L) {
-            context.getString(R.string.offline_ra_ledger_expired)
-        } else {
-            val days = ((expiresInMs + LEDGER_EXPIRATION_DAY_MS - 1L) / LEDGER_EXPIRATION_DAY_MS)
-                .coerceAtLeast(1L)
-                .toInt()
-            context.resources.getQuantityString(R.plurals.offline_ra_ledger_expires_days, days, days)
-        }
+    if (expiresInMs <= 0L) {
+        return stringResource(R.string.offline_ra_ledger_expired)
     }
+    val days = ((expiresInMs + LEDGER_EXPIRATION_DAY_MS - 1L) / LEDGER_EXPIRATION_DAY_MS)
+        .coerceAtLeast(1L)
+        .toInt()
+    return pluralStringResource(R.plurals.offline_ra_ledger_expires_days, days, days)
 }
 
 @Composable

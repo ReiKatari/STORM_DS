@@ -44,6 +44,13 @@ class InputSetupViewModel @Inject constructor(
     private val _inputUnderAssignment = MutableStateFlow<Input?>(null)
     val inputUnderAssignment = _inputUnderAssignment.asStateFlow()
 
+    private val _assigningCombo = MutableStateFlow(false)
+    val assigningCombo = _assigningCombo.asStateFlow()
+    private val _comboConflict = MutableStateFlow<Input?>(null)
+    val comboConflict = _comboConflict.asStateFlow()
+    private val comboKeys = linkedSetOf<Int>()
+    private var comboDevice: Int? = null
+
     private val _slot2AxisUnderAssignment = MutableStateFlow<Slot2AnalogAxisTarget?>(null)
     val slot2AxisUnderAssignment = _slot2AxisUnderAssignment.asStateFlow()
 
@@ -69,16 +76,27 @@ class InputSetupViewModel @Inject constructor(
     }
 
     fun startInputAssignment(input: Input) {
+        stopInputAssignment()
         _slot2AxisUnderAssignment.value = null
         _inputUnderAssignment.value = input
     }
 
+    fun startComboAssignment(input: Input) {
+        if (input.isSystemInput) return
+        startInputAssignment(input)
+        _assigningCombo.value = true
+    }
+
     fun stopInputAssignment() {
         _inputUnderAssignment.value = null
+        _assigningCombo.value = false
+        _comboConflict.value = null
+        comboKeys.clear()
+        comboDevice = null
     }
 
     fun startSlot2AxisAssignment(target: Slot2AnalogAxisTarget) {
-        _inputUnderAssignment.value = null
+        stopInputAssignment()
         _slot2AxisUnderAssignment.value = target
     }
 
@@ -87,7 +105,7 @@ class InputSetupViewModel @Inject constructor(
     }
 
     fun stopAnyAssignment() {
-        _inputUnderAssignment.value = null
+        stopInputAssignment()
         _slot2AxisUnderAssignment.value = null
     }
 
@@ -105,7 +123,36 @@ class InputSetupViewModel @Inject constructor(
         focusOnNextInput(inputUnderAssignment)
     }
 
+    fun updateComboKey(key: Int, deviceId: Int, pressed: Boolean) {
+        val input = _inputUnderAssignment.value ?: return
+        if (!_assigningCombo.value || key <= 0) return
+        if (pressed) {
+            if (comboDevice != null && comboDevice != deviceId) return
+            comboDevice = deviceId
+            _comboConflict.value = null
+            comboKeys.add(key)
+            if (comboKeys.size != 2) return
+            val conflict = _inputConfig.value.firstOrNull { config ->
+                config.input != input && listOf(config.assignment, config.altAssignment).any {
+                    it is InputConfig.Assignment.Chord && setOf(it.modifierKeyCode, it.triggerKeyCode) == comboKeys
+                }
+            }
+            if (conflict != null) {
+                _comboConflict.value = conflict.input
+                return
+            }
+            val modifier = comboKeys.first()
+            val main = comboKeys.last()
+            setInputAssignment(input, InputConfig.Assignment.Chord(null, modifier, main))
+            focusOnNextInput(input)
+        } else if (comboDevice == deviceId) {
+            comboKeys.remove(key)
+            if (comboKeys.isEmpty()) comboDevice = null
+        }
+    }
+
     fun updateInputAssignedAxis(axis: Int, direction: InputConfig.Assignment.Axis.Direction) {
+        if (_assigningCombo.value) return
         val inputUnderAssignment = _inputUnderAssignment.value ?: return
         val inputType = InputConfig.Assignment.Axis(null, axis, direction)
         setInputAssignment(inputUnderAssignment, inputType)
@@ -114,7 +161,7 @@ class InputSetupViewModel @Inject constructor(
 
     fun clearInputAssignment(input: Input) {
         setInputAssignment(input, InputConfig.Assignment.None)
-        _inputUnderAssignment.value = null
+        stopInputAssignment()
     }
 
     fun updateSlot2AxisAssignment(axisCode: Int, deviceId: Int) {
@@ -191,7 +238,7 @@ class InputSetupViewModel @Inject constructor(
                 }
             }
         }
-        _inputUnderAssignment.value = null
+        stopInputAssignment()
     }
 
     private fun onConfigsChanged(newConfig: List<InputConfig>) {
@@ -242,7 +289,7 @@ class InputSetupViewModel @Inject constructor(
                 onConfigsChanged(it)
             }
         }
-        _inputUnderAssignment.value = null
+        stopInputAssignment()
     }
 
     fun clearAllAssignments() {
@@ -253,6 +300,6 @@ class InputSetupViewModel @Inject constructor(
                 onConfigsChanged(it)
             }
         }
-        _inputUnderAssignment.value = null
+        stopInputAssignment()
     }
 }

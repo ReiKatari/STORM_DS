@@ -2,6 +2,7 @@ package me.magnum.melonds.impl.romprocessors
 
 import android.content.Context
 import me.magnum.melonds.common.romprocessors.NdsRomFileProcessor
+import me.magnum.melonds.common.romprocessors.NdzRomFileProcessor
 import me.magnum.melonds.common.romprocessors.RarRomFileProcessor
 import me.magnum.melonds.common.romprocessors.RomFileProcessor
 import me.magnum.melonds.common.romprocessors.SevenZRomFileProcessor
@@ -24,7 +25,7 @@ class Api24RomFileProcessorFactory(context: Context, uriHandler: UriHandler, nds
             "zip" to zipRomFileProcessor,
             "7z" to SevenZRomFileProcessor(context, uriHandler, ndsRomCache),
             "rar" to RarRomFileProcessor(context, uriHandler, ndsRomCache),
-            "ndz" to zipRomFileProcessor
+            "ndz" to NdzRomFileProcessor(context, uriHandler)
         )
     }
 

@@ -148,6 +148,10 @@ class RomListActivity : AppCompatActivity() {
             }
         })
 
+        if (savedInstanceState == null) {
+            handleShortcutLaunchIntent(intent)
+        }
+
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.hasSearchDirectories.collectLatest { hasDirectories ->
@@ -247,6 +251,10 @@ class RomListActivity : AppCompatActivity() {
                 }
                 KeyEvent.KEYCODE_BUTTON_R1, KeyEvent.KEYCODE_PAGE_DOWN -> {
                     viewModel.cycleFilter(forward = true)
+                    return true
+                }
+                KeyEvent.KEYCODE_BUTTON_SELECT -> {
+                    if (event.repeatCount == 0) openMultiplayer()
                     return true
                 }
             }
@@ -411,6 +419,49 @@ class RomListActivity : AppCompatActivity() {
     internal fun openSettings() {
         val intent = Intent(this, SettingsActivity::class.java)
         startActivity(intent)
+    }
+
+    internal fun openMultiplayer(join: String? = null) {
+        startActivity(
+            Intent(this, me.magnum.melonds.multiplayer.MultiplayerActivity::class.java)
+                .putExtra(me.magnum.melonds.multiplayer.MultiplayerActivity.EXTRA_JOIN, join)
+        )
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleShortcutLaunchIntent(intent)
+    }
+
+    private fun handleShortcutLaunchIntent(launchIntent: Intent?) {
+        if (launchIntent == null) return
+        if ((launchIntent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0) return
+        val action = launchIntent.action ?: return
+        if (action != "${packageName}.LAUNCH_ROM" && action != "${packageName}.LAUNCH_FIRMWARE") return
+        launchIntent.action = null
+        val launchArgs = me.magnum.melonds.ui.emulator.model.LaunchArgs.fromIntent(launchIntent) ?: return
+        when (launchArgs) {
+            is me.magnum.melonds.ui.emulator.model.LaunchArgs.Firmware -> launchFirmware(launchArgs.consoleType)
+            is me.magnum.melonds.ui.emulator.model.LaunchArgs.RomObject -> launchRom(launchArgs.rom)
+            is me.magnum.melonds.ui.emulator.model.LaunchArgs.RomUri -> launchRomUri(launchArgs.uri)
+            is me.magnum.melonds.ui.emulator.model.LaunchArgs.RomPath -> {
+                launchRomUri(android.net.Uri.fromFile(java.io.File(launchArgs.path)))
+            }
+        }
+    }
+
+    private fun launchRomUri(uri: android.net.Uri) {
+        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val rom = viewModel.getRomAtUri(uri)
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                if (rom != null) {
+                    launchRom(rom)
+                } else {
+                    Toast.makeText(this@RomListActivity, R.string.rom_launch_failed, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 
     internal fun openPlayerStats() {
