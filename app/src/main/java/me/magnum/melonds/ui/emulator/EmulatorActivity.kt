@@ -22,10 +22,12 @@ import android.text.InputType
 import android.util.TypedValue
 import android.view.Display
 import android.view.Gravity
+import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewTreeObserver
 import android.view.Window
 import android.view.WindowManager
 import android.widget.EditText
@@ -99,7 +101,9 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -143,7 +147,9 @@ import me.magnum.melonds.ui.emulator.component.EmulatorOverlayTracker
 import me.magnum.melonds.ui.emulator.component.RaPendingExitContext
 import me.magnum.melonds.ui.emulator.component.RaPendingModalState
 import me.magnum.melonds.ui.emulator.component.RaPendingSyncResult
+import me.magnum.melonds.domain.model.rom.config.RomGbaSlotConfig
 import me.magnum.melonds.ui.emulator.input.ConnectedControllerManager
+import me.magnum.melonds.ui.emulator.input.EmulatorMotionManager
 import me.magnum.melonds.ui.emulator.input.EmulatorRumbleManager
 import me.magnum.melonds.ui.emulator.input.FrontendInputHandler
 import me.magnum.melonds.ui.emulator.input.INativeInputListener
@@ -276,6 +282,14 @@ class EmulatorActivity : AppCompatActivity() {
     @Inject
     lateinit var boxArtRepository: me.magnum.melonds.ui.romlist.boxart.BoxArtRepository
 
+    @Inject
+    lateinit var layoutsRepository: me.magnum.melonds.domain.repositories.LayoutsRepository
+
+    private var joystickDispatchView: View? = null
+    private val joystickFocusListener = ViewTreeObserver.OnGlobalFocusChangeListener { _, _ ->
+        updateJoystickUnbufferedDispatch()
+    }
+    private var applyButtonClusterJob: kotlinx.coroutines.Job? = null
     private var presentation: ExternalPresentation? = null
     private var lastKnownGoodTopRect: Rect? = null
     private var lastKnownGoodBottomRect: Rect? = null
@@ -743,6 +757,7 @@ class EmulatorActivity : AppCompatActivity() {
         onOverlaysCleared = {
             disableScreenTimeOut()
             presentation?.setPauseOverlayVisibility(false)
+            updateJoystickUnbufferedDispatch()
             if (::choreographerFrameRenderer.isInitialized &&
                 !isClosingEmulator &&
                 lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
@@ -753,6 +768,7 @@ class EmulatorActivity : AppCompatActivity() {
         onOverlaysPresent = {
             enableScreenTimeOut()
             presentation?.setPauseOverlayVisibility(true)
+            updateJoystickUnbufferedDispatch()
             if (::nativeInputListener.isInitialized) {
                 (nativeInputListener as? InputProcessor)?.resetHeldInputs()
             }
@@ -814,6 +830,18 @@ class EmulatorActivity : AppCompatActivity() {
             }
         })
         emulatorRumbleManager = EmulatorRumbleManager(this, lifecycleScope, connectedControllerManager)
+        lifecycleScope.launch {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                viewModel.emulatorState.map { state ->
+                    val slot = (state as? EmulatorState.RunningRom)?.rom?.config?.gbaSlotConfig
+                    slot == RomGbaSlotConfig.MotionPakHomebrew || slot == RomGbaSlotConfig.MotionPakRetail
+                }.distinctUntilChanged().collectLatest { usesMotionPak ->
+                    if (usesMotionPak) {
+                        EmulatorMotionManager(this@EmulatorActivity).track(connectedControllerManager)
+                    }
+                }
+            }
+        }
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
@@ -1870,6 +1898,7 @@ class EmulatorActivity : AppCompatActivity() {
         lifecycleScope.launch {
             lifecycle.repeatOnLifecycle(Lifecycle.State.CREATED) {
                 viewModel.emulatorState.collectLatest {
+                    updateJoystickUnbufferedDispatch()
                     if (it is EmulatorState.ValidatingFirmware || it is EmulatorState.ValidatingRom ||
                         it is EmulatorState.LoadingFirmware || it is EmulatorState.LoadingRom) {
                         if (romLoadingTimeoutJob == null || romLoadingTimeoutJob?.isActive != true) {
@@ -2511,6 +2540,10 @@ class EmulatorActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            window.decorView.viewTreeObserver.addOnGlobalFocusChangeListener(joystickFocusListener)
+            updateJoystickUnbufferedDispatch(resumed = true)
+        }
         if (isTranslatorManagerInitialized) {
             translatorManager.onHostResume()
         }
@@ -2600,7 +2633,19 @@ class EmulatorActivity : AppCompatActivity() {
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
+        updateJoystickUnbufferedDispatch()
         setupFullscreen()
+    }
+
+    private fun updateJoystickUnbufferedDispatch(resumed: Boolean = lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        val target = if (resumed && hasWindowFocus() && MelonEmulator.isLowLatencyEnabled &&
+            viewModel.emulatorState.value.isRunning() && !activeOverlays.hasActiveOverlays()
+        ) currentFocus ?: window.decorView else null
+        if (joystickDispatchView === target) return
+        joystickDispatchView?.requestUnbufferedDispatch(InputDevice.SOURCE_CLASS_NONE)
+        target?.requestUnbufferedDispatch(InputDevice.SOURCE_CLASS_JOYSTICK)
+        joystickDispatchView = target
     }
 
     private fun setupFullscreen() {
@@ -2922,6 +2967,16 @@ class EmulatorActivity : AppCompatActivity() {
                 instantiateLayout(layoutConfiguration, LayoutTarget.MAIN_SCREEN)
                 setLayoutComponentToggleState(LayoutComponent.BUTTON_FAST_FORWARD_TOGGLE, frontendInputHandler.fastForwardEnabled)
                 setLayoutComponentToggleState(LayoutComponent.BUTTON_MICROPHONE_TOGGLE, frontendInputHandler.microphoneEnabled)
+            }
+            applyButtonClusterJob?.cancel()
+            applyButtonClusterJob = lifecycleScope.launch {
+                val activeConfig = runCatching { layoutsRepository.getLayout(viewModel.getActiveLayoutId()) }.getOrNull()
+                val spread = activeConfig?.buttonSpread ?: 1.0f
+                val innerScale = activeConfig?.buttonInnerScale ?: 1.0f
+                (binding.viewLayoutControls.getLayoutComponentView(LayoutComponent.BUTTONS)?.view as? me.magnum.melonds.ui.common.views.ModernButtonsView)?.let { buttonsView ->
+                    buttonsView.buttonSpread = spread
+                    buttonsView.buttonInnerScale = innerScale
+                }
             }
             instantiatedLayoutIsLandscape = when (layoutConfiguration.layoutOrientation) {
                 me.magnum.melonds.domain.model.layout.LayoutConfiguration.LayoutOrientation.PORTRAIT -> false
@@ -6575,6 +6630,10 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
 
     override fun onPause() {
         super.onPause()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            window.decorView.viewTreeObserver.removeOnGlobalFocusChangeListener(joystickFocusListener)
+            updateJoystickUnbufferedDispatch(resumed = false)
+        }
         if (isTranslatorManagerInitialized) {
             translatorManager.onHostPause()
         }

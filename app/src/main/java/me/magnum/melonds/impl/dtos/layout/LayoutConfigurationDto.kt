@@ -20,6 +20,10 @@ data class LayoutConfigurationDto(
     val opacity: Int,
     @SerializedName("layoutVariants")
     val layoutVariants: List<LayoutEntryDto>,
+    @SerializedName("buttonSpread")
+    val buttonSpread: Float? = null,
+    @SerializedName("buttonInnerScale")
+    val buttonInnerScale: Float? = null,
 ) {
 
     companion object {
@@ -34,6 +38,8 @@ data class LayoutConfigurationDto(
                 layoutConfiguration.layoutVariants.map {
                     LayoutEntryDto(UILayoutVariantDto.fromModel(it.key), UILayoutDto.fromModel(it.value))
                 },
+                layoutConfiguration.buttonSpread,
+                layoutConfiguration.buttonInnerScale,
             )
         }
     }
@@ -49,6 +55,8 @@ data class LayoutConfigurationDto(
             layoutVariants.associate {
                 it.variant.toModel() to it.layout.toModel()
             },
+            (buttonSpread ?: 1.0f).coerceIn(0.6f, 1.6f),
+            (buttonInnerScale ?: 1.0f).coerceIn(0.6f, 1.4f),
         )
     }
 

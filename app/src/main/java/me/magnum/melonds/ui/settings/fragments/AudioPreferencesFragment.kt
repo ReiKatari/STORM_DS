@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitleProvider {
 
     private var micSourcePreference: ListPreference? = null
+    private var micGainPreference: SeekBarPreference? = null
     private var audioLatencyPreference: ListPreference? = null
     private var agcNoiseGatePreference: SwitchPreference? = null
     private var micNoiseGateThresholdPreference: SeekBarPreference? = null
@@ -46,6 +47,7 @@ class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         setPreferencesFromResource(R.xml.pref_audio, rootKey)
         val volumePreference = findPreference<SeekBarPreference>("volume")
         micSourcePreference = findPreference("mic_source")
+        micGainPreference = findPreference("mic_gain")
         audioLatencyPreference = findPreference("audio_latency")
         agcNoiseGatePreference = findPreference("mic_agc_noise_gate_enabled")
         micNoiseGateThresholdPreference = findPreference("mic_noise_gate_threshold")
@@ -121,6 +123,15 @@ class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             }
         }
 
+        micGainPreference?.let { gainPref ->
+            updateMicGainSummary(gainPref, gainPref.value)
+            gainPref.setOnPreferenceChangeListener { _, newValue ->
+                val gain = (newValue as? Int)?.coerceIn(1, 10) ?: 1
+                updateMicGainSummary(gainPref, gain)
+                true
+            }
+        }
+
         findPreference<Preference>("audio_dsp_preset")?.setOnPreferenceClickListener {
             showAudioDspPresetDialog()
             true
@@ -147,6 +158,7 @@ class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
     override fun onResume() {
         super.onResume()
         micSourcePreference?.let { updateMicSourceSummary(it, it.value) }
+        micGainPreference?.let { updateMicGainSummary(it, it.value) }
         audioLatencyPreference?.let { updateAudioLatencySummary(it, it.value) }
         agcNoiseGatePreference?.let { MelonEmulator.setMicrophoneAgcEnabled(it.isChecked) }
         micNoiseGateThresholdPreference?.let {
@@ -369,6 +381,10 @@ class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         }
 
         val isDeviceMic = micVal.equals("device", ignoreCase = true)
+        micGainPreference?.let { pref ->
+            pref.isVisible = isDeviceMic
+            pref.isEnabled = isDeviceMic
+        }
         agcNoiseGatePreference?.let { pref ->
             pref.isVisible = isDeviceMic
             pref.isEnabled = isDeviceMic
@@ -397,6 +413,11 @@ class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             else -> null
         }
         pref.summary = if (approx != null) "$entry ($approx)" else entry
+    }
+
+    private fun updateMicGainSummary(pref: SeekBarPreference, value: Int) {
+        val gain = value.coerceIn(1, 10)
+        pref.summary = "${gain}x - ${getString(R.string.device_microphone_gain_summary)}"
     }
 
     private fun updateMicSourceSummary(pref: ListPreference, value: String?) {

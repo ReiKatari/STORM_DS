@@ -151,9 +151,23 @@ class OnlineVulkanDriverRepository @Inject constructor(
                 useTagName = true,
                 sortByPublishTime = true,
             ),
+            VulkanDriverRepoSpec(
+                id = "malisx2",
+                displayName = "malisx2 (Arm Mali PanVK)",
+                repoPath = "bmdhacks/malisx2",
+                category = DriverRepoCategory.ALL,
+                useTagName = true,
+                sortByPublishTime = true,
+            ),
         )
 
-        fun getRecommendedDriverDisplayTitle(subFamily: AdrenoVulkanDriverSupport.AdrenoSubFamily): String? {
+        fun getRecommendedDriverDisplayTitle(
+            subFamily: AdrenoVulkanDriverSupport.AdrenoSubFamily,
+            malisx2Supported: Boolean = false,
+        ): String? {
+            if (subFamily == AdrenoVulkanDriverSupport.AdrenoSubFamily.NON_ADRENO && malisx2Supported) {
+                return "malisx2 (Arm Mali PanVK)"
+            }
             return when (subFamily) {
                 AdrenoVulkanDriverSupport.AdrenoSubFamily.ADRENO_840_PLUS -> "STORM DRIVER 12.0.0 / GameHub 8xx"
                 AdrenoVulkanDriverSupport.AdrenoSubFamily.ADRENO_8XX_ELITE -> "STORM DRIVER 12.0.0 / GameHub 8xx"
@@ -173,7 +187,11 @@ class OnlineVulkanDriverRepository @Inject constructor(
         fun isRepoSupportedOnDevice(
             repoId: String,
             subFamily: AdrenoVulkanDriverSupport.AdrenoSubFamily,
+            malisx2Supported: Boolean = false,
         ): Boolean {
+            if (repoId == "malisx2") {
+                return malisx2Supported && subFamily == AdrenoVulkanDriverSupport.AdrenoSubFamily.NON_ADRENO
+            }
             return when (subFamily) {
                 AdrenoVulkanDriverSupport.AdrenoSubFamily.NON_ADRENO,
                 AdrenoVulkanDriverSupport.AdrenoSubFamily.ADRENO_LEGACY_OR_UNKNOWN,
@@ -199,26 +217,32 @@ class OnlineVulkanDriverRepository @Inject constructor(
             tagName: String,
             assetName: String,
             subFamily: AdrenoVulkanDriverSupport.AdrenoSubFamily,
+            malisx2Supported: Boolean = false,
         ): Boolean {
-            if (!isRepoSupportedOnDevice(repoId, subFamily)) {
+            if (!isRepoSupportedOnDevice(repoId, subFamily, malisx2Supported)) {
                 return false
+            }
+            if (repoId == "malisx2") {
+                val lowerAsset = assetName.lowercase(Locale.ROOT)
+                return lowerAsset.startsWith("malisx2-") &&
+                    lowerAsset.endsWith(".zip") &&
+                    !lowerAsset.endsWith(".sha256.zip")
             }
             if (repoId == "storm_driver") {
                 return true
             }
             val titleAndAsset = "$releaseTitle $tagName $assetName".lowercase(Locale.ROOT)
-            val fullText = "$titleAndAsset $releaseNotes".lowercase(Locale.ROOT)
 
-            val hasUnifiedTag = fullText.contains("a6xx") ||
-                fullText.contains("a7xx") ||
-                fullText.contains("6xx") ||
-                fullText.contains("7xx") ||
-                fullText.contains("unified") ||
-                fullText.contains("all adreno")
+            val hasUnifiedTag = titleAndAsset.contains("a6xx") ||
+                titleAndAsset.contains("a7xx") ||
+                titleAndAsset.contains("6xx") ||
+                titleAndAsset.contains("7xx") ||
+                titleAndAsset.contains("unified") ||
+                titleAndAsset.contains("all adreno")
 
             val has710OnlyTag = ADRENO_710_TOKEN_REGEX.containsMatchIn(titleAndAsset) &&
-                !fullText.contains("a7xx") &&
-                !fullText.contains("6xx")
+                !titleAndAsset.contains("a7xx") &&
+                !titleAndAsset.contains("6xx")
 
             return when (subFamily) {
                 AdrenoVulkanDriverSupport.AdrenoSubFamily.NON_ADRENO,
@@ -230,19 +254,18 @@ class OnlineVulkanDriverRepository @Inject constructor(
                     if (repoId == "crueter_8elite") {
                         return !titleAndAsset.contains("a7xx") && !titleAndAsset.contains("a6xx")
                     }
-                    fullText.contains("840") ||
-                        fullText.contains("8850") ||
-                        fullText.contains("gen 5") ||
-                        fullText.contains("gen5") ||
-                        fullText.contains("a840") ||
-                        fullText.contains("gamehub") ||
-                        fullText.contains("aurora") ||
-                        fullText.contains("adreno 8") ||
-                        fullText.contains("adreno8") ||
-                        fullText.contains("8 elite") ||
-                        fullText.contains("a8xx") ||
-                        fullText.contains("849.") ||
-                        fullText.contains("842.")
+                    titleAndAsset.contains("840") ||
+                        titleAndAsset.contains("8850") ||
+                        titleAndAsset.contains("gen 5") ||
+                        titleAndAsset.contains("gen5") ||
+                        titleAndAsset.contains("a840") ||
+                        titleAndAsset.contains("gamehub") ||
+                        titleAndAsset.contains("adreno 8") ||
+                        titleAndAsset.contains("adreno8") ||
+                        titleAndAsset.contains("8 elite") ||
+                        titleAndAsset.contains("a8xx") ||
+                        titleAndAsset.contains("849.") ||
+                        titleAndAsset.contains("842.")
                 }
 
                 AdrenoVulkanDriverSupport.AdrenoSubFamily.ADRENO_8XX_ELITE -> {
@@ -250,14 +273,13 @@ class OnlineVulkanDriverRepository @Inject constructor(
                     if (repoId == "crueter_8elite") {
                         return !titleAndAsset.contains("a7xx") && !titleAndAsset.contains("a6xx")
                     }
-                    ADRENO_8XX_TOKEN_REGEX.containsMatchIn(fullText) ||
-                        fullText.contains("adreno 8") ||
-                        fullText.contains("adreno8") ||
-                        fullText.contains("8 elite") ||
-                        fullText.contains("gamehub") ||
-                        fullText.contains("aurora") ||
-                        fullText.contains("842.8") ||
-                        fullText.contains("849.")
+                    ADRENO_8XX_TOKEN_REGEX.containsMatchIn(titleAndAsset) ||
+                        titleAndAsset.contains("adreno 8") ||
+                        titleAndAsset.contains("adreno8") ||
+                        titleAndAsset.contains("8 elite") ||
+                        titleAndAsset.contains("gamehub") ||
+                        titleAndAsset.contains("842.8") ||
+                        titleAndAsset.contains("849.")
                 }
 
                 AdrenoVulkanDriverSupport.AdrenoSubFamily.ADRENO_710_720 -> {
@@ -288,14 +310,15 @@ class OnlineVulkanDriverRepository @Inject constructor(
         fun filterCompatibleGroups(
             groups: List<VulkanDriverRepoGroup>,
             subFamily: AdrenoVulkanDriverSupport.AdrenoSubFamily,
+            malisx2Supported: Boolean = false,
         ): List<VulkanDriverRepoGroup> {
-            val recommendedIds = getRecommendedRepoIdsFor(subFamily)
+            val recommendedIds = getRecommendedRepoIdsFor(subFamily, malisx2Supported)
             val compatible = groups.mapNotNull { group ->
-                if (!isRepoSupportedOnDevice(group.spec.id, subFamily)) {
+                if (!isRepoSupportedOnDevice(group.spec.id, subFamily, malisx2Supported)) {
                     return@mapNotNull null
                 }
                 if (group.releases.isEmpty()) {
-                    return@mapNotNull group
+                    return@mapNotNull if (group.isLoading) group else null
                 }
                 val filteredReleases = group.releases.mapNotNull { release ->
                     val compatAssets = release.assets.filter { asset ->
@@ -306,11 +329,12 @@ class OnlineVulkanDriverRepository @Inject constructor(
                             tagName = release.tagName,
                             assetName = asset.name,
                             subFamily = subFamily,
+                            malisx2Supported = malisx2Supported,
                         )
                     }
                     if (compatAssets.isEmpty()) null else release.copy(assets = compatAssets)
                 }
-                if (filteredReleases.isEmpty() && !group.isLoading && group.error == null) {
+                if (filteredReleases.isEmpty() && !group.isLoading) {
                     null
                 } else {
                     group.copy(releases = filteredReleases)
@@ -336,7 +360,13 @@ class OnlineVulkanDriverRepository @Inject constructor(
             }
         }
 
-        fun getRecommendedRepoIdsFor(subFamily: AdrenoVulkanDriverSupport.AdrenoSubFamily): List<String> {
+        fun getRecommendedRepoIdsFor(
+            subFamily: AdrenoVulkanDriverSupport.AdrenoSubFamily,
+            malisx2Supported: Boolean = false,
+        ): List<String> {
+            if (subFamily == AdrenoVulkanDriverSupport.AdrenoSubFamily.NON_ADRENO && malisx2Supported) {
+                return listOf("malisx2")
+            }
             return when (subFamily) {
                 AdrenoVulkanDriverSupport.AdrenoSubFamily.ADRENO_840_PLUS ->
                     listOf("storm_driver", "crueter_8elite", "balemuni")
@@ -363,9 +393,10 @@ class OnlineVulkanDriverRepository @Inject constructor(
 
     fun getCachedRepositoryGroups(
         subFamily: AdrenoVulkanDriverSupport.AdrenoSubFamily = AdrenoVulkanDriverSupport.getSubFamily(),
+        malisx2Supported: Boolean = AdrenoVulkanDriverSupport.isMalisx2Supported(),
     ): List<VulkanDriverRepoGroup> {
         val raw = ALL_REPOSITORIES
-            .filter { isRepoSupportedOnDevice(it.id, subFamily) }
+            .filter { isRepoSupportedOnDevice(it.id, subFamily, malisx2Supported) }
             .map { spec ->
                 val file = cacheJsonFile(spec.id)
                 if (file.isFile && file.length() >= 2L) {
@@ -387,14 +418,15 @@ class OnlineVulkanDriverRepository @Inject constructor(
                     fromCache = false,
                 )
             }
-        return filterCompatibleGroups(raw, subFamily)
+        return filterCompatibleGroups(raw, subFamily, malisx2Supported)
     }
 
     suspend fun fetchAllRepositories(
         forceRefresh: Boolean = false,
         subFamily: AdrenoVulkanDriverSupport.AdrenoSubFamily = AdrenoVulkanDriverSupport.getSubFamily(),
+        malisx2Supported: Boolean = AdrenoVulkanDriverSupport.isMalisx2Supported(),
     ): List<VulkanDriverRepoGroup> = withContext(Dispatchers.IO) {
-        val supportedSpecs = ALL_REPOSITORIES.filter { isRepoSupportedOnDevice(it.id, subFamily) }
+        val supportedSpecs = ALL_REPOSITORIES.filter { isRepoSupportedOnDevice(it.id, subFamily, malisx2Supported) }
         if (supportedSpecs.isEmpty()) {
             return@withContext emptyList()
         }
@@ -408,7 +440,7 @@ class OnlineVulkanDriverRepository @Inject constructor(
                 }
             }.awaitAll()
         }
-        filterCompatibleGroups(raw, subFamily)
+        filterCompatibleGroups(raw, subFamily, malisx2Supported)
     }
 
     suspend fun fetchSingleRepository(
@@ -501,8 +533,11 @@ class OnlineVulkanDriverRepository @Inject constructor(
         }
     }
 
-    fun getRecommendedRepoIds(subFamily: AdrenoVulkanDriverSupport.AdrenoSubFamily): List<String> {
-        return getRecommendedRepoIdsFor(subFamily)
+    fun getRecommendedRepoIds(
+        subFamily: AdrenoVulkanDriverSupport.AdrenoSubFamily,
+        malisx2Supported: Boolean = AdrenoVulkanDriverSupport.isMalisx2Supported(),
+    ): List<String> {
+        return getRecommendedRepoIdsFor(subFamily, malisx2Supported)
     }
 
     private fun parseReleasesJson(
@@ -538,7 +573,7 @@ class OnlineVulkanDriverRepository @Inject constructor(
                 val downloadUrl = assetObj.optString("browser_download_url").trim()
                 val sizeBytes = assetObj.optLong("size", 0L)
                 if (assetName.isEmpty() || downloadUrl.isEmpty()) continue
-                if (!isSupportedDriverArchiveName(assetName)) continue
+                if (!isSupportedDriverArchiveName(assetName, spec.id)) continue
 
                 val extraMirrors = if (spec.id == "storm_driver" && assetName.equals("STORM_DRIVER_12.0.0.zip", ignoreCase = true)) {
                     STORM_DRIVER_MIRRORS
@@ -579,8 +614,14 @@ class OnlineVulkanDriverRepository @Inject constructor(
         }
     }
 
-    private fun isSupportedDriverArchiveName(name: String): Boolean {
+    private fun isSupportedDriverArchiveName(name: String, repoId: String? = null): Boolean {
         val lower = name.lowercase(Locale.ROOT)
+        if (repoId == "malisx2") {
+            return lower.startsWith("malisx2-") &&
+                lower.endsWith(".zip") &&
+                !lower.endsWith(".sha256.zip") &&
+                !lower.contains("source")
+        }
         if (!lower.endsWith(".zip") && !lower.endsWith(".adpkg.zip") && !lower.endsWith(".adpkg")) {
             return false
         }

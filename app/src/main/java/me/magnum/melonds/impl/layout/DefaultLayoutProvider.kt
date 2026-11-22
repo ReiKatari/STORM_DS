@@ -5,6 +5,7 @@ import android.os.Build
 import android.view.WindowInsets
 import android.view.WindowManager
 import androidx.core.content.getSystemService
+import androidx.preference.PreferenceManager
 import me.magnum.melonds.domain.model.Rect
 import me.magnum.melonds.domain.model.SCREEN_HEIGHT
 import me.magnum.melonds.domain.model.SCREEN_WIDTH
@@ -129,19 +130,32 @@ class DefaultLayoutProvider(
         val smallButtonsSize = screenUnitsConverter.dpToPixels(40f).toInt()
         val spacing4dp = screenUnitsConverter.dpToPixels(4f).toInt()
 
-        var screenWidth = safeWidth
-        var screenHeight = (safeWidth / consoleAspectRatio).toInt()
+        val skinEnabled = singleScreenComponent == null &&
+            PreferenceManager.getDefaultSharedPreferences(context).getBoolean("video_console_skin_enabled", false)
+        val skinTopInset = if (skinEnabled) screenUnitsConverter.dpToPixels(28f).roundToInt() else 0
+        val skinSideInset = if (skinEnabled) screenUnitsConverter.dpToPixels(6f).roundToInt() else 0
+        val skinHingeGap = if (skinEnabled) screenUnitsConverter.dpToPixels(24f).roundToInt() else 0
+
+        val screenSafeLeft = maxOf(safeLeft, skinSideInset)
+        val screenSafeTop = maxOf(safeTop, skinTopInset)
+        val screenSafeRight = maxOf(safeRight, skinSideInset)
+        val screenSafeWidth = (width - screenSafeLeft - screenSafeRight).coerceAtLeast(100)
+        val screenSafeHeight = (height - screenSafeTop - safeBottom).coerceAtLeast(100)
+
+        var screenWidth = if (skinEnabled) screenSafeWidth else safeWidth
+        var screenHeight = (screenWidth / consoleAspectRatio).toInt()
 
         val screenComponents = if (singleScreenComponent == null) {
             var screenMargin = 0
-            if (screenHeight * 2 > safeHeight) {
-                screenWidth = (safeHeight / 2 * consoleAspectRatio).toInt()
-                screenHeight = safeHeight / 2
-                screenMargin = (safeWidth - screenWidth) / 2
+            val maxCombinedHeight = if (skinEnabled) (screenSafeHeight - skinHingeGap).coerceAtLeast(100) else safeHeight
+            if (screenHeight * 2 > maxCombinedHeight) {
+                screenHeight = maxCombinedHeight / 2
+                screenWidth = (screenHeight * consoleAspectRatio).toInt().coerceAtMost(if (skinEnabled) screenSafeWidth else safeWidth)
+                screenMargin = ((if (skinEnabled) screenSafeWidth else safeWidth) - screenWidth) / 2
             }
 
-            val topScreenView = Rect(safeLeft + screenMargin, safeTop, screenWidth, screenHeight)
-            val bottomScreenView = Rect(safeLeft + screenMargin, safeTop + screenHeight, screenWidth, screenHeight)
+            val topScreenView = Rect(screenSafeLeft + screenMargin, screenSafeTop, screenWidth, screenHeight)
+            val bottomScreenView = Rect(screenSafeLeft + screenMargin, screenSafeTop + screenHeight + skinHingeGap, screenWidth, screenHeight)
 
             arrayOf(
                 PositionedLayoutComponent(topScreenView, LayoutComponent.TOP_SCREEN),
@@ -153,10 +167,10 @@ class DefaultLayoutProvider(
             arrayOf(PositionedLayoutComponent(screenArea, singleScreenComponent))
         }
 
-        val screensBottom = if (singleScreenComponent == null) safeTop + screenHeight * 2 else safeTop + screenHeight
+        val screensBottom = if (singleScreenComponent == null) screenSafeTop + screenHeight * 2 + skinHingeGap else safeTop + screenHeight
         // Check if there's space to put all the buttons below the screens. If not, place L, R, and utility buttons aligned with the top of the bottom screen
         val utilityButtonsTop = if (screensBottom + lrButtonsSize + largeButtonsSize > height) {
-            safeTop + screenHeight
+            screenSafeTop + screenHeight + skinHingeGap
         } else {
             screensBottom
         }

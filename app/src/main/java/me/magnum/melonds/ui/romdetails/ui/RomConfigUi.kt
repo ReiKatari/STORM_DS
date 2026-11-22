@@ -797,15 +797,22 @@ private fun Content(
         if (showGbaSlot) {
         ConfigSection(title = stringResource(R.string.label_rom_config_gba_slot)) {
             val isGbaRom = romConfig.gbaSlotConfig.type == RomGbaSlotConfigUiModel.Type.GbaRom
+            fun gbaSlotLabel(type: RomGbaSlotConfigUiModel.Type): String {
+                return gbaSlotOptions.getOrNull(type.ordinal) ?: when (type) {
+                    RomGbaSlotConfigUiModel.Type.MotionPakHomebrew -> "Motion Pak (Homebrew)"
+                    RomGbaSlotConfigUiModel.Type.MotionPakRetail -> "Motion Pak (Retail)"
+                    else -> type.name
+                }
+            }
             ConfigRow(
                 title = stringResource(R.string.label_rom_config_gba_slot),
-                value = gbaSlotOptions[romConfig.gbaSlotConfig.type.ordinal],
+                value = gbaSlotLabel(romConfig.gbaSlotConfig.type),
                 showDivider = false,
                 onClick = {
                     gbaSlotDialogState.show(
                         title = context.getString(R.string.label_rom_config_gba_slot),
                         items = RomGbaSlotConfigUiModel.Type.entries.toList(),
-                        labelOf = { gbaSlotOptions[it.ordinal] },
+                        labelOf = { gbaSlotLabel(it) },
                         selected = romConfig.gbaSlotConfig.type,
                         onSelect = { onConfigUpdate(RomConfigUpdateEvent.GbaSlotTypeUpdated(it)) },
                     )

@@ -59,7 +59,11 @@ class VulkanDriverManagerViewModel @Inject constructor(
             AdrenoVulkanDriverSupport.AdrenoSubFamily.NON_ADRENO,
         val gpuVendorFamily: AdrenoVulkanDriverSupport.GpuVendorFamily =
             AdrenoVulkanDriverSupport.GpuVendorFamily.OTHER,
+        val maliArchFamily: AdrenoVulkanDriverSupport.MaliArchFamily =
+            AdrenoVulkanDriverSupport.MaliArchFamily.NON_MALI,
         val isAdrenoTurnipCapable: Boolean = false,
+        val isMalisx2Supported: Boolean = false,
+        val hasMaliKbaseKernel: Boolean = false,
         val hasPanfrostKernel: Boolean = false,
         val driverMode: VulkanDriverMode = VulkanDriverMode.SYSTEM,
         val selectedDriverId: String? = null,
@@ -97,9 +101,14 @@ class VulkanDriverManagerViewModel @Inject constructor(
             val snapshot = withContext(Dispatchers.IO) {
                 readLocalHardwareAndDriverSnapshot()
             }
-            val cachedRepos = if (snapshot.supportStatus == AdrenoVulkanDriverSupport.SupportStatus.SUPPORTED) {
+            val cachedRepos = if (snapshot.supportStatus == AdrenoVulkanDriverSupport.SupportStatus.SUPPORTED &&
+                (snapshot.isAdrenoTurnipCapable || snapshot.isMalisx2Supported)
+            ) {
                 withContext(Dispatchers.IO) {
-                    onlineDriverRepository.getCachedRepositoryGroups(snapshot.gpuSubFamily)
+                    onlineDriverRepository.getCachedRepositoryGroups(
+                        subFamily = snapshot.gpuSubFamily,
+                        malisx2Supported = snapshot.isMalisx2Supported,
+                    )
                 }
             } else {
                 emptyList()
@@ -114,21 +123,27 @@ class VulkanDriverManagerViewModel @Inject constructor(
                     gpuSeries = snapshot.gpuSeries,
                     gpuSubFamily = snapshot.gpuSubFamily,
                     gpuVendorFamily = snapshot.gpuVendorFamily,
+                    maliArchFamily = snapshot.maliArchFamily,
                     isAdrenoTurnipCapable = snapshot.isAdrenoTurnipCapable,
+                    isMalisx2Supported = snapshot.isMalisx2Supported,
+                    hasMaliKbaseKernel = snapshot.hasMaliKbaseKernel,
                     hasPanfrostKernel = snapshot.hasPanfrostKernel,
                     driverMode = snapshot.driverMode,
                     selectedDriverId = snapshot.selectedDriverId,
                     installedDrivers = snapshot.installedDrivers,
                     installedDriverSizes = snapshot.installedDriverSizes,
                     compatibleInstalledDrivers = snapshot.compatibleInstalledDrivers,
-                    recommendedRepoIds = onlineDriverRepository.getRecommendedRepoIds(snapshot.gpuSubFamily),
+                    recommendedRepoIds = onlineDriverRepository.getRecommendedRepoIds(
+                        subFamily = snapshot.gpuSubFamily,
+                        malisx2Supported = snapshot.isMalisx2Supported,
+                    ),
                     availableCategories = availCategories,
                     selectedCategory = if (current.selectedCategory in availCategories) current.selectedCategory else DriverRepoCategory.ALL,
                     repoGroups = cachedRepos,
                 )
             }
             if (snapshot.supportStatus == AdrenoVulkanDriverSupport.SupportStatus.SUPPORTED &&
-                snapshot.isAdrenoTurnipCapable
+                (snapshot.isAdrenoTurnipCapable || snapshot.isMalisx2Supported)
             ) {
                 refreshRepositories(forceRefresh = false)
             }
@@ -142,7 +157,10 @@ class VulkanDriverManagerViewModel @Inject constructor(
         val gpuSeries: AdrenoVulkanDriverSupport.GpuSeries,
         val gpuSubFamily: AdrenoVulkanDriverSupport.AdrenoSubFamily,
         val gpuVendorFamily: AdrenoVulkanDriverSupport.GpuVendorFamily,
+        val maliArchFamily: AdrenoVulkanDriverSupport.MaliArchFamily,
         val isAdrenoTurnipCapable: Boolean,
+        val isMalisx2Supported: Boolean,
+        val hasMaliKbaseKernel: Boolean,
         val hasPanfrostKernel: Boolean,
         val driverMode: VulkanDriverMode,
         val selectedDriverId: String?,
@@ -158,6 +176,12 @@ class VulkanDriverManagerViewModel @Inject constructor(
         val series = AdrenoVulkanDriverSupport.getGpuSeries()
         val subFamily = AdrenoVulkanDriverSupport.getSubFamily()
         val vendorFamily = AdrenoVulkanDriverSupport.getGpuVendorFamily()
+        val maliArch = AdrenoVulkanDriverSupport.getMaliArchFamily()
+        val maliKbase = AdrenoVulkanDriverSupport.hasMaliKbaseKernel()
+        val malisx2Supported = AdrenoVulkanDriverSupport.isMalisx2Supported(
+            maliArch = maliArch,
+            hasKbaseKernel = maliKbase,
+        )
         val turnipCapable = AdrenoVulkanDriverSupport.isAdrenoTurnipCapable(subFamily)
         val panfrostKernel = AdrenoVulkanDriverSupport.hasPanfrostOrPanthorKernel()
         val gpuDesc = AdrenoVulkanDriverSupport.getDeviceGpuDescription()
@@ -183,6 +207,8 @@ class VulkanDriverManagerViewModel @Inject constructor(
                 sourceRepo = driver.sourceRepo ?: driver.assetFileName,
                 subFamily = subFamily,
                 vendorFamily = vendorFamily,
+                maliArch = maliArch,
+                malisx2Supported = malisx2Supported,
             )
         }
         return LocalSnapshot(
@@ -192,7 +218,10 @@ class VulkanDriverManagerViewModel @Inject constructor(
             gpuSeries = series,
             gpuSubFamily = subFamily,
             gpuVendorFamily = vendorFamily,
+            maliArchFamily = maliArch,
             isAdrenoTurnipCapable = turnipCapable,
+            isMalisx2Supported = malisx2Supported,
+            hasMaliKbaseKernel = maliKbase,
             hasPanfrostKernel = panfrostKernel,
             driverMode = effectiveMode,
             selectedDriverId = selectedId,
@@ -216,14 +245,20 @@ class VulkanDriverManagerViewModel @Inject constructor(
                     gpuSeries = snapshot.gpuSeries,
                     gpuSubFamily = snapshot.gpuSubFamily,
                     gpuVendorFamily = snapshot.gpuVendorFamily,
+                    maliArchFamily = snapshot.maliArchFamily,
                     isAdrenoTurnipCapable = snapshot.isAdrenoTurnipCapable,
+                    isMalisx2Supported = snapshot.isMalisx2Supported,
+                    hasMaliKbaseKernel = snapshot.hasMaliKbaseKernel,
                     hasPanfrostKernel = snapshot.hasPanfrostKernel,
                     driverMode = snapshot.driverMode,
                     selectedDriverId = snapshot.selectedDriverId,
                     installedDrivers = snapshot.installedDrivers,
                     installedDriverSizes = snapshot.installedDriverSizes,
                     compatibleInstalledDrivers = snapshot.compatibleInstalledDrivers,
-                    recommendedRepoIds = onlineDriverRepository.getRecommendedRepoIds(snapshot.gpuSubFamily),
+                    recommendedRepoIds = onlineDriverRepository.getRecommendedRepoIds(
+                        subFamily = snapshot.gpuSubFamily,
+                        malisx2Supported = snapshot.isMalisx2Supported,
+                    ),
                 )
             }
         }
@@ -232,7 +267,7 @@ class VulkanDriverManagerViewModel @Inject constructor(
     fun refreshRepositories(forceRefresh: Boolean = true) {
         val currentState = _uiState.value
         if (!currentState.isSupported) return
-        if (!currentState.isAdrenoTurnipCapable) {
+        if (!currentState.isAdrenoTurnipCapable && !currentState.isMalisx2Supported) {
             _uiState.update {
                 it.copy(
                     repoGroups = emptyList(),
@@ -251,6 +286,7 @@ class VulkanDriverManagerViewModel @Inject constructor(
             val fetched = onlineDriverRepository.fetchAllRepositories(
                 forceRefresh = forceRefresh,
                 subFamily = _uiState.value.gpuSubFamily,
+                malisx2Supported = _uiState.value.isMalisx2Supported,
             )
             val availCategories = OnlineVulkanDriverRepository.getAvailableCategories(fetched)
             _uiState.update { state ->
@@ -463,6 +499,8 @@ class VulkanDriverManagerViewModel @Inject constructor(
                         sourceRepo = installedInfo?.sourceRepo ?: installedInfo?.assetFileName,
                         subFamily = currentSnap.gpuSubFamily,
                         vendorFamily = currentSnap.gpuVendorFamily,
+                        maliArch = currentSnap.maliArchFamily,
+                        malisx2Supported = currentSnap.isMalisx2Supported,
                     )
                     val message = if (!isCompatible) {
                         ctx.getString(

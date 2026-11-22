@@ -16,6 +16,8 @@ class OnlineVulkanDriverFilteringTest {
         displayName: String,
         category: DriverRepoCategory,
         releases: List<VulkanDriverRelease>,
+        isLoading: Boolean = false,
+        error: String? = null,
     ): VulkanDriverRepoGroup {
         return VulkanDriverRepoGroup(
             spec = VulkanDriverRepoSpec(
@@ -27,8 +29,9 @@ class OnlineVulkanDriverFilteringTest {
                 sortByPublishTime = true,
             ),
             releases = releases,
-            isLoading = false,
+            isLoading = isLoading,
             fromCache = false,
+            error = error,
         )
     }
 
@@ -223,5 +226,111 @@ class OnlineVulkanDriverFilteringTest {
             Regex("""android:key="system_app_log_file_enabled"[\s\S]{0,400}?android:defaultValue="true"""")
                 .containsMatchIn(content)
         )
+    }
+
+    @Test
+    fun malisx2RepositoryIsConfiguredAndFilteredStrictlyToSupportedMali() {
+        val malisx2Spec = OnlineVulkanDriverRepository.ALL_REPOSITORIES.firstOrNull { it.id == "malisx2" }
+        assertNotNull(malisx2Spec)
+        assertEquals("bmdhacks/malisx2", malisx2Spec!!.repoPath)
+
+        // Supported Mali v7-v12 (API >= 29, 64-bit, /dev/mali0) enables ONLY malisx2
+        assertTrue(OnlineVulkanDriverRepository.isRepoSupportedOnDevice("malisx2", AdrenoSubFamily.NON_ADRENO, malisx2Supported = true))
+        assertFalse(OnlineVulkanDriverRepository.isRepoSupportedOnDevice("storm_driver", AdrenoSubFamily.NON_ADRENO, malisx2Supported = true))
+        assertFalse(OnlineVulkanDriverRepository.isRepoSupportedOnDevice("kimchi", AdrenoSubFamily.NON_ADRENO, malisx2Supported = true))
+        assertEquals(
+            listOf("malisx2"),
+            OnlineVulkanDriverRepository.getRecommendedRepoIdsFor(AdrenoSubFamily.NON_ADRENO, malisx2Supported = true),
+        )
+        assertEquals(
+            "malisx2 (Arm Mali PanVK)",
+            OnlineVulkanDriverRepository.getRecommendedDriverDisplayTitle(AdrenoSubFamily.NON_ADRENO, malisx2Supported = true),
+        )
+
+        // Unsupported Mali / non-Mali / Adreno exclude malisx2
+        assertFalse(OnlineVulkanDriverRepository.isRepoSupportedOnDevice("malisx2", AdrenoSubFamily.NON_ADRENO, malisx2Supported = false))
+        listOf(
+            AdrenoSubFamily.ADRENO_6XX,
+            AdrenoSubFamily.ADRENO_710_720,
+            AdrenoSubFamily.ADRENO_7XX_MODERN,
+            AdrenoSubFamily.ADRENO_8XX_ELITE,
+            AdrenoSubFamily.ADRENO_840_PLUS,
+        ).forEach { adrenoFamily ->
+            assertFalse(OnlineVulkanDriverRepository.isRepoSupportedOnDevice("malisx2", adrenoFamily, malisx2Supported = true))
+        }
+
+        // Asset filtering accepts only malisx2-*.zip and ignores .tar.gz / .sha256 / non-malisx2 archives
+        assertTrue(
+            OnlineVulkanDriverRepository.isAssetSupportedOnDevice(
+                repoId = "malisx2",
+                releaseTitle = "malisx2 v1.0",
+                releaseNotes = "",
+                tagName = "v1.0",
+                assetName = "malisx2-v1.0-arm64.zip",
+                subFamily = AdrenoSubFamily.NON_ADRENO,
+                malisx2Supported = true,
+            )
+        )
+        listOf(
+            "malisx2-v1.0-arm64.tar.gz",
+            "malisx2-v1.0-arm64.zip.sha256",
+            "malisx2-v1.0-arm64.sha256.zip",
+            "Source code (zip)",
+            "other-driver.zip",
+        ).forEach { rejectedAsset ->
+            assertFalse(
+                "Asset $rejectedAsset must be rejected for malisx2",
+                OnlineVulkanDriverRepository.isAssetSupportedOnDevice(
+                    repoId = "malisx2",
+                    releaseTitle = "malisx2 v1.0",
+                    releaseNotes = "",
+                    tagName = "v1.0",
+                    assetName = rejectedAsset,
+                    subFamily = AdrenoSubFamily.NON_ADRENO,
+                    malisx2Supported = true,
+                )
+            )
+        }
+    }
+
+    @Test
+    fun audit42Rejects8xxFalsePositivesFromReleaseNotesOrAuroraAndDropsEmptyGroups() {
+        // Release notes saying "no Adreno 840 support" or generic "aurora" must NOT match 8xx/840+
+        assertFalse(
+            OnlineVulkanDriverRepository.isAssetSupportedOnDevice(
+                repoId = "balemuni",
+                releaseTitle = "Balemuni Aurora Turnip",
+                releaseNotes = "This build has no Adreno 840 support and no 8 Elite support.",
+                tagName = "v25.0",
+                assetName = "turnip_a6xx_a7xx.zip",
+                subFamily = AdrenoSubFamily.ADRENO_840_PLUS,
+            )
+        )
+        assertFalse(
+            OnlineVulkanDriverRepository.isAssetSupportedOnDevice(
+                repoId = "balemuni",
+                releaseTitle = "Balemuni Aurora Turnip",
+                releaseNotes = "Mentioning Adreno 830 / 840 in changelog: not supported yet.",
+                tagName = "v25.0",
+                assetName = "turnip_a6xx_a7xx.zip",
+                subFamily = AdrenoSubFamily.ADRENO_8XX_ELITE,
+            )
+        )
+
+        // Empty non-loading groups (including error groups with 0 releases) are filtered out, loading groups remain
+        val groups = listOf(
+            buildSampleGroup("kimchi", "KIMCHI", DriverRepoCategory.TURNIP, emptyList(), isLoading = false, error = "HTTP 403"),
+            buildSampleGroup("mrpurple", "Mr. Purple", DriverRepoCategory.TURNIP, emptyList(), isLoading = false, error = null),
+            buildSampleGroup("weabchan", "Weab-Chan", DriverRepoCategory.TURNIP, emptyList(), isLoading = true, error = null),
+            buildSampleGroup(
+                "storm_driver",
+                "STORM DRIVER",
+                DriverRepoCategory.STORM,
+                listOf(releaseWithAsset("storm_driver", "STORM DRIVER 12.0.0", "12.0.0", "STORM_DRIVER_12.0.0.zip")),
+                isLoading = false,
+            ),
+        )
+        val filtered = OnlineVulkanDriverRepository.filterCompatibleGroups(groups, AdrenoSubFamily.ADRENO_7XX_MODERN)
+        assertEquals(listOf("storm_driver", "weabchan"), filtered.map { it.spec.id })
     }
 }

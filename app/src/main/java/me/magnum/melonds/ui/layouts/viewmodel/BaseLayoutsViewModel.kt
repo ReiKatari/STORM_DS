@@ -94,6 +94,11 @@ abstract class BaseLayoutsViewModel(protected val layoutsRepository: LayoutsRepo
                 val currentLayouts = layoutsRepository.getLayouts().firstOrNull() ?: emptyList()
                 val existingMatch = currentLayouts.firstOrNull { existing ->
                     existing.type == LayoutConfiguration.LayoutType.CUSTOM &&
+                    existing.orientation == model.orientation &&
+                    existing.useCustomOpacity == model.useCustomOpacity &&
+                    existing.opacity == model.opacity &&
+                    existing.buttonSpread == model.buttonSpread &&
+                    existing.buttonInnerScale == model.buttonInnerScale &&
                     existing.layoutVariants == model.layoutVariants
                 }
 

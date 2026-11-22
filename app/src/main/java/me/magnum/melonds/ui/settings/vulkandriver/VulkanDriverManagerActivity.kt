@@ -1,17 +1,12 @@
 package me.magnum.melonds.ui.settings.vulkandriver
 
-import android.graphics.Color
 import android.os.Bundle
-import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import dagger.hilt.android.AndroidEntryPoint
 import me.magnum.melonds.ui.theme.AppThemeManager
 import me.magnum.melonds.ui.theme.MelonTheme
-
-import me.magnum.melonds.extensions.applyImmersiveFullscreen
 
 @AndroidEntryPoint
 class VulkanDriverManagerActivity : AppCompatActivity() {

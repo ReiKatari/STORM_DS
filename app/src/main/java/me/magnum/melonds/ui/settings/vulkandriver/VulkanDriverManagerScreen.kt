@@ -489,7 +489,11 @@ private fun GpuTelemetryHeader(state: VulkanDriverManagerViewModel.UiState) {
                 )
                 TelemetryPill(
                     label = "${stringResource(R.string.vulkan_driver_recommended_badge)}: ${
-                        if (state.isAdrenoTurnipCapable) "STORM DRIVER" else stringResource(R.string.vulkan_driver_system_title)
+                        when {
+                            state.isAdrenoTurnipCapable -> "STORM DRIVER"
+                            state.isMalisx2Supported -> "malisx2 (PanVK)"
+                            else -> stringResource(R.string.vulkan_driver_system_title)
+                        }
                     }",
                     bg = WatermelonColors.gold.copy(alpha = 0.18f),
                     fg = WatermelonColors.gold,
@@ -731,6 +735,10 @@ private fun InstalledDriversTab(
                     onClick = onInstallStorm,
                 )
             }
+        } else if (state.isMalisx2Supported) {
+            item {
+                Malisx2CompatibilityCard(state = state)
+            }
         } else {
             item {
                 NonAdrenoCompatibilityCard(state = state)
@@ -739,7 +747,7 @@ private fun InstalledDriversTab(
 
         item {
             val isSystemActive = state.driverMode == VulkanDriverMode.SYSTEM
-            val isSystemRecommended = !state.isAdrenoTurnipCapable
+            val isSystemRecommended = !state.isAdrenoTurnipCapable && !state.isMalisx2Supported
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -878,16 +886,67 @@ private fun InstalledDriversTab(
 }
 
 @Composable
+private fun Malisx2CompatibilityCard(
+    state: VulkanDriverManagerViewModel.UiState,
+) {
+    val colors = watermelon
+    val gpuLabel = state.gpuDescription.ifBlank { state.maliArchFamily.displayName }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        backgroundColor = colors.surface,
+        border = BorderStroke(1.dp, colors.green.copy(alpha = 0.75f)),
+        elevation = 3.dp,
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.Star, contentDescription = null, tint = WatermelonColors.gold, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = stringResource(
+                        R.string.vulkan_driver_mali_supported_title,
+                        state.maliArchFamily.displayName,
+                    ),
+                    color = colors.text,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                )
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = stringResource(
+                    R.string.vulkan_driver_mali_supported_desc,
+                    gpuLabel,
+                    android.os.Build.VERSION.SDK_INT,
+                ),
+                color = colors.text2,
+                fontSize = 12.sp,
+                lineHeight = 17.sp,
+            )
+        }
+    }
+}
+
+@Composable
 private fun NonAdrenoCompatibilityCard(
     state: VulkanDriverManagerViewModel.UiState,
     showEmptyReposNotice: Boolean = false,
 ) {
     val colors = watermelon
+    val gpuLabel = state.gpuDescription.ifBlank { state.gpuVendorFamily.displayName }
     val baseDescription = when (state.gpuVendorFamily) {
-        AdrenoVulkanDriverSupport.GpuVendorFamily.ARM_MALI ->
-            stringResource(R.string.vulkan_driver_non_adreno_mali_desc)
+        AdrenoVulkanDriverSupport.GpuVendorFamily.ARM_MALI -> when {
+            state.maliArchFamily == AdrenoVulkanDriverSupport.MaliArchFamily.UNSUPPORTED_MIDGARD_OR_V6 ->
+                stringResource(R.string.vulkan_driver_mali_midgard_v6_desc, gpuLabel)
+            state.maliArchFamily == AdrenoVulkanDriverSupport.MaliArchFamily.UNSUPPORTED_V13_PLUS ->
+                stringResource(R.string.vulkan_driver_mali_v13_plus_desc, gpuLabel)
+            state.maliArchFamily.isSupportedByMalisx2() ->
+                stringResource(R.string.vulkan_driver_mali_api_or_kernel_desc, gpuLabel)
+            else ->
+                stringResource(R.string.vulkan_driver_non_adreno_mali_desc)
+        }
         else ->
-            stringResource(R.string.vulkan_driver_non_adreno_other_desc, state.gpuDescription.ifBlank { state.gpuVendorFamily.displayName })
+            stringResource(R.string.vulkan_driver_non_adreno_other_desc, gpuLabel)
     }
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1237,7 +1296,7 @@ private fun RepositoriesHubTab(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             if (filteredGroups.isEmpty() && !state.isSyncingRepos) {
-                if (!state.isAdrenoTurnipCapable) {
+                if (!state.isAdrenoTurnipCapable && !state.isMalisx2Supported) {
                     item {
                         NonAdrenoCompatibilityCard(
                             state = state,
@@ -1340,7 +1399,7 @@ private fun RecommendedForGpuTab(
         contentPadding = PaddingValues(14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        if (!state.isAdrenoTurnipCapable) {
+        if (!state.isAdrenoTurnipCapable && !state.isMalisx2Supported) {
             item {
                 val isSystemActive = state.driverMode == VulkanDriverMode.SYSTEM
                 Card(
@@ -1408,6 +1467,70 @@ private fun RecommendedForGpuTab(
                     showEmptyReposNotice = true,
                 )
             }
+            item {
+                OutlinedButton(
+                    enabled = state.activeDownloadKey == null && !state.isImportingLocal,
+                    onClick = onImportClick,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, colors.line),
+                ) {
+                    Icon(Icons.Filled.FileOpen, contentDescription = null, tint = colors.green, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = stringResource(R.string.vulkan_driver_import_zip),
+                        color = colors.text,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+        } else if (state.isMalisx2Supported) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    backgroundColor = colors.surface,
+                    border = BorderStroke(1.dp, colors.green),
+                    elevation = 4.dp,
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Filled.Star, contentDescription = null, tint = WatermelonColors.gold)
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            text = stringResource(
+                                R.string.vulkan_driver_mali_panvk_advice,
+                                state.gpuDescription.ifBlank { state.maliArchFamily.displayName },
+                            ),
+                            color = colors.text,
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp,
+                        )
+                    }
+                }
+            }
+
+            items(recommendedGroups, key = { "rec_${it.spec.id}" }) { group ->
+                RepoGroupCard(
+                    group = group,
+                    isRecommended = true,
+                    expanded = true,
+                    onToggleExpand = {},
+                    installedDrivers = state.installedDrivers,
+                    activeDriverId = if (state.driverMode == VulkanDriverMode.CUSTOM) state.selectedDriverId else null,
+                    activeDownloadKey = state.activeDownloadKey,
+                    searchQuery = "",
+                    maxReleasesShown = 3,
+                    onSelectInstalledDriver = onSelectInstalledDriver,
+                    onInstallAsset = { release, asset ->
+                        onInstallAsset(group.spec, release, asset)
+                    },
+                )
+            }
+
             item {
                 OutlinedButton(
                     enabled = state.activeDownloadKey == null && !state.isImportingLocal,

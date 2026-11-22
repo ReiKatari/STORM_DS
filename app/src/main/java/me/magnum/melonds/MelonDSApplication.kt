@@ -399,6 +399,7 @@ class MelonDSApplication : Application(), Configuration.Provider {
 
     override fun attachBaseContext(base: Context) {
         super.attachBaseContext(base)
+        runCatching { me.magnum.melonds.impl.FreedrenoSettings.applyAtStartup(base) }
         NativeCoreLoader.load()
     }
 

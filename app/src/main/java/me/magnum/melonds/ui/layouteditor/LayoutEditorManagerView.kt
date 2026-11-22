@@ -122,6 +122,7 @@ class LayoutEditorManagerView(
 
     private var previewSkinEnabled by mutableStateOf(false)
     private var previewSkinTheme by mutableStateOf(me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.AURORA_AUTO_THEME)
+    private var previewHingeGapPx by mutableStateOf(0)
     private var previewHasCustomBackground by mutableStateOf(false)
     private var previewTopRect by mutableStateOf<me.magnum.melonds.domain.model.Rect?>(null)
     private var previewBottomRect by mutableStateOf<me.magnum.melonds.domain.model.Rect?>(null)
@@ -277,12 +278,7 @@ class LayoutEditorManagerView(
         addView(composeView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
 
         if (layoutTarget == LayoutTarget.MAIN_SCREEN) {
-            val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
-            previewSkinEnabled = prefs.getBoolean("video_console_skin_enabled", false)
-            previewSkinTheme = me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.fromKey(
-                prefs.getString("video_console_skin_type", "aurora_auto_theme")
-            )
-            updateConsoleSkinPreviewVisibility()
+            reloadVisualPreviewSettings()
             binding.layoutConsoleSkinPreview.setContent {
                 if (previewSkinEnabled && !previewHasCustomBackground) {
                     val (surfW, surfH) = previewSurfaceSize
@@ -299,25 +295,7 @@ class LayoutEditorManagerView(
                 }
             }
             binding.viewLayoutEditor.setOnLayoutChangedListener { components, w, h ->
-                previewSurfaceSize = w to h
-                previewTopRect = components.firstOrNull { it.component == LayoutComponent.TOP_SCREEN }
-                    ?.rect
-                    ?.takeIf { it.width > 0 && it.height > 0 }
-                previewBottomRect = components.firstOrNull { it.component == LayoutComponent.BOTTOM_SCREEN }
-                    ?.rect
-                    ?.takeIf { it.width > 0 && it.height > 0 }
-                val hybridRect = components.firstOrNull { it.component == LayoutComponent.HYBRID_SCREEN }
-                    ?.rect
-                    ?.takeIf { it.width > 0 && it.height > 0 }
-                if (hybridRect != null) {
-                    val topH = (hybridRect.height / 2).coerceAtLeast(1)
-                    val bottomH = (hybridRect.height - topH).coerceAtLeast(1)
-                    previewHybridTopRect = hybridRect.copy(height = topH)
-                    previewHybridBottomRect = hybridRect.copy(y = hybridRect.y + topH, height = bottomH)
-                } else {
-                    previewHybridTopRect = null
-                    previewHybridBottomRect = null
-                }
+                updatePreviewScreenRects(components, w, h)
             }
         }
 
@@ -393,11 +371,12 @@ class LayoutEditorManagerView(
         }
         binding.seekBarSpread.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
-                binding.textSpread.text = "$progress%"
+                val percent = progress + 60
+                binding.textSpread.text = "$percent%"
                 if (fromUser) {
                     val comp = binding.viewLayoutEditor.getSelectedComponent()
                     if (comp == LayoutComponent.BUTTONS) {
-                        val spread = progress / 100f
+                        val spread = percent / 100f
                         binding.viewLayoutEditor.applyButtonClusterAppearance(
                             spread = spread,
                             innerScale = binding.viewLayoutEditor.currentButtonInnerScale,
@@ -415,11 +394,12 @@ class LayoutEditorManagerView(
         })
         binding.seekBarButtonScale.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
-                binding.textButtonScale.text = "$progress%"
+                val percent = progress + 60
+                binding.textButtonScale.text = "$percent%"
                 if (fromUser) {
                     val comp = binding.viewLayoutEditor.getSelectedComponent()
                     if (comp == LayoutComponent.BUTTONS) {
-                        val scale = progress / 100f
+                        val scale = percent / 100f
                         binding.viewLayoutEditor.applyButtonClusterAppearance(
                             spread = binding.viewLayoutEditor.currentButtonSpread,
                             innerScale = scale,
@@ -901,6 +881,76 @@ class LayoutEditorManagerView(
         )
     }
 
+    fun reloadVisualPreviewSettings() {
+        if (layoutTarget != LayoutTarget.MAIN_SCREEN) return
+        val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
+        previewSkinEnabled = prefs.getBoolean("video_console_skin_enabled", false)
+        previewSkinTheme = me.magnum.melonds.ui.emulator.skin.ConsoleSkinTheme.fromKey(
+            prefs.getString("video_console_skin_type", "aurora_auto_theme")
+        )
+        previewHingeGapPx = prefs.getString("video_ds_hinge_gap", "0")?.toIntOrNull()?.coerceIn(0, 200) ?: 0
+        updateConsoleSkinPreviewVisibility()
+        val (surfW, surfH) = previewSurfaceSize
+        if (surfW > 0 && surfH > 0) {
+            updatePreviewScreenRects(binding.viewLayoutEditor.buildCurrentLayout(), surfW, surfH)
+        }
+    }
+
+    private fun updatePreviewScreenRects(
+        components: List<me.magnum.melonds.domain.model.layout.PositionedLayoutComponent>,
+        w: Int,
+        h: Int,
+    ) {
+        previewSurfaceSize = w to h
+        var topRect = components.firstOrNull { it.component == LayoutComponent.TOP_SCREEN }
+            ?.rect
+            ?.takeIf { it.width > 0 && it.height > 0 }
+        var bottomRect = components.firstOrNull { it.component == LayoutComponent.BOTTOM_SCREEN }
+            ?.rect
+            ?.takeIf { it.width > 0 && it.height > 0 }
+
+        if (previewHingeGapPx > 0 && topRect != null && bottomRect != null && kotlin.math.abs(topRect.x - bottomRect.x) < 40) {
+            val upperIsTop = topRect.y <= bottomRect.y
+            val upper = if (upperIsTop) topRect else bottomRect
+            val lower = if (upperIsTop) bottomRect else topRect
+            if (lower.y >= upper.bottom - 8) {
+                val halfGap = previewHingeGapPx / 2
+                val minTopY = if (previewSkinEnabled && !previewHasCustomBackground) {
+                    (28f * resources.displayMetrics.density).roundToInt()
+                } else {
+                    0
+                }
+                val shiftUp = minOf(halfGap, (upper.y - minTopY).coerceAtLeast(0))
+                val maxY = (h - lower.height).coerceAtLeast(0)
+                val shiftDown = minOf(previewHingeGapPx - shiftUp, (maxY - lower.y).coerceAtLeast(0))
+                val newUpper = me.magnum.melonds.domain.model.Rect(upper.x, upper.y - shiftUp, upper.width, upper.height)
+                val newLower = me.magnum.melonds.domain.model.Rect(lower.x, lower.y + shiftDown, lower.width, lower.height)
+                if (upperIsTop) {
+                    topRect = newUpper
+                    bottomRect = newLower
+                } else {
+                    bottomRect = newUpper
+                    topRect = newLower
+                }
+            }
+        }
+
+        previewTopRect = topRect
+        previewBottomRect = bottomRect
+        val hybridRect = components.firstOrNull { it.component == LayoutComponent.HYBRID_SCREEN }
+            ?.rect
+            ?.takeIf { it.width > 0 && it.height > 0 }
+        if (hybridRect != null) {
+            val topH = (hybridRect.height / 2).coerceAtLeast(1)
+            val bottomH = (hybridRect.height - topH).coerceAtLeast(1)
+            previewHybridTopRect = hybridRect.copy(height = topH)
+            previewHybridBottomRect = hybridRect.copy(y = hybridRect.y + topH, height = bottomH)
+        } else {
+            previewHybridTopRect = null
+            previewHybridBottomRect = null
+        }
+    }
+
     private fun updateConsoleSkinPreviewVisibility() {
         binding.layoutConsoleSkinPreview.isVisible =
             layoutTarget == LayoutTarget.MAIN_SCREEN && previewSkinEnabled && !previewHasCustomBackground
@@ -1176,20 +1226,20 @@ class LayoutEditorManagerView(
         try {
             if (isScreen) {
                 binding.seekBarWidth.apply {
-                    max = maxWidth - minSize
-                    progress = (widthScale * (maxWidth - minSize)).roundToInt().coerceIn(0, max)
+                    max = (maxWidth - minSize).coerceAtLeast(1)
+                    progress = (widthScale * max).roundToInt().coerceIn(0, max)
                 }
-                binding.textWidth.text = ((maxWidth - minSize) * widthScale + minSize).roundToInt().toString()
+                binding.textWidth.text = (binding.seekBarWidth.max * widthScale + minSize).roundToInt().toString()
 
                 binding.seekBarHeight.apply {
-                    max = maxHeight - minSize
-                    progress = (heightScale * (maxHeight - minSize)).roundToInt().coerceIn(0, max)
+                    max = (maxHeight - minSize).coerceAtLeast(1)
+                    progress = (heightScale * max).roundToInt().coerceIn(0, max)
                 }
-                binding.textHeight.text = ((maxHeight - minSize) * heightScale + minSize).roundToInt().toString()
+                binding.textHeight.text = (binding.seekBarHeight.max * heightScale + minSize).roundToInt().toString()
             } else {
                 val maxDelta = (min(maxWidth, maxHeight) - minSize).coerceAtLeast(1)
-                val currentWidth = ((maxWidth - minSize) * widthScale + minSize).roundToInt()
-                val currentHeight = ((maxHeight - minSize) * heightScale + minSize).roundToInt()
+                val currentWidth = ((maxWidth - minSize).coerceAtLeast(1) * widthScale + minSize).roundToInt()
+                val currentHeight = ((maxHeight - minSize).coerceAtLeast(1) * heightScale + minSize).roundToInt()
                 val currentSize = min(currentWidth, currentHeight).coerceIn(minSize, minSize + maxDelta)
                 binding.seekBarSize.apply {
                     max = maxDelta
@@ -1198,14 +1248,14 @@ class LayoutEditorManagerView(
                 binding.textSize.text = currentSize.toString()
 
                 binding.seekBarWidth.apply {
-                    max = maxWidth - minSize
-                    progress = (widthScale * (maxWidth - minSize)).roundToInt().coerceIn(0, max)
+                    max = (maxWidth - minSize).coerceAtLeast(1)
+                    progress = (widthScale * max).roundToInt().coerceIn(0, max)
                 }
                 binding.textWidth.text = currentWidth.toString()
 
                 binding.seekBarHeight.apply {
-                    max = maxHeight - minSize
-                    progress = (heightScale * (maxHeight - minSize)).roundToInt().coerceIn(0, max)
+                    max = (maxHeight - minSize).coerceAtLeast(1)
+                    progress = (heightScale * max).roundToInt().coerceIn(0, max)
                 }
                 binding.textHeight.text = currentHeight.toString()
             }
@@ -1218,13 +1268,13 @@ class LayoutEditorManagerView(
             if (isButtonsCluster) {
                 val view = binding.viewLayoutEditor.getLayoutComponentView(LayoutComponent.BUTTONS)?.view
                 val currentSpread = (view as? me.magnum.melonds.ui.common.views.ModernButtonsView)?.buttonSpread ?: 1.0f
-                val spreadInt = (currentSpread * 100).toInt().coerceIn(60, 160)
-                binding.seekBarSpread.progress = spreadInt
+                val spreadInt = (currentSpread * 100).roundToInt().coerceIn(60, 160)
+                binding.seekBarSpread.progress = spreadInt - 60
                 binding.textSpread.text = "$spreadInt%"
 
                 val currentScale = (view as? me.magnum.melonds.ui.common.views.ModernButtonsView)?.buttonInnerScale ?: 1.0f
-                val scaleInt = (currentScale * 100).toInt().coerceIn(60, 140)
-                binding.seekBarButtonScale.progress = scaleInt
+                val scaleInt = (currentScale * 100).roundToInt().coerceIn(60, 140)
+                binding.seekBarButtonScale.progress = scaleInt - 60
                 binding.textButtonScale.text = "$scaleInt%"
             }
 

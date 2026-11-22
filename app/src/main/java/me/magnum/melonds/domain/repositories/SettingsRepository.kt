@@ -130,6 +130,7 @@ interface SettingsRepository {
     fun getAudioLatency(): AudioLatency
     fun getMicSource(): MicSource
     fun observeMicSource(): Flow<MicSource>
+    fun getMicGain(): Int
 
     fun getRomSortingMode(): SortingMode
     fun getRomSortingOrder(): SortingOrder

@@ -170,7 +170,7 @@ fun LayoutsScreen(
         },
         onEditLayout = { layoutId ->
             val intent = Intent(context, LayoutEditorActivity::class.java)
-            intent.putExtra(LayoutEditorActivity.KEY_LAYOUT_ID, layoutId.toString())
+            intent.putExtra(LayoutEditorActivity.KEY_LAYOUT_ID, (layoutId ?: LayoutConfiguration.DEFAULT_ID).toString())
             layoutEditorLauncher.launch(intent)
         },
         onDeleteLayout = viewModel::deleteLayout,
@@ -188,7 +188,7 @@ private fun LayoutsScreenContent(
     onImportLayout: () -> Unit,
     onExportLayout: (LayoutConfiguration) -> Unit,
     onDuplicateLayout: (LayoutConfiguration) -> Unit,
-    onEditLayout: (UUID) -> Unit,
+    onEditLayout: (UUID?) -> Unit,
     onDeleteLayout: (LayoutConfiguration) -> Unit,
     onUndoDelete: (LayoutConfiguration) -> Unit,
     onBackClick: () -> Unit,
@@ -349,7 +349,7 @@ private fun LayoutsScreenContent(
                     layout = layout,
                     isSelected = layout.id == selectedLayoutId,
                     onLayoutSelected = { onLayoutSelected(layout.id) },
-                    onEditLayout = { layout.id?.let(onEditLayout) },
+                    onEditLayout = { onEditLayout(layout.id) },
                     onDuplicateLayout = { onDuplicateLayout(layout) },
                     onExportLayout = { onExportLayout(layout) },
                     onDeleteLayout = {
@@ -405,7 +405,7 @@ private fun LayoutItem(
             )
             .focusRequester(mainFocusRequester)
             .focusProperties {
-                end = if (isCustomLayout) optionsFocusRequester else FocusRequester.Default
+                end = optionsFocusRequester
             }
             .focusable(interactionSource = interactionSource)
             .bouncingClickable(interactionSource = interactionSource, onClick = onLayoutSelected)

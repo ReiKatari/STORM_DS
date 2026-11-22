@@ -53,11 +53,12 @@ class LayoutEditorViewModel @Inject constructor(
     private val editingLayoutId = savedStateHandle.get<String?>(LayoutEditorActivity.KEY_LAYOUT_ID)?.let { UUID.fromString(it) }
 
     private var initialLayoutConfiguration: LayoutConfiguration? = null
+    private var sourceDefaultPresetId: UUID? = null
     private var currentLayoutVariant: UILayoutVariant? = null
     private var layoutResetToken: Long = 0L
 
-    private val initialButtonSpread: Float = sharedPreferences.getFloat("pref_button_cluster_spread", 1.0f)
-    private val initialButtonInnerScale: Float = sharedPreferences.getFloat("pref_button_cluster_inner_scale", 1.0f)
+    private var initialButtonSpread: Float = 1.0f
+    private var initialButtonInnerScale: Float = 1.0f
 
     private val _pendingButtonSpread = MutableStateFlow(initialButtonSpread)
     val pendingButtonSpread = _pendingButtonSpread.asStateFlow()
@@ -105,8 +106,23 @@ class LayoutEditorViewModel @Inject constructor(
         val layoutId = editingLayoutId
         if (layoutId != null && layoutId != LayoutConfiguration.DEFAULT_ID) {
             viewModelScope.launch {
-                val initialLayout = layoutsRepository.getLayout(layoutId)?.let(::ensureEditableCustomLayout)
+                val loadedLayout = layoutsRepository.getLayout(layoutId)
+                val initialLayout = loadedLayout?.let { layout ->
+                    if (layout.type == LayoutConfiguration.LayoutType.DEFAULT) {
+                        sourceDefaultPresetId = layout.id
+                        layout.copy(
+                            name = context.getString(R.string.v870_layout_custom_copy_name),
+                            type = LayoutConfiguration.LayoutType.CUSTOM,
+                        )
+                    } else {
+                        layout
+                    }
+                }
                 initialLayoutConfiguration = initialLayout
+                initialButtonSpread = (initialLayout?.buttonSpread ?: 1.0f).coerceIn(0.6f, 1.6f)
+                initialButtonInnerScale = (initialLayout?.buttonInnerScale ?: 1.0f).coerceIn(0.6f, 1.4f)
+                _pendingButtonSpread.value = initialButtonSpread
+                _pendingButtonInnerScale.value = initialButtonInnerScale
                 layoutResetToken++
                 _hasUnsavedChanges.value = false
                 _currentLayoutConfiguration.value = initialLayout
@@ -114,12 +130,18 @@ class LayoutEditorViewModel @Inject constructor(
         } else {
             viewModelScope.launch {
                 val defaultLayout = layoutsRepository.getLayout(LayoutConfiguration.DEFAULT_ID)
+                if (defaultLayout != null) {
+                    sourceDefaultPresetId = defaultLayout.id
+                }
                 val newLayout = defaultLayout?.copy(
-                    id = null,
                     name = if (layoutId == LayoutConfiguration.DEFAULT_ID) context.getString(R.string.v870_layout_custom_copy_name) else context.getString(R.string.v870_layout_custom_name),
                     type = LayoutConfiguration.LayoutType.CUSTOM,
                 ) ?: LayoutConfiguration.newCustom().copy(name = context.getString(R.string.v870_layout_custom_name))
                 initialLayoutConfiguration = newLayout
+                initialButtonSpread = newLayout.buttonSpread.coerceIn(0.6f, 1.6f)
+                initialButtonInnerScale = newLayout.buttonInnerScale.coerceIn(0.6f, 1.4f)
+                _pendingButtonSpread.value = initialButtonSpread
+                _pendingButtonInnerScale.value = initialButtonInnerScale
                 layoutResetToken++
                 _hasUnsavedChanges.value = false
                 _currentLayoutConfiguration.value = newLayout
@@ -140,7 +162,25 @@ class LayoutEditorViewModel @Inject constructor(
                     val (variant, layout) = it
                     val currentLayoutConfig = _currentLayoutConfiguration.value ?: return@collect
                     currentLayoutVariant = variant
-                    _currentLayout.value = CurrentLayoutState(layout, currentLayoutConfig.orientation, variant.orientation, layoutResetToken)
+                    val presetIdToMaterialize = sourceDefaultPresetId
+                    if (presetIdToMaterialize != null && currentLayoutConfig.id == presetIdToMaterialize) {
+                        val materializedConfig = currentLayoutConfig.copy(
+                            id = null,
+                            layoutVariants = if (currentLayoutConfig.layoutVariants.containsKey(variant)) {
+                                currentLayoutConfig.layoutVariants
+                            } else {
+                                currentLayoutConfig.layoutVariants + (variant to layout)
+                            },
+                        )
+                        sourceDefaultPresetId = null
+                        if (initialLayoutConfiguration?.id == presetIdToMaterialize) {
+                            initialLayoutConfiguration = materializedConfig
+                        }
+                        _currentLayoutConfiguration.value = materializedConfig
+                        _currentLayout.value = CurrentLayoutState(layout, materializedConfig.orientation, variant.orientation, layoutResetToken)
+                    } else {
+                        _currentLayout.value = CurrentLayoutState(layout, currentLayoutConfig.orientation, variant.orientation, layoutResetToken)
+                    }
                 }
             }
         }
@@ -246,11 +286,27 @@ class LayoutEditorViewModel @Inject constructor(
     }
 
     private fun ensureEditableCustomLayout(layout: LayoutConfiguration): LayoutConfiguration {
-        return if (layout.type == LayoutConfiguration.LayoutType.DEFAULT || layout.id == LayoutConfiguration.DEFAULT_ID) {
+        val shouldDetachId = layout.type == LayoutConfiguration.LayoutType.DEFAULT ||
+            layout.id == LayoutConfiguration.DEFAULT_ID ||
+            (sourceDefaultPresetId != null && layout.id == sourceDefaultPresetId)
+        val materializedVariants = if (shouldDetachId && layout.layoutVariants.isEmpty()) {
+            val variant = currentLayoutVariant
+            val builtLayout = _currentLayout.value?.layout
+            if (variant != null && builtLayout != null) {
+                layout.layoutVariants + (variant to builtLayout)
+            } else {
+                layout.layoutVariants
+            }
+        } else {
+            layout.layoutVariants
+        }
+        return if (shouldDetachId) {
+            sourceDefaultPresetId = null
             layout.copy(
                 id = null,
-                name = context.getString(R.string.v870_layout_custom_copy_name),
+                name = layout.name?.takeIf { it.isNotBlank() } ?: context.getString(R.string.v870_layout_custom_copy_name),
                 type = LayoutConfiguration.LayoutType.CUSTOM,
+                layoutVariants = materializedVariants,
             )
         } else {
             layout
@@ -260,11 +316,10 @@ class LayoutEditorViewModel @Inject constructor(
     suspend fun saveCurrentLayout() {
         _currentLayoutConfiguration.value?.let {
             withContext(NonCancellable) {
-                sharedPreferences.edit {
-                    putFloat("pref_button_cluster_spread", _pendingButtonSpread.value)
-                    putFloat("pref_button_cluster_inner_scale", _pendingButtonInnerScale.value)
-                }
-                val editableLayout = ensureEditableCustomLayout(it)
+                val editableLayout = ensureEditableCustomLayout(it).copy(
+                    buttonSpread = _pendingButtonSpread.value,
+                    buttonInnerScale = _pendingButtonInnerScale.value,
+                )
                 _currentLayoutConfiguration.value = editableLayout
                 layoutsRepository.saveLayout(editableLayout)
                 _hasUnsavedChanges.value = false
@@ -275,14 +330,13 @@ class LayoutEditorViewModel @Inject constructor(
     suspend fun saveCurrentLayoutAsNew() {
         _currentLayoutConfiguration.value?.let { currentLayoutConfiguration ->
             withContext(NonCancellable) {
-                sharedPreferences.edit {
-                    putFloat("pref_button_cluster_spread", _pendingButtonSpread.value)
-                    putFloat("pref_button_cluster_inner_scale", _pendingButtonInnerScale.value)
-                }
+                val baseLayout = ensureEditableCustomLayout(currentLayoutConfiguration)
                 layoutsRepository.saveLayout(
-                    currentLayoutConfiguration.copy(
+                    baseLayout.copy(
                         id = null,
                         type = LayoutConfiguration.LayoutType.CUSTOM,
+                        buttonSpread = _pendingButtonSpread.value,
+                        buttonInnerScale = _pendingButtonInnerScale.value,
                     )
                 )
                 _hasUnsavedChanges.value = false

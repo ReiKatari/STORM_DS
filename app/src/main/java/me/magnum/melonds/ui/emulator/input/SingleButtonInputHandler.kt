@@ -36,9 +36,10 @@ class SingleButtonInputHandler(
                         }
                         longPressRunnable = runnable
                         handler.postDelayed(runnable, 500L)
+                    } else {
+                        inputListener.onKeyPress(input)
+                        performHapticFeedback(v, HapticFeedbackType.KEY_PRESS)
                     }
-                    inputListener.onKeyPress(input)
-                    performHapticFeedback(v, HapticFeedbackType.KEY_PRESS)
                     (v as? me.magnum.melonds.ui.common.views.IAnimatedInputView)?.updatePressedInputs(setOf(input))
                 }
             }
@@ -47,8 +48,16 @@ class SingleButtonInputHandler(
                 longPressRunnable = null
                 if (isPressed) {
                     isPressed = false
-                    inputListener.onKeyReleased(input)
-                    performHapticFeedback(v, HapticFeedbackType.KEY_RELEASE)
+                    if (onLongPress != null) {
+                        if (event.actionMasked == MotionEvent.ACTION_UP && !isLongPressed) {
+                            inputListener.onKeyPress(input)
+                            performHapticFeedback(v, HapticFeedbackType.KEY_PRESS)
+                            inputListener.onKeyReleased(input)
+                        }
+                    } else {
+                        inputListener.onKeyReleased(input)
+                        performHapticFeedback(v, HapticFeedbackType.KEY_RELEASE)
+                    }
                     (v as? me.magnum.melonds.ui.common.views.IAnimatedInputView)?.updatePressedInputs(emptySet())
                 }
             }

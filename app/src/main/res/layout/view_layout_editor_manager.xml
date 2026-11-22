@@ -243,9 +243,8 @@
                 app:layout_constraintTop_toTopOf="@id/layout_spread_labels"
                 app:layout_constraintBottom_toBottomOf="@id/layout_spread_labels"
                 android:padding="8dp"
-                android:min="60"
-                android:max="160"
-                android:progress="100"
+                android:max="100"
+                android:progress="40"
                 android:layout_gravity="center_vertical" />
 
             <LinearLayout
@@ -286,9 +285,8 @@
                 app:layout_constraintTop_toTopOf="@id/layout_button_scale_labels"
                 app:layout_constraintBottom_toBottomOf="@id/layout_button_scale_labels"
                 android:padding="8dp"
-                android:min="60"
-                android:max="140"
-                android:progress="100"
+                android:max="80"
+                android:progress="40"
                 android:layout_gravity="center_vertical" />
 
             <LinearLayout

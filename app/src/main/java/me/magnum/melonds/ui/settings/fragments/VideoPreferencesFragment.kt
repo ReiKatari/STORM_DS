@@ -96,6 +96,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         const val GLES_3_2 = 0x30002
         const val VULKAN_SYSTEM_DRIVER_VALUE = "system"
         const val SHADER_LOG_FILE_NAME = "librashader.log"
+        const val FREEDRENO_SETTINGS_KEY = "video_freedreno_settings"
         const val SHADER_SETTINGS_KEY = "video_retroarch_shader_settings"
         const val HEAVY_PRESET_BADGE_THRESHOLD_MS = 60_000L
     }
@@ -124,6 +125,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
     private lateinit var adrenoVulkanDriverManager: AdrenoVulkanDriverManager
     private var retroArchPresetScanJob: Job? = null
     private var shaderInstallObserverJob: Job? = null
+    private var handledTerminalShaderWorkId: java.util.UUID? = null
     private var shaderInstallProgressDialog: AlertDialog? = null
     private var shaderInstallProgressBar: ProgressBar? = null
     private var shaderInstallPhaseText: TextView? = null
@@ -135,6 +137,11 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.pref_video, rootKey)
+
+        if (rootKey == FREEDRENO_SETTINGS_KEY) {
+            setupFreedrenoSettingsSubScreen()
+            return
+        }
 
         if (rootKey == SHADER_SETTINGS_KEY) {
             setupShaderSettingsSubScreen()
@@ -312,9 +319,10 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             true
         }
 
-        val videoFilteringPreference = findPreference<InGameLockedListPreference>("video_filtering")!!
-        videoFilteringPreference.isInGameLocked = launchedInGame &&
+        val lockVideoFiltering = launchedInGame &&
             requireActivity().intent.getBooleanExtra(SettingsActivity.KEY_LOCK_VIDEO_FILTERING, false)
+        val videoFilteringPreference = findPreference<InGameLockedListPreference>("video_filtering")!!
+        videoFilteringPreference.isInGameLocked = lockVideoFiltering
         videoFilteringPreference.inGameLockedMessageRes = R.string.cannot_change_use_rom_settings
         val dsiCameraSourcePreference = findPreference<ListPreference>("dsi_camera_source")!!
         val dsiCameraImagePreference = findPreference<StoragePickerPreference>("dsi_camera_static_image")!!
@@ -468,13 +476,21 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             allFilteringValues = allFilteringValues,
             allFilteringEntries = allFilteringEntries,
         )
-        val aiUpscaleSwitch = findPreference<SwitchPreference>("video_ai_upscale_enabled")
+        val aiUpscaleSwitch = findPreference<InGameLockedSwitchPreference>("video_ai_upscale_enabled")
+        aiUpscaleSwitch?.apply {
+            isInGameLocked = lockVideoFiltering
+            inGameLockedMessageRes = R.string.cannot_change_use_rom_settings
+        }
         val isInitialAiUpscale = videoFilteringPreference.value.equals("ai_upscale", ignoreCase = true)
         if (aiUpscaleSwitch != null && aiUpscaleSwitch.isChecked != isInitialAiUpscale) {
             aiUpscaleSwitch.isChecked = isInitialAiUpscale
             preferenceManager.sharedPreferences?.edit()?.putBoolean("video_ai_upscale_enabled", isInitialAiUpscale)?.apply()
         }
         aiUpscaleSwitch?.setOnPreferenceChangeListener { _, newValue ->
+            if (lockVideoFiltering) {
+                Toast.makeText(requireContext(), R.string.cannot_change_use_rom_settings, Toast.LENGTH_SHORT).show()
+                return@setOnPreferenceChangeListener false
+            }
             val enabled = newValue as? Boolean ?: false
             if (enabled && !videoFilteringPreference.value.equals("ai_upscale", ignoreCase = true)) {
                 videoFilteringPreference.value = "ai_upscale"
@@ -725,9 +741,12 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             importPreference.isEnabled = false
             removePreference.isEnabled = false
             removePreference.isVisible = false
+            findPreference<Preference>(FREEDRENO_SETTINGS_KEY)?.isVisible = false
             return
         }
 
+        findPreference<Preference>(FREEDRENO_SETTINGS_KEY)?.isVisible =
+            me.magnum.melonds.impl.AdrenoVulkanDriverSupport.supportsFreedreno(requireContext())
         category.summary = null
         managerPreference?.isEnabled = true
         modePreference.isEnabled = true
@@ -742,6 +761,32 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
 
         updateVulkanManagerSummary(managerPreference)
         updateVulkanDriverPreferenceSummaries(modePreference, removePreference, managerPreference)
+    }
+
+    private fun setupFreedrenoSettingsSubScreen() {
+        preferenceScreen.isEnabled =
+            me.magnum.melonds.impl.AdrenoVulkanDriverSupport.supportsFreedreno(requireContext()) &&
+            !requireActivity().intent.getBooleanExtra(SettingsActivity.KEY_IN_GAME, false)
+        for (variable in me.magnum.melonds.impl.FreedrenoSettings.variables) {
+            findPreference<EditTextPreference>(
+                me.magnum.melonds.impl.FreedrenoSettings.preferenceKey(variable),
+            )?.apply {
+                summaryProvider = Preference.SummaryProvider<EditTextPreference> {
+                    it.text?.takeIf { value -> value.isNotBlank() } ?: getString(R.string.freedreno_default)
+                }
+                setOnBindEditTextListener { it.setSingleLine(true) }
+                setOnPreferenceChangeListener { _, value ->
+                    val nextValue = value as String
+                    if (!me.magnum.melonds.impl.FreedrenoSettings.isValid(nextValue)) {
+                        Toast.makeText(requireContext(), R.string.freedreno_invalid, Toast.LENGTH_LONG).show()
+                    } else if (nextValue.trim() != text.orEmpty().trim()) {
+                        FreedrenoRestartDialog.create(key, nextValue.trim())
+                            .show(childFragmentManager, "freedreno_restart")
+                    }
+                    false
+                }
+            }
+        }
     }
 
     private fun updateVulkanManagerSummary(managerPreference: Preference?) {
@@ -1786,6 +1831,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             persistShaderSource(RetroArchShaderSource.INTERNAL)
         }
         isShaderInstallBackgrounded = false
+        handledTerminalShaderWorkId = null
         val request = OneTimeWorkRequestBuilder<RetroArchShaderInstallWorker>()
             .setConstraints(
                 Constraints.Builder()
@@ -1822,27 +1868,39 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                         }
                         WorkInfo.State.SUCCEEDED -> {
                             dismissShaderInstallProgressDialog()
-                            if (::shaderPresetPreference.isInitialized) {
-                                updateRetroArchPresetEntries(shaderPresetPreference, resetSelection = false)
+                            if (handledTerminalShaderWorkId != info.id) {
+                                handledTerminalShaderWorkId = info.id
+                                if (::shaderPresetPreference.isInitialized) {
+                                    updateRetroArchPresetEntries(shaderPresetPreference, resetSelection = false)
+                                }
+                                refreshShaderPreferenceVisibility()
+                                updateAiUpscaleSummary()
+                                WorkManager.getInstance(requireContext()).pruneWork()
                             }
-                            refreshShaderPreferenceVisibility()
-                            updateAiUpscaleSummary()
                         }
                         WorkInfo.State.FAILED -> {
                             dismissShaderInstallProgressDialog()
-                            val reasonName = info.outputData.getString(RetroArchShaderInstallWorker.KEY_FAILURE_REASON)
-                            val reason = runCatching {
-                                RetroArchShaderLibraryManager.ShaderInstallException.Reason.valueOf(reasonName.orEmpty())
-                            }.getOrDefault(RetroArchShaderLibraryManager.ShaderInstallException.Reason.HttpError)
-                            showShaderInstallError(
-                                reason,
-                                info.outputData.getLong(RetroArchShaderInstallWorker.KEY_REQUIRED_BYTES, 0),
-                            )
-                            refreshShaderPreferenceVisibility()
+                            if (handledTerminalShaderWorkId != info.id) {
+                                handledTerminalShaderWorkId = info.id
+                                val reasonName = info.outputData.getString(RetroArchShaderInstallWorker.KEY_FAILURE_REASON)
+                                val reason = runCatching {
+                                    RetroArchShaderLibraryManager.ShaderInstallException.Reason.valueOf(reasonName.orEmpty())
+                                }.getOrDefault(RetroArchShaderLibraryManager.ShaderInstallException.Reason.HttpError)
+                                showShaderInstallError(
+                                    reason,
+                                    info.outputData.getLong(RetroArchShaderInstallWorker.KEY_REQUIRED_BYTES, 0),
+                                )
+                                refreshShaderPreferenceVisibility()
+                                WorkManager.getInstance(requireContext()).pruneWork()
+                            }
                         }
                         WorkInfo.State.CANCELLED -> {
                             dismissShaderInstallProgressDialog()
-                            refreshShaderPreferenceVisibility()
+                            if (handledTerminalShaderWorkId != info.id) {
+                                handledTerminalShaderWorkId = info.id
+                                refreshShaderPreferenceVisibility()
+                                WorkManager.getInstance(requireContext()).pruneWork()
+                            }
                         }
                     }
                 }

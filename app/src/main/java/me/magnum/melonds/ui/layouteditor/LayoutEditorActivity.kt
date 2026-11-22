@@ -91,6 +91,7 @@ class LayoutEditorActivity : AppCompatActivity() {
         }
     }
 
+    private var pendingApplyLayoutRunnable: Runnable? = null
     private var externalLayoutEditorPresentation: ExternalLayoutEditorPresentation? = null
     private var savedExternalEditorState: ScreenEditorState? = null
     private var latestSecondaryDisplayId: Int? = null
@@ -249,8 +250,8 @@ class LayoutEditorActivity : AppCompatActivity() {
                         lastSecondaryDisplayId = null
                         lastFoldsSignature = null
                     } else {
-                        handler.removeCallbacksAndMessages(null)
-                        handler.post {
+                        pendingApplyLayoutRunnable?.let { pending -> handler.removeCallbacks(pending) }
+                        val applyRunnable = Runnable {
                             val orientationChanged = lastOrientation != it.orientation || lastSystemOrientation != it.systemOrientation
                             val resetChanged = lastResetToken != it.layoutResetToken
                             val displayOrFoldChanged = lastSecondaryDisplayId != latestSecondaryDisplayId ||
@@ -276,6 +277,8 @@ class LayoutEditorActivity : AppCompatActivity() {
                             }
                             setLayoutOrientation(it.orientation)
                         }
+                        pendingApplyLayoutRunnable = applyRunnable
+                        handler.post(applyRunnable)
                     }
                 }
             }
@@ -332,6 +335,9 @@ class LayoutEditorActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         setupFullscreen()
+        if (::layoutEditorManager.isInitialized) {
+            layoutEditorManager.reloadVisualPreviewSettings()
+        }
         updateDisplays()
     }
 
@@ -390,7 +396,7 @@ class LayoutEditorActivity : AppCompatActivity() {
                 setOnShowListener {
                     val currentConfiguration = viewModel.currentLayout.value
                     if (currentConfiguration != null) {
-                        layoutEditorManager.layoutEditorView.applyButtonClusterAppearance(
+                        this@apply.layoutEditorManager.layoutEditorView.applyButtonClusterAppearance(
                             viewModel.pendingButtonSpread.value,
                             viewModel.pendingButtonInnerScale.value,
                         )
@@ -476,6 +482,8 @@ class LayoutEditorActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        pendingApplyLayoutRunnable?.let { handler.removeCallbacks(it) }
+        pendingApplyLayoutRunnable = null
         picasso.cancelRequest(layoutEditorManager.imageBackground)
         externalLayoutEditorPresentation?.layoutEditorManager?.imageBackground?.let {
             picasso.cancelRequest(it)

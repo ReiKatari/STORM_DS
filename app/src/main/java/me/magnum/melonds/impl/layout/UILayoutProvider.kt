@@ -95,12 +95,12 @@ class UILayoutProvider(private val defaultLayoutProvider: DefaultLayoutProvider)
     private fun getOptimalLayoutForVariant(layoutConfiguration: LayoutConfiguration, variant: UILayoutVariant): UILayout {
         val exactLayoutMatch = layoutConfiguration.layoutVariants[variant]
         if (exactLayoutMatch != null) {
-            return populateLayoutIfRequired(exactLayoutMatch, variant)
+            return populateLayoutIfRequired(exactLayoutMatch, variant, layoutConfiguration.id)
         }
 
         val bestLayoutVariant = findSimilarLayoutVariant(layoutConfiguration, variant)
         if (bestLayoutVariant != null) {
-            return populateLayoutIfRequired(bestLayoutVariant, variant)
+            return populateLayoutIfRequired(bestLayoutVariant, variant, layoutConfiguration.id)
         }
 
         return defaultLayoutProvider.buildDefaultLayout(variant, layoutConfiguration.id)
@@ -109,13 +109,13 @@ class UILayoutProvider(private val defaultLayoutProvider: DefaultLayoutProvider)
     /**
      * Populates the given [layout] with default components if they were not placed by the user.
      */
-    private fun populateLayoutIfRequired(layout: UILayout, variant: UILayoutVariant): UILayout {
+    private fun populateLayoutIfRequired(layout: UILayout, variant: UILayoutVariant, layoutId: java.util.UUID?): UILayout {
         val mainScreenRequiresDefaultLayout = layout.mainScreenLayout.components.isNullOrEmpty()
         val secondaryScreenRequiresDefaultLayout = layout.secondaryScreenLayout.components.isNullOrEmpty() && variant.displays.secondaryScreenDisplay != null
         val requiresDefaultLayout = mainScreenRequiresDefaultLayout || secondaryScreenRequiresDefaultLayout
 
         val baseLayout = if (requiresDefaultLayout) {
-            val defaultLayout = defaultLayoutProvider.buildDefaultLayout(variant, _currentLayoutConfiguration.value?.id)
+            val defaultLayout = defaultLayoutProvider.buildDefaultLayout(variant, layoutId)
             val mainScreenLayout = if (mainScreenRequiresDefaultLayout) {
                 layout.mainScreenLayout.copy(components = defaultLayout.mainScreenLayout.components)
             } else {
@@ -150,7 +150,7 @@ class UILayoutProvider(private val defaultLayoutProvider: DefaultLayoutProvider)
             val hasScreens = mainComponents?.any { it.isScreen() } == true
             val hasButtons = mainComponents?.any { !it.isScreen() } == true
             if (requiresDefaultLayout && hasScreens && !hasButtons) {
-                val defaultLayout = defaultLayoutProvider.buildDefaultLayout(variant, _currentLayoutConfiguration.value?.id)
+                val defaultLayout = defaultLayoutProvider.buildDefaultLayout(variant, layoutId)
                 val defaultButtons = defaultLayout.mainScreenLayout.components?.filter { !it.isScreen() } ?: emptyList()
                 val mergedComponents = (mainComponents ?: emptyList()) + defaultButtons
                 resultLayout = resultLayout.copy(

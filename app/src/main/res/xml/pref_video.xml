@@ -226,7 +226,7 @@
                 app:iconSpaceReserved="false"
                 android:defaultValue="false" />
 
-        <SwitchPreference
+        <me.magnum.melonds.ui.settings.preferences.InGameLockedSwitchPreference
                 android:key="video_ai_upscale_enabled"
                 android:title="@string/video_ai_upscale_title"
                 android:summary="@string/video_ai_upscale_summary"
@@ -362,6 +362,33 @@
                 android:title="@string/video_vulkan_driver_import"
                 android:summary="@string/video_vulkan_driver_import_summary"
                 app:iconSpaceReserved="false" />
+
+        <PreferenceScreen
+                android:key="video_freedreno_settings"
+                android:layout="@layout/watermelon_preference"
+                android:title="@string/freedreno_settings"
+                android:summary="@string/freedreno_summary"
+                android:persistent="false"
+                app:iconSpaceReserved="false">
+
+            <EditTextPreference
+                    android:key="video_freedreno_fd_dev_features"
+                    android:title="@string/freedreno_name_fd_dev_features"
+                    android:defaultValue=""
+                    app:iconSpaceReserved="false" />
+
+            <EditTextPreference
+                    android:key="video_freedreno_tu_debug"
+                    android:title="@string/freedreno_name_tu_debug"
+                    android:defaultValue=""
+                    app:iconSpaceReserved="false" />
+
+            <EditTextPreference
+                    android:key="video_freedreno_fd_mesa_debug"
+                    android:title="@string/freedreno_name_fd_mesa_debug"
+                    android:defaultValue=""
+                    app:iconSpaceReserved="false" />
+        </PreferenceScreen>
 
         <Preference
                 android:key="video_vulkan_driver_remove"

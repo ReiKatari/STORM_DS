@@ -10,6 +10,8 @@ data class LayoutConfiguration(
     val useCustomOpacity: Boolean,
     val opacity: Int,
     val layoutVariants: Map<UILayoutVariant, UILayout>,
+    val buttonSpread: Float = 1.0f,
+    val buttonInnerScale: Float = 1.0f,
 ) {
 
     companion object {
@@ -34,7 +36,7 @@ data class LayoutConfiguration(
     }
 
     // Empty constructor to include defaults that help in migrations
-    constructor() : this(null, null, LayoutType.CUSTOM, LayoutOrientation.FOLLOW_SYSTEM, false, 50, emptyMap())
+    constructor() : this(null, null, LayoutType.CUSTOM, LayoutOrientation.FOLLOW_SYSTEM, false, 50, emptyMap(), 1.0f, 1.0f)
 
     enum class LayoutType {
         DEFAULT,

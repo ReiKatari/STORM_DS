@@ -49,12 +49,10 @@ class InputProcessor(
         private val r2Axes = intArrayOf(
             MotionEvent.AXIS_RTRIGGER,
             MotionEvent.AXIS_GAS,
-            MotionEvent.AXIS_RZ,
         )
         private val l2Axes = intArrayOf(
             MotionEvent.AXIS_LTRIGGER,
             MotionEvent.AXIS_BRAKE,
-            MotionEvent.AXIS_Z,
         )
 
         private val turboEligibleButtons = setOf(
@@ -196,8 +194,8 @@ class InputProcessor(
     }
 
     private fun isSelectKeyCode(keyCode: Int): Boolean {
-        return keyCode == KeyEvent.KEYCODE_BUTTON_SELECT ||
-            controllerConfiguration.keyToInput(keyCode) == Input.SELECT
+        val mapped = controllerConfiguration.keyToInput(keyCode) ?: resolveTriggerKeyFallback(keyCode)
+        return mapped == Input.SELECT
     }
 
     override fun onKeyEvent(keyEvent: KeyEvent): Boolean {
@@ -228,11 +226,14 @@ class InputProcessor(
                     if (customChordInput != null) {
                         activeChordTriggers[keyCode] = customChordInput
                         consumedChordModifiers.add(modKey)
-                        // Release modifier in system listener if it was previously pressed
-                        controllerConfiguration.keyToInput(modKey)?.let { modInput ->
-                            if (modInput.isSystemInput) {
-                                systemInputListener.onKeyReleased(modInput)
+                        // Release modifier if it was previously pressed as a system input or hold-fast-forward
+                        (controllerConfiguration.keyToInput(modKey) ?: resolveTriggerKeyFallback(modKey))?.let { modInput ->
+                            if (modInput.isSystemInput || modInput == Input.HOLD_FAST_FORWARD) {
+                                dispatchInputReleased(modInput, fromController)
                             }
+                        }
+                        if (isSelectKeyCode(modKey)) {
+                            selectUsedInChord = true
                         }
                         dispatchInputPressed(customChordInput, fromController)
                         return true

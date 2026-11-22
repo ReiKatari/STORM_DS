@@ -558,6 +558,7 @@ class SharedPreferencesSettingsRepository(
             volume = getVolume(),
             audioLatency = getAudioLatency(),
             micSource = getMicSource(),
+            micGain = getMicGain(),
             firmwareConfiguration = getFirmwareConfiguration(),
             rendererConfiguration = renderConfigurationFlow.first(),
             dldiSdCardConfiguration = DldiSdCardConfiguration(
@@ -1931,6 +1932,10 @@ class SharedPreferencesSettingsRepository(
         }
     }
 
+    override fun getMicGain(): Int {
+        return preferences.getInt("mic_gain", 1).coerceIn(1, 10)
+    }
+
     override fun getRomSortingMode(): SortingMode {
         val sortingMode = preferences.getString("rom_sorting_mode", "alphabetically") ?: "alphabetically"
         return runCatching { SortingMode.valueOf(sortingMode.uppercase()) }
@@ -2468,7 +2473,7 @@ class SharedPreferencesSettingsRepository(
                     root = root,
                     presetRelativePath = cleanRomPresetPath ?: globalPresetRelativePath,
                     parameterOverrides = parseRetroArchShaderParameters(romConfig.retroArchShaderParameters ?: globalParameterText),
-                    clearHistory = false,
+                    clearHistory = preferences.getBoolean("video_retroarch_shader_clear_history", false),
                 )
             }
         } else {
