@@ -40,9 +40,11 @@ import me.magnum.melonds.domain.model.ConsoleType
 import me.magnum.melonds.domain.model.ControllerConfiguration
 import me.magnum.melonds.domain.model.DSiProfile
 import me.magnum.melonds.domain.model.DSiProfileSettings
+import me.magnum.melonds.domain.model.DevicePerformanceProfile
 import me.magnum.melonds.domain.model.DldiSdCardConfiguration
 import me.magnum.melonds.domain.model.DualScreenPreset
 import me.magnum.melonds.domain.model.EmulatorConfiguration
+import me.magnum.melonds.domain.model.PerformanceMode
 import me.magnum.melonds.utils.getFloatCompat
 import me.magnum.melonds.domain.model.ExternalDisplayMode
 import me.magnum.melonds.domain.model.FirmwareConfiguration
@@ -445,7 +447,7 @@ class SharedPreferencesSettingsRepository(
             val coverageFixEnabled = (effectiveRenderer == VideoRenderer.OPENGL || effectiveRenderer == VideoRenderer.VULKAN) &&
                 renderInputs.coverageFix.enabled &&
                 safeProfile?.safeVisuals != true
-            RendererConfiguration(
+            val resolved = RendererConfiguration(
                 effectiveRenderer,
                 effectiveFiltering,
                 effectiveThreadedRendering,
@@ -466,6 +468,7 @@ class SharedPreferencesSettingsRepository(
                 renderInputs.coverageFix.debugClearMagenta,
                 if (effectiveFiltering == VideoFiltering.RETROARCH) retroArchShader else EmptyRetroArchShaderConfiguration,
             )
+            if (isLiteModeActive()) buildLiteRendererConfiguration(resolved) else resolved
         }.conflate().shareIn(preferencesCoroutineScope, SharingStarted.Lazily, replay = 1)
     }
 
@@ -579,7 +582,7 @@ class SharedPreferencesSettingsRepository(
 
         applyActiveRomVulkanRuntimeControls()
 
-        return EmulatorConfiguration(
+        val baseConfiguration = EmulatorConfiguration(
             useCustomBios = useCustomBios(),
             showBootScreen = showBootScreen(),
             dsBios7Uri = dsBios7,
@@ -628,7 +631,9 @@ class SharedPreferencesSettingsRepository(
             audioReverbEnabled = preferences.getBoolean("audio_reverb_enabled", false),
             wfcDnsServerIp = getWfcDnsServerIp(),
             lowLatencyEnabled = preferences.getBoolean("video_low_latency", false),
+            liteModeEnabled = false,
         )
+        return applyLiteOverlayIfNeeded(baseConfiguration)
     }
 
     override suspend fun getEmulatorConfiguration(romConfig: RomConfig, dsiProfile: DSiProfile?): EmulatorConfiguration {
@@ -663,7 +668,7 @@ class SharedPreferencesSettingsRepository(
         } else {
             getFrameskipMode().nativeValue
         }
-        return globalConfiguration.copy(
+        val romConfiguration = globalConfiguration.copy(
             frameskipMode = effectiveFrameskipMode,
             frameskipManualValue = getFrameskipManualValue(),
             vulkanDrsEnabled = effectiveDrsActive,
@@ -672,6 +677,7 @@ class SharedPreferencesSettingsRepository(
             enable60FpsPatch = globalConfiguration.enable60FpsPatch && fpsPatchAllowed,
             rendererConfiguration = romRendererConfig,
         )
+        return applyLiteOverlayIfNeeded(romConfiguration)
     }
 
     override fun getTheme(): Theme {
@@ -1101,6 +1107,9 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun getCurrentVideoRenderer(): VideoRenderer {
+        if (isLiteModeActive()) {
+            return VideoRenderer.SOFTWARE
+        }
         val videoRendererPreference = preferences.getString("video_renderer", "opengl")!!
         val requested = runCatching { VideoRenderer.valueOf(videoRendererPreference.uppercase()) }
             .getOrDefault(VideoRenderer.OPENGL)
@@ -1111,6 +1120,9 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun getEffectiveVideoRenderer(romConfig: RomConfig): VideoRenderer {
+        if (isLiteModeActive()) {
+            return VideoRenderer.SOFTWARE
+        }
         val baseRenderer = sanitizeVideoRenderer(romConfig.videoRenderer, fallback = getCurrentVideoRenderer())
         val safeProfile = GameCompatibilityManager.getEffectiveProfile(
             context = context,
@@ -2584,6 +2596,11 @@ class SharedPreferencesSettingsRepository(
         preferenceSharedFlows[key]?.tryEmit(Unit)
         when (key) {
             "dsi_bios_dir" -> syncDsiProfileFromDirPref()
+            "performance_mode" -> {
+                preferenceSharedFlows["video_renderer"]?.tryEmit(Unit)
+                preferenceSharedFlows["frameskip_mode"]?.tryEmit(Unit)
+                preferenceSharedFlows["video_vulkan_drs"]?.tryEmit(Unit)
+            }
             "video_vulkan_driver_mode",
             "video_vulkan_selected_driver_id",
             "video_vulkan_custom_drivers" -> {
@@ -2714,7 +2731,7 @@ class SharedPreferencesSettingsRepository(
             baseConfiguration.conservativeCoverageEnabled &&
             safeProfile?.safeVisuals != true
 
-        return baseConfiguration.copy(
+        val resolved = baseConfiguration.copy(
             renderer = renderer,
             videoFiltering = effectiveFiltering,
             threadedRendering = threadedRendering,
@@ -2727,6 +2744,7 @@ class SharedPreferencesSettingsRepository(
             conservativeCoverageEnabled = effectiveCoverageFix,
             retroArchShader = if (effectiveFiltering == VideoFiltering.RETROARCH) retroArchShader else EmptyRetroArchShaderConfiguration,
         )
+        return if (isLiteModeActive()) buildLiteRendererConfiguration(resolved) else resolved
     }
 
     private fun sanitizeVideoRenderer(renderer: VideoRenderer?, fallback: VideoRenderer): VideoRenderer {
@@ -3072,5 +3090,68 @@ class SharedPreferencesSettingsRepository(
             putFloat("slow_motion_speed", clamped)
             putString("slow_motion_speed_str", clamped.toString())
         }
+    }
+
+    override fun getPerformanceMode(): PerformanceMode {
+        return PerformanceMode.fromPrefValue(preferences.getString("performance_mode", PerformanceMode.AUTO.prefValue))
+    }
+
+    override fun setPerformanceMode(mode: PerformanceMode) {
+        preferences.edit {
+            putString("performance_mode", mode.prefValue)
+        }
+    }
+
+    override fun getDevicePerformanceProfile(): DevicePerformanceProfile {
+        return DevicePerformanceProfiler.inspectDevice(context)
+    }
+
+    override fun isLiteModeActive(): Boolean {
+        return when (getPerformanceMode()) {
+            PerformanceMode.STANDARD -> false
+            PerformanceMode.LITE -> true
+            PerformanceMode.AUTO -> getDevicePerformanceProfile().recommendsLiteMode
+        }
+    }
+
+    private fun buildLiteRendererConfiguration(base: RendererConfiguration): RendererConfiguration {
+        return base.copy(
+            renderer = VideoRenderer.SOFTWARE,
+            videoFiltering = VideoFiltering.NONE,
+            threadedRendering = getDevicePerformanceProfile().recommendedSoftThreaded,
+            vulkanPipelineProfile = VulkanPipelineProfile.COMPATIBILITY,
+            internalResolutionScaling = 1,
+            conservativeCoverageEnabled = false,
+            retroArchShader = EmptyRetroArchShaderConfiguration,
+        )
+    }
+
+    private fun applyLiteOverlayIfNeeded(config: EmulatorConfiguration): EmulatorConfiguration {
+        if (!isLiteModeActive()) {
+            return if (config.liteModeEnabled) config.copy(liteModeEnabled = false) else config
+        }
+        val effectiveFrameskip = if (config.frameskipMode == FrameskipMode.MANUAL.nativeValue) {
+            FrameskipMode.MANUAL.nativeValue
+        } else {
+            FrameskipMode.AUTO.nativeValue
+        }
+        return config.copy(
+            liteModeEnabled = true,
+            rendererConfiguration = buildLiteRendererConfiguration(config.rendererConfiguration),
+            frameskipMode = effectiveFrameskip,
+            vulkanDrsEnabled = false,
+            rewindEnabled = false,
+            audioInterpolation = AudioInterpolation.NONE,
+            audioBitrate = AudioBitrate.BIT10,
+            audioLatency = AudioLatency.HIGH,
+            audioSoftLimiterEnabled = false,
+            audioBassBoostEnabled = false,
+            audioSpatialAudioEnabled = false,
+            audioReverbEnabled = false,
+            lowLatencyEnabled = false,
+            arm9OverclockMultiplier = 1,
+            enable3dWidescreen = false,
+            enable60FpsPatch = false,
+        )
     }
 }

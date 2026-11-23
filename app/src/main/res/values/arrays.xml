@@ -613,4 +613,15 @@
         <item>hold_l</item>
         <item>hold_r</item>
     </string-array>
+
+    <string-array name="performance_mode_options">
+        <item>@string/performance_mode_auto</item>
+        <item>@string/performance_mode_standard</item>
+        <item>@string/performance_mode_lite</item>
+    </string-array>
+    <string-array name="performance_mode_values">
+        <item>auto</item>
+        <item>standard</item>
+        <item>lite</item>
+    </string-array>
 </resources>

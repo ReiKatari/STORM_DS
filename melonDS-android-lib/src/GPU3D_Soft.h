@@ -36,6 +36,8 @@ public:
 
     void SetThreaded(bool threaded, GPU& gpu) noexcept;
     [[nodiscard]] bool IsThreaded() const noexcept { return Threaded; }
+    void SetLiteFastMode(bool enabled) noexcept { LiteFastMode = enabled; }
+    [[nodiscard]] bool IsLiteFastMode() const noexcept { return LiteFastMode; }
 
     void VCount144(GPU& gpu) override;
     void RenderFrame(GPU& gpu) override;
@@ -491,6 +493,8 @@ protected:
     bool Enabled;
 
     bool FrameIdentical;
+    bool LiteFastMode = false;
+    bool SkippedFrameRender = false;
 
     // threading
 

@@ -62,6 +62,7 @@ void SoftRenderer::StopRenderThread()
 
 void SoftRenderer::SetupRenderThread(GPU& gpu)
 {
+    SkippedFrameRender = false;
     if (Threaded)
     {
         if (!RenderThreadRunning.load(std::memory_order_relaxed))
@@ -138,6 +139,7 @@ void SoftRenderer::Reset(GPU& gpu)
     memset(AttrBuffer, 0, BufferSize * 2 * 4);
 
     PrevIsShadowMask = false;
+    SkippedFrameRender = false;
 
     SetupRenderThread(gpu);
     EnableRenderThread();
@@ -1464,6 +1466,9 @@ u32 SoftRenderer::CalculateFogDensity(const GPU3D& gpu3d, u32 pixeladdr) const
 
 void SoftRenderer::ScanlineFinalPass(const GPU3D& gpu3d, s32 y)
 {
+    if (LiteFastMode)
+        return;
+
     // to consider:
     // clearing all polygon fog flags if the master flag isn't set?
     // merging all final pass loops into one?
@@ -1751,12 +1756,26 @@ void SoftRenderer::RenderPolygons(const GPU& gpu, bool threaded, Polygon** polyg
 
 void SoftRenderer::VCount144(GPU& gpu)
 {
+    if (SkippedFrameRender)
+    {
+        SkippedFrameRender = false;
+        return;
+    }
+
     if (RenderThreadRunning.load(std::memory_order_relaxed) && !gpu.GPU3D.AbortFrame)
         Platform::Semaphore_Wait(Sema_RenderDone);
 }
 
 void SoftRenderer::RenderFrame(GPU& gpu)
 {
+    if (gpu.IsLiteSkipNext3DRender() && ((gpu.GPU2D_A.CaptureCnt & (1u << 31u)) == 0u))
+    {
+        SkippedFrameRender = true;
+        gpu.MarkLiteSkipped3DForNextFrame();
+        return;
+    }
+    SkippedFrameRender = false;
+
     auto textureDirty = gpu.VRAMDirty_Texture.DeriveState(gpu.VRAMMap_Texture, gpu);
     auto texPalDirty = gpu.VRAMDirty_TexPal.DeriveState(gpu.VRAMMap_TexPal, gpu);
 
@@ -1818,7 +1837,7 @@ void SoftRenderer::RenderThreadFunc(GPU& gpu)
 
 u32* SoftRenderer::GetLine(int line)
 {
-    if (RenderThreadRunning.load(std::memory_order_relaxed))
+    if (!SkippedFrameRender && RenderThreadRunning.load(std::memory_order_relaxed))
     {
         if (line < 192)
             // We need a scanline, so let's wait for the render thread to finish it.

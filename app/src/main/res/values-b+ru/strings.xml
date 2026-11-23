@@ -1763,4 +1763,11 @@
         <item>Вручную</item>
         <item>Авто</item>
     </string-array>
+    <string name="performance_mode_title">Режим производительности</string>
+    <string name="performance_mode_summary">Авто подбирает режим по характеристикам устройства. Упрощённый режим ускоряет старые и слабые устройства, стандартный сохраняет полную точность.</string>
+    <string name="performance_mode_auto">Авто</string>
+    <string name="performance_mode_standard">Стандартный (полная точность)</string>
+    <string name="performance_mode_lite">Упрощённый (для слабых устройств)</string>
+    <string name="performance_mode_active_standard">активен стандартный режим</string>
+    <string name="performance_mode_active_lite">активен упрощённый режим</string>
 </resources>

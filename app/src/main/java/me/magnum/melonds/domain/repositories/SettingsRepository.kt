@@ -260,4 +260,8 @@ interface SettingsRepository {
     fun setExtendedPauseMenuEnabled(enabled: Boolean)
     fun getSlowMotionSpeed(): Float
     fun setSlowMotionSpeed(speed: Float)
+    fun getPerformanceMode(): PerformanceMode = PerformanceMode.AUTO
+    fun setPerformanceMode(mode: PerformanceMode) {}
+    fun getDevicePerformanceProfile(): DevicePerformanceProfile? = null
+    fun isLiteModeActive(): Boolean = false
 }

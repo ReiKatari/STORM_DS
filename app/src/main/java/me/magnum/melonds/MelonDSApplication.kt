@@ -432,6 +432,13 @@ class MelonDSApplication : Application(), Configuration.Provider {
         migrationScope.launch {
             runCatching { migrateConfigJsonFilesSynchronously(this@MelonDSApplication) }
             runCatching { settingsBackupManager.initializeMirror() }
+            runCatching {
+                val profile = settingsRepository.getDevicePerformanceProfile()
+                Log.i(
+                    "StormPerfMode",
+                    "mode=${settingsRepository.getPerformanceMode()} activeLite=${settingsRepository.isLiteModeActive()} reason=${profile?.reasonCode} gpu=${profile?.gpuSummary} cpu=${profile?.cpuSummary} 64bit=${profile?.is64Bit} ramMb=${profile?.totalRamMb} gles=${profile?.glEsVersionMajor}.${profile?.glEsVersionMinor}",
+                )
+            }
             runCatching { me.magnum.melonds.impl.StormDeviceSystemInfoReporter.saveUnifiedReport(this@MelonDSApplication) }
             runCatching { migrateStorageToRoot(this@MelonDSApplication) }
         }

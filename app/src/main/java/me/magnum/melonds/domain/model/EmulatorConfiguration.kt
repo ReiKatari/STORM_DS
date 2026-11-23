@@ -49,5 +49,6 @@ data class EmulatorConfiguration(
         val lowLatencyEnabled: Boolean = false,
         val rtcOffsetMinutes: Int = 0,
         val wfcSettingsPath: String? = null,
-        val micGain: Int = 1
+        val micGain: Int = 1,
+        val liteModeEnabled: Boolean = false,
 )

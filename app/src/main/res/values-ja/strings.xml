@@ -1762,4 +1762,11 @@
         <item>手動</item>
         <item>自動</item>
     </string-array>
+    <string name="performance_mode_title">パフォーマンスモード</string>
+    <string name="performance_mode_summary">自動は端末の性能に合わせて最適なモードを選択します。簡易モードは古い端末や低スペック端末で高速化し、標準モードは完全な精度を維持します。</string>
+    <string name="performance_mode_auto">自動</string>
+    <string name="performance_mode_standard">標準（高精度）</string>
+    <string name="performance_mode_lite">簡易モード（古い端末と低スペック向け）</string>
+    <string name="performance_mode_active_standard">標準モードが有効</string>
+    <string name="performance_mode_active_lite">簡易モードが有効</string>
 </resources>

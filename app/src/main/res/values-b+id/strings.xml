@@ -1674,4 +1674,11 @@ Impor ke STORM DS?</string>
         <item>Manual</item>
         <item>Otomatis</item>
     </string-array>
+    <string name="performance_mode_title">Mode performa</string>
+    <string name="performance_mode_summary">Otomatis memilih mode sesuai perangkat. Mode sederhana mempercepat perangkat lama dan ringan, standar menjaga akurasi penuh.</string>
+    <string name="performance_mode_auto">Otomatis</string>
+    <string name="performance_mode_standard">Standar (akurasi penuh)</string>
+    <string name="performance_mode_lite">Sederhana (perangkat lama dan ringan)</string>
+    <string name="performance_mode_active_standard">mode standar aktif</string>
+    <string name="performance_mode_active_lite">mode sederhana aktif</string>
 </resources>

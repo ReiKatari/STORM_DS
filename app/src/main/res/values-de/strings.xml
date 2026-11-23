@@ -1518,4 +1518,11 @@
         <item>Manuell</item>
         <item>Automatisch</item>
     </string-array>
+    <string name="performance_mode_title">Leistungsmodus</string>
+    <string name="performance_mode_summary">Automatisch wählt den passenden Modus für deine Hardware. Vereinfacht beschleunigt alte und schwache Geräte, Standard behält volle Genauigkeit.</string>
+    <string name="performance_mode_auto">Automatisch</string>
+    <string name="performance_mode_standard">Standard (volle Genauigkeit)</string>
+    <string name="performance_mode_lite">Vereinfacht (alte und schwache Geräte)</string>
+    <string name="performance_mode_active_standard">Standardmodus aktiv</string>
+    <string name="performance_mode_active_lite">vereinfachter Modus aktiv</string>
 </resources>

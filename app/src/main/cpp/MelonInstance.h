@@ -189,6 +189,7 @@ public:
         bool isSleeping;
         bool shouldCaptureRewindState;
         bool frameskipRetenerTail;
+        bool liteFrameSkipped = false;
     };
     struct VulkanFrameTailResult
     {
@@ -561,6 +562,8 @@ private:
     std::atomic<u64> vulkanFrameskipVetosPingPong {0};
 
     int vulkanFrameskipSaltosConsecutivos = 0;
+    bool liteFrameskipEsteFotograma = false;
+    int liteFrameskipSaltosConsecutivos = 0;
     std::atomic<bool> vulkanFrameskipConcedido {false};
 
     static constexpr int kDrsEnfriamientoFrames = 30;
@@ -666,6 +669,7 @@ private:
     bool vulkanFrameskipSwapEsteFotograma = false;
     void inhibirFrameskipVulkan() noexcept { vulkanFrameskipInhibirHastaFrame = frame + 2; }
     [[nodiscard]] bool decidirFrameskipVulkan(bool solicitado, bool fastForwardActive) noexcept;
+    [[nodiscard]] bool decidirFrameskipLite(bool solicitado, bool fastForwardActive) noexcept;
     int frame;
     mutable std::mutex exactLiveGuideMutex;
     ExactLiveGuide exactLiveGuide;

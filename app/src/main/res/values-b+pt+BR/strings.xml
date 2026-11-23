@@ -1635,4 +1635,11 @@ Importá-los para o STORM DS?</string>
         <item>Manual</item>
         <item>Automático</item>
     </string-array>
+    <string name="performance_mode_title">Modo de desempenho</string>
+    <string name="performance_mode_summary">Automático escolhe o modo ideal para o hardware. O modo simplificado acelera dispositivos antigos e básicos e o padrão mantém precisão total.</string>
+    <string name="performance_mode_auto">Automático</string>
+    <string name="performance_mode_standard">Padrão (precisão total)</string>
+    <string name="performance_mode_lite">Simplificado (dispositivos antigos e básicos)</string>
+    <string name="performance_mode_active_standard">modo padrão ativo</string>
+    <string name="performance_mode_active_lite">modo simplificado ativo</string>
 </resources>

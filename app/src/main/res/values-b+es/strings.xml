@@ -1653,4 +1653,11 @@ Rechazos permanentes del servidor: %7$d.</string>
         <item>Manual</item>
         <item>Automático</item>
     </string-array>
+    <string name="performance_mode_title">Modo de rendimiento</string>
+    <string name="performance_mode_summary">Automático elige el modo adecuado para tu hardware. El modo simplificado acelera dispositivos antiguos y básicos; el estándar conserva precisión completa.</string>
+    <string name="performance_mode_auto">Automático</string>
+    <string name="performance_mode_standard">Estándar (precisión completa)</string>
+    <string name="performance_mode_lite">Simplificado (dispositivos antiguos y básicos)</string>
+    <string name="performance_mode_active_standard">modo estándar activo</string>
+    <string name="performance_mode_active_lite">modo simplificado activo</string>
 </resources>

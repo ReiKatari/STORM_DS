@@ -142,6 +142,21 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
             true
         }
 
+        val performanceModePreference = findPreference<ListPreference>("performance_mode")
+        performanceModePreference?.let { pref ->
+            updatePerformanceModeSummary()
+            pref.setOnPreferenceChangeListener { _, newValue ->
+                val modeValue = newValue as? String
+                updatePerformanceModeSummary(modeValue)
+                view?.post {
+                    if (isAdded) {
+                        updateFrameskipDrsExclusion()
+                    }
+                }
+                true
+            }
+        }
+
         jitPreference?.isVisible = false
         if (Build.SUPPORTED_64_BIT_ABIS.isEmpty()) {
             jitPreference?.isChecked = false
@@ -503,8 +518,32 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
 
     override fun onResume() {
         super.onResume()
+        updatePerformanceModeSummary()
         updateFrameskipDrsExclusion()
         updateBiosStatusSummary()
+    }
+
+    private fun updatePerformanceModeSummary(selectedPrefValue: String? = null) {
+        val perfPref = findPreference<ListPreference>("performance_mode") ?: return
+        val value = selectedPrefValue ?: perfPref.value ?: me.magnum.melonds.domain.model.PerformanceMode.AUTO.prefValue
+        val mode = me.magnum.melonds.domain.model.PerformanceMode.fromPrefValue(value)
+        val selectedLabel = when (mode) {
+            me.magnum.melonds.domain.model.PerformanceMode.AUTO -> getString(R.string.performance_mode_auto)
+            me.magnum.melonds.domain.model.PerformanceMode.STANDARD -> getString(R.string.performance_mode_standard)
+            me.magnum.melonds.domain.model.PerformanceMode.LITE -> getString(R.string.performance_mode_lite)
+        }
+        val activeLite = when (mode) {
+            me.magnum.melonds.domain.model.PerformanceMode.STANDARD -> false
+            me.magnum.melonds.domain.model.PerformanceMode.LITE -> true
+            me.magnum.melonds.domain.model.PerformanceMode.AUTO ->
+                settingsRepository.getDevicePerformanceProfile()?.recommendsLiteMode
+                    ?: settingsRepository.isLiteModeActive()
+        }
+        val activeLabel = getString(
+            if (activeLite) R.string.performance_mode_active_lite else R.string.performance_mode_active_standard,
+        )
+        val baseDesc = getString(R.string.performance_mode_summary)
+        perfPref.summary = "$selectedLabel - $activeLabel\n$baseDesc"
     }
 
     private fun updateFrameskipDrsExclusion() {

@@ -1643,6 +1643,7 @@ void GPU::ResetVRAMCache() noexcept
 
 void GPU::Reset() noexcept
 {
+    ResetLiteFrameSkipState();
     GPU3D.GetCurrentRenderer().FinishFramePreparation();
     VCount = 0;
     NextVCount = -1;
@@ -2464,9 +2465,12 @@ void GPU::StartHBlank(u32 line) noexcept
         if (VCount == 96 && LogVuelcoActivo())
             fprintf(stderr, "[vuelco] f=%u linea96 asignado=%u front=%d\n",
                     sVuelcoFotograma, sVuelcoSwapAsignado, FrontBuffer);
+        const bool skipLite2D =
+            LiteSkip2DRender && ((GPU2D_A.CaptureCnt & (1u << 31u)) == 0u);
+
         // draw
         // note: this should start 48 cycles after the scanline start
-        if (line < 192)
+        if (line < 192 && !skipLite2D)
         {
             const bool measureStructured2D = ShouldMeasureStructured2D(*this);
             const u64 drawAStartNs = measureStructured2D ? PerfNowNs() : 0;
@@ -2483,7 +2487,7 @@ void GPU::StartHBlank(u32 line) noexcept
         }
 
         // sprites are pre-rendered one scanline in advance
-        if (line < 191)
+        if (line < 191 && !skipLite2D)
         {
             const bool measureStructured2D = ShouldMeasureStructured2D(*this);
             const u64 spriteAStartNs = measureStructured2D ? PerfNowNs() : 0;
@@ -2542,8 +2546,11 @@ void GPU::StartHBlank(u32 line) noexcept
 
 void GPU::FinishFrame(u32 lines) noexcept
 {
-    FrontBuffer = FrontBuffer ? 0 : 1;
-    AssignFramebuffers();
+    if (!LiteSkip2DRender)
+    {
+        FrontBuffer = FrontBuffer ? 0 : 1;
+        AssignFramebuffers();
+    }
 
     if (LogVuelcoActivo())
         fprintf(stderr,

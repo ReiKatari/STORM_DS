@@ -119,6 +119,7 @@ struct EmulatorConfiguration
 
     bool vulkanDrsEnabled = false;
     bool lowLatencyEnabled = false;
+    bool liteModeEnabled = false;
     int rtcOffsetMinutes = 0;
     bool showBootScreen;
     bool useJit;

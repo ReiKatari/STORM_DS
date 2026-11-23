@@ -480,6 +480,7 @@ MelonDSAndroid::EmulatorConfiguration MelonDSAndroidConfiguration::buildEmulator
     finalEmulatorConfiguration.frameskipManualValue = getIntFieldOrDefault(env, emulatorConfiguration, emulatorConfigurationClass, "frameskipManualValue", 0);
     finalEmulatorConfiguration.vulkanDrsEnabled = getBooleanFieldOrDefault(env, emulatorConfiguration, emulatorConfigurationClass, "vulkanDrsEnabled", JNI_FALSE) != 0;
     finalEmulatorConfiguration.lowLatencyEnabled = getBooleanFieldOrDefault(env, emulatorConfiguration, emulatorConfigurationClass, "lowLatencyEnabled", JNI_FALSE) != 0;
+    finalEmulatorConfiguration.liteModeEnabled = getBooleanFieldOrDefault(env, emulatorConfiguration, emulatorConfigurationClass, "liteModeEnabled", JNI_FALSE) != 0;
     finalEmulatorConfiguration.rtcOffsetMinutes = getIntFieldOrDefault(env, emulatorConfiguration, emulatorConfigurationClass, "rtcOffsetMinutes", 0);
     if (wfcSettingsPathField != nullptr) {
         jstring wfcPathStr = static_cast<jstring>(env->GetObjectField(emulatorConfiguration, wfcSettingsPathField));

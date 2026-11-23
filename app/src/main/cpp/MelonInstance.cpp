@@ -1951,6 +1951,10 @@ void MelonInstance::reset()
 {
     inhibirFrameskipVulkan();
     vulkanFrameskipSaltosConsecutivos = 0;
+    liteFrameskipEsteFotograma = false;
+    liteFrameskipSaltosConsecutivos = 0;
+    if (nds != nullptr)
+        nds->GPU.ResetLiteFrameSkipState();
     vulkanFrameskipSaltosPorPantalla[0] = vulkanFrameskipSaltosPorPantalla[1] = 0u;
     vulkanFrameskipSaltoHist[0] = vulkanFrameskipSaltoHist[1] = false;
     vulkanFrameskipCapAntValida = false;
@@ -2709,7 +2713,11 @@ MelonInstance::VulkanFrameTailResult MelonInstance::processFrameTail(
     }
     else if (!isRendererAccelerated)
     {
-        if (nds->GPU.Framebuffer[frontbuf][0] && nds->GPU.Framebuffer[frontbuf][1])
+        if (tailInputs.liteFrameSkipped)
+        {
+            hasValidFrame = false;
+        }
+        else if (nds->GPU.Framebuffer[frontbuf][0] && nds->GPU.Framebuffer[frontbuf][1])
         {
             glBindTexture(GL_TEXTURE_2D, renderFrame->frameTexture);
             glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 256, 192, GL_RGBA, GL_UNSIGNED_BYTE, nds->GPU.Framebuffer[frontbuf][0].get());
@@ -2724,7 +2732,7 @@ MelonInstance::VulkanFrameTailResult MelonInstance::processFrameTail(
         hasValidFrame = true;
     }
 
-    if (currentRenderer != Renderer::Vulkan)
+    if (currentRenderer != Renderer::Vulkan && !tailInputs.liteFrameSkipped)
     {
         lastCompletedVulkanFrame = nullptr;
         lastCompletedVulkanScale = 1;
@@ -2914,6 +2922,37 @@ bool MelonInstance::decidirFrameskipVulkan(bool solicitado, bool fastForwardActi
         return false;
     if (lastCompletedVulkanFrame == nullptr)
         return false;
+    return true;
+}
+
+bool MelonInstance::decidirFrameskipLite(bool solicitado, bool fastForwardActive) noexcept
+{
+    if (!solicitado
+        || currentConfiguration == nullptr
+        || !currentConfiguration->liteModeEnabled
+        || currentRenderer != Renderer::Software
+        || nds == nullptr
+        || fastForwardActive
+        || frame < 60)
+    {
+        return false;
+    }
+
+    if (vulkanFrameskipModo == 0)
+        return false;
+
+    const int maxConsecutive = vulkanFrameskipModo == 1
+        ? std::clamp(vulkanFrameskipManualN, 1, 4)
+        : 2;
+    if (liteFrameskipSaltosConsecutivos >= maxConsecutive)
+        return false;
+
+    if ((nds->GPU.GPU2D_A.CaptureCnt & (1u << 31u)) != 0u)
+        return false;
+
+    if (rewindManager.ShouldCaptureState(frame + 1))
+        return false;
+
     return true;
 }
 
@@ -3363,7 +3402,21 @@ u32 MelonInstance::runFrame(bool frameskipSolicitado, u64 wmFrameDeadline)
     vulkanFrameskipVetoPingPongEsteFotograma = false;
     vulkanFrameskipEsteFotograma =
         decidirFrameskipVulkan(frameskipSolicitado, fastForwardActive);
-    vulkanFrameskipConcedido.store(vulkanFrameskipEsteFotograma, std::memory_order_release);
+    const bool litePrevSkipped3D =
+        currentConfiguration != nullptr
+        && currentConfiguration->liteModeEnabled
+        && currentRenderer == Renderer::Software
+        && nds != nullptr
+        && nds->GPU.TakeLiteSkipped3DForNextFrame();
+    liteFrameskipEsteFotograma = litePrevSkipped3D;
+    if (liteFrameskipEsteFotograma)
+        liteFrameskipSaltosConsecutivos++;
+    else
+        liteFrameskipSaltosConsecutivos = 0;
+    const bool liteSkipNext3D = decidirFrameskipLite(frameskipSolicitado, fastForwardActive);
+    vulkanFrameskipConcedido.store(
+        vulkanFrameskipEsteFotograma || liteFrameskipEsteFotograma,
+        std::memory_order_release);
 
     if (nds != nullptr)
     {
@@ -3849,7 +3902,11 @@ u32 MelonInstance::runFrame(bool frameskipSolicitado, u64 wmFrameDeadline)
     });
     processExactLiveGuideBeforeRunFrame();
     nds->TraceWMFrameBoundary(MelonDSAndroid::internalFilesDir);
+    nds->GPU.SetLiteSkip2DRender(liteFrameskipEsteFotograma);
+    nds->GPU.SetLiteSkipNext3DRender(liteSkipNext3D);
     u32 nLines = nds->RunFrame(wmFrameDeadline);
+    nds->GPU.SetLiteSkip2DRender(false);
+    nds->GPU.SetLiteSkipNext3DRender(false);
     if (lowLatencyEnabled && currentRenderer == Renderer::Vulkan)
     {
         if (auto* renderer2D = dynamic_cast<GPU2D::SoftRenderer*>(&nds->GPU.GetRenderer2D()))
@@ -3891,6 +3948,7 @@ u32 MelonInstance::runFrame(bool frameskipSolicitado, u64 wmFrameDeadline)
         (nds->CPUStop & CPUStop_Sleep) != 0,
         rewindManager.ShouldCaptureState(frame + 1),
         currentRenderer == Renderer::Vulkan && vulkanFrameskipSaltoHist[1],
+        liteFrameskipEsteFotograma,
     };
 
     vulkanFrameskipSaltoHist[1] = vulkanFrameskipSaltoHist[0];
@@ -7372,6 +7430,10 @@ bool MelonInstance::loadState(Savestate* state)
     if (Multiplayer::Active()) return false;
     inhibirFrameskipVulkan();
     vulkanFrameskipSaltosConsecutivos = 0;
+    liteFrameskipEsteFotograma = false;
+    liteFrameskipSaltosConsecutivos = 0;
+    if (nds != nullptr)
+        nds->GPU.ResetLiteFrameSkipState();
     vulkanFrameskipSaltosPorPantalla[0] = vulkanFrameskipSaltosPorPantalla[1] = 0u;
     vulkanFrameskipSaltoHist[0] = vulkanFrameskipSaltoHist[1] = false;
     vulkanFrameskipCapAntValida = false;
@@ -7618,6 +7680,10 @@ void MelonInstance::updateRenderer()
 {
     inhibirFrameskipVulkan();
     vulkanFrameskipSaltosConsecutivos = 0;
+    liteFrameskipEsteFotograma = false;
+    liteFrameskipSaltosConsecutivos = 0;
+    if (nds != nullptr)
+        nds->GPU.ResetLiteFrameSkipState();
     vulkanFrameskipSaltosPorPantalla[0] = vulkanFrameskipSaltosPorPantalla[1] = 0u;
     vulkanFrameskipSaltoHist[0] = vulkanFrameskipSaltoHist[1] = false;
     vulkanFrameskipCapAntValida = false;
@@ -7761,7 +7827,9 @@ void MelonInstance::updateRenderer()
         case Renderer::Software:
         {
             auto softwareRenderSettings = static_cast<SoftwareRenderSettings&>(*currentConfiguration->renderSettings);
-            static_cast<SoftRenderer&>(nds->GPU.GetRenderer3D()).SetThreaded(softwareRenderSettings.threadedRendering, nds->GPU);
+            auto& softRenderer = static_cast<SoftRenderer&>(nds->GPU.GetRenderer3D());
+            softRenderer.SetLiteFastMode(currentConfiguration != nullptr && currentConfiguration->liteModeEnabled);
+            softRenderer.SetThreaded(softwareRenderSettings.threadedRendering, nds->GPU);
             break;
         }
         case Renderer::OpenGl:

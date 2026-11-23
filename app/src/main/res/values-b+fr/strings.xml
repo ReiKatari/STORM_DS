@@ -1641,4 +1641,11 @@ Les importer dans STORM DS ?</string>
         <item>Manuel</item>
         <item>Auto</item>
     </string-array>
+    <string name="performance_mode_title">Mode de performance</string>
+    <string name="performance_mode_summary">Auto choisit le mode adapté à votre appareil. Le mode simplifié accélère les appareils anciens et modestes, le mode standard garde toute la précision.</string>
+    <string name="performance_mode_auto">Auto</string>
+    <string name="performance_mode_standard">Standard (précision complète)</string>
+    <string name="performance_mode_lite">Simplifié (appareils anciens et modestes)</string>
+    <string name="performance_mode_active_standard">mode standard actif</string>
+    <string name="performance_mode_active_lite">mode simplifié actif</string>
 </resources>

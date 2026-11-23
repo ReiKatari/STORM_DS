@@ -1691,4 +1691,11 @@
         <item>手动</item>
         <item>自动</item>
     </string-array>
+    <string name="performance_mode_title">性能模式</string>
+    <string name="performance_mode_summary">自动模式会根据设备硬件选择合适方案。精简模式可提升老旧与低配设备速度，标准模式保持完整精确度。</string>
+    <string name="performance_mode_auto">自动</string>
+    <string name="performance_mode_standard">标准（完整精度）</string>
+    <string name="performance_mode_lite">精简模式（老旧和低配设备）</string>
+    <string name="performance_mode_active_standard">当前为标准模式</string>
+    <string name="performance_mode_active_lite">当前为精简模式</string>
 </resources>

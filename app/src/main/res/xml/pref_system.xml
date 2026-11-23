@@ -42,6 +42,15 @@
             android:title="@string/pref_cat_core_compiler"
             app:iconSpaceReserved="false">
 
+        <ListPreference
+                android:key="performance_mode"
+                android:title="@string/performance_mode_title"
+                android:summary="@string/performance_mode_summary"
+                app:iconSpaceReserved="false"
+                android:defaultValue="auto"
+                android:entries="@array/performance_mode_options"
+                android:entryValues="@array/performance_mode_values" />
+
         <SwitchPreference
                 android:key="enable_storm_compiler"
                 android:title="@string/enable_storm_compiler"

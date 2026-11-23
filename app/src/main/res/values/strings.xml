@@ -1840,4 +1840,11 @@
     <string name="v882_comp_desc_button_single">Individual face button (A, B, X, or Y) for flexible standalone placement and Toggle or Turbo modes</string>
     <string name="v882_comp_desc_slot2_analog">Virtual GBA Slot-2 analog stick for compatible homebrew and analog motion patches</string>
     <string name="waiting_for_combo">Hold two different buttons on the same controller. The first button can act before the combo is complete; use an unassigned button as the modifier to avoid this.</string>
+    <string name="performance_mode_title">Performance mode</string>
+    <string name="performance_mode_summary">Auto picks the best mode for your hardware. Simplified mode speeds up old and weak devices, while Standard keeps full accuracy.</string>
+    <string name="performance_mode_auto">Auto</string>
+    <string name="performance_mode_standard">Standard (full accuracy)</string>
+    <string name="performance_mode_lite">Simplified (old and weak devices)</string>
+    <string name="performance_mode_active_standard">standard mode active</string>
+    <string name="performance_mode_active_lite">simplified mode active</string>
 </resources>

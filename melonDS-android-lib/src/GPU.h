@@ -176,6 +176,24 @@ public:
     void FinishFaithfulDmaLineageBatch(
         u32 transferredByteCount) noexcept;
 
+    void SetLiteSkip2DRender(bool skip) noexcept { LiteSkip2DRender = skip; }
+    [[nodiscard]] bool IsLiteSkip2DRender() const noexcept { return LiteSkip2DRender; }
+    void SetLiteSkipNext3DRender(bool skip) noexcept { LiteSkipNext3DRender = skip; }
+    [[nodiscard]] bool IsLiteSkipNext3DRender() const noexcept { return LiteSkipNext3DRender; }
+    void MarkLiteSkipped3DForNextFrame() noexcept { LiteSkipped3DForNextFrame = true; }
+    [[nodiscard]] bool TakeLiteSkipped3DForNextFrame() noexcept
+    {
+        const bool wasSkipped = LiteSkipped3DForNextFrame;
+        LiteSkipped3DForNextFrame = false;
+        return wasSkipped;
+    }
+    void ResetLiteFrameSkipState() noexcept
+    {
+        LiteSkip2DRender = false;
+        LiteSkipNext3DRender = false;
+        LiteSkipped3DForNextFrame = false;
+    }
+
     [[nodiscard]] bool ShouldDeferFaithfulDmaMainRamInvalidation(
         u32 cpu, u32 addr, u32 byteCount) const noexcept;
     void InvalidateFaithfulMainRamCaptureRangeForCpuAddress(
@@ -968,6 +986,9 @@ private:
 
     u32 OAMDirty = 0;
     u32 PaletteDirty = 0;
+    bool LiteSkip2DRender = false;
+    bool LiteSkipNext3DRender = false;
+    bool LiteSkipped3DForNextFrame = false;
 };
 }
 
