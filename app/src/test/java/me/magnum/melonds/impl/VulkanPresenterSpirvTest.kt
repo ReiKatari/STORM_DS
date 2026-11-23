@@ -63,6 +63,10 @@ class VulkanPresenterSpirvTest {
 
         val bound = words[3]
         assertTrue("Adreno 619 requires SPIR-V bound < 65535, got $bound", bound in 1 until 65535)
+        assertTrue("Primary presenter SPIR-V bound must stay < 10000, got $bound", bound in 1 until 10000)
+
+        val byteSize = words.size * 4
+        assertTrue("Primary presenter SPIR-V size must stay < 200000 bytes, got $byteSize", byteSize < 200_000)
 
         val funcs = countFunctions(words)
         assertTrue("Expected non-inlined multi-function SPIR-V (>1 OpFunction), got $funcs", funcs > 1)
@@ -78,12 +82,16 @@ class VulkanPresenterSpirvTest {
         assertTrue("Expected SPIR-V 1.0 (0x00010000), got 0x${words[1].toString(16)}", words[1] == 0x00010000)
 
         val bound = words[3]
-        assertTrue("Fallback presenter SPIR-V bound must stay < 1000, got $bound", bound in 1 until 1000)
+        assertTrue("Fallback presenter SPIR-V bound must stay < 4096, got $bound", bound in 1 until 4096)
         assertTrue("Fallback presenter SPIR-V size must stay < 32768 bytes, got $byteSize", byteSize < 32768)
+
+        val funcs = countFunctions(words)
+        assertTrue("Fallback -O SPIR-V should inline to 1 function, got $funcs", funcs == 1)
     }
 
     @Test
     fun surfacePresenterCpp_omitsDeadStorageBindingsAndWiresFallbackShader() {
+        val header = resolveRepoFile("app/src/main/cpp/renderer/VulkanSurfacePresenter.h").readText(Charsets.UTF_8)
         val cpp = resolveRepoFile("app/src/main/cpp/renderer/VulkanSurfacePresenter.cpp").readText(Charsets.UTF_8)
         val start = cpp.indexOf("bool VulkanSurfacePresenter::createCommonResources()")
         val end = cpp.indexOf("void VulkanSurfacePresenter::destroyCommonResources()")
@@ -95,5 +103,8 @@ class VulkanPresenterSpirvTest {
         assertFalse("Unused binding 9 must not be declared", createBlock.contains(".binding = 9"))
         assertFalse("Unused binding 10 must not be declared", createBlock.contains(".binding = 10"))
         assertTrue("Fallback fragment shader must be created", createBlock.contains("fallbackFragmentShaderModule"))
+        assertTrue("Surface presenter must double-buffer frame slots", header.contains("kSurfaceFramesInFlight = 2u"))
+        assertTrue("Surface presenter must wire fastCompositePipeline", cpp.contains("fastCompositePipeline"))
+        assertTrue("Surface presenter must guard fastCompositePipeline eligibility", cpp.contains("canUseFastCompositePipeline("))
     }
 }

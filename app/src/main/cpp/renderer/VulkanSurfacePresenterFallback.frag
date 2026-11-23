@@ -131,28 +131,55 @@ vec3 applyLcdGridEffect(vec3 rgb, vec2 uv, uint lcdGridMode)
 {
     if (lcdGridMode == 0u)
         return rgb;
-    vec2 localUv = screenLocalCoord(uv, uv.y < 0.5);
+    bool topScreen = (pushConstants.drawMode == 4u || pushConstants.drawMode == 7u)
+        ? true
+        : ((pushConstants.drawMode == 5u || pushConstants.drawMode == 8u)
+            ? false
+            : (uv.y < 0.5));
+    vec2 localUv = screenLocalCoord(uv, topScreen);
     vec2 cellCoord = localUv * vec2(256.0, 192.0);
     vec2 fw = max(fwidth(cellCoord), vec2(0.0001));
-    float vis = clamp(1.0 - max(fw.x, fw.y) * 1.45, 0.0, 1.0);
-    if (vis <= 0.01)
+    float visibility = clamp(1.0 - max(fw.x, fw.y) * 1.45, 0.0, 1.0);
+    if (visibility <= 0.01)
         return rgb;
+
     vec2 cell = fract(cellCoord);
-    float gx = smoothstep(0.0, 0.09, cell.x) * (1.0 - smoothstep(0.91, 1.0, cell.x));
-    float gy = smoothstep(0.0, 0.10, cell.y) * (1.0 - smoothstep(0.90, 1.0, cell.y));
-    return clamp(rgb * mix(1.0, mix(0.76, 1.04, gx * gy), vis), 0.0, 1.0);
+    if (lcdGridMode == 1u)
+    {
+        float gx = smoothstep(0.0, 0.09, cell.x) * (1.0 - smoothstep(0.91, 1.0, cell.x));
+        float gy = smoothstep(0.0, 0.10, cell.y) * (1.0 - smoothstep(0.90, 1.0, cell.y));
+        float mask = mix(1.0, mix(0.76, 1.04, gx * gy), visibility);
+        return clamp(rgb * mask, 0.0, 1.0);
+    }
+    if (lcdGridMode == 2u)
+    {
+        float scan = mix(0.82, 1.05, smoothstep(0.0, 0.12, cell.y) * (1.0 - smoothstep(0.88, 1.0, cell.y)));
+        float sub = cell.x * 3.0;
+        vec3 triad = vec3(
+            0.90 + 0.18 * smoothstep(0.0, 0.35, sub) * (1.0 - smoothstep(0.65, 1.15, sub)),
+            0.90 + 0.18 * smoothstep(0.85, 1.35, sub) * (1.0 - smoothstep(1.65, 2.15, sub)),
+            0.90 + 0.18 * smoothstep(1.85, 2.35, sub) * (1.0 - smoothstep(2.65, 3.0, sub))
+        );
+        vec3 maskRgb = mix(vec3(1.0), triad * scan, visibility);
+        return clamp(rgb * maskRgb, 0.0, 1.0);
+    }
+    return rgb;
 }
 
 void main()
 {
-    if (pushConstants.drawMode == 0u || pushConstants.drawMode == 6u)
+    if (pushConstants.drawMode == 0u)
     {
         outColor = vec4(texture(uTexture, inFragUv).rgb, fragAlpha);
         return;
     }
 
     vec3 rgb;
-    if (pushConstants.drawMode == 4u || pushConstants.drawMode == 5u)
+    if (pushConstants.drawMode == 6u)
+    {
+        rgb = texture(uTexture, inFragUv).rgb;
+    }
+    else if (pushConstants.drawMode == 4u || pushConstants.drawMode == 5u)
     {
         bool topScreen = (pushConstants.drawMode == 4u);
         uint fMode = pushConstants.filtering & 0xFFu;
@@ -165,6 +192,10 @@ void main()
         else
             rgb = sampleCompositeRgb(inFragUv, topScreen);
     }
+    else if (pushConstants.drawMode == 7u || pushConstants.drawMode == 8u)
+    {
+        rgb = sampleCompositeRgb(inFragUv, pushConstants.drawMode == 7u);
+    }
     else
     {
         rgb = texture(uTexture, inFragUv).bgr;
@@ -172,6 +203,11 @@ void main()
 
     uint colorProfile = (pushConstants.filtering >> 11u) & 0x7u;
     uint lcdGridMode = (pushConstants.filtering >> 21u) & 0x3u;
+    if (colorProfile == 0u && lcdGridMode == 0u)
+    {
+        outColor = vec4(rgb, fragAlpha);
+        return;
+    }
     rgb = applyConsoleColorProfile(rgb, colorProfile);
     rgb = applyLcdGridEffect(rgb, inFragUv, lcdGridMode);
     outColor = vec4(rgb, fragAlpha);

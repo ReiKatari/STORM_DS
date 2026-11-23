@@ -65,22 +65,40 @@ public:
 
     int getCapacity(std::size_t cpu, std::uint32_t& capacity) noexcept override
     {
-        char path[96];
-        std::snprintf(path, sizeof(path), "/sys/devices/system/cpu/cpu%zu/cpu_capacity", cpu);
-        FILE* file = std::fopen(path, "r");
-        if (file == nullptr)
-            return errno;
-        unsigned long value = 0;
-        char trailing = 0;
-        const int count = std::fscanf(file, "%lu %c", &value, &trailing);
-        const int readError = std::ferror(file) ? EIO : 0;
-        std::fclose(file);
-        if (readError != 0)
-            return readError;
-        if (count != 1 || value == 0 || value > std::numeric_limits<std::uint32_t>::max())
-            return EINVAL;
-        capacity = static_cast<std::uint32_t>(value);
-        return 0;
+        const auto readPositiveUint32 = [](const char* sysfsPath, std::uint32_t& outValue) noexcept -> int {
+            FILE* file = std::fopen(sysfsPath, "r");
+            if (file == nullptr)
+                return errno;
+            unsigned long value = 0;
+            char trailing = 0;
+            const int count = std::fscanf(file, "%lu %c", &value, &trailing);
+            const int readError = std::ferror(file) ? EIO : 0;
+            std::fclose(file);
+            if (readError != 0)
+                return readError;
+            if (count != 1 || value == 0 || value > std::numeric_limits<std::uint32_t>::max())
+                return EINVAL;
+            outValue = static_cast<std::uint32_t>(value);
+            return 0;
+        };
+
+        static constexpr const char* kCapacityPathFormats[] = {
+            "/sys/devices/system/cpu/cpu%zu/cpu_capacity",
+            "/sys/devices/system/cpu/cpu%zu/cpufreq/cpuinfo_max_freq",
+            "/sys/devices/system/cpu/cpu%zu/cpufreq/scaling_max_freq",
+        };
+        int firstError = ENOENT;
+        for (const char* format : kCapacityPathFormats)
+        {
+            char path[128];
+            std::snprintf(path, sizeof(path), format, cpu);
+            const int rc = readPositiveUint32(path, capacity);
+            if (rc == 0)
+                return 0;
+            if (firstError == ENOENT)
+                firstError = rc;
+        }
+        return firstError;
     }
 
     void record(const char* operation, int error,

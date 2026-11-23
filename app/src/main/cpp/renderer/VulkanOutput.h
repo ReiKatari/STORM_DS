@@ -644,6 +644,7 @@ private:
         VkFence submitFence{VK_NULL_HANDLE};
         VkQueryPool timestampQueryPool{VK_NULL_HANDLE};
         bool faithfulTimestampBreakdownPending{};
+        bool timestampRecordedInCommandBuffer{false};
         VkImage renderer3dSnapshot{VK_NULL_HANDLE};
         VkImageView renderer3dSnapshotView{VK_NULL_HANDLE};
         VkDeviceMemory renderer3dSnapshotMemory{VK_NULL_HANDLE};

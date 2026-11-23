@@ -155,6 +155,8 @@ class VulkanSurfacePresenter
     const bool lowLatencyEnabled;
 
 public:
+    static constexpr u32 kSurfaceFramesInFlight = 2u;
+
     explicit VulkanSurfacePresenter(bool lowLatencyEnabled = false) : lowLatencyEnabled(lowLatencyEnabled) {}
     ~VulkanSurfacePresenter();
 
@@ -316,22 +318,54 @@ private:
         std::vector<VkImageView> swapchainImageViews;
         std::vector<VkFramebuffer> framebuffers;
 
+        struct FrameSlot
+        {
+            VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+            VkFence inFlightFence = VK_NULL_HANDLE;
+            VkSemaphore imageAvailableSemaphore = VK_NULL_HANDLE;
+            VkDescriptorSet screenDescriptorSet = VK_NULL_HANDLE;
+            VkDescriptorSet backgroundDescriptorSet = VK_NULL_HANDLE;
+            DescriptorSetCacheState screenDescriptorCache{};
+            DescriptorSetCacheState backgroundDescriptorCache{};
+            VkBuffer vertexBuffer = VK_NULL_HANDLE;
+            VkDeviceMemory vertexMemory = VK_NULL_HANDLE;
+            VkDeviceSize vertexBufferSize = 0;
+            void* mappedVertexMemory = nullptr;
+            bool vertexBufferDirty = true;
+            bool backgroundDescriptorDirty = false;
+            bool cachedDirectPresent = false;
+            bool cachedRetroArchApplied = false;
+            bool cachedFastHighresOnlyTop = false;
+            bool cachedFastHighresOnlyBottom = false;
+            bool cachedFastHighresOverlay2DTop = false;
+            bool cachedFastHighresOverlay2DBottom = false;
+            bool cachedFastPacked2DOnlyTop = false;
+            bool cachedFastPacked2DOnlyBottom = false;
+            u32 cachedFastPacked2DOnlyLayerTop = 2u;
+            u32 cachedFastPacked2DOnlyLayerBottom = 2u;
+            u32 cachedTopOverlay2DMinX = 0;
+            u32 cachedTopOverlay2DMinY = 0;
+            u32 cachedTopOverlay2DMaxX = 0;
+            u32 cachedTopOverlay2DMaxY = 0;
+            u32 cachedBottomOverlay2DMinX = 0;
+            u32 cachedBottomOverlay2DMinY = 0;
+            u32 cachedBottomOverlay2DMaxX = 0;
+            u32 cachedBottomOverlay2DMaxY = 0;
+            bool cachedDirectTopCarryRequired = false;
+            bool cachedDirectBottomCarryRequired = false;
+            bool cachedDirectTopComposedCarryRequired = false;
+            bool cachedDirectBottomComposedCarryRequired = false;
+            std::vector<DrawCall> cachedDrawCalls;
+        };
+
         VkRenderPass renderPass = VK_NULL_HANDLE;
         VkPipeline composedPipeline = VK_NULL_HANDLE;
+        VkPipeline fastCompositePipeline = VK_NULL_HANDLE;
         VkCommandPool commandPool = VK_NULL_HANDLE;
-        VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
-        VkFence inFlightFence = VK_NULL_HANDLE;
-        VkSemaphore imageAvailableSemaphore = VK_NULL_HANDLE;
+        std::array<FrameSlot, kSurfaceFramesInFlight> frameSlots{};
+        u32 currentFrameSlot = 0u;
 
         std::vector<VkSemaphore> renderFinishedSemaphores;
-
-        VkDescriptorSet screenDescriptorSet = VK_NULL_HANDLE;
-        VkDescriptorSet backgroundDescriptorSet = VK_NULL_HANDLE;
-
-        VkBuffer vertexBuffer = VK_NULL_HANDLE;
-        VkDeviceMemory vertexMemory = VK_NULL_HANDLE;
-        VkDeviceSize vertexBufferSize = 0;
-        void* mappedVertexMemory = nullptr;
 
         VulkanSurfaceConfig config{};
         bool configured = false;
@@ -340,33 +374,6 @@ private:
         bool usingFallbackShader = false;
         VkSurfaceFormatKHR cachedSurfaceFormat{};
         VkPresentModeKHR cachedPresentMode = VK_PRESENT_MODE_FIFO_KHR;
-        bool vertexBufferDirty = true;
-        bool backgroundDescriptorDirty = false;
-        DescriptorSetCacheState screenDescriptorCache{};
-        DescriptorSetCacheState backgroundDescriptorCache{};
-        bool cachedDirectPresent = false;
-        bool cachedRetroArchApplied = false;
-        bool cachedFastHighresOnlyTop = false;
-        bool cachedFastHighresOnlyBottom = false;
-        bool cachedFastHighresOverlay2DTop = false;
-        bool cachedFastHighresOverlay2DBottom = false;
-        bool cachedFastPacked2DOnlyTop = false;
-        bool cachedFastPacked2DOnlyBottom = false;
-        u32 cachedFastPacked2DOnlyLayerTop = 2u;
-        u32 cachedFastPacked2DOnlyLayerBottom = 2u;
-        u32 cachedTopOverlay2DMinX = 0;
-        u32 cachedTopOverlay2DMinY = 0;
-        u32 cachedTopOverlay2DMaxX = 0;
-        u32 cachedTopOverlay2DMaxY = 0;
-        u32 cachedBottomOverlay2DMinX = 0;
-        u32 cachedBottomOverlay2DMinY = 0;
-        u32 cachedBottomOverlay2DMaxX = 0;
-        u32 cachedBottomOverlay2DMaxY = 0;
-        bool cachedDirectTopCarryRequired = false;
-        bool cachedDirectBottomCarryRequired = false;
-        bool cachedDirectTopComposedCarryRequired = false;
-        bool cachedDirectBottomComposedCarryRequired = false;
-        std::vector<DrawCall> cachedDrawCalls;
         VkQueryPool timestampQueryPool = VK_NULL_HANDLE;
         bool timestampPending = false;
         bool timestampRecordedInCommandBuffer = false;
@@ -424,13 +431,21 @@ private:
     void destroyRenderFinishedSemaphores(SurfaceState& surfaceState);
     VkResult waitForPresentQueueIdleForLifecycle();
     void recoverSwapchain(SurfaceState& surfaceState, const char* reason);
-    bool createInFlightFence(SurfaceState& surfaceState, bool signaled);
-    void destroyInFlightFence(SurfaceState& surfaceState);
+    bool createInFlightFence(SurfaceState::FrameSlot& slot, bool signaled);
+    void destroyInFlightFence(SurfaceState::FrameSlot& slot);
     void ensureSurfacePipelineCache();
     void saveSurfacePipelineCache();
     void destroySurfacePipelineCache();
+    static void markAllFrameSlotsVertexDirty(SurfaceState& surfaceState);
+    static void markAllFrameSlotsBackgroundDirty(SurfaceState& surfaceState);
+    static bool canUseFastCompositePipeline(
+        const SurfaceState& surfaceState,
+        VulkanFilterMode effectiveFiltering,
+        u32 packedFiltering,
+        bool directPresent);
+    VkResult waitForSurfaceSlotIdle(SurfaceState& surfaceState, u32 slotIndex, u64 timeoutNs = UINT64_MAX);
     VkResult waitForSurfaceIdle(SurfaceState& surfaceState, u64 timeoutNs = UINT64_MAX);
-    bool resetSurfaceInFlightFence(SurfaceState& surfaceState);
+    bool resetSurfaceInFlightFence(SurfaceState::FrameSlot& slot);
     bool createTimestampQueryPool(VkQueryPool& queryPool);
     void destroyTimestampQueryPool(VkQueryPool& queryPool);
     void consumeSurfaceGpuTiming(SurfaceState& surfaceState);
@@ -442,6 +457,7 @@ private:
 
     bool updateDescriptorSets(
         SurfaceState& surfaceState,
+        u32 slotIndex,
         VkImageView frameImageView,
         const VulkanCompositionInputs& inputs,
         VulkanFilterMode filtering,
@@ -449,6 +465,7 @@ private:
     );
     bool updateVertexBuffer(
         SurfaceState& surfaceState,
+        u32 slotIndex,
         const VulkanSurfaceConfig& config,
         const BackgroundResource* backgroundResource,
         const VulkanCompositionInputs& inputs,
@@ -458,9 +475,11 @@ private:
     );
     bool recordSurfaceCommands(
         SurfaceState& surfaceState,
+        u32 slotIndex,
         VkFramebuffer framebuffer,
         const VulkanCompositionInputs& inputs,
         VkImage sampledImage,
+        VulkanFilterMode effectiveFiltering,
         bool directPresent,
         const std::vector<DrawCall>& drawCalls,
         bool bottomComp2OneShotStore,
@@ -473,6 +492,7 @@ private:
     );
     bool submitSurfaceCommands(
         SurfaceState& surfaceState,
+        u32 slotIndex,
         u32 imageIndex,
         VkSemaphore sourceReadySemaphore,
         u64 sourceReadyValue,

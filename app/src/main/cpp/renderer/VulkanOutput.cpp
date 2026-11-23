@@ -32,6 +32,7 @@ bool areRendererDebugToolsEnabled();
 bool areRendererDebugBgObjLogsEnabled();
 bool areRenderer2DDebugControlsActive();
 bool isRenderer2DDebugBackgroundKindEnabled(melonDS::u32 featureFlag);
+static bool perfForzadoPorPropiedadVO();
 
 namespace
 {
@@ -78,6 +79,15 @@ void writeFaithfulMaskedScreen(u32* destination, const u32* colors,
         destination[i] = (colors[i] & ~(1u << 26u))
             | (mask != nullptr ? mask[i] : 0u);
 #endif
+}
+
+bool shouldRecordOutputGpuTimestamps(bool faithfulPassTiming)
+{
+    static const bool perfFuerza = std::getenv("MELON_PERF_FUERZA") != nullptr;
+    return faithfulPassTiming
+        || perfFuerza
+        || perfForzadoPorPropiedadVO()
+        || areRendererDebugToolsEnabled();
 }
 
 bool faithfulPassTimingEnabled()
@@ -5392,7 +5402,10 @@ bool VulkanOutput::dispatchFaithfulCompositor(Frame* frame, FrameResource& resou
     if (!beginFrameCommand(resource))
         return rejectCompose("begin_frame_command");
     const bool recordFaithfulPassTiming =
-        faithfulPassTimingSessionEnabled;
+        faithfulPassTimingSessionEnabled
+        && shouldRecordOutputGpuTimestamps(faithfulPassTimingSessionEnabled);
+    const bool recordOutputGpuTimestamps =
+        shouldRecordOutputGpuTimestamps(faithfulPassTimingSessionEnabled);
     const auto writeFaithfulTimestamp = [&, this](
             u32 query, VkPipelineStageFlagBits stage) {
         if (!recordFaithfulPassTiming
@@ -5401,8 +5414,20 @@ bool VulkanOutput::dispatchFaithfulCompositor(Frame* frame, FrameResource& resou
         vkCmdWriteTimestamp(
             resource.commandBuffer, stage,
             resource.timestampQueryPool, query);
+        resource.timestampRecordedInCommandBuffer = true;
     };
-    writeFaithfulTimestamp(0u, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT);
+    if (recordFaithfulPassTiming)
+    {
+        writeFaithfulTimestamp(0u, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT);
+    }
+    else if (recordOutputGpuTimestamps
+        && resource.timestampQueryPool != VK_NULL_HANDLE)
+    {
+        vkCmdWriteTimestamp(
+            resource.commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+            resource.timestampQueryPool, 0u);
+        resource.timestampRecordedInCommandBuffer = true;
+    }
 
     if (snapshotDiferidoRenderer != nullptr)
     {
@@ -6770,10 +6795,20 @@ bool VulkanOutput::dispatchFaithfulCompositor(Frame* frame, FrameResource& resou
             resource.commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
             resource.timestampQueryPool, 7u);
         resource.faithfulTimestampBreakdownPending = true;
+        resource.timestampRecordedInCommandBuffer = true;
+    }
+    else if (recordOutputGpuTimestamps
+        && resource.timestampQueryPool != VK_NULL_HANDLE)
+    {
+        vkCmdWriteTimestamp(
+            resource.commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+            resource.timestampQueryPool, 1u);
+        resource.timestampRecordedInCommandBuffer = true;
     }
     if (!submitFrameCommand(frame, resource, true))
     {
         resource.faithfulTimestampBreakdownPending = false;
+        resource.timestampRecordedInCommandBuffer = false;
         faithfulSealReadbackPending[faithfulRing] = false;
         faithfulSealReadbackSlot[faithfulRing] = 4u;
         faithfulSealReadbackEpoch[faithfulRing] = 0u;
@@ -7722,7 +7757,10 @@ bool VulkanOutput::beginFrameCommand(FrameResource& resource, u64 waitTimeoutNs)
 
     clearFaithfulUsesForCompletedResourceLocked(resource);
 
-    if (resource.timestampQueryPool != VK_NULL_HANDLE && resetQueryPool != nullptr)
+    resource.timestampRecordedInCommandBuffer = false;
+    if (resource.timestampQueryPool != VK_NULL_HANDLE
+        && resetQueryPool != nullptr
+        && shouldRecordOutputGpuTimestamps(faithfulPassTimingSessionEnabled))
     {
         resetQueryPool(
             device, resource.timestampQueryPool, 0,
@@ -7816,7 +7854,9 @@ bool VulkanOutput::submitFrameCommand(Frame* frame, FrameResource& resource, boo
     if (signalTimeline)
         resource.submissionValue = signalValue;
 
-    if (signalTimeline && resource.timestampQueryPool != VK_NULL_HANDLE)
+    if (signalTimeline
+        && resource.timestampQueryPool != VK_NULL_HANDLE
+        && resource.timestampRecordedInCommandBuffer)
         resource.timestampPending = true;
 
     return true;
@@ -10457,6 +10497,7 @@ void VulkanOutput::consumeFrameGpuTiming(FrameResource& resource)
 
     resource.timestampPending = false;
     resource.faithfulTimestampBreakdownPending = false;
+    resource.timestampRecordedInCommandBuffer = false;
 }
 
 static bool perfForzadoPorPropiedadVO()

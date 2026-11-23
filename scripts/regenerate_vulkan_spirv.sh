@@ -199,6 +199,51 @@ generate_header() {
     optimized_spv="$(mktemp)"
     "$SPIRV_OPT" -O --preserve-spec-constants "$tmp_spv" -o "$optimized_spv"
     mv "$optimized_spv" "$tmp_spv"
+  elif [[ "${OPTIMIZE_SPIRV:-0}" == "no_inline" ]]; then
+    if [[ -z "$SPIRV_OPT" ]]; then
+      echo "Missing required tool for non-inlining optimized shader: spirv-opt" >&2
+      exit 1
+    fi
+    local optimized_spv
+    optimized_spv="$(mktemp)"
+    "$SPIRV_OPT" \
+      --wrap-opkill \
+      --eliminate-dead-branches \
+      --merge-return \
+      --eliminate-dead-functions \
+      --scalar-replacement=100 \
+      --convert-local-access-chains \
+      --eliminate-local-single-block \
+      --eliminate-local-single-store \
+      --eliminate-dead-code-aggressive \
+      --eliminate-insert-extract \
+      --eliminate-local-multi-store \
+      --ccp \
+      --simplify-instructions \
+      --redundancy-elimination \
+      --combine-access-chains \
+      --simplify-instructions \
+      --vector-dce \
+      --eliminate-dead-inserts \
+      --eliminate-dead-branches \
+      --simplify-instructions \
+      --if-conversion \
+      --copy-propagate-arrays \
+      --reduce-load-size \
+      --combine-access-chains \
+      --scalar-replacement=100 \
+      --convert-local-access-chains \
+      --eliminate-local-single-block \
+      --eliminate-local-single-store \
+      --eliminate-dead-code-aggressive \
+      --eliminate-local-multi-store \
+      --redundancy-elimination \
+      --simplify-instructions \
+      --eliminate-dead-code-aggressive \
+      --cfg-cleanup \
+      --compact-ids \
+      "$tmp_spv" -o "$optimized_spv"
+    mv "$optimized_spv" "$tmp_spv"
   fi
 
   if [[ "$requires_dynamic_indexing" == "1" ]]; then
@@ -453,7 +498,7 @@ generate_header \
   "melonDS_android_vulkan_surface_presenter_vert_spv" \
   "$ROOT_DIR/app/src/main/cpp/renderer/VulkanSurfacePresenterVertexShaderData.h"
 
-generate_header \
+OPTIMIZE_SPIRV=no_inline generate_header \
   "$ROOT_DIR/app/src/main/cpp/renderer/VulkanSurfacePresenter.frag" \
   "frag" \
   "melonDS_android_vulkan_surface_presenter_frag_spv" \
@@ -463,7 +508,8 @@ generate_header \
   "$ROOT_DIR/app/src/main/cpp/renderer/VulkanSurfacePresenterFallback.frag" \
   "frag" \
   "melonDS_android_vulkan_surface_presenter_fallback_frag_spv" \
-  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanSurfacePresenterFallbackFragmentShaderData.h"
+  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanSurfacePresenterFallbackFragmentShaderData.h" \
+  "-O"
 
 if [[ "$MODE" == "check" ]]; then
   echo "Vulkan SPIR-V headers are up to date."

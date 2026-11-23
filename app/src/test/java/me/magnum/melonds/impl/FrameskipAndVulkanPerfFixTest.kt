@@ -219,7 +219,7 @@ class FrameskipAndVulkanPerfFixTest {
     }
 
     @Test
-    fun settingsDialogsAndNativePerfGuards_match886Contract() {
+    fun settingsDialogsAndNativePerfGuards_match887Contract() {
         val dialogsKt = resolveRepoPath(
             "app/src/main/java/me/magnum/melonds/ui/settings/dialogs/SettingsComposeDialogs.kt",
         ).readText(Charsets.UTF_8)
@@ -236,8 +236,16 @@ class FrameskipAndVulkanPerfFixTest {
         val miPerfBlock = melonInstance.substring(miPerfStart, miPerfEnd)
         assertTrue("perfForzadoPorPropiedadMI must require debug.melonds.perf == '1'", miPerfBlock.contains("v[0] == '1'"))
         assertTrue(
-            "Presenter high-res realtime budget floor must be >= 14ms",
-            melonInstance.contains("kVulkanHighResolutionRealtimePresenterBudgetFloorNs = 14'000'000ull"),
+            "Presenter high-res realtime budget floor must be 6ms",
+            melonInstance.contains("kVulkanHighResolutionRealtimePresenterBudgetFloorNs = 6'000'000ull"),
+        )
+        assertTrue(
+            "Realtime not-ready wait cap must be 12ms",
+            melonInstance.contains("kVulkanRealtimeNotReadyWaitCapNs = 12'000'000ull"),
+        )
+        assertTrue(
+            "Not-ready presenter timeout branch must cap waits at kVulkanRealtimeNotReadyWaitCapNs",
+            melonInstance.contains("return std::min(candidateBudgetNs, kVulkanRealtimeNotReadyWaitCapNs);"),
         )
 
         val gpu3d = resolveRepoPath("melonDS-android-lib/src/GPU3D_Vulkan.cpp").readText(Charsets.UTF_8)
@@ -247,9 +255,55 @@ class FrameskipAndVulkanPerfFixTest {
         val r3dPerfBlock = gpu3d.substring(r3dPerfStart, r3dPerfEnd)
         assertTrue("perfForzadoPorPropiedadR3D must require debug.melonds.perf == '1'", r3dPerfBlock.contains("v[0] == '1'"))
 
+        val eagerStart = gpu3d.indexOf("const bool eagerNativeProjectionSubmitted =")
+        val eagerEnd = gpu3d.indexOf("if (eagerNativeProjectionSubmitted && prefetchNativeForCompose)", eagerStart)
+        assertTrue("Could not locate eagerNativeProjectionSubmitted", eagerStart >= 0 && eagerEnd > eagerStart)
+        val eagerBlock = gpu3d.substring(eagerStart, eagerEnd)
+        assertFalse(
+            "eagerNativeProjectionSubmitted must not trigger extra 1x 3D projection for every 3D polygon frame",
+            eagerBlock.contains("RenderNumPolygons"),
+        )
+
         val g1Idx = gpu3d.indexOf("\"VulkanG1: sinEscritura=")
         assertTrue("Could not locate VulkanG1 log", g1Idx > 200)
         val g1Context = gpu3d.substring((g1Idx - 420).coerceAtLeast(0), g1Idx)
         assertTrue("VulkanG1 log must be gated by areRendererDebugToolsEnabled()", g1Context.contains("areRendererDebugToolsEnabled()"))
+
+        val outputHeader = resolveRepoPath("app/src/main/cpp/renderer/VulkanOutput.h").readText(Charsets.UTF_8)
+        val outputCpp = resolveRepoPath("app/src/main/cpp/renderer/VulkanOutput.cpp").readText(Charsets.UTF_8)
+        assertTrue(
+            "VulkanOutput.h must track whether timestamps were actually recorded in command buffer",
+            outputHeader.contains("bool timestampRecordedInCommandBuffer{false};"),
+        )
+        assertTrue(
+            "VulkanOutput.cpp must gate query pool resets via shouldRecordOutputGpuTimestamps",
+            outputCpp.contains("shouldRecordOutputGpuTimestamps(faithfulPassTimingSessionEnabled)"),
+        )
+        assertTrue(
+            "VulkanOutput.cpp submitFrameCommand must require timestampRecordedInCommandBuffer",
+            outputCpp.contains("resource.timestampRecordedInCommandBuffer"),
+        )
+
+        val cpuPolicyCpp = resolveRepoPath("app/src/main/cpp/EmulationThreadCpuPolicy.cpp").readText(Charsets.UTF_8)
+        assertTrue(
+            "CPU policy must fall back to cpufreq/cpuinfo_max_freq when cpu_capacity is missing",
+            cpuPolicyCpp.contains("/cpufreq/cpuinfo_max_freq"),
+        )
+        assertTrue(
+            "CPU policy must fall back to cpufreq/scaling_max_freq when cpu_capacity is missing",
+            cpuPolicyCpp.contains("/cpufreq/scaling_max_freq"),
+        )
+
+        val coordinatorKt = resolveRepoPath(
+            "app/src/main/java/me/magnum/melonds/ui/emulator/render/VulkanFrameRenderCoordinator.kt",
+        ).readText(Charsets.UTF_8)
+        assertTrue(
+            "VulkanFrameRenderCoordinator must perform a short park retry on not-ready",
+            coordinatorKt.contains("LockSupport.parkNanos(NOT_READY_RETRY_PARK_NS)"),
+        )
+        assertTrue(
+            "VulkanFrameRenderCoordinator must schedule a coalesced catchup retry instead of dropping the VSync",
+            coordinatorKt.contains("schedulePresentationCatchupRetry(permit)"),
+        )
     }
 }

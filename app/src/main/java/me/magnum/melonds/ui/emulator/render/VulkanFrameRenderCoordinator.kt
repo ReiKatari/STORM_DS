@@ -19,6 +19,7 @@ import me.magnum.melonds.domain.model.RuntimeBackground
 import me.magnum.melonds.extensions.parcelable
 import me.magnum.melonds.ui.emulator.EmulatorSurfaceView
 import me.magnum.melonds.ui.emulator.model.VulkanPresentationConfig
+import java.util.concurrent.locks.LockSupport
 
 class VulkanFrameRenderCoordinator(
     private val context: Context,
@@ -671,6 +672,47 @@ class VulkanFrameRenderCoordinator(
             }
         }
 
+        private fun schedulePresentationCatchupRetry(permit: PacingPermit) {
+            val activeHandler = synchronized(pacingLock) {
+                val currentPermit = pendingPacingPermit
+                val candidateHandler = getActiveHandler()
+                if (!running
+                    || pacingTransitionCount != 0
+                    || renderMessageQueued
+                    || candidateHandler == null
+                    || currentPermit == null
+                    || currentPermit.consumed
+                    || currentPermit.permitId != permit.permitId
+                    || currentPermit.controlEpoch != permit.controlEpoch
+                    || controlEpoch != permit.controlEpoch
+                ) {
+                    null
+                } else {
+                    renderMessageQueued = true
+                    candidateHandler
+                }
+            } ?: return
+
+            activeHandler.obtainMessage(MSG_RENDER_FRAME).also { msg ->
+                try {
+                    if (!activeHandler.sendMessageDelayed(msg, NOT_READY_CATCHUP_DELAY_MS)) {
+                        synchronized(pacingLock) {
+                            renderMessageQueued = false
+                        }
+                    }
+                } catch (_: IllegalStateException) {
+                    synchronized(pacingLock) {
+                        renderMessageQueued = false
+                    }
+                    if (handler === activeHandler) {
+                        activeHandler.removeCallbacksAndMessages(null)
+                        handler = null
+                    }
+                    msg.recycle()
+                }
+            }
+        }
+
         private fun pumpPresentation() {
             val initialPermit = startPresentationPump() ?: return
             if (!bindNativeWaitEpoch(initialPermit.permitId, initialPermit.controlEpoch)) {
@@ -688,6 +730,7 @@ class VulkanFrameRenderCoordinator(
             }
 
             var alreadyRetriedAfterProductWake = false
+            var alreadyRetriedNotReady = false
             while (running) {
                 val permit = currentPacingPermit(
                     initialPermit.permitId,
@@ -764,6 +807,19 @@ class VulkanFrameRenderCoordinator(
 
                     MelonEmulator.VulkanPresentationResult.GPU_NOT_READY,
                     MelonEmulator.VulkanPresentationResult.WSI_NOT_READY,
+                    -> {
+                        if (!alreadyRetriedNotReady) {
+                            alreadyRetriedNotReady = true
+                            LockSupport.parkNanos(NOT_READY_RETRY_PARK_NS)
+                            if (currentPacingPermit(permit.permitId, permit.controlEpoch) != null) {
+                                continue
+                            }
+                            return
+                        }
+                        schedulePresentationCatchupRetry(permit)
+                        return
+                    }
+
                     MelonEmulator.VulkanPresentationResult.RECOVERABLE_SURFACE_ERROR,
                     -> return
 
@@ -966,6 +1022,8 @@ class VulkanFrameRenderCoordinator(
         const val MSG_BACKGROUND_BITMAP = "background-bitmap"
 
         const val PRODUCT_WAIT_TIMEOUT_NS = 50_000_000L
+        const val NOT_READY_RETRY_PARK_NS = 1_000_000L
+        const val NOT_READY_CATCHUP_DELAY_MS = 2L
         const val STOP_JOIN_TIMEOUT_MS = 1500L
     }
 }

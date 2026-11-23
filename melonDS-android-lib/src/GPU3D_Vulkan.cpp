@@ -1339,8 +1339,7 @@ void VulkanRenderer3D::renderPreparedFrame(GPU& gpu, bool textureCacheChanged,
 
     const bool eagerNativeProjectionSubmitted =
         scale > 1u
-        && (captureNeedsGpuCaptureLine || prefetchNativeForCompose
-            || gpu.GPU3D.RenderNumPolygons != 0u)
+        && (captureNeedsGpuCaptureLine || prefetchNativeForCompose)
         && submitFaithfulNativeProjection(gpu, usePreparedGeometry);
     if (eagerNativeProjectionSubmitted && prefetchNativeForCompose)
         NativeComposePrefetchCount++;
