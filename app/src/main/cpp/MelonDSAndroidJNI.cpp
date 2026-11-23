@@ -100,7 +100,7 @@ std::atomic_int targetFps{60};
 std::atomic<float> fastForwardSpeedMultiplier{0.0f};
 std::atomic<float> frameLimitSpeedMultiplier{1.0f};
 
-std::atomic<int> frameskipMode{2};
+std::atomic<int> frameskipMode{0};
 std::atomic<int> frameskipManualValue{1};
 
 std::atomic<bool> vulkanDrsEnabled{false};
@@ -3938,15 +3938,17 @@ void* emulate(void*)
     MelonDSAndroid::start();
 
     auto manager = PerformanceHintManagerFactory::create(jniEnvHandler);
+    bool adpfSessionActive = false;
     {
         std::lock_guard<std::mutex> lock(performanceHintSessionLock);
         performanceHintSession = new ThreadSafePerformanceHintSession(std::move(manager));
         performanceHintSession->createSession(gettid(), FRAME_DURATION_60FPS_NS, performanceHintWorkers);
         performanceHintSession->updateTargetWorkDuration(currentPerformanceHintTargetNs());
+        adpfSessionActive = performanceHintSession->isActive();
         MelonDSAndroid::hookRegistrarHiloHints = registrarHiloEnHints;
         __android_log_print(ANDROID_LOG_INFO, "melonDS",
             "ADPF: sesion de hints %s (hilo de emulacion registrado)",
-            performanceHintSession->isActive() ? "ACTIVA" : "NO disponible");
+            adpfSessionActive ? "ACTIVA" : "NO disponible");
     }
 
     for (;;)
@@ -4019,7 +4021,7 @@ void* emulate(void*)
         }
 
         const bool multiplayerActive = MelonDSAndroid::Multiplayer::Active();
-        cpuPolicy.setActive(multiplayerActive);
+        cpuPolicy.setActive(multiplayerActive || !adpfSessionActive);
         const bool recordFrameTiming = frameTiming.active();
         const uint64_t timingCpuStart = recordFrameTiming ? FrameTimingRecorder::threadCpuNs() : 0;
         auto frameStart = std::chrono::steady_clock::now();
@@ -4087,13 +4089,13 @@ void* emulate(void*)
 
         if (limitFps && !wifiClient)
         {
-
+            double esperaCola = 0.0;
             if (!isFastForwardEnabled.load(std::memory_order_acquire))
             {
-                const double esperaCola =
+                esperaCola =
                     static_cast<double>(MelonDSAndroid::vulkanUltimaEsperaColaNs.load(std::memory_order_acquire)) / 1e6;
-                if (esperaCola > 0.0 && delay <= frameTimeStep * 1.05)
-                    delay -= std::min(esperaCola, frameTimeStep);
+                if (esperaCola > 0.0)
+                    delay = std::max(0.0, delay - std::min(esperaCola, delay));
             }
             frameLimitError += frameTimeStep - delay;
             if (frameLimitError < -frameTimeStep)
@@ -4128,12 +4130,17 @@ void* emulate(void*)
             else if (modoFrameskip == 1)
                 frameskipSolicitado = frameskipCicloManual != 0;
             else
+            {
+                const double frameWorkMs =
+                    std::chrono::duration<double, std::milli>(frameDuration).count()
+                    - esperaCola
+                    - static_cast<double>(wmWaitUS) / 1000.0;
                 frameskipSolicitado = nLines > 0
                     && frameskipInhibidoFotogramas == 0
                     && !ffActivo
-                    && (!wmWaitUS || std::chrono::duration<double, std::milli>(frameDuration).count()
-                                        - static_cast<double>(wmWaitUS) / 1000.0 > frameTimeStep)
-                    && frameLimitError <= -(frameTimeStep * 0.5);
+                    && frameWorkMs > frameTimeStep * 1.10
+                    && frameLimitError <= -(frameTimeStep * 0.85);
+            }
 
             if (round(frameLimitError) > 0.0)
             {

@@ -52,9 +52,7 @@
                 android:textSize="14.5sp"
                 android:textFontWeight="600"
                 android:fontFamily="@font/space_grotesk"
-                android:textColor="?android:attr/textColorPrimary"
-                android:maxLines="2"
-                android:ellipsize="end" />
+                android:textColor="?android:attr/textColorPrimary" />
 
             <TextView
                 android:id="@android:id/summary"
@@ -64,9 +62,7 @@
                 android:textSize="13sp"
                 android:textFontWeight="500"
                 android:fontFamily="@font/manrope"
-                android:textColor="?android:attr/textColorSecondary"
-                android:maxLines="4"
-                android:ellipsize="end" />
+                android:textColor="?android:attr/textColorSecondary" />
         </LinearLayout>
 
         <LinearLayout

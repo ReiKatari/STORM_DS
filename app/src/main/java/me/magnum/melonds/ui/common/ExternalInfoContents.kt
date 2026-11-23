@@ -545,8 +545,6 @@ fun ExternalSettingInfo(
                 fontSize = 13.5.sp,
                 lineHeight = 20.sp,
                 textAlign = TextAlign.Center,
-                maxLines = 5,
-                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 9.dp).width(420.dp),
             )
         }

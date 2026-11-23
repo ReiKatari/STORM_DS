@@ -369,6 +369,7 @@ private:
         std::vector<DrawCall> cachedDrawCalls;
         VkQueryPool timestampQueryPool = VK_NULL_HANDLE;
         bool timestampPending = false;
+        bool timestampRecordedInCommandBuffer = false;
         BackgroundResource background{};
         RetroArchResources retroArch{};
         RetroArchImageResource topComposedCarry{};

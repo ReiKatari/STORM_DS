@@ -405,7 +405,7 @@ class SettingsSearchIndex(private val context: Context) {
         } else {
             prefs.getBoolean("video_drs_enabled", false)
         }
-        if (vulkanDrsActive || prefs.getString("frameskip_mode", "auto") != "manual") {
+        if (vulkanDrsActive || prefs.getString("frameskip_mode", "off") != "manual") {
             hidden.add("frameskip_manual_value")
         }
         if (prefs.getString("save_state_location", "save_dir") != "custom_dir") {
@@ -710,7 +710,6 @@ class SettingsSearchDialog(
             val summaryView = TextView(parent.context).apply {
                 setTextColor(textColorSecondary)
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-                maxLines = 2
             }
             textContainer.addView(summaryView)
 

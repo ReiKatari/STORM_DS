@@ -17,7 +17,7 @@ data class EmulatorConfiguration(
         val internalDirectory: String,
         val fastForwardSpeedMultiplier: Float,
         val frameLimitSpeedMultiplier: Float,
-        val frameskipMode: Int = 2,
+        val frameskipMode: Int = 0,
         val frameskipManualValue: Int = 1,
         val vulkanDrsEnabled: Boolean = false,
         val rewindEnabled: Boolean,

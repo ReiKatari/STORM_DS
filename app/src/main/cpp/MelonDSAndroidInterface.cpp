@@ -397,12 +397,16 @@ bool hasRequiredDeviceExtensions(VkInstance instance, VkPhysicalDevice physicalD
     const bool timelineExtensionAvailable = apiAtLeast12 || hasExtension(kTimelineSemaphoreExtension, extensions);
     if (!timelineExtensionAvailable && !forceDisableTimelineSemaphores)
     {
-        melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Warn,
-            "MelonDSAndroidInterface: device '%s' missing extension %s; timeline fallback will use fences",
-            properties.deviceName,
-            kTimelineSemaphoreExtension
-        );
+        static std::atomic_bool loggedMissingTimelineExt{false};
+        if (!loggedMissingTimelineExt.exchange(true, std::memory_order_relaxed))
+        {
+            melonDS::Platform::Log(
+                melonDS::Platform::LogLevel::Warn,
+                "MelonDSAndroidInterface: device '%s' missing extension %s; timeline fallback will use fences",
+                properties.deviceName,
+                kTimelineSemaphoreExtension
+            );
+        }
     }
 
     const bool hasExternalMemoryExtension = hasExtension(kOptionalExternalMemoryExtension, extensions);
@@ -452,11 +456,15 @@ bool hasRequiredDeviceExtensions(VkInstance instance, VkPhysicalDevice physicalD
 
     if (timelineFeatures.timelineSemaphore != VK_TRUE)
     {
-        melonDS::Platform::Log(
-            melonDS::Platform::LogLevel::Warn,
-            "MelonDSAndroidInterface: device '%s' missing feature timelineSemaphore; timeline fallback will use fences",
-            properties.deviceName
-        );
+        static std::atomic_bool loggedMissingTimelineFeat{false};
+        if (!loggedMissingTimelineFeat.exchange(true, std::memory_order_relaxed))
+        {
+            melonDS::Platform::Log(
+                melonDS::Platform::LogLevel::Warn,
+                "MelonDSAndroidInterface: device '%s' missing feature timelineSemaphore; timeline fallback will use fences",
+                properties.deviceName
+            );
+        }
     }
 
     const bool dynamicTextureIndexingAvailable =

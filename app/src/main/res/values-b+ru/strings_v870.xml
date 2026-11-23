@@ -176,7 +176,7 @@
     <string name="v870_submenu_cat_controls">Звук и управление</string>
     <string name="v870_submenu_items_count">%1$d параметров</string>
     <string name="v870_toggle_on">ВКЛ</string>
-    <string name="v870_toggle_off">ВЫКЛ</string>
+    <string name="v870_toggle_off">Выключено</string>
     <string name="v870_submenu_desc_rom">Параметры и оверлеи для текущей игры</string>
     <string name="v870_submenu_desc_video">Шейдеры, фильтры и видеочип</string>
     <string name="v870_submenu_desc_audio">Аудиопотоки и параметры микрофона</string>

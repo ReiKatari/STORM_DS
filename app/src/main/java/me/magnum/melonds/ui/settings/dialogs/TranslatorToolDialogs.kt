@@ -666,8 +666,7 @@ private fun MlKitModelsManagerDialogContent(
                                 fontFamily = SpaceGrotesk,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
+                                softWrap = true,
                             )
                             Spacer(Modifier.height(2.dp))
                             Row(

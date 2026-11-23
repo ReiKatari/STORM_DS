@@ -4087,16 +4087,22 @@ void VulkanRenderer3D::consumeGpuTiming(RenderContext* context)
 static bool perfForzadoPorPropiedadR3D()
 {
 #ifdef __ANDROID__
-
     static const bool forzado = [] {
         char v[92] = {};
-        const bool leido = __system_property_get("debug.melonds.perf", v) > 0;
-        return !(leido && v[0] == '0');
+        return __system_property_get("debug.melonds.perf", v) > 0 && v[0] == '1';
     }();
     return forzado;
 #else
     return false;
 #endif
+}
+
+static bool shouldRecordGpuTimestampsR3D()
+{
+    static const bool perfFuerza = std::getenv("MELON_PERF_FUERZA") != nullptr;
+    return perfFuerza
+        || perfForzadoPorPropiedadR3D()
+        || MelonDSAndroid::areRendererDebugToolsEnabled();
 }
 
 void VulkanRenderer3D::logPerformanceIfNeeded()
@@ -9091,7 +9097,9 @@ bool VulkanRenderer3D::dispatchPlainRearPlaneOnly(
         return false;
 
     const bool recordTimestamps =
-        timestampQueryPool != VK_NULL_HANDLE && ResetQueryPool != nullptr;
+        shouldRecordGpuTimestampsR3D()
+        && timestampQueryPool != VK_NULL_HANDLE
+        && ResetQueryPool != nullptr;
     if (recordTimestamps)
     {
         ResetQueryPool(Device, timestampQueryPool, 0, TimestampQueryCount);
@@ -9693,13 +9701,19 @@ bool VulkanRenderer3D::dispatchGraphicsRasterAndReadback(
     if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS)
         return false;
 
-    if (timestampQueryPool != VK_NULL_HANDLE && ResetQueryPool != nullptr)
+    if (shouldRecordGpuTimestampsR3D()
+        && timestampQueryPool != VK_NULL_HANDLE
+        && ResetQueryPool != nullptr)
     {
         ResetQueryPool(Device, timestampQueryPool, 0, TimestampQueryCount);
         timestampPending = true;
         vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, timestampQueryPool, 0);
         vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, timestampQueryPool, 1);
         vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, timestampQueryPool, 2);
+    }
+    else
+    {
+        timestampPending = false;
     }
 
     static const bool perfSecciones = [] {
@@ -10024,6 +10038,7 @@ bool VulkanRenderer3D::dispatchGraphicsRasterAndReadback(
 
         && !captureReadbackPath;
 
+    if (MelonDSAndroid::areRendererDebugToolsEnabled())
     {
         static int g1UltimoSinEscritura = -1;
         if (static_cast<int>(usarPassSinEscritura) != g1UltimoSinEscritura)

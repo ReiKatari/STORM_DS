@@ -23,9 +23,14 @@ namespace MelonDSAndroid
 bool isFastForwardActive();
 bool areRendererDebugToolsEnabled();
 bool areRendererDebugBgObjLogsEnabled();
+bool isVulkanPerfLoggingEnabled();
 
 namespace
 {
+bool shouldRecordPresenterGpuTimestamps()
+{
+    return areRendererDebugToolsEnabled() || isVulkanPerfLoggingEnabled();
+}
 constexpr u32 kMaxSurfaceVertexCount = 240;
 constexpr VkDeviceSize kVertexBufferSize = static_cast<VkDeviceSize>(kMaxSurfaceVertexCount * 5u * sizeof(float));
 constexpr u32 kDescriptorSetCapacity = 64;
@@ -5435,7 +5440,11 @@ bool VulkanSurfacePresenter::recordSurfaceCommands(
         return false;
     }
 
-    if (surfaceState.timestampQueryPool != VK_NULL_HANDLE && resetQueryPool != nullptr)
+    surfaceState.timestampRecordedInCommandBuffer = false;
+    const bool recordTimestamps =
+        surfaceState.timestampQueryPool != VK_NULL_HANDLE
+        && shouldRecordPresenterGpuTimestamps();
+    if (recordTimestamps && resetQueryPool != nullptr)
         resetQueryPool(device, surfaceState.timestampQueryPool, 0, 2);
 
     if (vkResetCommandBuffer(surfaceState.commandBuffer, 0) != VK_SUCCESS)
@@ -5448,7 +5457,7 @@ bool VulkanSurfacePresenter::recordSurfaceCommands(
     if (vkBeginCommandBuffer(surfaceState.commandBuffer, &beginInfo) != VK_SUCCESS)
         return false;
 
-    if (surfaceState.timestampQueryPool != VK_NULL_HANDLE)
+    if (recordTimestamps)
         vkCmdWriteTimestamp(surfaceState.commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, surfaceState.timestampQueryPool, 0);
 
     std::array<VkImageMemoryBarrier, 8> sourceBarriers{};
@@ -5928,8 +5937,11 @@ bool VulkanSurfacePresenter::recordSurfaceCommands(
         }
     }
 
-    if (surfaceState.timestampQueryPool != VK_NULL_HANDLE)
+    if (surfaceState.timestampQueryPool != VK_NULL_HANDLE && shouldRecordPresenterGpuTimestamps())
+    {
         vkCmdWriteTimestamp(surfaceState.commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, surfaceState.timestampQueryPool, 1);
+        surfaceState.timestampRecordedInCommandBuffer = true;
+    }
 
     return vkEndCommandBuffer(surfaceState.commandBuffer) == VK_SUCCESS;
 }
@@ -6113,8 +6125,8 @@ bool VulkanSurfacePresenter::submitSurfaceCommands(
     if (presentResult == VK_ERROR_OUT_OF_DATE_KHR)
         presentOutOfDate++;
 
-    if (surfaceState.timestampQueryPool != VK_NULL_HANDLE)
-        surfaceState.timestampPending = true;
+    surfaceState.timestampPending = surfaceState.timestampRecordedInCommandBuffer;
+    surfaceState.timestampRecordedInCommandBuffer = false;
 
     presentTimelineValueOut = signalValue;
 

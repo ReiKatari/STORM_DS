@@ -203,8 +203,7 @@ private fun ButtonColorThemePickerContent(
                         fontFamily = SpaceGrotesk,
                         fontSize = 13.5.sp,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                        softWrap = true,
                         modifier = Modifier.weight(1f),
                     )
 

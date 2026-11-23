@@ -454,8 +454,6 @@ private fun GpuTelemetryHeader(state: VulkanDriverManagerViewModel.UiState) {
                     color = colors.text,
                     fontWeight = FontWeight.Bold,
                     fontSize = 15.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
                 )
             }
 
@@ -1107,16 +1105,12 @@ private fun InstalledCustomDriverCard(
                         color = colors.text,
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
                     )
                     if (!driver.description.isNullOrBlank()) {
                         Text(
                             text = driver.description,
                             color = colors.text2,
                             fontSize = 12.sp,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
@@ -1763,8 +1757,6 @@ private fun ReleaseCardSection(
                 color = colors.text,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 13.sp,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
             if (release.publishedAt.isNotBlank()) {
@@ -1855,8 +1847,6 @@ private fun ReleaseCardSection(
                             color = colors.text,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
                         )
                         if (asset.sizeBytes > 0L) {
                             Text(

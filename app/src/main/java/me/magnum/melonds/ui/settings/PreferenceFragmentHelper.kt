@@ -252,8 +252,7 @@ class PreferenceFragmentHelper(
                                 fontFamily = SpaceGrotesk,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Medium,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
+                                softWrap = true,
                                 modifier = Modifier.weight(1f),
                             )
                             Icon(

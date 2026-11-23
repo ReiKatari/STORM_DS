@@ -32,9 +32,7 @@
                 android:textSize="13.5sp"
                 android:textFontWeight="600"
                 android:fontFamily="@font/manrope"
-                android:textColor="@color/watermelon_pref_title"
-                android:maxLines="2"
-                android:ellipsize="end" />
+                android:textColor="@color/watermelon_pref_title" />
 
             <TextView
                 android:id="@android:id/summary"

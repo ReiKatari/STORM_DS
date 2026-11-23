@@ -5259,7 +5259,7 @@ bool VulkanOutput::dispatchFaithfulCompositor(Frame* frame, FrameResource& resou
         else
             capSwapRetenidos = 0u;
 
-        if (cambio && capSwapCambioReciente == 0u)
+        if (MelonDSAndroid::areRendererDebugToolsEnabled() && cambio && capSwapCambioReciente == 0u)
             melonDS::Platform::Log(melonDS::Platform::LogLevel::Warn,
                 "[swapev] swap %u->%u act=%d salto=%d vent=%02X cnt=%08X "
                 "dispA=%08X preA=%d preB=%d",
@@ -6224,7 +6224,7 @@ bool VulkanOutput::dispatchFaithfulCompositor(Frame* frame, FrameResource& resou
 
     static u32 capdCadencia = 0;
     static const bool capdCada = std::getenv("MELON_LOG_TAIL") != nullptr;
-    if (trazaCapActiva() || capdCada || (capdCadencia++ % 120u) == 0u)
+    if (trazaCapActiva() || capdCada || (MelonDSAndroid::areRendererDebugToolsEnabled() && (capdCadencia++ % 120u) == 0u))
         melonDS::Platform::Log(melonDS::Platform::LogLevel::Warn,
             "[capd] frameId=%d inv=%u prop=%d val=%d escI=%u esc=%u usable=%d banco=%u act=%d "
             "ini0=%d ini1=%d iniA=%08X iniB=%08X iniO=%08X pase=%d m2=%d "

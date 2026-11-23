@@ -59,8 +59,7 @@
                     android:textStyle="bold"
                     android:textSize="16sp"
                     android:textColor="?android:attr/textColorPrimary"
-                    android:maxLines="1"
-                    android:ellipsize="end"
+                    android:maxLines="2"
                     tools:text="Настройки" />
 
                 <TextView
@@ -69,8 +68,6 @@
                     android:layout_height="wrap_content"
                     android:textSize="11sp"
                     android:textColor="?android:attr/textColorSecondary"
-                    android:maxLines="1"
-                    android:ellipsize="end"
                     tools:text="Параметры и конфигурация эмулятора" />
             </LinearLayout>
 

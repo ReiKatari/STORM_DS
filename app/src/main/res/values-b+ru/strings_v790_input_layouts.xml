@@ -8,7 +8,7 @@
     <string name="pref_input_turbo_20hz">20 Гц</string>
     <string name="pref_input_turbo_30hz">30 Гц</string>
     <string name="turbo_toast_enabled_format">Турбо геймпада: Вкл (%d Гц)</string>
-    <string name="turbo_toast_disabled">Турбо геймпада: Выкл</string>
+    <string name="turbo_toast_disabled">Турбо геймпада: Выключено</string>
     <string name="input_slow_motion">Замедление времени</string>
     <string name="input_frame_advance">Покадровый шаг</string>
     <string name="input_take_screenshot">Сделать скриншот</string>

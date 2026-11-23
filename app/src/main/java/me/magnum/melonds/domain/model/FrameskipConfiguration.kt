@@ -7,7 +7,7 @@ enum class FrameskipMode(val preferenceValue: String, val nativeValue: Int) {
 
     companion object {
         fun fromPreferenceValue(value: String?): FrameskipMode {
-            return entries.firstOrNull { it.preferenceValue == value } ?: AUTO
+            return entries.firstOrNull { it.preferenceValue == value } ?: OFF
         }
     }
 }
@@ -19,6 +19,6 @@ data class FrameskipConfiguration(
     companion object {
         const val MANUAL_VALUE_MIN = 0
         const val MANUAL_VALUE_MAX = 4
-        val DEFAULT = FrameskipConfiguration(FrameskipMode.AUTO, 1)
+        val DEFAULT = FrameskipConfiguration(FrameskipMode.OFF, 1)
     }
 }

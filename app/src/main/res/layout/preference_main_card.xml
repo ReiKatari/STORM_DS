@@ -45,9 +45,7 @@
                 android:textSize="15sp"
                 android:textFontWeight="600"
                 android:fontFamily="@font/manrope"
-                android:textColor="@color/textColorPrimary"
-                android:maxLines="1"
-                android:ellipsize="end" />
+                android:textColor="@color/textColorPrimary" />
 
             <TextView
                 android:id="@android:id/summary"
@@ -56,8 +54,6 @@
                 android:textSize="12sp"
                 android:fontFamily="@font/manrope"
                 android:textColor="@color/textColorSecondary"
-                android:maxLines="2"
-                android:ellipsize="end"
                 android:layout_marginTop="2dp" />
         </LinearLayout>
 

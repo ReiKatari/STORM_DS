@@ -16,4 +16,6 @@
     android:fontFamily="@font/manrope"
     android:textSize="14sp"
     android:textColor="@color/textColorPrimary"
-    android:ellipsize="marquee" />
+    android:singleLine="false"
+    android:paddingTop="10dp"
+    android:paddingBottom="10dp" />

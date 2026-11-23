@@ -4,7 +4,7 @@
   <string name="yes">Да</string>
   <string name="no">Нет</string>
   <string name="on">Вкл.</string>
-  <string name="off">Выкл.</string>
+  <string name="off">Выключено</string>
   <string name="cancel">Отмена</string>
   <string name="not_set">Не задано</string>
   <string name="delete">Удалить</string>
@@ -1759,7 +1759,7 @@
         <item>4 (показать 1, пропустить 4)</item>
     </string-array>
     <string-array name="frameskip_mode_options">
-        <item>Выкл</item>
+        <item>Выключено</item>
         <item>Вручную</item>
         <item>Авто</item>
     </string-array>

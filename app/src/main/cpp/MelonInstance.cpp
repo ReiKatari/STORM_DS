@@ -66,7 +66,7 @@ const int kVulkanCompileStageBuildPipelines = 2;
 const int kVulkanCompileStageInitOutput = 3;
 const int kVulkanCompileStageWarmupSubmission = 4;
 const int kVulkanCompileStageRetroArchFilter = 5;
-const u64 kVulkanHighResolutionRealtimePresenterBudgetFloorNs = 4'000'000ull;
+const u64 kVulkanHighResolutionRealtimePresenterBudgetFloorNs = 14'000'000ull;
 const u64 kVulkanExactRealtimeGpuWaitBudgetNs = 25'000'000ull;
 constexpr u64 kVulkanRealtimePlatformWaitSafetyBoundNs = 50'000'000ull;
 const u64 kVulkanNotReadyPresenterWaitBudgetNs = 250'000'000ull;
@@ -82,8 +82,8 @@ constexpr u64 boundVulkanRealtimePlatformWait(
 
 static_assert(boundVulkanRealtimePlatformWait(UINT64_MAX, true)
     == kVulkanRealtimePlatformWaitSafetyBoundNs);
-static_assert(boundVulkanRealtimePlatformWait(4'000'000ull, true)
-    == 4'000'000ull);
+static_assert(boundVulkanRealtimePlatformWait(14'000'000ull, true)
+    == 14'000'000ull);
 static_assert(boundVulkanRealtimePlatformWait(UINT64_MAX, false)
     == UINT64_MAX);
 
@@ -1350,12 +1350,9 @@ static thread_local bool sFrameTailWorkerActive = false;
 static bool perfForzadoPorPropiedadMI()
 {
 #ifdef __ANDROID__
-
     static const bool forzado = [] {
         char v[92] = {};
-        if (__system_property_get("debug.melonds.perf", v) > 0 && v[0] == '0')
-            return false;
-        return true;
+        return __system_property_get("debug.melonds.perf", v) > 0 && v[0] == '1';
     }();
     return forzado;
 #else
@@ -4931,8 +4928,12 @@ VulkanPresentationResult MelonInstance::presentVulkanFrame(
             if ((shouldAllowBlockingHighResolutionRealtimePresentation
                     || realtimeGraphicsPresenterBudget)
                 && !frameReady)
-
-                return kVulkanHighResolutionRealtimePresenterBudgetFloorNs;
+            {
+                const u64 candidateBudgetNs = waitTimeoutNs == UINT64_MAX
+                    ? kVulkanRealtimePlatformWaitSafetyBoundNs
+                    : std::max(realDeadlineTimeoutNs, kVulkanHighResolutionRealtimePresenterBudgetFloorNs);
+                return std::min(candidateBudgetNs, kVulkanRealtimePlatformWaitSafetyBoundNs);
+            }
 
             if (!shouldProbeRealtimeBacklog || waitTimeoutNs == UINT64_MAX)
             {

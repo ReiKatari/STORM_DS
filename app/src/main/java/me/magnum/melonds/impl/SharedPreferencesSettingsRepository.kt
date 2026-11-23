@@ -118,6 +118,18 @@ class SharedPreferencesSettingsRepository(
         private const val KEY_DUAL_SCREEN_EXTERNAL_VERTICAL_ALIGNMENT = "dual_screen_external_vertical_alignment"
         private const val GLES_3_2 = 0x30002
         private const val BIOS_INDEX_CACHE_TTL_MS = 10_000L
+        private const val KEY_MIGRATION_FRAMESKIP_DEFAULT_OFF_886 = "pref_migration_frameskip_default_off_886"
+
+        internal fun migrateFrameskipDefaultToOffIfNeeded(preferences: SharedPreferences) {
+            if (!preferences.getBoolean(KEY_MIGRATION_FRAMESKIP_DEFAULT_OFF_886, false)) {
+                val editor = preferences.edit()
+                    .putBoolean(KEY_MIGRATION_FRAMESKIP_DEFAULT_OFF_886, true)
+                if (preferences.getString("frameskip_mode", null) == FrameskipMode.AUTO.preferenceValue) {
+                    editor.putString("frameskip_mode", FrameskipMode.OFF.preferenceValue)
+                }
+                editor.apply()
+            }
+        }
 
         fun resolveDefaultFirmwareLanguage(preferences: SharedPreferences): Int {
             val appLanguage = preferences.getString("app_language", "default") ?: "default"
@@ -317,6 +329,7 @@ class SharedPreferencesSettingsRepository(
     private var isSyncingDsiProfilePref = false
 
     init {
+        migrateFrameskipDefaultToOffIfNeeded(preferences)
         preferences.registerOnSharedPreferenceChangeListener(this)
         setDefaultThemeIfRequired()
         setDefaultMacAddressIfRequired()
@@ -685,7 +698,7 @@ class SharedPreferencesSettingsRepository(
 
     private fun getFrameskipMode(): FrameskipMode {
         return FrameskipMode.fromPreferenceValue(
-            preferences.getString("frameskip_mode", FrameskipMode.AUTO.preferenceValue)
+            preferences.getString("frameskip_mode", FrameskipMode.OFF.preferenceValue)
         )
     }
 

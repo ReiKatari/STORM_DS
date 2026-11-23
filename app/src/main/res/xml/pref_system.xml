@@ -64,7 +64,7 @@
                 android:title="@string/frameskip_mode"
                 android:summary="@string/frameskip_mode_summary"
                 app:iconSpaceReserved="false"
-                android:defaultValue="auto"
+                android:defaultValue="off"
                 android:entries="@array/frameskip_mode_options"
                 android:entryValues="@array/frameskip_mode_values" />
 

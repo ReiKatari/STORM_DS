@@ -148,7 +148,7 @@ fun SettingsDialogScaffold(
                 Column(modifier = Modifier.fillMaxWidth()) {
                     // Header Bar
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
+                        verticalAlignment = Alignment.Top,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 12.dp),
@@ -175,18 +175,19 @@ fun SettingsDialogScaffold(
                                 color = colors.text,
                                 fontFamily = SpaceGrotesk,
                                 fontSize = 16.sp,
+                                lineHeight = 20.sp,
                                 fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
+                                softWrap = true,
                             )
                             if (subtitle != null) {
+                                Spacer(Modifier.height(4.dp))
                                 Text(
                                     text = subtitle,
                                     color = colors.text2,
                                     fontFamily = SpaceGrotesk,
                                     fontSize = 12.sp,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
+                                    lineHeight = 16.sp,
+                                    softWrap = true,
                                 )
                             }
                         }
@@ -268,9 +269,9 @@ fun SettingsChoiceDialogContent(
                         color = colors.text,
                         fontFamily = SpaceGrotesk,
                         fontSize = 14.sp,
+                        lineHeight = 19.sp,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
+                        softWrap = true,
                         modifier = Modifier.weight(1f),
                     )
 
@@ -310,6 +311,7 @@ fun SettingsEditTextDialogContent(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
@@ -440,9 +442,9 @@ fun SettingsMultiChoiceDialogContent(
                         color = colors.text,
                         fontFamily = SpaceGrotesk,
                         fontSize = 14.sp,
+                        lineHeight = 19.sp,
                         fontWeight = if (isChecked) FontWeight.Bold else FontWeight.Medium,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
+                        softWrap = true,
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -498,6 +500,7 @@ fun SettingsSeekBarDialogContent(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 18.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -978,6 +981,7 @@ fun SettingsConfirmDialogContent(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
