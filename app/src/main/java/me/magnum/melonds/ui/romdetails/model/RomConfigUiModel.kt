@@ -48,4 +48,5 @@ data class RomConfigUiModel(
     val globalVulkanDriverDisplayName: String = "System GPU",
     val availableVulkanDrivers: List<Pair<String?, String>> = emptyList(),
     val isCustomVulkanDriverSupported: Boolean = true,
+    val isLiteModeActive: Boolean = false,
 )

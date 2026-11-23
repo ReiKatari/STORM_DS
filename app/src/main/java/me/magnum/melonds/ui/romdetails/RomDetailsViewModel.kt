@@ -141,6 +141,7 @@ class RomDetailsViewModel @Inject constructor(
                     globalVulkanDriverDisplayName = overrides.activeVulkanDriverLabel,
                     availableVulkanDrivers = overrides.availableVulkanDrivers,
                     isCustomVulkanDriverSupported = overrides.isCustomVulkanSupported,
+                    isLiteModeActive = overrides.isLiteModeActive,
                 )
             }.collect {
                 uiStateFlow.value = RomConfigUiState.Ready(it)
@@ -267,6 +268,7 @@ class RomDetailsViewModel @Inject constructor(
         val activeVulkanDriverLabel: String,
         val availableVulkanDrivers: List<Pair<String?, String>>,
         val isCustomVulkanSupported: Boolean,
+        val isLiteModeActive: Boolean,
     )
 
     private fun readGlobalRuntimeOverrides(): GlobalRuntimeOverrides {
@@ -292,12 +294,14 @@ class RomDetailsViewModel @Inject constructor(
             activeVulkanDriverLabel = activeDriverLabel,
             availableVulkanDrivers = driverOptions,
             isCustomVulkanSupported = customVulkanSupported,
+            isLiteModeActive = settingsRepository.isLiteModeActive(),
         )
     }
 
     private fun observeGlobalRuntimeOverrides(): Flow<GlobalRuntimeOverrides> = callbackFlow {
         val prefs = PreferenceManager.getDefaultSharedPreferences(context)
         val watchedKeys = setOf(
+            "performance_mode",
             "arm9_overclock",
             "fast_forward_speed_multiplier",
             "video_vulkan_driver_mode",

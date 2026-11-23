@@ -329,9 +329,12 @@ class SharedPreferencesSettingsRepository(
 
     @Volatile
     private var isSyncingDsiProfilePref = false
+    @Volatile
+    private var isSyncingLiteModePreferences = false
 
     init {
         migrateFrameskipDefaultToOffIfNeeded(preferences)
+        syncLiteModePreferencesIfNeeded()
         preferences.registerOnSharedPreferenceChangeListener(this)
         setDefaultThemeIfRequired()
         setDefaultMacAddressIfRequired()
@@ -2593,10 +2596,14 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences, key: String?) {
+        if (isSyncingLiteModePreferences) {
+            return
+        }
         preferenceSharedFlows[key]?.tryEmit(Unit)
         when (key) {
             "dsi_bios_dir" -> syncDsiProfileFromDirPref()
             "performance_mode" -> {
+                syncLiteModePreferencesIfNeeded()
                 preferenceSharedFlows["video_renderer"]?.tryEmit(Unit)
                 preferenceSharedFlows["frameskip_mode"]?.tryEmit(Unit)
                 preferenceSharedFlows["video_vulkan_drs"]?.tryEmit(Unit)
@@ -3097,8 +3104,59 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun setPerformanceMode(mode: PerformanceMode) {
-        preferences.edit {
-            putString("performance_mode", mode.prefValue)
+        isSyncingLiteModePreferences = true
+        try {
+            preferences.edit {
+                putString("performance_mode", mode.prefValue)
+            }
+            val active = isLiteModeActive()
+            val changedKeys = if (active) {
+                LiteModePreferenceSnapshotManager.activateLiteMode(
+                    prefs = preferences,
+                    recommendedSoftThreaded = getDevicePerformanceProfile().recommendedSoftThreaded,
+                )
+            } else {
+                LiteModePreferenceSnapshotManager.deactivateLiteMode(preferences)
+            }
+            emitLiteModePreferenceFlows(changedKeys, includePerformanceMode = true)
+        } finally {
+            isSyncingLiteModePreferences = false
+        }
+    }
+
+    override fun syncLiteModePreferencesIfNeeded(): Boolean {
+        if (isSyncingLiteModePreferences) {
+            return isLiteModeActive()
+        }
+        isSyncingLiteModePreferences = true
+        return try {
+            val active = isLiteModeActive()
+            val changedKeys = if (active) {
+                LiteModePreferenceSnapshotManager.activateLiteMode(
+                    prefs = preferences,
+                    recommendedSoftThreaded = getDevicePerformanceProfile().recommendedSoftThreaded,
+                )
+            } else {
+                LiteModePreferenceSnapshotManager.deactivateLiteMode(preferences)
+            }
+            if (changedKeys.isNotEmpty()) {
+                emitLiteModePreferenceFlows(changedKeys, includePerformanceMode = true)
+            }
+            active
+        } finally {
+            isSyncingLiteModePreferences = false
+        }
+    }
+
+    private fun emitLiteModePreferenceFlows(
+        changedKeys: Set<String>,
+        includePerformanceMode: Boolean,
+    ) {
+        if (includePerformanceMode) {
+            preferenceSharedFlows["performance_mode"]?.tryEmit(Unit)
+        }
+        changedKeys.forEach { key ->
+            preferenceSharedFlows[key]?.tryEmit(Unit)
         }
     }
 
@@ -3130,15 +3188,10 @@ class SharedPreferencesSettingsRepository(
         if (!isLiteModeActive()) {
             return if (config.liteModeEnabled) config.copy(liteModeEnabled = false) else config
         }
-        val effectiveFrameskip = if (config.frameskipMode == FrameskipMode.MANUAL.nativeValue) {
-            FrameskipMode.MANUAL.nativeValue
-        } else {
-            FrameskipMode.AUTO.nativeValue
-        }
         return config.copy(
             liteModeEnabled = true,
             rendererConfiguration = buildLiteRendererConfiguration(config.rendererConfiguration),
-            frameskipMode = effectiveFrameskip,
+            frameskipMode = FrameskipMode.AUTO.nativeValue,
             vulkanDrsEnabled = false,
             rewindEnabled = false,
             audioInterpolation = AudioInterpolation.NONE,

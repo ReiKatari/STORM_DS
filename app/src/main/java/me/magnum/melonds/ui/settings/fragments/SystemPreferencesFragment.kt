@@ -147,13 +147,11 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
             updatePerformanceModeSummary()
             pref.setOnPreferenceChangeListener { _, newValue ->
                 val modeValue = newValue as? String
-                updatePerformanceModeSummary(modeValue)
-                view?.post {
-                    if (isAdded) {
-                        updateFrameskipDrsExclusion()
-                    }
-                }
-                true
+                val newMode = me.magnum.melonds.domain.model.PerformanceMode.fromPrefValue(modeValue)
+                settingsRepository.setPerformanceMode(newMode)
+                pref.value = newMode.prefValue
+                refreshPerformanceModeDependentControls(newMode.prefValue)
+                false
             }
         }
 
@@ -235,6 +233,7 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
                                     lifecycleScope.launch(Dispatchers.IO) {
                                         val restored = runCatching {
                                             settingsBackupManager.restoreMirrorFrom(mirrorDirectory)
+                                            settingsRepository.syncLiteModePreferencesIfNeeded()
                                             settingsBackupManager.requestMirrorWrite()
                                             true
                                         }.getOrDefault(false)
@@ -363,6 +362,7 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
             lockPreferenceInGame("system_wfc_server")
             lockPreferenceInGame("system_wfc_custom_dns")
         }
+        refreshPerformanceModeDependentControls()
     }
 
     private fun testWfcDnsServer(ip: String): Triple<Boolean, Long, String?> {
@@ -518,9 +518,41 @@ class SystemPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTi
 
     override fun onResume() {
         super.onResume()
-        updatePerformanceModeSummary()
-        updateFrameskipDrsExclusion()
+        refreshPerformanceModeDependentControls()
         updateBiosStatusSummary()
+    }
+
+    private fun refreshPerformanceModeDependentControls(selectedPrefValue: String? = null) {
+        updatePerformanceModeSummary(selectedPrefValue)
+        syncListPreferenceFromPrefs("performance_mode", me.magnum.melonds.domain.model.PerformanceMode.AUTO.prefValue)
+        val arm9Pref = syncListPreferenceFromPrefs("arm9_overclock", "1")
+        syncListPreferenceFromPrefs("frameskip_mode", "off")
+        val manualPref = syncListPreferenceFromPrefs("frameskip_manual_value", "1")
+
+        val liteActive = settingsRepository.isLiteModeActive()
+        val inGame = isLaunchedInGame()
+
+        if (arm9Pref != null) {
+            if (liteActive) {
+                applyLiteModeLock(arm9Pref, liteLocked = true)
+            } else {
+                applyLiteModeLock(arm9Pref, liteLocked = false, restoreEnabled = !inGame)
+                if (inGame) {
+                    lockPreferenceInGame("arm9_overclock")
+                }
+            }
+        }
+
+        val modePref = findPreference<ListPreference>("frameskip_mode")
+        if (!liteActive) {
+            applyLiteModeLock(modePref, liteLocked = false, restoreEnabled = true)
+            updateFrameskipDrsExclusion()
+            manualPref?.isEnabled = true
+        } else {
+            applyLiteModeLock(modePref, liteLocked = true)
+            manualPref?.isVisible = false
+            manualPref?.isEnabled = false
+        }
     }
 
     private fun updatePerformanceModeSummary(selectedPrefValue: String? = null) {

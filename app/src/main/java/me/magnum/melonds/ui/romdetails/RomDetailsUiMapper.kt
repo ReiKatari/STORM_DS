@@ -36,6 +36,7 @@ class RomDetailsUiMapper(
         globalVulkanDriverDisplayName: String = "System GPU",
         availableVulkanDrivers: List<Pair<String?, String>> = emptyList(),
         isCustomVulkanDriverSupported: Boolean = true,
+        isLiteModeActive: Boolean = false,
     ): RomConfigUiModel {
         return RomConfigUiModel(
             runtimeConsoleType = romConfig.runtimeConsoleType,
@@ -76,6 +77,7 @@ class RomDetailsUiMapper(
             globalVulkanDriverDisplayName = globalVulkanDriverDisplayName,
             availableVulkanDrivers = availableVulkanDrivers,
             isCustomVulkanDriverSupported = isCustomVulkanDriverSupported,
+            isLiteModeActive = isLiteModeActive,
         )
     }
 

@@ -202,7 +202,7 @@ class RomListActivity : AppCompatActivity() {
                         is ManualUpdateResult.UpToDate -> {
                             val curVer = runCatching {
                                 packageManager.getPackageInfo(packageName, 0).versionName
-                            }.getOrNull() ?: "8.8.8"
+                            }.getOrNull() ?: "8.8.9"
                             AlertDialog.Builder(this@RomListActivity)
                                 .setTitle(R.string.v800_update_up_to_date_title)
                                 .setMessage(getString(R.string.v800_update_up_to_date_msg, curVer))

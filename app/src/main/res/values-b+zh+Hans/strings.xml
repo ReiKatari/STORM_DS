@@ -1697,5 +1697,6 @@
     <string name="performance_mode_standard">标准（完整精度）</string>
     <string name="performance_mode_lite">精简模式（老旧和低配设备）</string>
     <string name="performance_mode_active_standard">当前为标准模式</string>
+    <string name="performance_mode_locked_by_lite">由简化模式管理</string>
     <string name="performance_mode_active_lite">当前为精简模式</string>
 </resources>

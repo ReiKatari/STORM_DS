@@ -1641,5 +1641,6 @@ Importá-los para o STORM DS?</string>
     <string name="performance_mode_standard">Padrão (precisão total)</string>
     <string name="performance_mode_lite">Simplificado (dispositivos antigos e básicos)</string>
     <string name="performance_mode_active_standard">modo padrão ativo</string>
+    <string name="performance_mode_locked_by_lite">Gerenciado pelo modo simplificado</string>
     <string name="performance_mode_active_lite">modo simplificado ativo</string>
 </resources>

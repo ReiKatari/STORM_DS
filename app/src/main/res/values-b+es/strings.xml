@@ -1659,5 +1659,6 @@ Rechazos permanentes del servidor: %7$d.</string>
     <string name="performance_mode_standard">Estándar (precisión completa)</string>
     <string name="performance_mode_lite">Simplificado (dispositivos antiguos y básicos)</string>
     <string name="performance_mode_active_standard">modo estándar activo</string>
+    <string name="performance_mode_locked_by_lite">Gestionado por el modo simplificado</string>
     <string name="performance_mode_active_lite">modo simplificado activo</string>
 </resources>

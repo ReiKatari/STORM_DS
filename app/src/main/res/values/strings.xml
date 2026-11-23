@@ -1846,5 +1846,6 @@
     <string name="performance_mode_standard">Standard (full accuracy)</string>
     <string name="performance_mode_lite">Simplified (old and weak devices)</string>
     <string name="performance_mode_active_standard">standard mode active</string>
+    <string name="performance_mode_locked_by_lite">Managed by simplified mode</string>
     <string name="performance_mode_active_lite">simplified mode active</string>
 </resources>

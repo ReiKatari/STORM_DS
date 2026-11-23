@@ -22,6 +22,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 @AndroidEntryPoint
 class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitleProvider {
 
+    @javax.inject.Inject
+    lateinit var settingsRepository: me.magnum.melonds.domain.repositories.SettingsRepository
+
     private var micSourcePreference: ListPreference? = null
     private var micGainPreference: SeekBarPreference? = null
     private var audioLatencyPreference: ListPreference? = null
@@ -143,7 +146,7 @@ class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         }
 
         findPreference<SwitchPreference>("sound_enabled")?.setOnPreferenceChangeListener { _, newValue ->
-            refreshAudioVisibility(soundEnabledOverride = newValue as? Boolean)
+            applyLiteModeAudioState(soundEnabledOverride = newValue as? Boolean)
             true
         }
 
@@ -152,7 +155,7 @@ class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             true
         }
 
-        refreshAudioVisibility()
+        applyLiteModeAudioState()
     }
 
     override fun onResume() {
@@ -165,7 +168,42 @@ class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             MelonEmulator.setMicrophoneNoiseGateThreshold(it.value.coerceIn(0, 100))
             micVuMeterPreference?.setGateSettings(agcNoiseGatePreference?.isChecked ?: true, it.value.coerceIn(0, 100))
         }
-        refreshAudioVisibility()
+        applyLiteModeAudioState()
+    }
+
+    private fun applyLiteModeAudioState(soundEnabledOverride: Boolean? = null) {
+        syncListPreferenceFromPrefs("audio_interpolation", "none")
+        syncListPreferenceFromPrefs("audio_bitrate", "auto")
+        val latencyPref = syncListPreferenceFromPrefs("audio_latency", "medium")
+        syncSwitchPreferenceFromPrefs("audio_soft_limiter_enabled", true)
+        syncSwitchPreferenceFromPrefs("audio_bass_boost_enabled", false)
+        syncSwitchPreferenceFromPrefs("audio_spatial_audio_enabled", false)
+        syncSwitchPreferenceFromPrefs("audio_reverb_enabled", false)
+
+        val liteActive = settingsRepository.isLiteModeActive()
+        val liteLockedAudioKeys = listOf(
+            "audio_interpolation",
+            "audio_bitrate",
+            "audio_latency",
+            "audio_dsp_preset",
+            "audio_soft_limiter_enabled",
+            "audio_bass_boost_enabled",
+            "audio_bass_boost_strength",
+            "audio_spatial_audio_enabled",
+            "audio_reverb_enabled",
+        )
+        if (!liteActive) {
+            liteLockedAudioKeys.forEach { key ->
+                applyLiteModeLock(findPreference(key), liteLocked = false, restoreEnabled = true)
+            }
+            latencyPref?.let { updateAudioLatencySummary(it, it.value) }
+            refreshAudioVisibility(soundEnabledOverride = soundEnabledOverride)
+        } else {
+            refreshAudioVisibility(soundEnabledOverride = soundEnabledOverride)
+            liteLockedAudioKeys.forEach { key ->
+                applyLiteModeLock(findPreference(key), liteLocked = true)
+            }
+        }
     }
 
     override fun onPause() {

@@ -1768,5 +1768,6 @@
     <string name="performance_mode_standard">標準（高精度）</string>
     <string name="performance_mode_lite">簡易モード（古い端末と低スペック向け）</string>
     <string name="performance_mode_active_standard">標準モードが有効</string>
+    <string name="performance_mode_locked_by_lite">簡易モードで管理されています</string>
     <string name="performance_mode_active_lite">簡易モードが有効</string>
 </resources>

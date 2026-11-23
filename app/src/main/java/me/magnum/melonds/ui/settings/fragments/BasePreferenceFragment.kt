@@ -16,9 +16,11 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
+import androidx.preference.ListPreference
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceGroupAdapter
+import androidx.preference.SeekBarPreference
 import androidx.preference.TwoStatePreference
 import androidx.recyclerview.widget.RecyclerView
 import me.magnum.melonds.ui.settings.dialogs.SettingsChoiceDialogContent
@@ -28,6 +30,74 @@ import me.magnum.melonds.ui.settings.dialogs.SettingsSeekBarDialogContent
 import me.magnum.melonds.ui.settings.dialogs.showSettingsComposeDialog
 
 abstract class BasePreferenceFragment : PreferenceFragmentCompat() {
+
+    private val liteSavedSummaryProviders = mutableMapOf<String, Preference.SummaryProvider<Preference>?>()
+    private val liteSavedSummaries = mutableMapOf<String, CharSequence?>()
+
+    protected fun syncListPreferenceFromPrefs(key: String, defaultValue: String): ListPreference? {
+        val pref = findPreference<ListPreference>(key) ?: return null
+        val prefs = preferenceManager.sharedPreferences ?: return pref
+        val value = prefs.getString(key, defaultValue) ?: defaultValue
+        if (pref.value != value) {
+            pref.value = value
+        }
+        return pref
+    }
+
+    protected fun syncSwitchPreferenceFromPrefs(key: String, defaultValue: Boolean): TwoStatePreference? {
+        val pref = findPreference<TwoStatePreference>(key) ?: return null
+        val prefs = preferenceManager.sharedPreferences ?: return pref
+        val checked = if (prefs.contains(key)) prefs.getBoolean(key, defaultValue) else defaultValue
+        if (pref.isChecked != checked) {
+            pref.isChecked = checked
+        }
+        return pref
+    }
+
+    protected fun syncSeekBarPreferenceFromPrefs(key: String, defaultValue: Int): SeekBarPreference? {
+        val pref = findPreference<SeekBarPreference>(key) ?: return null
+        val prefs = preferenceManager.sharedPreferences ?: return pref
+        val value = if (prefs.contains(key)) prefs.getInt(key, defaultValue) else defaultValue
+        if (pref.value != value) {
+            pref.value = value
+        }
+        return pref
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    protected fun applyLiteModeLock(
+        preference: Preference?,
+        liteLocked: Boolean,
+        restoreEnabled: Boolean = true,
+    ) {
+        val pref = preference ?: return
+        val key = pref.key ?: return
+        if (liteLocked) {
+            if (!liteSavedSummaryProviders.containsKey(key) && !liteSavedSummaries.containsKey(key)) {
+                val currentProvider = pref.summaryProvider as? Preference.SummaryProvider<Preference>
+                liteSavedSummaryProviders[key] = currentProvider
+                liteSavedSummaries[key] = if (currentProvider == null) pref.summary else null
+            }
+            pref.isEnabled = false
+            val lockNotice = getString(me.magnum.melonds.R.string.performance_mode_locked_by_lite)
+            val entryLabel = (pref as? ListPreference)?.entry?.toString()?.takeIf { it.isNotBlank() }
+            pref.summaryProvider = null
+            pref.summary = if (entryLabel != null) "$entryLabel - $lockNotice" else lockNotice
+        } else {
+            val hadSavedState = liteSavedSummaryProviders.containsKey(key) || liteSavedSummaries.containsKey(key)
+            if (hadSavedState) {
+                val savedProvider = liteSavedSummaryProviders.remove(key)
+                val savedSummary = liteSavedSummaries.remove(key)
+                if (savedProvider != null) {
+                    pref.summaryProvider = savedProvider
+                } else {
+                    pref.summaryProvider = null
+                    pref.summary = savedSummary
+                }
+            }
+            pref.isEnabled = restoreEnabled
+        }
+    }
 
     protected fun isLaunchedInGame(): Boolean {
         return activity?.intent?.getBooleanExtra(me.magnum.melonds.ui.settings.SettingsActivity.KEY_IN_GAME, false) == true

@@ -23,6 +23,9 @@ import me.magnum.melonds.ui.settings.SettingsActivity
 @AndroidEntryPoint
 class MainPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitleProvider {
 
+    @javax.inject.Inject
+    lateinit var settingsRepository: me.magnum.melonds.domain.repositories.SettingsRepository
+
     override fun getTitle() = getString(R.string.settings)
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
@@ -50,6 +53,7 @@ class MainPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
 
     override fun onResume() {
         super.onResume()
+        settingsRepository.syncLiteModePreferencesIfNeeded()
         updateDynamicSummaries()
     }
 
@@ -125,7 +129,12 @@ class MainPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTitl
             val customBios = prefs.getBoolean("use_custom_bios", false)
             val jitStr = "JIT: ${getString(if (compilerEnabled) R.string.on else R.string.off)}"
             val biosStr = getString(if (customBios) R.string.v793_summary_custom_bios else R.string.v793_summary_builtin_drastic_bios)
-            pref.summary = "NDS/DSi • $jitStr • ${overclock}x • $biosStr"
+            val systemPrefix = if (settingsRepository.isLiteModeActive()) {
+                getString(R.string.performance_mode_lite)
+            } else {
+                "NDS/DSi"
+            }
+            pref.summary = "$systemPrefix • $jitStr • ${overclock}x • $biosStr"
         }
 
         // 5. Video (renderer, resolution scale, filtering, console skin)

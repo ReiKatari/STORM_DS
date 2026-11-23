@@ -194,7 +194,11 @@ private fun Content(
         }
     }
     val selectedRenderer = romConfig.videoRenderer?.takeIf { supportsRenderer(it) }
-    val effectiveRenderer = selectedRenderer ?: romConfig.globalVideoRenderer
+    val effectiveRenderer = if (romConfig.isLiteModeActive) {
+        VideoRenderer.SOFTWARE
+    } else {
+        selectedRenderer ?: romConfig.globalVideoRenderer
+    }
     fun supportsFiltering(renderer: VideoRenderer, filtering: VideoFiltering): Boolean {
         return filtering.isSupportedByRenderer(renderer)
     }
@@ -418,6 +422,7 @@ private fun Content(
 
         if (showSystemCpu) {
         ConfigSection(title = stringResource(R.string.rom_config_overclock_arm9)) {
+            val liteLockNotice = stringResource(R.string.performance_mode_locked_by_lite)
             val normalizedArm9 = if (romConfig.arm9Overclock == 3) 2 else romConfig.arm9Overclock
             val arm9Label = when (normalizedArm9) {
                 null -> useGlobalWithValue("${romConfig.globalArm9Overclock}x")
@@ -428,9 +433,11 @@ private fun Content(
             }
             ConfigRow(
                 title = stringResource(R.string.rom_config_overclock_arm9),
-                value = arm9Label,
+                value = if (romConfig.isLiteModeActive) "1x - $liteLockNotice" else arm9Label,
+                enabled = !romConfig.isLiteModeActive,
                 showDivider = false,
                 onClick = {
+                    if (romConfig.isLiteModeActive) return@ConfigRow
                     arm9OverclockDialogState.show(
                         title = context.getString(R.string.rom_config_overclock_arm9),
                         items = listOf(null, 1, 2, 4),
@@ -526,6 +533,7 @@ private fun Content(
 
         if (showGraphics) {
         ConfigSection(title = stringResource(R.string.label_rom_config_video)) {
+            val liteVideoLockNotice = stringResource(R.string.performance_mode_locked_by_lite)
             val vulkanDriverLabel = if (!romConfig.isCustomVulkanDriverSupported) {
                 stringResource(R.string.rom_config_vulkan_driver_blocked_value)
             } else {
@@ -538,11 +546,11 @@ private fun Content(
             }
             ConfigRow(
                 title = stringResource(R.string.rom_config_vulkan_driver),
-                value = vulkanDriverLabel,
-                enabled = romConfig.isCustomVulkanDriverSupported,
+                value = if (romConfig.isLiteModeActive) liteVideoLockNotice else vulkanDriverLabel,
+                enabled = romConfig.isCustomVulkanDriverSupported && !romConfig.isLiteModeActive,
                 showDivider = false,
                 onClick = {
-                    if (!romConfig.isCustomVulkanDriverSupported) return@ConfigRow
+                    if (!romConfig.isCustomVulkanDriverSupported || romConfig.isLiteModeActive) return@ConfigRow
                     customVulkanDriverDialogState.show(
                         title = context.getString(R.string.rom_config_vulkan_driver),
                         items = romConfig.availableVulkanDrivers.map { it.first },
@@ -560,9 +568,15 @@ private fun Content(
             )
             ConfigRow(
                 title = stringResource(R.string.renderer),
-                value = selectedRenderer?.let { rendererOptions[it.ordinal] } ?: useGlobalWithValue(globalRendererLabel),
+                value = if (romConfig.isLiteModeActive) {
+                    "${rendererOptions.getOrNull(VideoRenderer.SOFTWARE.ordinal) ?: VideoRenderer.SOFTWARE.name} - $liteVideoLockNotice"
+                } else {
+                    selectedRenderer?.let { rendererOptions[it.ordinal] } ?: useGlobalWithValue(globalRendererLabel)
+                },
+                enabled = !romConfig.isLiteModeActive,
                 showDivider = true,
                 onClick = {
+                    if (romConfig.isLiteModeActive) return@ConfigRow
                     videoRendererDialogState.show(
                         title = context.getString(R.string.renderer),
                         items = rendererItems,
@@ -575,13 +589,19 @@ private fun Content(
             AnimatedVisibility(visible = effectiveRenderer == VideoRenderer.SOFTWARE) {
                 ConfigRow(
                     title = stringResource(R.string.threaded_rendering),
-                    value = when (romConfig.threadedRendering) {
-                        true -> stringResource(R.string.on)
-                        false -> stringResource(R.string.off)
-                        null -> useGlobalWithValue(globalThreadedRenderingLabel)
+                    value = if (romConfig.isLiteModeActive) {
+                        "$globalThreadedRenderingLabel - $liteVideoLockNotice"
+                    } else {
+                        when (romConfig.threadedRendering) {
+                            true -> stringResource(R.string.on)
+                            false -> stringResource(R.string.off)
+                            null -> useGlobalWithValue(globalThreadedRenderingLabel)
+                        }
                     },
+                    enabled = !romConfig.isLiteModeActive,
                     showDivider = true,
                     onClick = {
+                        if (romConfig.isLiteModeActive) return@ConfigRow
                         threadedRenderingDialogState.show(
                             title = context.getString(R.string.threaded_rendering),
                             items = listOf(null, true, false),
@@ -603,9 +623,11 @@ private fun Content(
                 val currentResolutionLabel = currentResolutionIndex?.let { internalResolutionOptions.getOrNull(it) } ?: useGlobalWithValue(globalInternalResolutionLabel)
                 ConfigRow(
                     title = stringResource(R.string.internal_resolution),
-                    value = currentResolutionLabel,
+                    value = if (romConfig.isLiteModeActive) "1x - $liteVideoLockNotice" else currentResolutionLabel,
+                    enabled = !romConfig.isLiteModeActive,
                     showDivider = true,
                     onClick = {
+                        if (romConfig.isLiteModeActive) return@ConfigRow
                         internalResolutionDialogState.show(
                             title = context.getString(R.string.internal_resolution),
                             items = listOf(null) + internalResolutionValues,
@@ -621,9 +643,15 @@ private fun Content(
             }
             ConfigRow(
                 title = stringResource(R.string.filter),
-                value = selectedFiltering?.let { videoFilteringOptions.getOrNull(it.ordinal) ?: it.name } ?: useGlobalWithValue(globalVideoFilteringLabel),
+                value = if (romConfig.isLiteModeActive) {
+                    "${videoFilteringOptions.getOrNull(VideoFiltering.NONE.ordinal) ?: VideoFiltering.NONE.name} - $liteVideoLockNotice"
+                } else {
+                    selectedFiltering?.let { videoFilteringOptions.getOrNull(it.ordinal) ?: it.name } ?: useGlobalWithValue(globalVideoFilteringLabel)
+                },
+                enabled = !romConfig.isLiteModeActive,
                 showDivider = true,
                 onClick = {
+                    if (romConfig.isLiteModeActive) return@ConfigRow
                     videoFilteringDialogState.show(
                         title = context.getString(R.string.filter),
                         items = filteringItems,

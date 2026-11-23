@@ -1663,5 +1663,6 @@ Importarli in STORM DS?</string>
     <string name="performance_mode_standard">Standard (precisione completa)</string>
     <string name="performance_mode_lite">Semplificato (dispositivi vecchi e poco potenti)</string>
     <string name="performance_mode_active_standard">modalità standard attiva</string>
+    <string name="performance_mode_locked_by_lite">Gestito dalla modalità semplificata</string>
     <string name="performance_mode_active_lite">modalità semplificata attiva</string>
 </resources>

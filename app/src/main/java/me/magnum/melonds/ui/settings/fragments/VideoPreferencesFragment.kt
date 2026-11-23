@@ -653,6 +653,7 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                 true
             }
         }
+        applyLiteModeVideoState()
     }
 
     private fun getVulkanBlockedSummary(): String {
@@ -2188,6 +2189,153 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                 removePreference = removePreference,
                 launchedInGame = launchedInGame,
             )
+        }
+        applyLiteModeVideoState()
+    }
+
+    private fun applyLiteModeVideoState() {
+        val liteActive = settingsRepository.isLiteModeActive()
+        val rendererPref = findPreference<InGameLockedListPreference>("video_renderer")
+        if (rendererPref == null) {
+            if (liteActive) {
+                preferenceScreen?.isEnabled = false
+            }
+            return
+        }
+
+        val prefs = preferenceManager.sharedPreferences
+        val persistedRenderer = prefs?.getString("video_renderer", "opengl") ?: "opengl"
+        if (rendererPref.findIndexOfValue(persistedRenderer) >= 0 && rendererPref.value != persistedRenderer) {
+            rendererPref.value = persistedRenderer
+        }
+
+        val internalResPref = syncListPreferenceFromPrefs("video_internal_resolution", "2")
+        syncSwitchPreferenceFromPrefs("enable_threaded_rendering", true)
+        val videoFilteringPref = syncListPreferenceFromPrefs("video_filtering", "quilez")
+        val aiUpscaleSwitch = syncSwitchPreferenceFromPrefs("video_ai_upscale_enabled", false)
+        syncSwitchPreferenceFromPrefs("video_vulkan_fastpath_enabled", false)
+        syncListPreferenceFromPrefs("video_vulkan_3d_depth_mode", "off")
+        syncSwitchPreferenceFromPrefs("video_vulkan_ssao", false)
+        syncSwitchPreferenceFromPrefs("video_vulkan_thick_edges", false)
+        syncSwitchPreferenceFromPrefs("video_low_latency", false)
+        syncSwitchPreferenceFromPrefs("video_vulkan_drs", false)
+        syncSwitchPreferenceFromPrefs("video_widescreen_3d", false)
+        syncSwitchPreferenceFromPrefs("video_60fps_patch", false)
+        syncSwitchPreferenceFromPrefs("video_conservative_coverage_enabled", false)
+
+        val launchedInGame = isLaunchedInGame()
+        val lockVideoFiltering = launchedInGame &&
+            requireActivity().intent.getBooleanExtra(SettingsActivity.KEY_LOCK_VIDEO_FILTERING, false)
+
+        val retroArchShaderRootPref = findPreference<StoragePickerPreference>("video_retroarch_shader_root")
+        val retroArchShaderPresetPref = findPreference<ListPreference>("video_retroarch_shader_preset")
+        val retroArchShaderParametersPref = findPreference<EditTextPreference>("video_retroarch_shader_parameters")
+        val retroArchShaderClearHistoryPref = findPreference<SwitchPreference>("video_retroarch_shader_clear_history")
+        val vulkanCategory = findPreference<PreferenceCategory>("video_vulkan_driver_category")
+        val modePreference = findPreference<ListPreference>("video_vulkan_driver_mode")
+        val importPreference = findPreference<Preference>("video_vulkan_driver_import")
+        val removePreference = findPreference<Preference>("video_vulkan_driver_remove")
+        val managerPreference = findPreference<Preference>("video_vulkan_driver_manager")
+        val allFilteringValues = resources.getStringArray(R.array.video_filtering_values)
+        val allFilteringEntries = resources.getStringArray(R.array.video_filtering_options)
+
+        val liteLockedVideoKeys = listOf(
+            "video_quick_profile",
+            "video_renderer",
+            "video_internal_resolution",
+            "enable_threaded_rendering",
+            "video_filtering",
+            "video_ai_upscale_enabled",
+            "video_vulkan_fastpath_enabled",
+            "video_vulkan_compositor_mode",
+            "video_vulkan_compat_autoselect",
+            "video_vulkan_3d_depth_mode",
+            "video_vulkan_3d_depth_strength",
+            "video_vulkan_ssao",
+            "video_vulkan_thick_edges",
+            "video_low_latency",
+            "video_vulkan_drs",
+            "video_widescreen_3d",
+            "video_60fps_patch",
+            "video_dslite_preset",
+            "video_retroarch_shader_source",
+            "video_retroarch_shader_preset",
+            "video_retroarch_shader_root",
+            "video_retroarch_shader_settings",
+            "video_retroarch_shader_manage",
+            "video_retroarch_shader_parameters",
+            "video_retroarch_shader_clear_history",
+            "video_conservative_coverage_enabled",
+            "video_reset_enhancements",
+            "video_vulkan_driver_manager",
+            "video_vulkan_driver_mode",
+            "video_vulkan_driver_import",
+            "video_vulkan_driver_remove",
+            FREEDRENO_SETTINGS_KEY,
+        )
+
+        val effectiveRenderer = if (liteActive) {
+            VideoRenderer.SOFTWARE
+        } else {
+            runCatching { enumValueOfIgnoreCase<VideoRenderer>(rendererPref.value) }
+                .getOrDefault(VideoRenderer.SOFTWARE)
+        }
+
+        if (!liteActive) {
+            liteLockedVideoKeys.forEach { key ->
+                applyLiteModeLock(findPreference(key), liteLocked = false, restoreEnabled = true)
+            }
+        }
+
+        if (videoFilteringPref != null && retroArchShaderRootPref != null && retroArchShaderPresetPref != null) {
+            onRendererPreferenceChanged(
+                rendererValue = effectiveRenderer.name.lowercase(),
+                videoFilteringPreference = videoFilteringPref,
+                retroArchShaderRootPreference = retroArchShaderRootPref,
+                retroArchShaderPresetPreference = retroArchShaderPresetPref,
+                retroArchShaderParametersPreference = retroArchShaderParametersPref,
+                retroArchShaderClearHistoryPreference = retroArchShaderClearHistoryPref,
+                allFilteringValues = allFilteringValues,
+                allFilteringEntries = allFilteringEntries,
+            )
+        }
+        updateVulkanDrsPreferenceState(effectiveRenderer)
+        if (vulkanCategory != null && modePreference != null && importPreference != null && removePreference != null) {
+            updateVulkanDriverPreferenceState(
+                renderer = effectiveRenderer,
+                category = vulkanCategory,
+                managerPreference = managerPreference,
+                modePreference = modePreference,
+                importPreference = importPreference,
+                removePreference = removePreference,
+                launchedInGame = launchedInGame,
+            )
+        }
+        refreshConditionalVideoVisibility()
+
+        if (!liteActive) {
+            val isAiSelected = videoFilteringPref?.value.equals("ai_upscale", ignoreCase = true)
+            if (aiUpscaleSwitch != null && aiUpscaleSwitch.isChecked != isAiSelected) {
+                aiUpscaleSwitch.isChecked = isAiSelected
+            }
+            internalResPref?.takeIf { effectiveRenderer != VideoRenderer.SOFTWARE }?.let {
+                updateInternalResolutionSummary(it)
+            }
+            if (launchedInGame) {
+                findPreference<Preference>("video_quick_profile")?.apply {
+                    isEnabled = false
+                    summary = "${getString(R.string.v794_video_quick_profile_summary)} (${getString(R.string.video_setting_cannot_change_ingame)})"
+                }
+                findPreference<Preference>("video_reset_enhancements")?.apply {
+                    isEnabled = false
+                    summary = "${getString(R.string.v780_video_reset_enhancements_summary)} (${getString(R.string.video_setting_cannot_change_ingame)})"
+                }
+            }
+            findPreference<Preference>("video_dslite_preset")?.isEnabled = !lockVideoFiltering
+        } else {
+            liteLockedVideoKeys.forEach { key ->
+                applyLiteModeLock(findPreference(key), liteLocked = true)
+            }
         }
     }
 

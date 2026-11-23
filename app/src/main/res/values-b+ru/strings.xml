@@ -1769,5 +1769,6 @@
     <string name="performance_mode_standard">Стандартный (полная точность)</string>
     <string name="performance_mode_lite">Упрощённый (для слабых устройств)</string>
     <string name="performance_mode_active_standard">активен стандартный режим</string>
+    <string name="performance_mode_locked_by_lite">Управляется упрощённым режимом</string>
     <string name="performance_mode_active_lite">активен упрощённый режим</string>
 </resources>

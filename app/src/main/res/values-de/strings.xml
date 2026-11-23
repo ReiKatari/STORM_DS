@@ -1524,5 +1524,6 @@
     <string name="performance_mode_standard">Standard (volle Genauigkeit)</string>
     <string name="performance_mode_lite">Vereinfacht (alte und schwache Geräte)</string>
     <string name="performance_mode_active_standard">Standardmodus aktiv</string>
+    <string name="performance_mode_locked_by_lite">Vom vereinfachten Modus verwaltet</string>
     <string name="performance_mode_active_lite">vereinfachter Modus aktiv</string>
 </resources>

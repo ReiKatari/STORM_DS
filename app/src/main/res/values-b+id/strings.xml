@@ -1680,5 +1680,6 @@ Impor ke STORM DS?</string>
     <string name="performance_mode_standard">Standar (akurasi penuh)</string>
     <string name="performance_mode_lite">Sederhana (perangkat lama dan ringan)</string>
     <string name="performance_mode_active_standard">mode standar aktif</string>
+    <string name="performance_mode_locked_by_lite">Dikelola oleh mode sederhana</string>
     <string name="performance_mode_active_lite">mode sederhana aktif</string>
 </resources>

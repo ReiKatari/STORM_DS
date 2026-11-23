@@ -37,6 +37,7 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
     @Inject lateinit var uriPermissionManager: UriPermissionManager
     @Inject lateinit var directoryAccessValidator: DirectoryAccessValidator
     @Inject lateinit var settingsBackupManager: SettingsBackupManager
+    @Inject lateinit var settingsRepository: me.magnum.melonds.domain.repositories.SettingsRepository
 
     private var rewindPreference: Preference? = null
     private lateinit var frameLimitSpeedPreference: ListPreference
@@ -69,7 +70,10 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
     private val restoreLauncher = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) {
             lifecycleScope.launch(Dispatchers.IO) {
-                runCatching { settingsBackupManager.restore(uri) }
+                runCatching {
+                    settingsBackupManager.restore(uri)
+                    settingsRepository.syncLiteModePreferencesIfNeeded()
+                }
                     .onSuccess {
                         withContext(Dispatchers.Main) {
                             if (!isAdded) return@withContext
@@ -213,7 +217,13 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
                 return@setOnPreferenceClickListener true
             }
             lifecycleScope.launch(Dispatchers.IO) {
-                val imported = runCatching { settingsBackupManager.syncExternalSettingsIfModified(force = true) }.getOrDefault(false)
+                val imported = runCatching {
+                    settingsBackupManager.syncExternalSettingsIfModified(force = true).also { ok ->
+                        if (ok) {
+                            settingsRepository.syncLiteModePreferencesIfNeeded()
+                        }
+                    }
+                }.getOrDefault(false)
                 withContext(Dispatchers.Main) {
                     if (!isAdded) return@withContext
                     val ctx = context ?: return@withContext
@@ -338,6 +348,9 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
                                 val selected = snapshots.getOrNull(index) ?: return@SettingsChoiceDialogContent
                                 lifecycleScope.launch(Dispatchers.IO) {
                                     val ok = settingsBackupManager.restoreSnapshot(selected)
+                                    if (ok) {
+                                        settingsRepository.syncLiteModePreferencesIfNeeded()
+                                    }
                                     withContext(Dispatchers.Main) {
                                         val safeCtx = context ?: return@withContext
                                         if (ok) {
@@ -419,6 +432,13 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
 
     private fun updateRewindSummary() {
         val pref = rewindPreference ?: return
+        val liteActive = settingsRepository.isLiteModeActive()
+        if (liteActive) {
+            pref.isEnabled = false
+            pref.summary = "${getString(R.string.v820_rewind_summary_disabled)} - ${getString(R.string.performance_mode_locked_by_lite)}"
+            return
+        }
+        pref.isEnabled = true
         val sp = PreferenceManager.getDefaultSharedPreferences(requireContext())
         val isEnabled = sp.getBoolean("enable_rewind", false)
         val period = sp.getInt("rewind_period", 10)
@@ -596,6 +616,7 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
                     }
                 }
                 editor.apply()
+                settingsRepository.syncLiteModePreferencesIfNeeded()
                 me.magnum.melonds.common.AppLocaleSync.syncFromPreferences(appContext)
                 appliedCount
             }
@@ -679,6 +700,7 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
         }
         editor.putBoolean("enable_storm_compiler", true)
         editor.apply()
+        settingsRepository.syncLiteModePreferencesIfNeeded()
         me.magnum.melonds.common.AppLocaleSync.syncFromPreferences(requireContext())
 
         Toast.makeText(requireContext(), getString(R.string.v780_settings_reset_defaults_title), Toast.LENGTH_SHORT).show()

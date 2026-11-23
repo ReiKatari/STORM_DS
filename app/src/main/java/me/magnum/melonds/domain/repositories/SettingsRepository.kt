@@ -264,4 +264,5 @@ interface SettingsRepository {
     fun setPerformanceMode(mode: PerformanceMode) {}
     fun getDevicePerformanceProfile(): DevicePerformanceProfile? = null
     fun isLiteModeActive(): Boolean = false
+    fun syncLiteModePreferencesIfNeeded(): Boolean = false
 }
