@@ -13,6 +13,7 @@
 #include "VulkanDispatch.h"
 #include "VulkanOutput.h"
 #include "VulkanSurfacePresenterFragmentShaderData.h"
+#include "VulkanSurfacePresenterFallbackFragmentShaderData.h"
 #include "VulkanSurfacePresenterVertexShaderData.h"
 #include "renderer/RetroArchOutputScale.h"
 #include "VulkanRuntimeControls.h"
@@ -810,6 +811,23 @@ void VulkanSurfacePresenter::destroySyncObjects()
 
 bool VulkanSurfacePresenter::createCommonResources()
 {
+    VkPhysicalDeviceProperties deviceProperties{};
+    vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
+    useMinimalPresenterLayout =
+        (deviceProperties.limits.maxPerStageDescriptorStorageImages < 3u)
+        || (deviceProperties.limits.maxPerStageDescriptorStorageBuffers < 3u);
+    fallbackPresenterShaderForced = useMinimalPresenterLayout;
+
+    if (useMinimalPresenterLayout)
+    {
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Warn,
+            "VulkanSurfacePresenter: using minimal texture-only presenter layout (maxPerStageStorageImages=%u maxPerStageStorageBuffers=%u)",
+            deviceProperties.limits.maxPerStageDescriptorStorageImages,
+            deviceProperties.limits.maxPerStageDescriptorStorageBuffers
+        );
+    }
+
     VkDescriptorSetLayoutBinding sampledTextureBinding{};
     sampledTextureBinding.binding = 0;
     sampledTextureBinding.descriptorCount = 1;
@@ -852,43 +870,32 @@ bool VulkanSurfacePresenter::createCommonResources()
     previousBottomRendererImageBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
     previousBottomRendererImageBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-    VkDescriptorSetLayoutBinding topComposedCarryImageBinding{};
-    topComposedCarryImageBinding.binding = 7;
-    topComposedCarryImageBinding.descriptorCount = 1;
-    topComposedCarryImageBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    topComposedCarryImageBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    VkDescriptorSetLayoutBinding bottomComposedCarryImageBinding{};
-    bottomComposedCarryImageBinding.binding = 8;
-    bottomComposedCarryImageBinding.descriptorCount = 1;
-    bottomComposedCarryImageBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    bottomComposedCarryImageBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    VkDescriptorSetLayoutBinding exactObjSourceImageBinding{};
-    exactObjSourceImageBinding.binding = 9;
-    exactObjSourceImageBinding.descriptorCount = 1;
-    exactObjSourceImageBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    exactObjSourceImageBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    VkDescriptorSetLayoutBinding bottomComp2OneShotCarryImageBinding{};
-    bottomComp2OneShotCarryImageBinding.binding = 10;
-    bottomComp2OneShotCarryImageBinding.descriptorCount = 1;
-    bottomComp2OneShotCarryImageBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    bottomComp2OneShotCarryImageBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    const std::array<VkDescriptorSetLayoutBinding, 11> bindings = {
-        sampledTextureBinding,
-        rendererImageBinding,
-        topPackedBinding,
-        bottomPackedBinding,
-        previousTopRendererImageBinding,
-        capture3dBinding,
-        previousBottomRendererImageBinding,
-        topComposedCarryImageBinding,
-        bottomComposedCarryImageBinding,
-        exactObjSourceImageBinding,
-        bottomComp2OneShotCarryImageBinding,
-    };
+    std::vector<VkDescriptorSetLayoutBinding> bindings;
+    std::vector<VkDescriptorPoolSize> poolSizes;
+    if (useMinimalPresenterLayout)
+    {
+        bindings = {sampledTextureBinding};
+        poolSizes = {
+            VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, kDescriptorSetCapacity},
+        };
+    }
+    else
+    {
+        bindings = {
+            sampledTextureBinding,
+            rendererImageBinding,
+            topPackedBinding,
+            bottomPackedBinding,
+            previousTopRendererImageBinding,
+            capture3dBinding,
+            previousBottomRendererImageBinding,
+        };
+        poolSizes = {
+            VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, kDescriptorSetCapacity},
+            VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, kDescriptorSetCapacity * 3u},
+            VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, kDescriptorSetCapacity * 3u},
+        };
+    }
 
     VkDescriptorSetLayoutCreateInfo descriptorSetLayoutInfo{};
     descriptorSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -897,14 +904,6 @@ bool VulkanSurfacePresenter::createCommonResources()
 
     if (vkCreateDescriptorSetLayout(device, &descriptorSetLayoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS)
         return false;
-
-    std::array<VkDescriptorPoolSize, 3> poolSizes{};
-    poolSizes[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[0].descriptorCount = kDescriptorSetCapacity;
-    poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    poolSizes[1].descriptorCount = kDescriptorSetCapacity * 7u;
-    poolSizes[2].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    poolSizes[2].descriptorCount = kDescriptorSetCapacity * 3u;
 
     VkDescriptorPoolCreateInfo descriptorPoolInfo{};
     descriptorPoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -919,7 +918,7 @@ bool VulkanSurfacePresenter::createCommonResources()
     VkPushConstantRange pushConstantRange{};
     pushConstantRange.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
     pushConstantRange.offset = 0;
-    pushConstantRange.size = sizeof(PresenterPushConstants);
+    pushConstantRange.size = sizeof(ComposedPresenterPushConstants);
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -950,6 +949,13 @@ bool VulkanSurfacePresenter::createCommonResources()
         return false;
 
     if (!createShaderModule(
+            melonDS_android_vulkan_surface_presenter_fallback_frag_spv,
+            melonDS_android_vulkan_surface_presenter_fallback_frag_spv_len,
+            &fallbackFragmentShaderModule))
+        return false;
+
+    if (!useMinimalPresenterLayout
+        && !createShaderModule(
             melonDS_android_vulkan_surface_presenter_frag_spv,
             melonDS_android_vulkan_surface_presenter_frag_spv_len,
             &composedFragmentShaderModule))
@@ -1006,6 +1012,12 @@ void VulkanSurfacePresenter::destroyCommonResources()
         vertexShaderModule = VK_NULL_HANDLE;
     }
 
+    if (fallbackFragmentShaderModule != VK_NULL_HANDLE)
+    {
+        vkDestroyShaderModule(device, fallbackFragmentShaderModule, nullptr);
+        fallbackFragmentShaderModule = VK_NULL_HANDLE;
+    }
+
     if (composedFragmentShaderModule != VK_NULL_HANDLE)
     {
         vkDestroyShaderModule(device, composedFragmentShaderModule, nullptr);
@@ -1029,6 +1041,10 @@ void VulkanSurfacePresenter::destroyCommonResources()
         vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
         descriptorSetLayout = VK_NULL_HANDLE;
     }
+
+    useMinimalPresenterLayout = false;
+    fallbackPresenterShaderForced = false;
+    surfacePipelineCacheHasValidPipeline = false;
 }
 
 bool VulkanSurfacePresenter::createTimestampQueryPool(VkQueryPool& queryPool)
@@ -1307,7 +1323,9 @@ VulkanPresentationResult VulkanSurfacePresenter::presentFrame(
         || !inputs.capture3dSourceValid
         || (inputs.previousTopSourceValid && inputs.previousBottomSourceValid);
     const bool directPresentRequested =
-        !inputs.needsReadback
+        !useMinimalPresenterLayout
+        && !fallbackPresenterShaderForced
+        && !inputs.needsReadback
         && !inputs.validationMode
         && !postProcessFilterRequested
         && surfaces.size() == 1
@@ -1413,8 +1431,8 @@ VulkanPresentationResult VulkanSurfacePresenter::presentFrame(
         if (priority(result) > priority(deferredResult))
             deferredResult = result;
     };
-    auto ensureFullFrameComposed = [&]() -> bool {
-        if (directPresentRequested)
+    auto ensureFullFrameComposed = [&](bool forceCompose) -> bool {
+        if (!forceCompose && directPresentRequested)
             return true;
         if (frameImage != VK_NULL_HANDLE && frameImageView != VK_NULL_HANDLE)
             return true;
@@ -1484,7 +1502,7 @@ VulkanPresentationResult VulkanSurfacePresenter::presentFrame(
 
     if (!directPresentRequested)
     {
-        if (!ensureFullFrameComposed())
+        if (!ensureFullFrameComposed(false))
             return terminalCausalWait
                 ? terminalCausalWaitResult
                 : deferredResult;
@@ -1517,10 +1535,6 @@ VulkanPresentationResult VulkanSurfacePresenter::presentFrame(
             continue;
         sawConfiguredSurface = true;
 
-        const bool directPresent = directPresentRequested;
-        VkImage sampledImage = directPresent ? inputs.sourceImage : frameImage;
-        VkImageView sampledImageView = directPresent ? inputs.sourceImageView : frameImageView;
-
         const u64 ensureSwapchainStartNs = PerfNowNs();
         const bool swapchainOk = ensureSwapchain(surfaceState);
         const u64 ensureSwapchainNs = PerfNowNs() - ensureSwapchainStartNs;
@@ -1541,6 +1555,23 @@ VulkanPresentationResult VulkanSurfacePresenter::presentFrame(
                 VulkanPresentationResult::RecoverableSurfaceError);
             continue;
         }
+
+        const bool directPresent =
+            directPresentRequested
+            && !useMinimalPresenterLayout
+            && !surfaceState.usingFallbackShader
+            && !fallbackPresenterShaderForced;
+        if (!directPresent && (frameImage == VK_NULL_HANDLE || frameImageView == VK_NULL_HANDLE))
+        {
+            if (!ensureFullFrameComposed(true))
+            {
+                if (terminalCausalWait)
+                    break;
+                continue;
+            }
+        }
+        VkImage sampledImage = directPresent ? inputs.sourceImage : frameImage;
+        VkImageView sampledImageView = directPresent ? inputs.sourceImageView : frameImageView;
         const u64 remainingBudgetNs = [&]() -> u64 {
             if (fastForwardActive)
                 return 0;
@@ -1621,7 +1652,7 @@ VulkanPresentationResult VulkanSurfacePresenter::presentFrame(
         if (!directPresent)
         {
             const u64 fullComposeStartNs = PerfNowNs();
-            const bool fullComposeOk = ensureFullFrameComposed();
+            const bool fullComposeOk = ensureFullFrameComposed(true);
             const u64 fullComposeNs = PerfNowNs() - fullComposeStartNs;
             if (fullComposeNs > 200'000'000ull)
             {
@@ -3063,6 +3094,13 @@ bool VulkanSurfacePresenter::ensureSwapchain(SurfaceState& surfaceState)
             return failSwapchainConfig("vkCreateImageView", createImageViewResult);
     }
 
+    const VkShaderModule primaryFragmentModule =
+        (useMinimalPresenterLayout
+            || fallbackPresenterShaderForced
+            || composedFragmentShaderModule == VK_NULL_HANDLE)
+            ? fallbackFragmentShaderModule
+            : composedFragmentShaderModule;
+
     VkPipelineShaderStageCreateInfo shaderStages[2]{};
     shaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     shaderStages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
@@ -3070,7 +3108,7 @@ bool VulkanSurfacePresenter::ensureSwapchain(SurfaceState& surfaceState)
     shaderStages[0].pName = "main";
     shaderStages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     shaderStages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    shaderStages[1].module = composedFragmentShaderModule;
+    shaderStages[1].module = primaryFragmentModule;
     shaderStages[1].pName = "main";
 
     VkVertexInputBindingDescription bindingDescription{};
@@ -3162,7 +3200,8 @@ bool VulkanSurfacePresenter::ensureSwapchain(SurfaceState& surfaceState)
     const u64 a1PipelineStartNs = PerfNowNs();
 
     ensureSurfacePipelineCache();
-    const VkResult createPipelineResult = vkCreateGraphicsPipelines(
+    bool usedSurfaceCache = (surfacePipelineCache != VK_NULL_HANDLE);
+    VkResult createPipelineResult = vkCreateGraphicsPipelines(
         device,
         surfacePipelineCache,
         1,
@@ -3170,9 +3209,60 @@ bool VulkanSurfacePresenter::ensureSwapchain(SurfaceState& surfaceState)
         nullptr,
         &surfaceState.composedPipeline
     );
+    if (createPipelineResult != VK_SUCCESS && surfacePipelineCache != VK_NULL_HANDLE)
+    {
+        surfaceState.composedPipeline = VK_NULL_HANDLE;
+        usedSurfaceCache = false;
+        createPipelineResult = vkCreateGraphicsPipelines(
+            device,
+            VK_NULL_HANDLE,
+            1,
+            &pipelineInfo,
+            nullptr,
+            &surfaceState.composedPipeline
+        );
+        if (createPipelineResult == VK_SUCCESS)
+        {
+            melonDS::Platform::Log(
+                melonDS::Platform::LogLevel::Warn,
+                "VulkanSurfacePresenter: uncached vkCreateGraphicsPipelines succeeded for surface=%d after cached failure",
+                surfaceState.id
+            );
+        }
+    }
+    if (createPipelineResult != VK_SUCCESS
+        && shaderStages[1].module != fallbackFragmentShaderModule
+        && fallbackFragmentShaderModule != VK_NULL_HANDLE)
+    {
+        melonDS::Platform::Log(
+            melonDS::Platform::LogLevel::Warn,
+            "VulkanSurfacePresenter: primary fragment shader failed vkCreateGraphicsPipelines (result=%d), retrying with lightweight fallback presenter shader",
+            static_cast<int>(createPipelineResult)
+        );
+        surfaceState.composedPipeline = VK_NULL_HANDLE;
+        usedSurfaceCache = false;
+        shaderStages[1].module = fallbackFragmentShaderModule;
+        createPipelineResult = vkCreateGraphicsPipelines(
+            device,
+            VK_NULL_HANDLE,
+            1,
+            &pipelineInfo,
+            nullptr,
+            &surfaceState.composedPipeline
+        );
+        if (createPipelineResult == VK_SUCCESS)
+        {
+            fallbackPresenterShaderForced = true;
+        }
+    }
     if (createPipelineResult != VK_SUCCESS)
         return failSwapchainConfig("vkCreateGraphicsPipelines", createPipelineResult);
-    saveSurfacePipelineCache();
+    surfaceState.usingFallbackShader = (shaderStages[1].module == fallbackFragmentShaderModule);
+    if (usedSurfaceCache)
+    {
+        surfacePipelineCacheHasValidPipeline = true;
+        saveSurfacePipelineCache();
+    }
 
     if (areRendererDebugToolsEnabled())
     {
@@ -3252,6 +3342,7 @@ void VulkanSurfacePresenter::destroySwapchain(SurfaceState& surfaceState)
         vkDestroyPipeline(device, surfaceState.composedPipeline, nullptr);
         surfaceState.composedPipeline = VK_NULL_HANDLE;
     }
+    surfaceState.usingFallbackShader = false;
 
     if (surfaceState.renderPass != VK_NULL_HANDLE)
     {
@@ -3352,6 +3443,8 @@ void VulkanSurfacePresenter::ensureSurfacePipelineCache()
     if (surfacePipelineCache != VK_NULL_HANDLE || device == VK_NULL_HANDLE)
         return;
 
+    surfacePipelineCacheHasValidPipeline = false;
+
     VkPhysicalDeviceProperties deviceProperties{};
     vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
 
@@ -3368,11 +3461,14 @@ void VulkanSurfacePresenter::ensureSurfacePipelineCache()
     };
     fnv(melonDS_android_vulkan_surface_presenter_vert_spv, melonDS_android_vulkan_surface_presenter_vert_spv_len);
     fnv(melonDS_android_vulkan_surface_presenter_frag_spv, melonDS_android_vulkan_surface_presenter_frag_spv_len);
+    fnv(
+        melonDS_android_vulkan_surface_presenter_fallback_frag_spv,
+        melonDS_android_vulkan_surface_presenter_fallback_frag_spv_len);
     char cacheFileName[256]{};
     std::snprintf(
         cacheFileName,
         sizeof(cacheFileName),
-        "vulkan_presenter_pipeline_cache_v2_%08x_%08x_%08x_%s_%016llx.bin",
+        "vulkan_presenter_pipeline_cache_v3_%08x_%08x_%08x_%s_%016llx.bin",
         deviceProperties.vendorID,
         deviceProperties.deviceID,
         deviceProperties.driverVersion,
@@ -3425,7 +3521,10 @@ void VulkanSurfacePresenter::ensureSurfacePipelineCache()
 
 void VulkanSurfacePresenter::saveSurfacePipelineCache()
 {
-    if (device == VK_NULL_HANDLE || surfacePipelineCache == VK_NULL_HANDLE || surfacePipelineCacheFile.empty())
+    if (device == VK_NULL_HANDLE
+        || surfacePipelineCache == VK_NULL_HANDLE
+        || surfacePipelineCacheFile.empty()
+        || !surfacePipelineCacheHasValidPipeline)
         return;
 
     size_t cacheSize = 0;
@@ -3466,6 +3565,7 @@ void VulkanSurfacePresenter::destroySurfacePipelineCache()
         vkDestroyPipelineCache(device, surfacePipelineCache, nullptr);
     }
     surfacePipelineCache = VK_NULL_HANDLE;
+    surfacePipelineCacheHasValidPipeline = false;
 }
 
 bool VulkanSurfacePresenter::createInFlightFence(SurfaceState& surfaceState, bool signaled)
@@ -4584,7 +4684,7 @@ bool VulkanSurfacePresenter::updateDescriptorSets(
             : inputs.sourceImageView;
     bottomComp2OneShotCarryImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 
-    if (placeholderBuffer == VK_NULL_HANDLE)
+    if (!useMinimalPresenterLayout && placeholderBuffer == VK_NULL_HANDLE)
     {
         VkBufferCreateInfo phInfo{};
         phInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -4613,7 +4713,7 @@ bool VulkanSurfacePresenter::updateDescriptorSets(
             }
         }
     }
-    if (placeholderBuffer == VK_NULL_HANDLE)
+    if (!useMinimalPresenterLayout && placeholderBuffer == VK_NULL_HANDLE)
         return false;
 
     VkDescriptorBufferInfo topPackedBufferInfo{};
@@ -4647,19 +4747,15 @@ bool VulkanSurfacePresenter::updateDescriptorSets(
         || screenCache.sampledImageView != frameImageView
         || screenCache.sampledImageLayout != screenImageInfo.imageLayout
         || screenCache.sampledSampler != screenImageInfo.sampler
-        || screenCache.rendererImageView != inputs.sourceImageView
-        || screenCache.exactObjSourceImageView != inputs.exactObjSourceImageView
-        || screenCache.previousTopRendererImageView != inputs.previousTopSourceImageView
-        || screenCache.previousBottomRendererImageView != inputs.previousBottomSourceImageView
-        || screenCache.topComposedCarryImageView != topComposedCarryImageInfo.imageView
-        || screenCache.bottomComposedCarryImageView != bottomComposedCarryImageInfo.imageView
-        || screenCache.bottomComp2OneShotCarryImageView
-            != bottomComp2OneShotCarryImageInfo.imageView
-        || screenCache.topPackedBuffer != inputs.topPackedBuffer
-        || screenCache.bottomPackedBuffer != inputs.bottomPackedBuffer
-        || screenCache.capture3dBuffer != inputs.capture3dBuffer)
+        || (!useMinimalPresenterLayout
+            && (screenCache.rendererImageView != inputs.sourceImageView
+                || screenCache.previousTopRendererImageView != inputs.previousTopSourceImageView
+                || screenCache.previousBottomRendererImageView != inputs.previousBottomSourceImageView
+                || screenCache.topPackedBuffer != inputs.topPackedBuffer
+                || screenCache.bottomPackedBuffer != inputs.bottomPackedBuffer
+                || screenCache.capture3dBuffer != inputs.capture3dBuffer)))
     {
-        std::array<VkWriteDescriptorSet, 11> screenWrites{};
+        std::array<VkWriteDescriptorSet, 7> screenWrites{};
         u32 screenWriteCount = 0;
         auto appendScreenImageWrite = [&](u32 binding, const VkDescriptorImageInfo* info, VkDescriptorType descriptorType) {
             VkWriteDescriptorSet& write = screenWrites[screenWriteCount++];
@@ -4688,51 +4784,32 @@ bool VulkanSurfacePresenter::updateDescriptorSets(
         {
             appendScreenImageWrite(0, &screenImageInfo, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
         }
-        if (!screenCache.ready || screenInputShapeChanged || screenCache.rendererImageView != inputs.sourceImageView)
+        if (!useMinimalPresenterLayout)
         {
-            appendScreenImageWrite(1, &rendererImageInfo, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-        }
-        if (!screenCache.ready || screenInputShapeChanged || screenCache.exactObjSourceImageView != inputs.exactObjSourceImageView)
-        {
-            appendScreenImageWrite(9, &exactObjSourceImageInfo, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-        }
-        if (!screenCache.ready || screenInputShapeChanged || screenCache.previousTopRendererImageView != inputs.previousTopSourceImageView)
-        {
-            appendScreenImageWrite(4, &previousTopRendererImageInfo, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-        }
-        if (!screenCache.ready || screenInputShapeChanged || screenCache.previousBottomRendererImageView != inputs.previousBottomSourceImageView)
-        {
-            appendScreenImageWrite(6, &previousBottomRendererImageInfo, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-        }
-        if (!screenCache.ready || screenInputShapeChanged || screenCache.topComposedCarryImageView != topComposedCarryImageInfo.imageView)
-        {
-            appendScreenImageWrite(7, &topComposedCarryImageInfo, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-        }
-        if (!screenCache.ready || screenInputShapeChanged || screenCache.bottomComposedCarryImageView != bottomComposedCarryImageInfo.imageView)
-        {
-            appendScreenImageWrite(8, &bottomComposedCarryImageInfo, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-        }
-        if (!screenCache.ready
-            || screenInputShapeChanged
-            || screenCache.bottomComp2OneShotCarryImageView
-                != bottomComp2OneShotCarryImageInfo.imageView)
-        {
-            appendScreenImageWrite(
-                10,
-                &bottomComp2OneShotCarryImageInfo,
-                VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-        }
-        if (!screenCache.ready || screenInputShapeChanged || screenCache.topPackedBuffer != inputs.topPackedBuffer)
-        {
-            appendScreenBufferWrite(2, &topPackedBufferInfo);
-        }
-        if (!screenCache.ready || screenInputShapeChanged || screenCache.bottomPackedBuffer != inputs.bottomPackedBuffer)
-        {
-            appendScreenBufferWrite(3, &bottomPackedBufferInfo);
-        }
-        if (!screenCache.ready || screenInputShapeChanged || screenCache.capture3dBuffer != inputs.capture3dBuffer)
-        {
-            appendScreenBufferWrite(5, &capture3dBufferInfo);
+            if (!screenCache.ready || screenInputShapeChanged || screenCache.rendererImageView != inputs.sourceImageView)
+            {
+                appendScreenImageWrite(1, &rendererImageInfo, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+            }
+            if (!screenCache.ready || screenInputShapeChanged || screenCache.previousTopRendererImageView != inputs.previousTopSourceImageView)
+            {
+                appendScreenImageWrite(4, &previousTopRendererImageInfo, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+            }
+            if (!screenCache.ready || screenInputShapeChanged || screenCache.previousBottomRendererImageView != inputs.previousBottomSourceImageView)
+            {
+                appendScreenImageWrite(6, &previousBottomRendererImageInfo, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+            }
+            if (!screenCache.ready || screenInputShapeChanged || screenCache.topPackedBuffer != inputs.topPackedBuffer)
+            {
+                appendScreenBufferWrite(2, &topPackedBufferInfo);
+            }
+            if (!screenCache.ready || screenInputShapeChanged || screenCache.bottomPackedBuffer != inputs.bottomPackedBuffer)
+            {
+                appendScreenBufferWrite(3, &bottomPackedBufferInfo);
+            }
+            if (!screenCache.ready || screenInputShapeChanged || screenCache.capture3dBuffer != inputs.capture3dBuffer)
+            {
+                appendScreenBufferWrite(5, &capture3dBufferInfo);
+            }
         }
 
         if (screenWriteCount > 0)
@@ -4765,24 +4842,20 @@ bool VulkanSurfacePresenter::updateDescriptorSets(
             || backgroundCache.sampledImageView != surfaceState.background.imageView
             || backgroundCache.sampledImageLayout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
             || backgroundCache.sampledSampler != linearSampler
-            || backgroundCache.rendererImageView != inputs.sourceImageView
-            || backgroundCache.exactObjSourceImageView != inputs.exactObjSourceImageView
-            || backgroundCache.previousTopRendererImageView != inputs.previousTopSourceImageView
-            || backgroundCache.previousBottomRendererImageView != inputs.previousBottomSourceImageView
-            || backgroundCache.topComposedCarryImageView != topComposedCarryImageInfo.imageView
-            || backgroundCache.bottomComposedCarryImageView != bottomComposedCarryImageInfo.imageView
-            || backgroundCache.bottomComp2OneShotCarryImageView
-                != bottomComp2OneShotCarryImageInfo.imageView
-            || backgroundCache.topPackedBuffer != inputs.topPackedBuffer
-            || backgroundCache.bottomPackedBuffer != inputs.bottomPackedBuffer
-            || backgroundCache.capture3dBuffer != inputs.capture3dBuffer))
+            || (!useMinimalPresenterLayout
+                && (backgroundCache.rendererImageView != inputs.sourceImageView
+                    || backgroundCache.previousTopRendererImageView != inputs.previousTopSourceImageView
+                    || backgroundCache.previousBottomRendererImageView != inputs.previousBottomSourceImageView
+                    || backgroundCache.topPackedBuffer != inputs.topPackedBuffer
+                    || backgroundCache.bottomPackedBuffer != inputs.bottomPackedBuffer
+                    || backgroundCache.capture3dBuffer != inputs.capture3dBuffer))))
     {
         VkDescriptorImageInfo backgroundImageInfo{};
         backgroundImageInfo.sampler = linearSampler;
         backgroundImageInfo.imageView = surfaceState.background.imageView;
         backgroundImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-        std::array<VkWriteDescriptorSet, 11> backgroundWrites{};
+        std::array<VkWriteDescriptorSet, 7> backgroundWrites{};
         u32 backgroundWriteCount = 0;
         auto appendBackgroundImageWrite = [&](u32 binding, const VkDescriptorImageInfo* info, VkDescriptorType descriptorType) {
             VkWriteDescriptorSet& write = backgroundWrites[backgroundWriteCount++];
@@ -4811,61 +4884,36 @@ bool VulkanSurfacePresenter::updateDescriptorSets(
         {
             appendBackgroundImageWrite(0, &backgroundImageInfo, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
         }
-        if (!backgroundCache.ready || surfaceState.backgroundDescriptorDirty || backgroundCache.rendererImageView != inputs.sourceImageView)
+        if (!useMinimalPresenterLayout)
         {
-            appendBackgroundImageWrite(1, &rendererImageInfo, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-        }
-        if (!backgroundCache.ready
-            || surfaceState.backgroundDescriptorDirty
-            || backgroundCache.exactObjSourceImageView != inputs.exactObjSourceImageView)
-        {
-            appendBackgroundImageWrite(9, &exactObjSourceImageInfo, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-        }
-        if (!backgroundCache.ready
-            || surfaceState.backgroundDescriptorDirty
-            || backgroundCache.previousTopRendererImageView != inputs.previousTopSourceImageView)
-        {
-            appendBackgroundImageWrite(4, &previousTopRendererImageInfo, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-        }
-        if (!backgroundCache.ready
-            || surfaceState.backgroundDescriptorDirty
-            || backgroundCache.previousBottomRendererImageView != inputs.previousBottomSourceImageView)
-        {
-            appendBackgroundImageWrite(6, &previousBottomRendererImageInfo, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-        }
-        if (!backgroundCache.ready
-            || surfaceState.backgroundDescriptorDirty
-            || backgroundCache.topComposedCarryImageView != topComposedCarryImageInfo.imageView)
-        {
-            appendBackgroundImageWrite(7, &topComposedCarryImageInfo, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-        }
-        if (!backgroundCache.ready
-            || surfaceState.backgroundDescriptorDirty
-            || backgroundCache.bottomComposedCarryImageView != bottomComposedCarryImageInfo.imageView)
-        {
-            appendBackgroundImageWrite(8, &bottomComposedCarryImageInfo, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-        }
-        if (!backgroundCache.ready
-            || surfaceState.backgroundDescriptorDirty
-            || backgroundCache.bottomComp2OneShotCarryImageView
-                != bottomComp2OneShotCarryImageInfo.imageView)
-        {
-            appendBackgroundImageWrite(
-                10,
-                &bottomComp2OneShotCarryImageInfo,
-                VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-        }
-        if (!backgroundCache.ready || surfaceState.backgroundDescriptorDirty || backgroundCache.topPackedBuffer != inputs.topPackedBuffer)
-        {
-            appendBackgroundBufferWrite(2, &topPackedBufferInfo);
-        }
-        if (!backgroundCache.ready || surfaceState.backgroundDescriptorDirty || backgroundCache.bottomPackedBuffer != inputs.bottomPackedBuffer)
-        {
-            appendBackgroundBufferWrite(3, &bottomPackedBufferInfo);
-        }
-        if (!backgroundCache.ready || surfaceState.backgroundDescriptorDirty || backgroundCache.capture3dBuffer != inputs.capture3dBuffer)
-        {
-            appendBackgroundBufferWrite(5, &capture3dBufferInfo);
+            if (!backgroundCache.ready || surfaceState.backgroundDescriptorDirty || backgroundCache.rendererImageView != inputs.sourceImageView)
+            {
+                appendBackgroundImageWrite(1, &rendererImageInfo, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+            }
+            if (!backgroundCache.ready
+                || surfaceState.backgroundDescriptorDirty
+                || backgroundCache.previousTopRendererImageView != inputs.previousTopSourceImageView)
+            {
+                appendBackgroundImageWrite(4, &previousTopRendererImageInfo, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+            }
+            if (!backgroundCache.ready
+                || surfaceState.backgroundDescriptorDirty
+                || backgroundCache.previousBottomRendererImageView != inputs.previousBottomSourceImageView)
+            {
+                appendBackgroundImageWrite(6, &previousBottomRendererImageInfo, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+            }
+            if (!backgroundCache.ready || surfaceState.backgroundDescriptorDirty || backgroundCache.topPackedBuffer != inputs.topPackedBuffer)
+            {
+                appendBackgroundBufferWrite(2, &topPackedBufferInfo);
+            }
+            if (!backgroundCache.ready || surfaceState.backgroundDescriptorDirty || backgroundCache.bottomPackedBuffer != inputs.bottomPackedBuffer)
+            {
+                appendBackgroundBufferWrite(3, &bottomPackedBufferInfo);
+            }
+            if (!backgroundCache.ready || surfaceState.backgroundDescriptorDirty || backgroundCache.capture3dBuffer != inputs.capture3dBuffer)
+            {
+                appendBackgroundBufferWrite(5, &capture3dBufferInfo);
+            }
         }
 
         if (backgroundWriteCount > 0)

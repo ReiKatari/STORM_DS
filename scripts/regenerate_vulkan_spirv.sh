@@ -127,9 +127,9 @@ compile_shader() {
   local output="$3"
   shift 3
   if [[ "${SHADER_COMPILER[0]##*/}" == glslc* ]]; then
-    "${SHADER_COMPILER[@]}" -fshader-stage="$stage" "$@" -o "$output" "$source"
+    "${SHADER_COMPILER[@]}" --target-env=vulkan1.0 -fshader-stage="$stage" "$@" -o "$output" "$source"
   else
-    "${SHADER_COMPILER[@]}" -V -S "$stage" "$@" -o "$output" "$source"
+    "${SHADER_COMPILER[@]}" --target-env vulkan1.0 -V -S "$stage" "$@" -o "$output" "$source"
   fi
 }
 
@@ -458,6 +458,12 @@ generate_header \
   "frag" \
   "melonDS_android_vulkan_surface_presenter_frag_spv" \
   "$ROOT_DIR/app/src/main/cpp/renderer/VulkanSurfacePresenterFragmentShaderData.h"
+
+generate_header \
+  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanSurfacePresenterFallback.frag" \
+  "frag" \
+  "melonDS_android_vulkan_surface_presenter_fallback_frag_spv" \
+  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanSurfacePresenterFallbackFragmentShaderData.h"
 
 if [[ "$MODE" == "check" ]]; then
   echo "Vulkan SPIR-V headers are up to date."

@@ -337,6 +337,7 @@ private:
         bool configured = false;
         bool swapchainDirty = true;
         bool hasCachedSwapchainSelection = false;
+        bool usingFallbackShader = false;
         VkSurfaceFormatKHR cachedSurfaceFormat{};
         VkPresentModeKHR cachedPresentMode = VK_PRESENT_MODE_FIFO_KHR;
         bool vertexBufferDirty = true;
@@ -535,8 +536,12 @@ private:
     VkPipelineCache surfacePipelineCache = VK_NULL_HANDLE;
     std::string surfacePipelineCacheFile;
     std::size_t surfacePipelineCacheSavedBytes = 0;
+    bool surfacePipelineCacheHasValidPipeline = false;
+    bool useMinimalPresenterLayout = false;
+    bool fallbackPresenterShaderForced = false;
     VkShaderModule vertexShaderModule = VK_NULL_HANDLE;
     VkShaderModule composedFragmentShaderModule = VK_NULL_HANDLE;
+    VkShaderModule fallbackFragmentShaderModule = VK_NULL_HANDLE;
     VkSampler nearestSampler = VK_NULL_HANDLE;
     VkSampler linearSampler = VK_NULL_HANDLE;
 
