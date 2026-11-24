@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=STORM DS
+Comment=Nintendo DS and DSiWare Emulator (STORM AURORA FLUID)
+Exec=storm-ds %f
+Icon=com.stormds.emulator
+Categories=Game;Emulator;
+MimeType=application/x-nintendo-ds-rom;
+Terminal=false
+StartupWMClass=STORM DS

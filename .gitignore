@@ -111,5 +111,9 @@ Tools/STORM_DSi_Decryptor/Installer/*.exe
 # STORM Multiplatform Avalonia & Native build outputs
 multiplatform/**/bin/
 multiplatform/**/obj/
+multiplatform/**/publish/
 multiplatform/native/build*/
+multiplatform/native/dist/
+multiplatform/installer/Payload/
+multiplatform/native/src/*_compat.cpp
 

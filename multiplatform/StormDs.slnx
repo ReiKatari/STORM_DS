@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Storm.AuroraFluid.Kit/Storm.AuroraFluid.Kit.csproj" />
+    <Project Path="src/StormDs.Core/StormDs.Core.csproj" />
+    <Project Path="src/StormDs.UI/StormDs.UI.csproj" />
+    <Project Path="src/StormDs.Desktop/StormDs.Desktop.csproj" />
+    <Project Path="src/StormDs.Android/StormDs.Android.csproj" />
+  </Folder>
+  <Folder Name="/installer/">
+    <Project Path="installer/StormDs.Installer.csproj" />
+  </Folder>
+</Solution>

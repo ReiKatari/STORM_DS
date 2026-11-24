@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>preview</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>STORM DS</AssemblyName>
+    <RootNamespace>StormDs.Desktop</RootNamespace>
+    <Version>8.9.0</Version>
+    <AssemblyVersion>8.9.0.0</AssemblyVersion>
+    <FileVersion>8.9.0.0</FileVersion>
+    <Company>STORM TEAM</Company>
+    <Product>STORM DS</Product>
+    <ApplicationIcon>..\..\assets\AppIcon.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsAotCompatible>true</IsAotCompatible>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.2.999-cibuild0100943-alpha" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.2.999-cibuild0100943-alpha" />
+    <PackageReference Include="Avalonia.Skia" Version="12.2.999-cibuild0100943-alpha" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.2.999-cibuild0100943-alpha" />
+    <PackageReference Include="SkiaSharp" Version="3.119.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Storm.AuroraFluid.Kit\Storm.AuroraFluid.Kit.csproj" />
+    <ProjectReference Include="..\StormDs.Core\StormDs.Core.csproj" />
+    <ProjectReference Include="..\StormDs.UI\StormDs.UI.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\native\dist\win-x64\storm_ds_core.dll" Link="storm_ds_core.dll" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\native\dist\win-x64\storm_ds_core.dll')" />
+    <None Include="..\..\assets\vulkan_compat.json" Link="assets\vulkan_compat.json" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\assets\vulkan_compat.json')" />
+    <None Include="..\..\assets\AppIcon.ico" Link="assets\AppIcon.ico" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\assets\AppIcon.ico')" />
+  </ItemGroup>
+
+</Project>

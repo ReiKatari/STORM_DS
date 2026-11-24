@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>STORM_DS_8.9.0_Setup</AssemblyName>
+    <RootNamespace>StormDs.Installer</RootNamespace>
+    <Version>8.9.0</Version>
+    <AssemblyVersion>8.9.0.0</AssemblyVersion>
+    <FileVersion>8.9.0.0</FileVersion>
+    <Company>STORM SOFT</Company>
+    <Product>STORM DS Setup</Product>
+    <ApplicationIcon>..\assets\AppIcon.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <PublishAot>false</PublishAot>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.2.999-cibuild0100943-alpha" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.2.999-cibuild0100943-alpha" />
+    <PackageReference Include="Avalonia.Skia" Version="12.2.999-cibuild0100943-alpha" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.2.999-cibuild0100943-alpha" />
+    <PackageReference Include="SkiaSharp" Version="3.119.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\src\Storm.AuroraFluid.Kit\Storm.AuroraFluid.Kit.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Payload\Payload.zip" LogicalName="Payload.zip" Condition="Exists('Payload\Payload.zip')" />
+    <EmbeddedResource Include="..\assets\AppIcon_256.png" LogicalName="AppIcon.png" />
+    <EmbeddedResource Include="..\assets\AppIcon.ico" LogicalName="AppIcon.ico" />
+    <EmbeddedResource Include="..\..\logo.png" LogicalName="StormSoftLogo.png" />
+  </ItemGroup>
+</Project>

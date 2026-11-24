@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net11.0-android</TargetFramework>
+    <SupportedOSPlatformVersion>24.0</SupportedOSPlatformVersion>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <LangVersion>preview</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationId>com.stormds.emulator</ApplicationId>
+    <ApplicationTitle>STORM DS</ApplicationTitle>
+    <ApplicationDisplayVersion>8.0.0</ApplicationDisplayVersion>
+    <ApplicationVersion>80000</ApplicationVersion>
+    <RuntimeIdentifiers>android-arm64;android-arm</RuntimeIdentifiers>
+    <AndroidSdkDirectory Condition="'$(AndroidSdkDirectory)' == '' and '$(ANDROID_HOME)' == ''">C:\Users\ReiKa\AppData\Local\Android\Sdk</AndroidSdkDirectory>
+    <JavaSdkDirectory Condition="'$(JavaSdkDirectory)' == '' and '$(JAVA_HOME)' == ''">C:\Program Files\Android\openjdk\jdk-21.0.8</JavaSdkDirectory>
+    <AndroidPackageFormat>apk</AndroidPackageFormat>
+    <EmbedAssembliesIntoApk>true</EmbedAssembliesIntoApk>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.2.999-cibuild0100943-alpha" />
+    <PackageReference Include="Avalonia.Android" Version="12.2.999-cibuild0100943-alpha" />
+    <PackageReference Include="Avalonia.Skia" Version="12.2.999-cibuild0100943-alpha" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.2.999-cibuild0100943-alpha" />
+    <PackageReference Include="SkiaSharp" Version="3.119.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\StormDs.UI\StormDs.UI.csproj" />
+    <ProjectReference Include="..\StormDs.Core\StormDs.Core.csproj" />
+    <ProjectReference Include="..\Storm.AuroraFluid.Kit\Storm.AuroraFluid.Kit.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AndroidNativeLibrary Include="..\..\native\dist\android-arm64\libstorm_ds_core.so" Abi="arm64-v8a" Condition="Exists('..\..\native\dist\android-arm64\libstorm_ds_core.so')" />
+    <AndroidNativeLibrary Include="..\..\native\dist\android-arm\libstorm_ds_core.so" Abi="armeabi-v7a" Condition="Exists('..\..\native\dist\android-arm\libstorm_ds_core.so')" />
+    <AndroidAsset Include="..\..\assets\vulkan_compat.json" Link="vulkan_compat.json" Condition="Exists('..\..\assets\vulkan_compat.json')" />
+  </ItemGroup>
+
+</Project>
