@@ -206,7 +206,7 @@ class RomListActivity : AppCompatActivity() {
                         is ManualUpdateResult.UpToDate -> {
                             val curVer = (runCatching {
                                 packageManager.getPackageInfo(packageName, 0).versionName
-                            }.getOrNull() ?: "8.9.1").removePrefix("v").removePrefix("V")
+                            }.getOrNull() ?: "8.9.2").removePrefix("v").removePrefix("V")
                             activeUpdateDialog?.dismiss()
                             activeUpdateDialog = showStormUpdateInfoDialog(
                                 context = this@RomListActivity,
@@ -513,8 +513,8 @@ class RomListActivity : AppCompatActivity() {
         if (isFinishing || isDestroyed) return
         val currentVersionStr = runCatching {
             val pInfo = packageManager.getPackageInfo(packageName, 0)
-            pInfo.versionName ?: "8.9.1"
-        }.getOrDefault("8.9.1")
+            pInfo.versionName ?: "8.9.2"
+        }.getOrDefault("8.9.2")
 
         val newVersionStr = getReadableVersionString(update.newVersion)
         val rawDescription = update.description.ifBlank {
@@ -541,8 +541,8 @@ class RomListActivity : AppCompatActivity() {
         if (isFinishing || isDestroyed) return
         val currentVersionStr = runCatching {
             val pInfo = packageManager.getPackageInfo(packageName, 0)
-            pInfo.versionName ?: "8.9.1"
-        }.getOrDefault("8.9.1")
+            pInfo.versionName ?: "8.9.2"
+        }.getOrDefault("8.9.2")
 
         activeUpdateDialog?.dismiss()
         activeUpdateDialog = showStormUpdateAvailableDialog(

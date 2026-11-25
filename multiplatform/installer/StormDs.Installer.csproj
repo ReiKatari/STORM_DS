@@ -4,11 +4,11 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <AssemblyName>STORM_DS_8.9.1_Setup</AssemblyName>
+    <AssemblyName>STORM_DS_8.9.2_Setup</AssemblyName>
     <RootNamespace>StormDs.Installer</RootNamespace>
-    <Version>8.9.1</Version>
-    <AssemblyVersion>8.9.1.0</AssemblyVersion>
-    <FileVersion>8.9.1.0</FileVersion>
+    <Version>8.9.2</Version>
+    <AssemblyVersion>8.9.2.0</AssemblyVersion>
+    <FileVersion>8.9.2.0</FileVersion>
     <Company>STORM SOFT</Company>
     <Product>STORM DS Setup</Product>
     <ApplicationIcon>..\assets\AppIcon.ico</ApplicationIcon>

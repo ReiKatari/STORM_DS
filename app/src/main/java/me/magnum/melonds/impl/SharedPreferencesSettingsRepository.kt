@@ -977,9 +977,13 @@ class SharedPreferencesSettingsRepository(
             }
         }
         val rootBase = getEmulatorBaseDirectory()
-        val rootDir = File(rootBase, "bios/dsi")
-        if (rootDir.exists() && hasValidBiosFiles(rootDir, isDsi = true)) {
-            return Uri.fromFile(rootDir)
+        val dsiSubDir = File(rootBase, "bios/dsi")
+        if (dsiSubDir.exists() && hasValidBiosFiles(dsiSubDir, isDsi = true)) {
+            return Uri.fromFile(dsiSubDir)
+        }
+        val legacyRootDir = File(rootBase, "bios")
+        if (legacyRootDir.exists() && hasValidBiosFiles(legacyRootDir, isDsi = true)) {
+            return Uri.fromFile(legacyRootDir)
         }
         return null
     }
@@ -990,11 +994,13 @@ class SharedPreferencesSettingsRepository(
             ?.firstOrNull()
             ?.takeIf { !it.contains("data/user/0") && !it.contains("files/bios") }
         val directory = prefDirectory ?: run {
-            val rootDir = File(getEmulatorBaseDirectory(), "bios/dsi")
-            if (rootDir.exists() && hasValidBiosFiles(rootDir, isDsi = true)) {
-                Uri.fromFile(rootDir).toString()
-            } else {
-                null
+            val rootBase = getEmulatorBaseDirectory()
+            val dsiSubDir = File(rootBase, "bios/dsi")
+            val legacyRootDir = File(rootBase, "bios")
+            when {
+                dsiSubDir.exists() && hasValidBiosFiles(dsiSubDir, isDsi = true) -> Uri.fromFile(dsiSubDir).toString()
+                legacyRootDir.exists() && hasValidBiosFiles(legacyRootDir, isDsi = true) -> Uri.fromFile(legacyRootDir).toString()
+                else -> null
             }
         }
         val profile = directory?.let {

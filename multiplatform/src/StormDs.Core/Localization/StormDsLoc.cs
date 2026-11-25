@@ -9,12 +9,12 @@ public sealed record LanguageInfo(string Code, string NativeName, string English
 
 /// <summary>
 /// 11-Language localization dictionary for STORM DS adhering to Sentence case, 0% '&' (always 'и' / 'and'),
-/// and version '8.9.1' without 'v' per ecosystem laws.
+/// and version '8.9.2' without 'v' per ecosystem laws.
 /// Supported languages: ru, en, de, fr, zh, ko, ja, es, it, pt, hi.
 /// </summary>
 public static class StormDsLoc
 {
-    public const string AppVersion = "8.9.1";
+    public const string AppVersion = "8.9.2";
 
     public static event Action<string>? LanguageChanged;
 
@@ -181,7 +181,7 @@ public static class StormDsLoc
             ["StateSaved"] = "Состояние успешно сохранено",
             ["StateLoaded"] = "Состояние успешно восстановлено",
             ["AchievementUnlocked"] = "Достижение разблокировано!",
-            ["VersionLabel"] = "Версия 8.9.1",
+            ["VersionLabel"] = "Версия 8.9.2",
             ["TrayReady"] = "Готов к эмуляции",
             ["TrayOpenWindow"] = "Открыть главное окно",
             ["TrayContinue"] = "Продолжить эмуляцию",
@@ -330,7 +330,7 @@ public static class StormDsLoc
             ["StateSaved"] = "State saved successfully",
             ["StateLoaded"] = "State restored successfully",
             ["AchievementUnlocked"] = "Achievement unlocked!",
-            ["VersionLabel"] = "Version 8.9.1",
+            ["VersionLabel"] = "Version 8.9.2",
             ["TrayReady"] = "Ready for emulation",
             ["TrayOpenWindow"] = "Open main window",
             ["TrayContinue"] = "Resume emulation",
@@ -405,7 +405,7 @@ public static class StormDsLoc
             ["AudioSettings"] = "Ton- und Mikrofoneinstellungen",
             ["InputSettings"] = "Steuerung und Bildschirme",
             ["SystemSettings"] = "System und BIOS",
-            ["VersionLabel"] = "Version 8.9.1"
+            ["VersionLabel"] = "Version 8.9.2"
         },
         ["fr"] = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -424,7 +424,7 @@ public static class StormDsLoc
             ["AudioSettings"] = "Paramètres audio et microphone",
             ["InputSettings"] = "Contrôles et affichage",
             ["SystemSettings"] = "Système et BIOS",
-            ["VersionLabel"] = "Version 8.9.1"
+            ["VersionLabel"] = "Version 8.9.2"
         },
         ["zh"] = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -443,7 +443,7 @@ public static class StormDsLoc
             ["AudioSettings"] = "音频和麦克风设置",
             ["InputSettings"] = "控制和双屏布局",
             ["SystemSettings"] = "系统和 BIOS",
-            ["VersionLabel"] = "版本 8.9.1"
+            ["VersionLabel"] = "版本 8.9.2"
         },
         ["ko"] = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -462,7 +462,7 @@ public static class StormDsLoc
             ["AudioSettings"] = "오디오 및 마이크 설정",
             ["InputSettings"] = "입력 및 듀얼 스크린",
             ["SystemSettings"] = "시스템 및 BIOS",
-            ["VersionLabel"] = "버전 8.9.1"
+            ["VersionLabel"] = "버전 8.9.2"
         },
         ["ja"] = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -481,7 +481,7 @@ public static class StormDsLoc
             ["AudioSettings"] = "サウンドとマイク設定",
             ["InputSettings"] = "操作とデュアル画面",
             ["SystemSettings"] = "システムとBIOS",
-            ["VersionLabel"] = "バージョン 8.9.1"
+            ["VersionLabel"] = "バージョン 8.9.2"
         },
         ["es"] = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -500,7 +500,7 @@ public static class StormDsLoc
             ["AudioSettings"] = "Ajustes de audio y micrófono",
             ["InputSettings"] = "Controles y pantallas",
             ["SystemSettings"] = "Sistema y BIOS",
-            ["VersionLabel"] = "Versión 8.9.1"
+            ["VersionLabel"] = "Versión 8.9.2"
         },
         ["it"] = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -519,7 +519,7 @@ public static class StormDsLoc
             ["AudioSettings"] = "Impostazioni audio e microfono",
             ["InputSettings"] = "Controlli e schermi",
             ["SystemSettings"] = "Sistema e BIOS",
-            ["VersionLabel"] = "Versione 8.9.1"
+            ["VersionLabel"] = "Versione 8.9.2"
         },
         ["pt"] = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -538,7 +538,7 @@ public static class StormDsLoc
             ["AudioSettings"] = "Configurações de áudio e microfone",
             ["InputSettings"] = "Controles e telas",
             ["SystemSettings"] = "Sistema e BIOS",
-            ["VersionLabel"] = "Versão 8.9.1"
+            ["VersionLabel"] = "Versão 8.9.2"
         },
         ["hi"] = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -557,7 +557,7 @@ public static class StormDsLoc
             ["AudioSettings"] = "ऑडियो और माइक्रोफ़ोन सेटिंग्स",
             ["InputSettings"] = "नियंत्रण और स्क्रीन लेआउट",
             ["SystemSettings"] = "सिस्टम और BIOS",
-            ["VersionLabel"] = "संस्करण 8.9.1"
+            ["VersionLabel"] = "संस्करण 8.9.2"
         }
     };
 }

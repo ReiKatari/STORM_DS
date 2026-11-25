@@ -415,23 +415,80 @@ static void refreshWrapHashes(std::vector<u8>& wrap)
     SHA1Final(wrap.data(), &sha);
 }
 
+static void initializeCleanWrapBin(std::vector<u8>& wrap)
+{
+    wrap.assign(WRAP_ENTRIES_OFFSET + WRAP_ENTRIES_SIZE, 0);
+    wrap[0x28] = 'A';
+    wrap[0x29] = 'P';
+    wrap[0x2A] = 'W';
+    wrap[0x2B] = 'R';
+    const u32 entriesSize = static_cast<u32>(WRAP_ENTRIES_SIZE);
+    wrap[0x2C] = static_cast<u8>(entriesSize & 0xFF);
+    wrap[0x2D] = static_cast<u8>((entriesSize >> 8) & 0xFF);
+    wrap[0x2E] = static_cast<u8>((entriesSize >> 16) & 0xFF);
+    wrap[0x2F] = static_cast<u8>((entriesSize >> 24) & 0xFF);
+}
+
+static bool isSupportedWrapMagic(const u8* data)
+{
+    return memcmp(data + 0x28, "APWR", 4) == 0 || memcmp(data + 0x28, "RWPA", 4) == 0;
+}
+
+static void normalizeWrapHeader(std::vector<u8>& wrap)
+{
+    if (wrap.size() < WRAP_ENTRIES_OFFSET + WRAP_ENTRIES_SIZE)
+        return;
+
+    if (memcmp(wrap.data() + 0x28, "RWPA", 4) == 0)
+    {
+        wrap[0x28] = 'A';
+        wrap[0x29] = 'P';
+        wrap[0x2A] = 'W';
+        wrap[0x2B] = 'R';
+    }
+    if (readLe32(wrap.data() + 0x2C) < WRAP_ENTRIES_SIZE)
+    {
+        const u32 entriesSize = static_cast<u32>(WRAP_ENTRIES_SIZE);
+        wrap[0x2C] = static_cast<u8>(entriesSize & 0xFF);
+        wrap[0x2D] = static_cast<u8>((entriesSize >> 8) & 0xFF);
+        wrap[0x2E] = static_cast<u8>((entriesSize >> 16) & 0xFF);
+        wrap[0x2F] = static_cast<u8>((entriesSize >> 24) & 0xFF);
+    }
+}
+
 static LauncherMetadataResult updateWrapBin(u32 category, u32 titleId, bool add, int& usedEntriesOut)
 {
     usedEntriesOut = -1;
 
     std::vector<u8> wrap;
+    bool createdOrRepaired = false;
     if (!nandMount->ExportFile("0:/shared2/launcher/wrap.bin", wrap))
     {
-        melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "DSiWareImport: failed to read launcher wrap.bin\n");
-        return LauncherMetadataResult::Failed;
+        if (!add)
+        {
+            usedEntriesOut = 0;
+            return LauncherMetadataResult::Ok;
+        }
+        initializeCleanWrapBin(wrap);
+        createdOrRepaired = true;
     }
-
-    if (wrap.size() < WRAP_ENTRIES_OFFSET + WRAP_ENTRIES_SIZE ||
-        memcmp(wrap.data() + 0x28, "APWR", 4) != 0 ||
-        readLe32(wrap.data() + 0x2C) < WRAP_ENTRIES_SIZE)
+    else if (wrap.size() < WRAP_ENTRIES_OFFSET + WRAP_ENTRIES_SIZE || !isSupportedWrapMagic(wrap.data()))
     {
-        melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "DSiWareImport: invalid launcher wrap.bin size=%zu\n", wrap.size());
-        return LauncherMetadataResult::Failed;
+        if (!add)
+        {
+            usedEntriesOut = 0;
+            return LauncherMetadataResult::Ok;
+        }
+        initializeCleanWrapBin(wrap);
+        createdOrRepaired = true;
+    }
+    else
+    {
+        if (memcmp(wrap.data() + 0x28, "RWPA", 4) == 0 || readLe32(wrap.data() + 0x2C) < WRAP_ENTRIES_SIZE)
+        {
+            normalizeWrapHeader(wrap);
+            createdOrRepaired = true;
+        }
     }
 
     u8* entries = wrap.data() + WRAP_ENTRIES_OFFSET;
@@ -458,7 +515,7 @@ static LauncherMetadataResult updateWrapBin(u32 category, u32 titleId, bool add,
     int after = countLauncherEntries(entries);
     usedEntriesOut = after;
 
-    if (mutation == LauncherEntryMutation::Changed)
+    if (mutation == LauncherEntryMutation::Changed || createdOrRepaired)
     {
         refreshWrapHashes(wrap);
         if (!nandMount->ImportFile("0:/shared2/launcher/wrap.bin", wrap.data(), wrap.size()))
@@ -490,15 +547,15 @@ static bool readWrapLauncherEntries(std::vector<LauncherTitle>& entriesOut)
     std::vector<u8> wrap;
     if (!nandMount->ExportFile("0:/shared2/launcher/wrap.bin", wrap))
     {
-        melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "DSiWareImport: failed to read launcher wrap.bin for menusave sync\n");
+        melonDS::Platform::Log(melonDS::Platform::LogLevel::Warn, "DSiWareImport: wrap.bin not found while syncing menusave\n");
         return false;
     }
 
     if (wrap.size() < WRAP_ENTRIES_OFFSET + WRAP_ENTRIES_SIZE ||
-        memcmp(wrap.data() + 0x28, "APWR", 4) != 0 ||
+        !isSupportedWrapMagic(wrap.data()) ||
         readLe32(wrap.data() + 0x2C) < WRAP_ENTRIES_SIZE)
     {
-        melonDS::Platform::Log(melonDS::Platform::LogLevel::Error, "DSiWareImport: invalid launcher wrap.bin while syncing menusave size=%zu\n", wrap.size());
+        melonDS::Platform::Log(melonDS::Platform::LogLevel::Warn, "DSiWareImport: non-standard launcher wrap.bin while syncing menusave size=%zu\n", wrap.size());
         return false;
     }
 

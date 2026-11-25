@@ -151,6 +151,7 @@ public:
     static u32 PageShift;
 private:
     friend class Compiler;
+    friend class ARMJIT;
     struct Mapping
     {
         u32 Addr;

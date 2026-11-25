@@ -1778,8 +1778,11 @@ void DSi::SetupDirectBoot()
     ARM7.CPSR = 0x0000001F;
     ARM7.JumpTo(header.ARM7EntryAddress);
 
-    PowerControl9 = 0x820F;
-    GPU.SetPowerCnt(PowerControl9);
+    if (NtrIpcMirrorHack)
+    {
+        PowerControl9 = 0x820F;
+        GPU.SetPowerCnt(PowerControl9);
+    }
 
     if (NtrIpcMirrorHack && MainRAM != nullptr)
     {
