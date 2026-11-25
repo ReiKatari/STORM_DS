@@ -18,7 +18,7 @@ namespace StormDs.UI.Windows;
 
 /// <summary>
 /// Detached 2nd Screen Window for dual-monitor or multi-window emulation.
-/// Dynamically scales the touch screen (AspectFit / Pixel-Perfect / StretchFill) and maps touch accurately.
+/// Dynamically scales the screen and forwards touch coordinates through the shared emulation input handler.
 /// </summary>
 public class DetachedTouchScreenWindow : Window
 {
@@ -26,13 +26,22 @@ public class DetachedTouchScreenWindow : Window
     private readonly Border _screenContainer;
     private readonly Image _screenImage;
     private readonly Action _onReattach;
+    private readonly Action<ushort, ushort, bool>? _onTouchInput;
+    private readonly Func<bool>? _canAcceptTouch;
     private bool _isTouchDown;
+    private bool _reattachInvoked;
 
     public Image ScreenImage => _screenImage;
 
-    public DetachedTouchScreenWindow(Action onReattach)
+    public DetachedTouchScreenWindow(
+        Action onReattach,
+        Action<ushort, ushort, bool>? onTouchInput = null,
+        Func<bool>? canAcceptTouch = null)
     {
         _onReattach = onReattach;
+        _onTouchInput = onTouchInput;
+        _canAcceptTouch = canAcceptTouch;
+
         Title = "STORM DS - Сенсорный экран";
         Width = 640;
         Height = 520;
@@ -50,7 +59,6 @@ public class DetachedTouchScreenWindow : Window
             }
             catch
             {
-                // Ignore invalid icon resource
             }
         }
 
@@ -59,7 +67,6 @@ public class DetachedTouchScreenWindow : Window
             RowDefinitions = new RowDefinitions("36,*")
         };
 
-        // TitleBar
         var titleBar = new Grid
         {
             Background = new SolidColorBrush(Color.FromArgb(160, 20, 24, 38)),
@@ -93,7 +100,6 @@ public class DetachedTouchScreenWindow : Window
         titleBar.Children.Add(dragArea);
         Grid.SetColumn(dragArea, 1);
 
-        // Reattach button
         var reattachBtn = new Button
         {
             Height = 26,
@@ -110,18 +116,13 @@ public class DetachedTouchScreenWindow : Window
         rStack.Children.Add(new AuroraVectorIcon { Kind = AuroraIconKind.SwapScreens, Size = 12, VerticalAlignment = VerticalAlignment.Center });
         rStack.Children.Add(new TextBlock { Text = "Прикрепить экран", FontSize = 10, FontWeight = FontWeight.Medium, Foreground = Brushes.White, VerticalAlignment = VerticalAlignment.Center });
         reattachBtn.Content = rStack;
-        reattachBtn.Click += (s, e) =>
-        {
-            Close();
-            _onReattach();
-        };
+        reattachBtn.Click += (s, e) => Close();
         titleBar.Children.Add(reattachBtn);
         Grid.SetColumn(reattachBtn, 2);
 
         rootGrid.Children.Add(titleBar);
         Grid.SetRow(titleBar, 0);
 
-        // Responsive Screen Viewport
         _canvas = new Canvas
         {
             Background = Brushes.Black,
@@ -145,17 +146,29 @@ public class DetachedTouchScreenWindow : Window
 
         _screenImage.PointerPressed += (s, e) =>
         {
+            if (_canAcceptTouch != null && !_canAcceptTouch()) return;
             _isTouchDown = true;
             SendTouch(e.GetPosition(_screenImage));
         };
         _screenImage.PointerMoved += (s, e) =>
         {
-            if (_isTouchDown) SendTouch(e.GetPosition(_screenImage));
+            if (_isTouchDown && (_canAcceptTouch == null || _canAcceptTouch()))
+            {
+                SendTouch(e.GetPosition(_screenImage));
+            }
         };
         _screenImage.PointerReleased += (s, e) =>
         {
+            if (!_isTouchDown) return;
             _isTouchDown = false;
-            StormDsUiState.Instance.EngineService.SetInput(0, 0, 0, false);
+            if (_onTouchInput != null)
+            {
+                _onTouchInput(0, 0, false);
+            }
+            else
+            {
+                StormDsUiState.Instance.EngineService.SetInput(0, 0, 0, false);
+            }
         };
 
         _screenContainer.Child = _screenImage;
@@ -179,6 +192,11 @@ public class DetachedTouchScreenWindow : Window
         {
             StormDsUiState.Instance.DisplayConfigChanged -= ApplyVisualOptionsAndLayout;
             StormDsUiState.Instance.IsDetachedScreenActive = false;
+            if (!_reattachInvoked)
+            {
+                _reattachInvoked = true;
+                _onReattach();
+            }
         };
     }
 
@@ -255,6 +273,13 @@ public class DetachedTouchScreenWindow : Window
         ushort tx = (ushort)(Math.Clamp(p.X / b.Width, 0.0, 1.0) * 255.0);
         ushort ty = (ushort)(Math.Clamp(p.Y / b.Height, 0.0, 1.0) * 191.0);
 
-        StormDsUiState.Instance.EngineService.SetInput(0, tx, ty, true);
+        if (_onTouchInput != null)
+        {
+            _onTouchInput(tx, ty, true);
+        }
+        else
+        {
+            StormDsUiState.Instance.EngineService.SetInput(0, tx, ty, true);
+        }
     }
 }

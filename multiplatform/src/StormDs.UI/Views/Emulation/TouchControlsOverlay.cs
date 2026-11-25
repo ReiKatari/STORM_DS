@@ -11,6 +11,7 @@ using Storm.AuroraFluid.Kit.Controls;
 using Storm.AuroraFluid.Kit.Icons;
 using Storm.AuroraFluid.Kit.Services;
 using Storm.AuroraFluid.Kit.Themes;
+using StormDs.Core.Configuration;
 using StormDs.UI.Common;
 
 namespace StormDs.UI.Views.Emulation;
@@ -21,6 +22,7 @@ namespace StormDs.UI.Views.Emulation;
 /// </summary>
 public class TouchControlsOverlay : Grid
 {
+    private readonly List<(Border Box, TextBlock Label, Color Accent)> _padButtons = [];
     private uint _buttonsMask;
     public uint CurrentButtonsMask => _buttonsMask;
 
@@ -140,15 +142,46 @@ public class TouchControlsOverlay : Grid
         Grid.SetColumn(rightStack, 2);
     }
 
+    public void ApplyConfig(StormDsAppConfig cfg)
+    {
+        Opacity = Math.Clamp(cfg.TouchOverlayOpacity, 0.15f, 1.0f);
+        double scale = Math.Clamp(cfg.TouchOverlayScale, 0.65f, 1.50f);
+        RenderTransform = Math.Abs(scale - 1.0) > 0.01 ? new ScaleTransform(scale, scale) : null;
+        RenderTransformOrigin = RelativePoint.Center;
+
+        foreach (var (box, _, accent) in _padButtons)
+        {
+            switch (cfg.TouchOverlayPreset)
+            {
+                case TouchOverlayPreset.CyberNeon:
+                    box.Background = new SolidColorBrush(Color.FromArgb(135, 10, 12, 24));
+                    box.BorderBrush = new SolidColorBrush(accent);
+                    box.BorderThickness = new Thickness(2.0);
+                    break;
+                case TouchOverlayPreset.MinimalOutline:
+                    box.Background = new SolidColorBrush(Color.FromArgb(25, 255, 255, 255));
+                    box.BorderBrush = new SolidColorBrush(Color.FromArgb(160, accent.R, accent.G, accent.B));
+                    box.BorderThickness = new Thickness(1.0);
+                    break;
+                default:
+                    box.Background = new SolidColorBrush(Color.FromArgb(90, 20, 24, 38));
+                    box.BorderBrush = new SolidColorBrush(Color.FromArgb(145, accent.R, accent.G, accent.B));
+                    box.BorderThickness = new Thickness(1.5);
+                    break;
+            }
+        }
+    }
+
     private Border CreateNeonPadButton(string label, uint maskBit, double w, double h, double fontSize = 12, string? accentHex = null)
     {
+        var resolvedAccent = accentHex != null ? Color.Parse(accentHex) : Colors.White;
         var border = new Border
         {
             Width = w,
             Height = h,
             CornerRadius = new CornerRadius(Math.Min(w, h) / 2.0),
             Background = new SolidColorBrush(Color.FromArgb(90, 20, 24, 38)),
-            BorderBrush = new SolidColorBrush(accentHex != null ? Color.Parse(accentHex) : Color.FromArgb(120, 255, 255, 255)),
+            BorderBrush = new SolidColorBrush(accentHex != null ? resolvedAccent : Color.FromArgb(120, 255, 255, 255)),
             BorderThickness = new Thickness(1.5),
             Cursor = new Cursor(StandardCursorType.Hand)
         };
@@ -158,16 +191,17 @@ public class TouchControlsOverlay : Grid
             Text = label,
             FontSize = fontSize,
             FontWeight = FontWeight.Bold,
-            Foreground = accentHex != null ? new SolidColorBrush(Color.Parse(accentHex)) : Brushes.White,
+            Foreground = accentHex != null ? new SolidColorBrush(resolvedAccent) : Brushes.White,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center
         };
         border.Child = tb;
+        _padButtons.Add((border, tb, resolvedAccent));
 
         border.PointerPressed += (s, e) =>
         {
             _buttonsMask |= maskBit;
-            border.Background = new SolidColorBrush(accentHex != null ? Color.FromArgb(150, Color.Parse(accentHex).R, Color.Parse(accentHex).G, Color.Parse(accentHex).B) : Color.FromArgb(140, 255, 255, 255));
+            border.Background = new SolidColorBrush(accentHex != null ? Color.FromArgb(150, resolvedAccent.R, resolvedAccent.G, resolvedAccent.B) : Color.FromArgb(140, 255, 255, 255));
             AuroraTactileFeedbackService.Instance.PlayClick();
             InputChanged?.Invoke(_buttonsMask);
             e.Handled = true;

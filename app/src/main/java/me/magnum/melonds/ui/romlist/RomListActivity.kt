@@ -1,16 +1,13 @@
 package me.magnum.melonds.ui.romlist
 
+import android.app.Dialog
 import android.app.SearchManager
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import android.view.KeyEvent
-import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
-import android.view.ViewGroup
-import android.widget.ProgressBar
-import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
@@ -47,9 +44,13 @@ import me.magnum.melonds.domain.model.SortingMode
 import me.magnum.melonds.domain.model.Version
 import me.magnum.melonds.domain.model.appupdate.AppUpdate
 import me.magnum.melonds.domain.model.rom.Rom
+import me.magnum.melonds.github.services.GitHubUpdateInstallManager
 import me.magnum.melonds.ui.common.rom.EmulatorLaunchValidatorDelegate
 import me.magnum.melonds.ui.emulator.EmulatorActivity
 import me.magnum.melonds.ui.settings.SettingsActivity
+import me.magnum.melonds.ui.updates.showStormUpdateAvailableDialog
+import me.magnum.melonds.ui.updates.showStormUpdateInfoDialog
+import me.magnum.melonds.ui.updates.showStormUpdateProgressDialog
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -65,7 +66,10 @@ class RomListActivity : AppCompatActivity() {
     private val updatesViewModel: UpdatesViewModel by viewModels()
     private lateinit var emulatorLauncherValidatorDelegate: EmulatorLaunchValidatorDelegate
 
-    private var downloadProgressDialog: AlertDialog? = null
+    private var activeUpdateDialog: Dialog? = null
+    private var downloadProgressDialog: Dialog? = null
+    private var pendingUpdateApkPath: String? = null
+    private val updateDownloadProgressFlow = kotlinx.coroutines.flow.MutableStateFlow<DownloadProgress?>(null)
     private var romBrowserDpadDownGate: (() -> Boolean)? = null
     private var hasPromptedStoragePermissionThisSession = false
     private var hasPromptedNotificationPermissionThisSession = false
@@ -200,17 +204,26 @@ class RomListActivity : AppCompatActivity() {
                             // Handled by appUpdate flow
                         }
                         is ManualUpdateResult.UpToDate -> {
-                            val curVer = runCatching {
+                            val curVer = (runCatching {
                                 packageManager.getPackageInfo(packageName, 0).versionName
-                            }.getOrNull() ?: "8.9.0"
-                            AlertDialog.Builder(this@RomListActivity)
-                                .setTitle(R.string.v800_update_up_to_date_title)
-                                .setMessage(getString(R.string.v800_update_up_to_date_msg, curVer))
-                                .setPositiveButton(android.R.string.ok, null)
-                                .show()
+                            }.getOrNull() ?: "8.9.1").removePrefix("v").removePrefix("V")
+                            activeUpdateDialog?.dismiss()
+                            activeUpdateDialog = showStormUpdateInfoDialog(
+                                context = this@RomListActivity,
+                                title = getString(R.string.v800_update_up_to_date_title),
+                                message = getString(R.string.v800_update_up_to_date_msg, curVer),
+                                versionBadge = curVer,
+                            )
                         }
                         is ManualUpdateResult.Error -> {
-                            Toast.makeText(this@RomListActivity, R.string.v800_update_error, Toast.LENGTH_SHORT).show()
+                            activeUpdateDialog?.dismiss()
+                            activeUpdateDialog = showStormUpdateInfoDialog(
+                                context = this@RomListActivity,
+                                title = getString(R.string.v800_update_error),
+                                message = result.message?.takeIf { it.isNotBlank() } ?: getString(R.string.v800_update_error),
+                                isError = true,
+                                onRetry = { updatesViewModel.checkForUpdatesManually() },
+                            )
                         }
                     }
                 }
@@ -497,107 +510,104 @@ class RomListActivity : AppCompatActivity() {
     }
 
     private fun showProdUpdateAvailableDialog(update: AppUpdate) {
+        if (isFinishing || isDestroyed) return
         val currentVersionStr = runCatching {
             val pInfo = packageManager.getPackageInfo(packageName, 0)
-            pInfo.versionName ?: "1.0.0"
-        }.getOrDefault("1.0.0")
+            pInfo.versionName ?: "8.9.1"
+        }.getOrDefault("8.9.1")
 
         val newVersionStr = getReadableVersionString(update.newVersion)
-        val message = markwon.toMarkdown(update.description)
-
-        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_styled_update, null, false)
-        val tvCurrentVersion = dialogView.findViewById<android.widget.TextView>(R.id.tv_current_version)
-        val tvNewVersion = dialogView.findViewById<android.widget.TextView>(R.id.tv_new_version)
-        val tvChangelog = dialogView.findViewById<android.widget.TextView>(R.id.tv_changelog)
-        val btnUpdate = dialogView.findViewById<android.widget.Button>(R.id.btn_update_now)
-        val btnLater = dialogView.findViewById<android.widget.Button>(R.id.btn_update_later)
-        val btnSkip = dialogView.findViewById<android.widget.Button>(R.id.btn_skip_version)
-
-        tvCurrentVersion?.text = currentVersionStr.removePrefix("v").removePrefix("V")
-        tvNewVersion?.text = newVersionStr.removePrefix("v").removePrefix("V")
-        tvChangelog?.text = message
-
-        val dialog = AlertDialog.Builder(this)
-            .setView(dialogView)
-            .setCancelable(true)
-            .create()
-
-        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-
-        btnUpdate?.setOnClickListener {
-            dialog.dismiss()
-            startUpdateDownload(update)
-        }
-        btnLater?.setOnClickListener {
-            dialog.dismiss()
-        }
-        btnSkip?.setOnClickListener {
-            dialog.dismiss()
-            updatesViewModel.skipUpdate(update)
+        val rawDescription = update.description.ifBlank {
+            "STORM DS ${newVersionStr.removePrefix("v").removePrefix("V")}"
         }
 
-        dialog.show()
+        activeUpdateDialog?.dismiss()
+        activeUpdateDialog = showStormUpdateAvailableDialog(
+            context = this,
+            currentVersion = currentVersionStr,
+            newVersion = newVersionStr,
+            changelogMd = rawDescription,
+            binarySizeBytes = update.binarySize,
+            publishedEpochMillis = update.updateDate.toEpochMilliseconds(),
+            sourceReleaseUrl = update.sourceReleaseUrl,
+            downloadUrl = update.downloadUri.toString(),
+            onUpdateNow = { startUpdateDownload(update) },
+            onRemindLater = {},
+            onSkipVersion = { updatesViewModel.skipUpdate(update) },
+        )
     }
 
     private fun showNightlyUpdateAvailableDialog(update: AppUpdate) {
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.nightly_update_available))
-            .setMessage(getString(R.string.nightly_update_available_message))
-            .setPositiveButton(R.string.update) { _, _ ->
-                startUpdateDownload(update)
-            }
-            .setNegativeButton(R.string.remind_later_update) { _, _ ->
-                updatesViewModel.skipUpdate(update)
-            }
-            .show()
+        if (isFinishing || isDestroyed) return
+        val currentVersionStr = runCatching {
+            val pInfo = packageManager.getPackageInfo(packageName, 0)
+            pInfo.versionName ?: "8.9.1"
+        }.getOrDefault("8.9.1")
+
+        activeUpdateDialog?.dismiss()
+        activeUpdateDialog = showStormUpdateAvailableDialog(
+            context = this,
+            currentVersion = currentVersionStr,
+            newVersion = getReadableVersionString(update.newVersion),
+            changelogMd = update.description.ifBlank { getString(R.string.nightly_update_available_message) },
+            binarySizeBytes = update.binarySize,
+            publishedEpochMillis = update.updateDate.toEpochMilliseconds(),
+            sourceReleaseUrl = update.sourceReleaseUrl,
+            downloadUrl = update.downloadUri.toString(),
+            titleOverride = getString(R.string.nightly_update_available),
+            onUpdateNow = { startUpdateDownload(update) },
+            onRemindLater = {},
+            onSkipVersion = { updatesViewModel.skipUpdate(update) },
+        )
     }
 
     private fun startUpdateDownload(update: AppUpdate) {
+        updateDownloadProgressFlow.value = DownloadProgress.DownloadUpdate(update.binarySize.coerceAtLeast(0L), 0L)
         downloadProgressDialog?.dismiss()
-        downloadProgressDialog = AlertDialog.Builder(this)
-            .setTitle(R.string.downloading_update)
-            .setView(R.layout.dialog_layout_update_download_progress)
-            .setPositiveButton(R.string.move_to_background) { _, _ ->
-                downloadProgressDialog = null
-            }
-            .setCancelable(false)
-            .show()
+        downloadProgressDialog = showStormUpdateProgressDialog(
+            context = this,
+            versionLabel = getReadableVersionString(update.newVersion),
+            progressFlow = updateDownloadProgressFlow,
+            onMoveToBackground = { downloadProgressDialog = null },
+        )
 
         updatesViewModel.downloadUpdate(update)
     }
 
     private fun onDownloadProgressUpdated(downloadProgress: DownloadProgress) {
-        downloadProgressDialog?.let {
-            when (downloadProgress) {
-                is DownloadProgress.DownloadUpdate -> {
-                    val progressBar = it.findViewById<ProgressBar>(R.id.progress_bar_download_progress)!!
-                    val progressText = it.findViewById<TextView>(R.id.text_download_progress)!!
-
-                    val totalSize = downloadProgress.totalSize
-                    if (totalSize > 0) {
-                        val progress = (downloadProgress.downloadedBytes.toDouble() / totalSize) * 100
-                        val downloadedMb = (downloadProgress.downloadedBytes.toDouble() / 1024 / 1024)
-                        val totalMb = (totalSize.toDouble() / 1024 / 1024)
-
-                        progressBar.apply {
-                            isIndeterminate = false
-                            this.progress = progress.toInt()
-                        }
-
-                        progressText.text = getString(R.string.download_progress_sizes, downloadedMb, totalMb)
-                    } else {
-                        progressBar.isIndeterminate = true
-                        progressText.text = ""
+        when (downloadProgress) {
+            is DownloadProgress.DownloadUpdate -> {
+                updateDownloadProgressFlow.value = downloadProgress
+            }
+            is DownloadProgress.DownloadComplete -> {
+                updateDownloadProgressFlow.value = downloadProgress
+                runCatching { downloadProgressDialog?.dismiss() }
+                downloadProgressDialog = null
+            }
+            is DownloadProgress.DownloadFailed -> {
+                updateDownloadProgressFlow.value = downloadProgress
+                runCatching { downloadProgressDialog?.dismiss() }
+                downloadProgressDialog = null
+                Toast.makeText(this, R.string.update_download_failed, Toast.LENGTH_LONG).show()
+            }
+            is DownloadProgress.InstallPermissionRequired -> {
+                updateDownloadProgressFlow.value = downloadProgress
+                runCatching { downloadProgressDialog?.dismiss() }
+                downloadProgressDialog = null
+                pendingUpdateApkPath = downloadProgress.apkPath
+                Toast.makeText(this, R.string.update_install_permission_required, Toast.LENGTH_LONG).show()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    runCatching {
+                        startActivity(
+                            Intent(
+                                android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                                android.net.Uri.parse("package:$packageName"),
+                            )
+                        )
+                    }.onFailure {
+                        pendingUpdateApkPath = null
+                        Toast.makeText(this, R.string.update_download_failed, Toast.LENGTH_LONG).show()
                     }
-                }
-                is DownloadProgress.DownloadComplete -> {
-                    it.dismiss()
-                    downloadProgressDialog = null
-                }
-                is DownloadProgress.DownloadFailed -> {
-                    it.dismiss()
-                    downloadProgressDialog = null
-                    Toast.makeText(this, R.string.update_download_failed, Toast.LENGTH_LONG).show()
                 }
             }
         }
@@ -632,6 +642,8 @@ class RomListActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        activeUpdateDialog?.dismiss()
+        activeUpdateDialog = null
         downloadProgressDialog?.dismiss()
         downloadProgressDialog = null
         super.onDestroy()
@@ -669,6 +681,16 @@ class RomListActivity : AppCompatActivity() {
         enablePhoneGameBoosterIntegration()
         checkAndRequestStoragePermission()
         me.magnum.melonds.MelonDSApplication.migrateStorageToRoot(this)
+        val pendingPath = pendingUpdateApkPath
+        if (pendingPath != null) {
+            val installManager = GitHubUpdateInstallManager(applicationContext)
+            if (installManager.canRequestPackageInstalls()) {
+                pendingUpdateApkPath = null
+                if (!installManager.openInstaller(java.io.File(pendingPath))) {
+                    Toast.makeText(this, R.string.update_download_failed, Toast.LENGTH_LONG).show()
+                }
+            }
+        }
         lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             settingsBackupManager.syncExternalSettingsIfModified(force = false)
         }

@@ -10,6 +10,8 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using Storm.AuroraFluid.Kit.Controls;
 using Storm.AuroraFluid.Kit.Icons;
 using Storm.AuroraFluid.Kit.Services;
@@ -30,6 +32,7 @@ public class SettingsView : Grid
     private readonly AuroraSearchBox _searchBox;
     private readonly StackPanel _tabsRail;
     private readonly ContentControl _contentPresenter;
+    private readonly TextBlock _savedFeedbackText;
     private readonly List<(int Index, AuroraIconKind Icon, string Title, Border Button)> _tabButtons = [];
     private int _activeTabIndex;
     private string _filterQuery = string.Empty;
@@ -56,7 +59,27 @@ public class SettingsView : Grid
         Children.Add(_searchBox);
         Grid.SetRow(_searchBox, 0); Grid.SetColumn(_searchBox, 0);
 
-        // Top Action: Save Config Pill
+        // Top Action: Save Status + Save Config Pill
+        var topRight = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 12,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 0, 10)
+        };
+
+        _savedFeedbackText = new TextBlock
+        {
+            Text = string.Empty,
+            FontSize = 11.5,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = new SolidColorBrush(Color.Parse("#10B981")),
+            VerticalAlignment = VerticalAlignment.Center,
+            IsVisible = false
+        };
+        topRight.Children.Add(_savedFeedbackText);
+
         var savePill = new Border
         {
             Height = 36,
@@ -65,9 +88,6 @@ public class SettingsView : Grid
             BorderBrush = new SolidColorBrush(Color.Parse("#10B981")),
             BorderThickness = new Thickness(1),
             Padding = new Thickness(12, 0),
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 0, 10),
             Cursor = new Cursor(StandardCursorType.Hand)
         };
         var spStack = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, VerticalAlignment = VerticalAlignment.Center };
@@ -77,10 +97,11 @@ public class SettingsView : Grid
         savePill.PointerPressed += (s, e) =>
         {
             AuroraTactileFeedbackService.Instance.PlayAchievementChime();
-            StormDsUiState.Instance.SaveConfig();
+            CommitSave(showBanner: true);
         };
-        Children.Add(savePill);
-        Grid.SetRow(savePill, 0); Grid.SetColumn(savePill, 1);
+        topRight.Children.Add(savePill);
+        Children.Add(topRight);
+        Grid.SetRow(topRight, 0); Grid.SetColumn(topRight, 1);
 
         // 2. Left Tabs List
         var tabsScroll = new ScrollViewer
@@ -125,7 +146,16 @@ public class SettingsView : Grid
         Children.Add(glassCard);
         Grid.SetRow(glassCard, 1); Grid.SetColumn(glassCard, 1);
 
+        StormThemeBrushes.BindTheme(this, () => LoadTab(_activeTabIndex));
         LoadTab(0);
+    }
+
+    private void CommitSave(bool showBanner = false)
+    {
+        StormDsUiState.Instance.SaveConfig(showBanner);
+        _savedFeedbackText.Text = StormDsLoc.T("SettingsSavedMsg");
+        _savedFeedbackText.IsVisible = true;
+        DispatcherTimer.RunOnce(() => _savedFeedbackText.IsVisible = false, TimeSpan.FromSeconds(2));
     }
 
     private void AddTabHeader(int index, AuroraIconKind icon, string title)
@@ -182,16 +212,18 @@ public class SettingsView : Grid
     {
         _activeTabIndex = index;
 
-        // Update tab button highlights
-        var theme = AuroraThemeManager.Instance.CurrentTheme;
-        var (primary, _) = AuroraThemeManager.ResolveAccentColors(theme, AuroraThemeManager.Instance.CurrentAccentOverride);
+        var primaryColor = StormThemeBrushes.AccentPrimaryColor;
 
         foreach (var item in _tabButtons)
         {
             bool isSel = item.Index == index;
-            item.Button.Background = isSel ? new SolidColorBrush(Color.FromArgb(50, primary.R, primary.G, primary.B)) : Brushes.Transparent;
-            item.Button.BorderBrush = isSel ? new SolidColorBrush(primary) : Brushes.Transparent;
+            item.Button.Background = isSel ? new SolidColorBrush(Color.FromArgb(50, primaryColor.R, primaryColor.G, primaryColor.B)) : Brushes.Transparent;
+            item.Button.BorderBrush = isSel ? new SolidColorBrush(primaryColor) : Brushes.Transparent;
             item.Button.BorderThickness = new Thickness(isSel ? 1 : 0);
+            if (item.Button.Child is Grid g && g.Children.Count > 1 && g.Children[1] is TextBlock tb)
+            {
+                tb.Foreground = isSel ? StormThemeBrushes.PrimaryText : StormThemeBrushes.SecondaryText;
+            }
         }
 
         var scroll = new ScrollViewer
@@ -201,21 +233,73 @@ public class SettingsView : Grid
         };
 
         var container = new StackPanel { Spacing = 14 };
+        string q = _filterQuery.Trim();
 
-        switch (index)
+        if (q.Length >= 2)
         {
-            case 0: BuildGraphicsTab(container); break;
-            case 1: BuildAudioTab(container); break;
-            case 2: BuildInputTab(container); break;
-            case 3: BuildScreenTab(container); break;
-            case 4: BuildSystemTab(container); break;
-            case 5: BuildNetplayTab(container); break;
-            case 6: BuildAiTab(container); break;
-            case 7: BuildThemesTab(container); break;
+            var allItems = new StackPanel { Spacing = 14 };
+            BuildGraphicsTab(allItems);
+            BuildAudioTab(allItems);
+            BuildInputTab(allItems);
+            BuildScreenTab(allItems);
+            BuildSystemTab(allItems);
+            BuildNetplayTab(allItems);
+            BuildAiTab(allItems);
+            BuildThemesTab(allItems);
+
+            var list = allItems.Children.ToList();
+            allItems.Children.Clear();
+            foreach (var child in list)
+            {
+                if (ControlContainsText(child, q))
+                {
+                    container.Children.Add(child);
+                }
+            }
+
+            if (container.Children.Count == 0)
+            {
+                container.Children.Add(new TextBlock
+                {
+                    Text = $"По запросу '{q}' настройки не найдены.",
+                    FontSize = 12,
+                    Foreground = StormThemeBrushes.SecondaryText
+                });
+            }
+        }
+        else
+        {
+            switch (index)
+            {
+                case 0: BuildGraphicsTab(container); break;
+                case 1: BuildAudioTab(container); break;
+                case 2: BuildInputTab(container); break;
+                case 3: BuildScreenTab(container); break;
+                case 4: BuildSystemTab(container); break;
+                case 5: BuildNetplayTab(container); break;
+                case 6: BuildAiTab(container); break;
+                case 7: BuildThemesTab(container); break;
+            }
         }
 
         scroll.Content = container;
         _contentPresenter.Content = scroll;
+    }
+
+    private static bool ControlContainsText(Control control, string query)
+    {
+        if (control is TextBlock tb && tb.Text?.Contains(query, StringComparison.OrdinalIgnoreCase) == true) return true;
+        if (control is AuroraNeonCheckBox cb && cb.Label?.Contains(query, StringComparison.OrdinalIgnoreCase) == true) return true;
+        if (control is Panel panel)
+        {
+            foreach (var child in panel.Children)
+            {
+                if (ControlContainsText(child, query)) return true;
+            }
+        }
+        if (control is Border border && border.Child is Control bc && ControlContainsText(bc, query)) return true;
+        if (control is ContentControl cc && cc.Content is Control contentCtrl && ControlContainsText(contentCtrl, query)) return true;
+        return false;
     }
 
     // --- Tab 1: Graphics & Vulkan ---
@@ -262,7 +346,7 @@ public class SettingsView : Grid
                 StormDsUiState.Instance.NotifyDisplayConfigChanged();
             }));
 
-        p.Children.Add(CreateTextSettingRow("Пользовательский Vulkan драйвер:", cfg.CustomTurnipDriverPath, (txt) => cfg.CustomTurnipDriverPath = txt));
+        p.Children.Add(CreatePathSettingRow("Пользовательский Vulkan драйвер:", cfg.CustomTurnipDriverPath, new[] { "*.adpkg", "*.zip", "*.so", "*.dll" }, (txt) => { cfg.CustomTurnipDriverPath = txt; CommitSave(); }));
     }
 
     // --- Tab 2: Audio & DSP ---
@@ -286,7 +370,12 @@ public class SettingsView : Grid
         p.Children.Add(CreateCheckBoxRow("DSP мягкий лимитер (Soft Limiter)", cfg.DspSoftLimiter, (v) => cfg.DspSoftLimiter = v));
         p.Children.Add(CreateCheckBoxRow("DSP пространственное стерео (Spatial)", cfg.DspSpatialStereo, (v) => cfg.DspSpatialStereo = v));
         p.Children.Add(CreateCheckBoxRow("DSP реверберация помещения", cfg.DspReverb, (v) => cfg.DspReverb = v));
-        p.Children.Add(CreateCheckBoxRow("Тактильный звуковой отклик интерфейса STORM", cfg.UiTactileAudioEnabled, (v) => cfg.UiTactileAudioEnabled = v));
+        p.Children.Add(CreateCheckBoxRow("Тактильный звуковой отклик интерфейса STORM", cfg.UiTactileAudioEnabled, (v) =>
+        {
+            cfg.UiTactileAudioEnabled = v;
+            AuroraTactileFeedbackService.Instance.Enabled = v;
+            CommitSave();
+        }));
 
         p.Children.Add(CreateComboBoxRow(
             "Режим микрофона:",
@@ -415,7 +504,11 @@ public class SettingsView : Grid
             (idx) => cfg.ConsoleMode = (ConsoleMode)idx));
 
         p.Children.Add(CreateCheckBoxRow("Прямой запуск игр (Direct Boot без стартового меню)", cfg.DirectBoot, (v) => cfg.DirectBoot = v));
-        p.Children.Add(CreateCheckBoxRow("Использовать внешние дампы BIOS и Firmware", cfg.UseExternalBios, (v) => cfg.UseExternalBios = v));
+        p.Children.Add(CreateCheckBoxRow("Использовать внешние дампы BIOS и Firmware", cfg.UseExternalBios, (v) => { cfg.UseExternalBios = v; CommitSave(); }));
+        p.Children.Add(CreatePathSettingRow("Путь BIOS ARM9 (bios9.bin):", cfg.Bios9Path, new[] { "*.bin" }, t => { cfg.Bios9Path = t; CommitSave(); }));
+        p.Children.Add(CreatePathSettingRow("Путь BIOS ARM7 (bios7.bin):", cfg.Bios7Path, new[] { "*.bin" }, t => { cfg.Bios7Path = t; CommitSave(); }));
+        p.Children.Add(CreatePathSettingRow("Путь Firmware (firmware.bin):", cfg.FirmwarePath, new[] { "*.bin" }, t => { cfg.FirmwarePath = t; CommitSave(); }));
+        p.Children.Add(CreatePathSettingRow("Образ DSiWare NAND (.bin / .nand):", cfg.DsiNandPath, new[] { "*.bin", "*.img", "*.nand" }, t => { cfg.DsiNandPath = t; CommitSave(); }));
 
         int ocIdx = cfg.Arm9Overclock switch { 1 => 0, 2 => 1, 3 => 2, 4 => 3, _ => 0 };
         p.Children.Add(CreateComboBoxRow(
@@ -494,31 +587,112 @@ public class SettingsView : Grid
         var themesGrid = new UniformGrid { Columns = 3 };
         foreach (var t in themes)
         {
+            bool isSel = string.Equals(AuroraThemeManager.Instance.CurrentTheme.Id, t.Item1, StringComparison.OrdinalIgnoreCase);
             var btn = new Button
             {
                 Margin = new Thickness(4),
                 Padding = new Thickness(8, 6),
-                Background = new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(70, 255, 255, 255)),
+                Background = isSel ? StormThemeBrushes.HoverSurface : StormThemeBrushes.CardSurface,
+                BorderBrush = isSel ? StormThemeBrushes.Accent : StormThemeBrushes.SubtleBorder,
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(8),
                 Cursor = new Cursor(StandardCursorType.Hand),
                 HorizontalContentAlignment = HorizontalAlignment.Center
             };
             var s = new StackPanel { Spacing = 2, HorizontalAlignment = HorizontalAlignment.Center };
-            s.Children.Add(new TextBlock { Text = t.Item1, FontSize = 11, FontWeight = FontWeight.Bold, Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Center });
-            s.Children.Add(new TextBlock { Text = t.Item2, FontSize = 9, Foreground = new SolidColorBrush(Color.Parse("#94A3B8")), HorizontalAlignment = HorizontalAlignment.Center });
+            s.Children.Add(new TextBlock { Text = t.Item1, FontSize = 11, FontWeight = FontWeight.Bold, Foreground = StormThemeBrushes.PrimaryText, HorizontalAlignment = HorizontalAlignment.Center });
+            s.Children.Add(new TextBlock { Text = t.Item2, FontSize = 9, Foreground = StormThemeBrushes.SecondaryText, HorizontalAlignment = HorizontalAlignment.Center });
             btn.Content = s;
             btn.Click += (sender, e) =>
             {
                 AuroraTactileFeedbackService.Instance.PlayClick();
                 AuroraThemeManager.Instance.ApplyTheme(t.Item1);
                 StormDsUiState.Instance.AppConfig.Theme = "STORM " + t.Item1;
-                StormDsUiState.Instance.SaveConfig();
+                CommitSave();
             };
             themesGrid.Children.Add(btn);
         }
         p.Children.Add(themesGrid);
+
+        p.Children.Add(CreateSectionTitle("Акцентные цвета интерфейса (14 вариантов)"));
+        var accentsWrap = new WrapPanel { Orientation = Orientation.Horizontal };
+        foreach (var kind in Enum.GetValues<AuroraAccentKind>())
+        {
+            var (swatchColor, _) = AuroraThemeManager.ResolveAccentColors(AuroraThemeManager.Instance.CurrentTheme, kind);
+            bool activeAccent = AuroraThemeManager.Instance.CurrentAccentOverride == kind;
+            var swatchBtn = new Button
+            {
+                Margin = new Thickness(0, 0, 6, 6),
+                Padding = new Thickness(8, 5),
+                CornerRadius = new CornerRadius(8),
+                Background = activeAccent ? StormThemeBrushes.HoverSurface : StormThemeBrushes.CardSurface,
+                BorderBrush = activeAccent ? new SolidColorBrush(swatchColor) : StormThemeBrushes.SubtleBorder,
+                BorderThickness = new Thickness(1),
+                Cursor = new Cursor(StandardCursorType.Hand)
+            };
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, VerticalAlignment = VerticalAlignment.Center };
+            row.Children.Add(new Border
+            {
+                Width = 12,
+                Height = 12,
+                CornerRadius = new CornerRadius(6),
+                Background = new SolidColorBrush(swatchColor),
+                VerticalAlignment = VerticalAlignment.Center
+            });
+            row.Children.Add(new TextBlock
+            {
+                Text = kind == AuroraAccentKind.DefaultThemeAccent ? "По теме" : kind.ToString(),
+                FontSize = 10.5,
+                Foreground = StormThemeBrushes.PrimaryText,
+                VerticalAlignment = VerticalAlignment.Center
+            });
+            swatchBtn.Content = row;
+            swatchBtn.Click += (_, _) =>
+            {
+                AuroraTactileFeedbackService.Instance.PlayClick();
+                AuroraThemeManager.Instance.ApplyTheme(AuroraThemeManager.Instance.CurrentTheme.Id, kind);
+                StormDsUiState.Instance.AppConfig.AccentName = kind.ToString();
+                CommitSave();
+                LoadTab(_activeTabIndex);
+            };
+            accentsWrap.Children.Add(swatchBtn);
+        }
+        p.Children.Add(accentsWrap);
+
+        p.Children.Add(CreateSectionTitle("Типографика и системные шрифты (10 пресетов)"));
+        var fontsGrid = new UniformGrid { Columns = 2 };
+        foreach (var preset in Enum.GetValues<AuroraTypographyPreset>())
+        {
+            bool activeFont = AuroraThemeManager.Instance.CurrentTypography == preset;
+            var fBtn = new Button
+            {
+                Margin = new Thickness(3),
+                Padding = new Thickness(8, 5),
+                CornerRadius = new CornerRadius(6),
+                Background = activeFont ? StormThemeBrushes.HoverSurface : StormThemeBrushes.CardSurface,
+                BorderBrush = activeFont ? StormThemeBrushes.Accent : StormThemeBrushes.SubtleBorder,
+                BorderThickness = new Thickness(1),
+                Cursor = new Cursor(StandardCursorType.Hand),
+                HorizontalContentAlignment = HorizontalAlignment.Center
+            };
+            fBtn.Content = new TextBlock
+            {
+                Text = preset.ToString(),
+                FontSize = 11,
+                FontFamily = AuroraThemeManager.ResolveFontFamily(preset),
+                Foreground = StormThemeBrushes.PrimaryText
+            };
+            fBtn.Click += (_, _) =>
+            {
+                AuroraTactileFeedbackService.Instance.PlayClick();
+                AuroraThemeManager.Instance.ApplyTheme(AuroraThemeManager.Instance.CurrentTheme.Id, null, preset);
+                StormDsUiState.Instance.AppConfig.TypographyName = preset.ToString();
+                CommitSave();
+                LoadTab(_activeTabIndex);
+            };
+            fontsGrid.Children.Add(fBtn);
+        }
+        p.Children.Add(fontsGrid);
 
         p.Children.Add(CreateSectionTitle("11 Системных языков интерфейса"));
         var langs = new[]
@@ -530,23 +704,25 @@ public class SettingsView : Grid
         var langGrid = new UniformGrid { Columns = 4 };
         foreach (var l in langs)
         {
+            bool activeLang = string.Equals(StormDsLoc.CurrentLanguage, l.Item1, StringComparison.OrdinalIgnoreCase);
             var btn = new Button
             {
                 Margin = new Thickness(3),
                 Padding = new Thickness(6, 4),
-                Background = new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(70, 255, 255, 255)),
+                Background = activeLang ? StormThemeBrushes.HoverSurface : StormThemeBrushes.CardSurface,
+                BorderBrush = activeLang ? StormThemeBrushes.Accent : StormThemeBrushes.SubtleBorder,
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(6),
                 Cursor = new Cursor(StandardCursorType.Hand)
             };
-            btn.Content = new TextBlock { Text = l.Item2, FontSize = 11, HorizontalAlignment = HorizontalAlignment.Center, Foreground = Brushes.White };
+            btn.Content = new TextBlock { Text = l.Item2, FontSize = 11, HorizontalAlignment = HorizontalAlignment.Center, Foreground = StormThemeBrushes.PrimaryText };
             btn.Click += (sender, e) =>
             {
                 AuroraTactileFeedbackService.Instance.PlayClick();
                 StormDsLoc.CurrentLanguage = l.Item1;
                 StormDsUiState.Instance.AppConfig.Language = l.Item1;
-                StormDsUiState.Instance.SaveConfig();
+                CommitSave();
+                LoadTab(_activeTabIndex);
             };
             langGrid.Children.Add(btn);
         }
@@ -557,8 +733,8 @@ public class SettingsView : Grid
         {
             Padding = new Thickness(12),
             CornerRadius = new CornerRadius(8),
-            Background = new SolidColorBrush(Color.FromArgb(30, 255, 255, 255)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(60, 255, 255, 255)),
+            Background = StormThemeBrushes.RowSurface,
+            BorderBrush = StormThemeBrushes.SubtleBorder,
             BorderThickness = new Thickness(1)
         };
         var uStack = new StackPanel { Spacing = 8 };
@@ -566,30 +742,34 @@ public class SettingsView : Grid
         {
             Text = $"Текущая версия: {StormDsLoc.AppVersion}. Зеркала: GitHub Releases API + STORM GAMES WORLD",
             FontSize = 11.5,
-            Foreground = new SolidColorBrush(Color.Parse("#CBD5E1")),
+            Foreground = StormThemeBrushes.BodyText,
             TextWrapping = TextWrapping.Wrap
         };
         uStack.Children.Add(updateStatusText);
 
+        uStack.Children.Add(CreateCheckBoxRow(
+            "Автоматически проверять обновления при запуске",
+            StormDsUiState.Instance.AppConfig.AutoCheckUpdates,
+            v =>
+            {
+                StormDsUiState.Instance.AppConfig.AutoCheckUpdates = v;
+                CommitSave();
+            }));
+
         var checkBtn = new AuroraVolumetricButton
         {
             Height = 32,
-            Width = 210,
+            Width = 220,
             HorizontalAlignment = HorizontalAlignment.Left
         };
         var cbStack = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         cbStack.Children.Add(new AuroraVectorIcon { Kind = AuroraIconKind.UpdateRocket, Size = 14, VerticalAlignment = VerticalAlignment.Center });
         cbStack.Children.Add(new TextBlock { Text = "Проверить обновления", FontSize = 11, FontWeight = FontWeight.Bold, Foreground = Brushes.White, VerticalAlignment = VerticalAlignment.Center });
         checkBtn.Content = cbStack;
-        checkBtn.Click += async (s, e) =>
+        checkBtn.Click += (s, e) =>
         {
-            updateStatusText.Text = "Проверка обновлений...";
-            var updater = new AuroraDualMirrorUpdater();
-            var res = await updater.CheckForUpdateAsync("ReiKatari", "STORM_DS", new Version(8, 9, 0));
-            AuroraTactileFeedbackService.Instance.PlayAchievementChime();
-            updateStatusText.Text = res.IsUpdateAvailable
-                ? $"Доступна новая версия {res.LatestVersion} ({res.SourceMirror})"
-                : $"Установлена актуальная версия {StormDsLoc.AppVersion} ({res.SourceMirror})";
+            updateStatusText.Text = $"Открыто окно проверки обновлений ({StormDsLoc.AppVersion})";
+            StormDsUiState.Instance.RequestUpdateCheck(true);
         };
         uStack.Children.Add(checkBtn);
         updateCard.Child = uStack;
@@ -604,12 +784,12 @@ public class SettingsView : Grid
             Text = title.ToUpperInvariant(),
             FontSize = 11,
             FontWeight = FontWeight.Bold,
-            Foreground = new SolidColorBrush(Color.Parse("#38BDF8")),
+            Foreground = StormThemeBrushes.Accent,
             Margin = new Thickness(0, 6, 0, 2)
         };
     }
 
-    private static Control CreateCheckBoxRow(string label, bool initial, Action<bool> onChange)
+    private Control CreateCheckBoxRow(string label, bool initial, Action<bool> onChange)
     {
         var cb = new AuroraNeonCheckBox
         {
@@ -617,11 +797,15 @@ public class SettingsView : Grid
             IsChecked = initial,
             Margin = new Thickness(0, 2)
         };
-        cb.IsCheckedChanged += (s, chk) => onChange(chk);
+        cb.IsCheckedChanged += (s, chk) =>
+        {
+            onChange(chk);
+            CommitSave();
+        };
         return cb;
     }
 
-    private static Grid CreateSliderRow(string label, double min, double max, double initial, string unit, Action<double> onChange)
+    private Grid CreateSliderRow(string label, double min, double max, double initial, string unit, Action<double> onChange)
     {
         var g = new Grid
         {
@@ -629,7 +813,7 @@ public class SettingsView : Grid
             RowDefinitions = new RowDefinitions("Auto,Auto")
         };
 
-        var labelText = new TextBlock { Text = $"{label} {initial:0.##} {unit}", FontSize = 11, Foreground = new SolidColorBrush(Color.Parse("#CBD5E1")), Margin = new Thickness(0, 0, 0, 2) };
+        var labelText = new TextBlock { Text = $"{label} {initial:0.##} {unit}", FontSize = 11, Foreground = StormThemeBrushes.BodyText, Margin = new Thickness(0, 0, 0, 2) };
         g.Children.Add(labelText);
         Grid.SetRow(labelText, 0);
 
@@ -644,6 +828,7 @@ public class SettingsView : Grid
         {
             labelText.Text = $"{label} {val:0.##} {unit}";
             onChange(val);
+            CommitSave();
         };
         g.Children.Add(slider);
         Grid.SetRow(slider, 1);
@@ -651,7 +836,7 @@ public class SettingsView : Grid
         return g;
     }
 
-    private static Grid CreateComboBoxRow(string label, string[] options, int selectedIndex, Action<int> onSelect)
+    private Grid CreateComboBoxRow(string label, string[] options, int selectedIndex, Action<int> onSelect)
     {
         var g = new Grid
         {
@@ -663,7 +848,7 @@ public class SettingsView : Grid
         {
             Text = label,
             FontSize = 11.5,
-            Foreground = new SolidColorBrush(Color.Parse("#CBD5E1")),
+            Foreground = StormThemeBrushes.BodyText,
             VerticalAlignment = VerticalAlignment.Center,
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 12, 0)
@@ -681,7 +866,11 @@ public class SettingsView : Grid
         };
         combo.SelectionChanged += (s, e) =>
         {
-            if (combo.SelectedIndex >= 0) onSelect(combo.SelectedIndex);
+            if (combo.SelectedIndex >= 0)
+            {
+                onSelect(combo.SelectedIndex);
+                CommitSave();
+            }
         };
         g.Children.Add(combo);
         Grid.SetColumn(combo, 1);
@@ -689,7 +878,7 @@ public class SettingsView : Grid
         return g;
     }
 
-    private static Grid CreateTextSettingRow(string label, string initial, Action<string> onChange)
+    private Grid CreateTextSettingRow(string label, string initial, Action<string> onChange)
     {
         var g = new Grid
         {
@@ -701,7 +890,7 @@ public class SettingsView : Grid
         {
             Text = label,
             FontSize = 11.5,
-            Foreground = new SolidColorBrush(Color.Parse("#CBD5E1")),
+            Foreground = StormThemeBrushes.BodyText,
             VerticalAlignment = VerticalAlignment.Center,
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 12, 0)
@@ -716,9 +905,77 @@ public class SettingsView : Grid
             Width = 240,
             Height = 30
         };
-        tb.TextChanged += (s, e) => onChange(tb.Text ?? string.Empty);
+        tb.TextChanged += (s, e) =>
+        {
+            onChange(tb.Text ?? string.Empty);
+            CommitSave();
+        };
         g.Children.Add(tb);
         Grid.SetColumn(tb, 1);
+
+        return g;
+    }
+
+    private Grid CreatePathSettingRow(string label, string initial, string[] patterns, Action<string> onChange)
+    {
+        var g = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,210,Auto"),
+            Margin = new Thickness(0, 4)
+        };
+
+        g.Children.Add(new TextBlock
+        {
+            Text = label,
+            FontSize = 11.5,
+            Foreground = StormThemeBrushes.BodyText,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 12, 0)
+        });
+
+        var tb = new TextBox
+        {
+            Text = initial,
+            Height = 30
+        };
+        tb.TextChanged += (_, _) => onChange(tb.Text ?? string.Empty);
+        g.Children.Add(tb);
+        Grid.SetColumn(tb, 1);
+
+        var browseBtn = new Button
+        {
+            Content = "...",
+            Width = 34,
+            Height = 30,
+            Margin = new Thickness(6, 0, 0, 0),
+            Cursor = new Cursor(StandardCursorType.Hand),
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center
+        };
+        browseBtn.Click += async (_, _) =>
+        {
+            var top = TopLevel.GetTopLevel(this);
+            if (top?.StorageProvider == null) return;
+            var files = await top.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = label,
+                AllowMultiple = false,
+                FileTypeFilter = new[]
+                {
+                    new FilePickerFileType(label) { Patterns = patterns },
+                    FilePickerFileTypes.All
+                }
+            });
+            string? path = files.Count > 0 ? files[0].TryGetLocalPath() : null;
+            if (!string.IsNullOrWhiteSpace(path))
+            {
+                tb.Text = path;
+                onChange(path);
+            }
+        };
+        g.Children.Add(browseBtn);
+        Grid.SetColumn(browseBtn, 2);
 
         return g;
     }

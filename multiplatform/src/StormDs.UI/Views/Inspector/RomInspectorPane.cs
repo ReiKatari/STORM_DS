@@ -37,6 +37,16 @@ public class RomInspectorPane : Border
     private readonly AuroraVolumetricButton _playBtn;
     private readonly AuroraVolumetricButton _biosBtn;
     private readonly UniformGrid _saveSlotsGrid;
+    private readonly TextBlock _headerLabel;
+    private readonly TextBlock _playBtnText;
+    private readonly TextBlock _biosBtnText;
+    private readonly TextBlock _saveHeaderText;
+    private readonly TextBlock _controlsHeaderText;
+    private readonly TextBlock _rendererValText;
+    private readonly TextBlock _scaleValText;
+    private readonly TextBlock _compositorValText;
+    private readonly TextBlock _slot2ValText;
+    private readonly Border _imgBorder;
     private readonly Action<RomMetadataRecord, int>? _onOpenModalTab;
 
     private RomMetadataRecord? _currentRom;
@@ -47,10 +57,6 @@ public class RomInspectorPane : Border
         Width = 330;
         HorizontalAlignment = HorizontalAlignment.Right;
         VerticalAlignment = VerticalAlignment.Stretch;
-
-        // Law 12: Sleek glass border with right clearance
-        Background = new SolidColorBrush(Color.FromArgb(160, 15, 18, 28));
-        BorderBrush = new SolidColorBrush(Color.FromArgb(50, 255, 255, 255));
         BorderThickness = new Thickness(1, 0, 0, 0);
 
         var scroll = new ScrollViewer
@@ -65,24 +71,22 @@ public class RomInspectorPane : Border
         };
 
         // Header Title
-        var headerLabel = new TextBlock
+        _headerLabel = new TextBlock
         {
-            Text = "ИНСПЕКТОР КАРТРИДЖА",
+            Text = StormDs.Core.Localization.StormDsLoc.T("CartridgeInspector"),
             FontSize = 10,
             FontWeight = FontWeight.Bold,
-            Foreground = new SolidColorBrush(Color.Parse("#38BDF8")),
             HorizontalAlignment = HorizontalAlignment.Center
         };
-        stack.Children.Add(headerLabel);
+        stack.Children.Add(_headerLabel);
 
         // 1. Genuine 128x128 Nearest-Neighbor Cover / Icon
-        var imgBorder = new Border
+        _imgBorder = new Border
         {
             Width = 128,
             Height = 128,
             CornerRadius = new CornerRadius(12),
             Background = new SolidColorBrush(Color.FromArgb(50, 0, 0, 0)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(80, 255, 255, 255)),
             BorderThickness = new Thickness(1),
             HorizontalAlignment = HorizontalAlignment.Center,
             ClipToBounds = true
@@ -95,8 +99,8 @@ public class RomInspectorPane : Border
             Stretch = Stretch.Uniform
         };
         RenderOptions.SetBitmapInterpolationMode(_coverImage, BitmapInterpolationMode.None);
-        imgBorder.Child = _coverImage;
-        stack.Children.Add(imgBorder);
+        _imgBorder.Child = _coverImage;
+        stack.Children.Add(_imgBorder);
 
         // 2. Titles & Metadata
         _titleText = new TextBlock
@@ -104,7 +108,6 @@ public class RomInspectorPane : Border
             Text = "Выберите игру",
             FontSize = 14,
             FontWeight = FontWeight.Bold,
-            Foreground = new SolidColorBrush(Color.Parse("#F8FAFC")),
             TextAlignment = TextAlignment.Center,
             TextWrapping = TextWrapping.Wrap,
             MaxLines = 2
@@ -118,30 +121,14 @@ public class RomInspectorPane : Border
             Spacing = 6
         };
 
-        _codeText = new TextBlock
-        {
-            Text = "NTR-XXXX",
-            FontSize = 11,
-            FontWeight = FontWeight.SemiBold,
-            Foreground = new SolidColorBrush(Color.Parse("#38BDF8"))
-        };
-        _sizeText = new TextBlock
-        {
-            Text = "0.0 MB",
-            FontSize = 11,
-            Foreground = new SolidColorBrush(Color.Parse("#94A3B8"))
-        };
-        _crcText = new TextBlock
-        {
-            Text = "CRC32: -",
-            FontSize = 11,
-            Foreground = new SolidColorBrush(Color.Parse("#A855F7"))
-        };
+        _codeText = new TextBlock { Text = "NTR-XXXX", FontSize = 11, FontWeight = FontWeight.SemiBold };
+        _sizeText = new TextBlock { Text = "0.0 MB", FontSize = 11 };
+        _crcText = new TextBlock { Text = "CRC32: -", FontSize = 11 };
 
         badgeRow.Children.Add(_codeText);
-        badgeRow.Children.Add(new TextBlock { Text = "•", Foreground = new SolidColorBrush(Color.Parse("#64748B")) });
+        badgeRow.Children.Add(new TextBlock { Text = "|", Foreground = StormThemeBrushes.SecondaryText });
         badgeRow.Children.Add(_sizeText);
-        badgeRow.Children.Add(new TextBlock { Text = "•", Foreground = new SolidColorBrush(Color.Parse("#64748B")) });
+        badgeRow.Children.Add(new TextBlock { Text = "|", Foreground = StormThemeBrushes.SecondaryText });
         badgeRow.Children.Add(_crcText);
         stack.Children.Add(badgeRow);
 
@@ -159,20 +146,16 @@ public class RomInspectorPane : Border
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center
         };
-        playStack.Children.Add(new AuroraVectorIcon
+        playStack.Children.Add(new AuroraVectorIcon { Kind = AuroraIconKind.PlayPrism, Size = 16, VerticalAlignment = VerticalAlignment.Center });
+        _playBtnText = new TextBlock
         {
-            Kind = AuroraIconKind.PlayPrism,
-            Size = 16,
-            VerticalAlignment = VerticalAlignment.Center
-        });
-        playStack.Children.Add(new TextBlock
-        {
-            Text = "Запустить игру",
+            Text = StormDs.Core.Localization.StormDsLoc.T("LaunchGame"),
             FontSize = 13,
             FontWeight = FontWeight.Bold,
             Foreground = Brushes.White,
             VerticalAlignment = VerticalAlignment.Center
-        });
+        };
+        playStack.Children.Add(_playBtnText);
         _playBtn.Content = playStack;
         _playBtn.Click += (s, e) =>
         {
@@ -193,20 +176,16 @@ public class RomInspectorPane : Border
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center
         };
-        biosStack.Children.Add(new AuroraVectorIcon
+        biosStack.Children.Add(new AuroraVectorIcon { Kind = AuroraIconKind.ResetCycle, Size = 14, VerticalAlignment = VerticalAlignment.Center });
+        _biosBtnText = new TextBlock
         {
-            Kind = AuroraIconKind.ResetCycle,
-            Size = 14,
-            VerticalAlignment = VerticalAlignment.Center
-        });
-        biosStack.Children.Add(new TextBlock
-        {
-            Text = "Запустить меню консоли",
+            Text = StormDs.Core.Localization.StormDsLoc.T("LaunchBios"),
             FontSize = 11.5,
             FontWeight = FontWeight.Medium,
-            Foreground = new SolidColorBrush(Color.Parse("#CBD5E1")),
+            Foreground = Brushes.White,
             VerticalAlignment = VerticalAlignment.Center
-        });
+        };
+        biosStack.Children.Add(_biosBtnText);
         _biosBtn.Content = biosStack;
         _biosBtn.Click += (s, e) =>
         {
@@ -218,61 +197,73 @@ public class RomInspectorPane : Border
         stack.Children.Add(CreateSeparator());
 
         // 5. Interactive Save State Slots (Slot 1..4)
-        var saveHeader = new TextBlock
+        _saveHeaderText = new TextBlock
         {
-            Text = "СЛОТЫ СОХРАНЕНИЙ (F5/F7)",
+            Text = StormDs.Core.Localization.StormDsLoc.T("SaveSlotsHeader"),
             FontSize = 10,
-            FontWeight = FontWeight.Bold,
-            Foreground = new SolidColorBrush(Color.Parse("#94A3B8"))
+            FontWeight = FontWeight.Bold
         };
-        stack.Children.Add(saveHeader);
+        stack.Children.Add(_saveHeaderText);
 
-        _saveSlotsGrid = new UniformGrid
-        {
-            Columns = 2,
-            Rows = 2
-        };
-        for (int i = 0; i < 4; i++)
-        {
-            _saveSlotsGrid.Children.Add(CreateSlotCard(i));
-        }
+        _saveSlotsGrid = new UniformGrid { Columns = 2, Rows = 2 };
         stack.Children.Add(_saveSlotsGrid);
 
         // Separator
         stack.Children.Add(CreateSeparator());
 
         // 6. Instant Per-ROM Quick Controls
-        var controlsHeader = new TextBlock
+        _controlsHeaderText = new TextBlock
         {
-            Text = "ПРОФИЛЬ КАРТРИДЖА",
+            Text = StormDs.Core.Localization.StormDsLoc.T("CartridgeProfile"),
             FontSize = 10,
-            FontWeight = FontWeight.Bold,
-            Foreground = new SolidColorBrush(Color.Parse("#94A3B8"))
+            FontWeight = FontWeight.Bold
         };
-        stack.Children.Add(controlsHeader);
+        stack.Children.Add(_controlsHeaderText);
 
-        stack.Children.Add(CreateQuickSettingRow("Рендерер:", "Vulkan 1.4 Hardware"));
-        stack.Children.Add(CreateQuickSettingRow("Масштаб 3D:", $"{StormDsUiState.Instance.AppConfig.InternalResolutionScale}x Native"));
-        stack.Children.Add(CreateQuickSettingRow("Композитор:", "Fast Async"));
-        stack.Children.Add(CreateQuickSettingRow("Slot-2 слот:", StormDsUiState.Instance.AppConfig.Slot2AddonType.ToString()));
+        stack.Children.Add(CreateQuickSettingRow("Рендерер:", out _rendererValText));
+        stack.Children.Add(CreateQuickSettingRow("Масштаб 3D:", out _scaleValText));
+        stack.Children.Add(CreateQuickSettingRow("Композитор:", out _compositorValText));
+        stack.Children.Add(CreateQuickSettingRow("Slot-2 слот:", out _slot2ValText));
 
         // 7. Modal Open Buttons: ROM Properties, Cheats, Achievements
-        var tabsRow = new UniformGrid
-        {
-            Columns = 3,
-            Margin = new Thickness(0, 6, 0, 0)
-        };
-
-        tabsRow.Children.Add(CreateTabButton(AuroraIconKind.InfoCrystal, "Свойства", 0));
-        tabsRow.Children.Add(CreateTabButton(AuroraIconKind.CheatMatrix, "Читы", 1));
-        tabsRow.Children.Add(CreateTabButton(AuroraIconKind.TrophyCrown, "Награды", 2));
+        var tabsRow = new UniformGrid { Columns = 3, Margin = new Thickness(0, 6, 0, 0) };
+        tabsRow.Children.Add(CreateTabButton(AuroraIconKind.InfoCrystal, StormDs.Core.Localization.StormDsLoc.T("PropsBtn"), 0));
+        tabsRow.Children.Add(CreateTabButton(AuroraIconKind.CheatMatrix, StormDs.Core.Localization.StormDsLoc.T("CheatsBtn"), 1));
+        tabsRow.Children.Add(CreateTabButton(AuroraIconKind.TrophyCrown, StormDs.Core.Localization.StormDsLoc.T("AwardsBtn"), 2));
         stack.Children.Add(tabsRow);
 
         scroll.Content = stack;
         Child = scroll;
 
+        StormThemeBrushes.BindTheme(this, ApplyThemeAndLocalization);
+        StormDs.Core.Localization.StormDsLoc.LanguageChanged += _ => ApplyThemeAndLocalization();
+        StormDsUiState.Instance.SettingsSaved += () => UpdatePane(_currentRom);
         StormDsUiState.Instance.RomSelected += UpdatePane;
         UpdatePane(StormDsUiState.Instance.SelectedRom);
+    }
+
+    private void ApplyThemeAndLocalization()
+    {
+        Background = StormThemeBrushes.GlassPanel;
+        BorderBrush = StormThemeBrushes.SubtleBorder;
+        _headerLabel.Foreground = StormThemeBrushes.Accent;
+        _headerLabel.Text = StormDs.Core.Localization.StormDsLoc.T("CartridgeInspector");
+        _imgBorder.BorderBrush = StormThemeBrushes.StrongBorder;
+        _titleText.Foreground = StormThemeBrushes.PrimaryText;
+        _codeText.Foreground = StormThemeBrushes.Accent;
+        _sizeText.Foreground = StormThemeBrushes.SecondaryText;
+        _crcText.Foreground = StormThemeBrushes.AccentSecondary;
+        _playBtnText.Text = StormDs.Core.Localization.StormDsLoc.T("LaunchGame");
+        _biosBtnText.Text = StormDs.Core.Localization.StormDsLoc.T("LaunchBios");
+        _saveHeaderText.Foreground = StormThemeBrushes.SecondaryText;
+        _saveHeaderText.Text = StormDs.Core.Localization.StormDsLoc.T("SaveSlotsHeader");
+        _controlsHeaderText.Foreground = StormThemeBrushes.SecondaryText;
+        _controlsHeaderText.Text = StormDs.Core.Localization.StormDsLoc.T("CartridgeProfile");
+        _rendererValText.Foreground = StormThemeBrushes.BodyText;
+        _scaleValText.Foreground = StormThemeBrushes.BodyText;
+        _compositorValText.Foreground = StormThemeBrushes.BodyText;
+        _slot2ValText.Foreground = StormThemeBrushes.BodyText;
+        UpdatePane(_currentRom);
     }
 
     private Control CreateSlotCard(int slotIdx)
@@ -282,8 +273,8 @@ public class RomInspectorPane : Border
             Margin = new Thickness(3),
             Padding = new Thickness(6, 5),
             CornerRadius = new CornerRadius(8),
-            Background = new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(70, 255, 255, 255)),
+            Background = StormThemeBrushes.RowSurface,
+            BorderBrush = StormThemeBrushes.SubtleBorder,
             BorderThickness = new Thickness(1),
             Cursor = new Cursor(StandardCursorType.Hand)
         };
@@ -302,15 +293,17 @@ public class RomInspectorPane : Border
             Text = $"Слот {slotIdx + 1}",
             FontSize = 10.5,
             FontWeight = FontWeight.Bold,
-            Foreground = new SolidColorBrush(Color.Parse("#F8FAFC"))
+            Foreground = StormThemeBrushes.PrimaryText
         });
 
         string timeText = "Пусто";
+        bool hasFile = false;
         if (_currentRom != null)
         {
             string path = StormDsPlatformPaths.GetSaveStateFilePath(_currentRom.GameCode, slotIdx);
             if (File.Exists(path))
             {
+                hasFile = true;
                 var fi = new FileInfo(path);
                 timeText = $"{fi.LastWriteTime:HH:mm dd.MM}";
             }
@@ -320,14 +313,14 @@ public class RomInspectorPane : Border
         {
             Text = timeText,
             FontSize = 9,
-            Foreground = new SolidColorBrush(Color.Parse("#94A3B8"))
+            Foreground = StormThemeBrushes.SecondaryText
         });
         row.Children.Add(slotInfo);
         Grid.SetColumn(slotInfo, 0);
 
         var saveIcon = new AuroraVectorIcon
         {
-            Kind = AuroraIconKind.SaveSlotRibbon,
+            Kind = hasFile ? AuroraIconKind.LoadSlotArrow : AuroraIconKind.SaveSlotRibbon,
             Size = 13,
             VerticalAlignment = VerticalAlignment.Center
         };
@@ -338,9 +331,20 @@ public class RomInspectorPane : Border
         border.PointerPressed += (s, e) =>
         {
             AuroraTactileFeedbackService.Instance.PlayClick();
-            if (StormDsUiState.Instance.IsEmulationActive)
+            if (!StormDsUiState.Instance.IsEmulationActive) return;
+
+            bool isRight = e.GetCurrentPoint(border).Properties.IsRightButtonPressed;
+            if (hasFile && !isRight)
+            {
+                if (StormDsUiState.Instance.RetroAchievementsService.IsFeatureAllowedInCurrentMode("loadstate"))
+                {
+                    StormDsUiState.Instance.EngineService.LoadState(slotIdx);
+                }
+            }
+            else
             {
                 StormDsUiState.Instance.EngineService.SaveState(slotIdx);
+                UpdatePane(_currentRom);
             }
         };
 
@@ -353,8 +357,8 @@ public class RomInspectorPane : Border
         {
             Margin = new Thickness(2),
             Padding = new Thickness(4, 6),
-            Background = new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(70, 255, 255, 255)),
+            Background = StormThemeBrushes.RowSurface,
+            BorderBrush = StormThemeBrushes.SubtleBorder,
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(8),
             Cursor = new Cursor(StandardCursorType.Hand),
@@ -377,7 +381,7 @@ public class RomInspectorPane : Border
             Text = title,
             FontSize = 10,
             FontWeight = FontWeight.Medium,
-            Foreground = new SolidColorBrush(Color.Parse("#E2E8F0")),
+            Foreground = StormThemeBrushes.BodyText,
             HorizontalAlignment = HorizontalAlignment.Center
         });
 
@@ -399,12 +403,12 @@ public class RomInspectorPane : Border
         return new Border
         {
             Height = 1,
-            Background = new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)),
+            Background = StormThemeBrushes.SubtleBorder,
             Margin = new Thickness(0, 4)
         };
     }
 
-    private static Grid CreateQuickSettingRow(string label, string val)
+    private static Grid CreateQuickSettingRow(string label, out TextBlock valText)
     {
         var g = new Grid
         {
@@ -416,15 +420,15 @@ public class RomInspectorPane : Border
         {
             Text = label,
             FontSize = 11,
-            Foreground = new SolidColorBrush(Color.Parse("#94A3B8"))
+            Foreground = StormThemeBrushes.SecondaryText
         });
 
-        var valText = new TextBlock
+        valText = new TextBlock
         {
-            Text = val,
+            Text = "-",
             FontSize = 11,
             FontWeight = FontWeight.SemiBold,
-            Foreground = new SolidColorBrush(Color.Parse("#E2E8F0")),
+            Foreground = StormThemeBrushes.BodyText,
             HorizontalAlignment = HorizontalAlignment.Right
         };
         g.Children.Add(valText);
@@ -436,6 +440,20 @@ public class RomInspectorPane : Border
     private void UpdatePane(RomMetadataRecord? rom)
     {
         _currentRom = rom;
+        var cfg = StormDsUiState.Instance.AppConfig;
+        var profile = rom != null ? StormDsUiState.Instance.LoadRomProfile(rom.GameCode) : null;
+
+        _rendererValText.Text = cfg.RendererBackend.ToString();
+        _scaleValText.Text = $"{cfg.InternalResolutionScale}x Native";
+        _compositorValText.Text = cfg.VulkanCompositorMode.ToString();
+        _slot2ValText.Text = (profile?.Slot2AddonType ?? cfg.Slot2AddonType).ToString();
+
+        _saveSlotsGrid.Children.Clear();
+        for (int i = 0; i < 4; i++)
+        {
+            _saveSlotsGrid.Children.Add(CreateSlotCard(i));
+        }
+
         if (rom == null)
         {
             _titleText.Text = $"STORM DS {StormDs.Core.Localization.StormDsLoc.AppVersion}";
@@ -446,7 +464,7 @@ public class RomInspectorPane : Border
             return;
         }
 
-        string lang = StormDsUiState.Instance.AppConfig.Language;
+        string lang = cfg.Language;
         _titleText.Text = rom.GetDisplayTitle(lang);
         _codeText.Text = rom.GameCode;
         _sizeText.Text = $"{rom.FileSizeBytes / (1024.0 * 1024.0):0.1} MB";

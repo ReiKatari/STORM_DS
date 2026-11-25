@@ -12,6 +12,7 @@ import me.magnum.melonds.domain.model.appupdate.AppUpdate
 import me.magnum.melonds.domain.repositories.UpdatesRepository
 import me.magnum.melonds.github.GitHubReleaseSelector
 import me.magnum.melonds.github.GitHubUpdateChannel
+import me.magnum.melonds.github.GitHubUpdateCheckPolicy
 import me.magnum.melonds.github.PREF_KEY_GITHUB_CHECK_FOR_UPDATES
 import me.magnum.melonds.github.PREF_KEY_GITHUB_UPDATE_CHANNEL
 import me.magnum.melonds.github.StormUpdateMirrorClient
@@ -33,35 +34,26 @@ open class BaseMirrorUpdatesRepository(
 
     private var sessionSkippedVersion: Version? = null
 
-    init {
-        // Clear old persistent keys on startup so updates are never permanently blocked
-        statePreferences.edit {
-            remove(KEY_SKIP_VERSION)
-            remove(KEY_LAST_UPDATE_CHECK)
-        }
-    }
-
     override suspend fun checkNewUpdate(ignorePreferences: Boolean): Result<AppUpdate?> {
         if (ignorePreferences) {
             sessionSkippedVersion = null
         }
-        statePreferences.edit {
-            remove(KEY_SKIP_VERSION)
-            remove(KEY_LAST_UPDATE_CHECK)
-        }
 
         val updatesEnabled = ignorePreferences || settingsPreferences.getBoolean(PREF_KEY_GITHUB_CHECK_FOR_UPDATES, true)
-        if (!updatesEnabled) {
-            return Result.success(null)
+        if (!ignorePreferences) {
+            val lastCheckMillis = statePreferences.getLong(KEY_LAST_UPDATE_CHECK, -1L)
+            if (!GitHubUpdateCheckPolicy.shouldCheckProduction(updatesEnabled, lastCheckMillis, nowMillis())) {
+                return Result.success(null)
+            }
         }
 
         return suspendRunCatching {
             StormUpdateMirrorClient.fetchReleasesWithMirror(primaryFetcher)
         }.suspendMapCatching { releases ->
+            updateLastUpdateCheckTime()
             if (releases.isEmpty()) {
                 return@suspendMapCatching null
             }
-            updateLastUpdateCheckTime()
             val packageInfo = PackageManagerCompat.getPackageInfo(
                 context.packageManager,
                 context.packageName,
@@ -76,6 +68,14 @@ open class BaseMirrorUpdatesRepository(
                     GitHubUpdateChannel.STABLE.preferenceValue,
                 ),
             )
+            val persistedSkip = if (!ignorePreferences) {
+                runCatching {
+                    statePreferences.getString(KEY_SKIP_VERSION, null)?.let(Version::fromString)
+                }.getOrNull()
+            } else {
+                null
+            }
+            val effectiveSkip = sessionSkippedVersion ?: persistedSkip
             val preferLegacyApk = !runCatching {
                 context.resources.getBoolean(R.bool.adrenotools_enabled)
             }.getOrDefault(defaultAdrenotoolsEnabled)
@@ -84,7 +84,7 @@ open class BaseMirrorUpdatesRepository(
                 releases = releases,
                 currentVersion = currentVersion,
                 channel = channel,
-                skippedVersion = sessionSkippedVersion,
+                skippedVersion = effectiveSkip,
                 preferLegacyApk = preferLegacyApk,
             )?.let { candidate ->
                 AppUpdate(
@@ -104,11 +104,18 @@ open class BaseMirrorUpdatesRepository(
 
     override suspend fun checkNewUpdateManually(): Result<AppUpdate?> {
         sessionSkippedVersion = null
+        statePreferences.edit {
+            remove(KEY_SKIP_VERSION)
+            remove(KEY_LAST_UPDATE_CHECK)
+        }
         return checkNewUpdate(ignorePreferences = true)
     }
 
     override fun skipUpdate(update: AppUpdate) {
         sessionSkippedVersion = update.newVersion
+        statePreferences.edit {
+            putString(KEY_SKIP_VERSION, update.newVersion.toString())
+        }
     }
 
     override fun notifyUpdateDownloaded(update: AppUpdate) = Unit

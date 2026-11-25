@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="update_dialog_title">Pembaruan Tersedia</string>
+    <string name="update_dialog_title_stormds">Pembaruan STORM DS Tersedia</string>
+    <string name="update_dialog_whats_new">Yang baru:</string>
+    <string name="update_dialog_current_label">Terpasang</string>
+    <string name="update_dialog_new_label">Versi Baru</string>
+    <string name="update_dialog_update_now">Perbarui Sekarang</string>
+    <string name="update_dialog_remind_later">Nanti Saja</string>
+    <string name="update_dialog_skip_version">Lewati Versi</string>
+    <string name="update_dialog_open_page">Buka Halaman Rilis</string>
+    <string name="update_dialog_preparing">Menyiapkan unduhan...</string>
+    <string name="update_dialog_speed_fmt">%1$.1f MB/s</string>
+    <string name="update_dialog_size_mb_fmt">%1$.1f MB</string>
+    <string name="update_dialog_retry">Coba Lagi</string>
+    <string name="update_install_permission_required">Izinkan pemasangan aplikasi dari sumber ini untuk menerapkan pembaruan</string>
+</resources>

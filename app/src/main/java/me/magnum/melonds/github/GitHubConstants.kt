@@ -11,12 +11,16 @@ const val GITHUB_API_RELEASES_URL = "https://api.github.com/repos/$GITHUB_REPOSI
 const val GITHUB_LATEST_REDIRECT_URL = "https://github.com/$GITHUB_REPOSITORY/releases/latest"
 
 const val STORM_GAMES_WORLD_REPO = "STORM_DS"
-const val STORM_GAMES_WORLD_API_URL = "https://stormgamesworld.ru/api/programs?repo=$STORM_GAMES_WORLD_REPO"
-const val STORM_GAMES_WORLD_ALT_API_URL = "https://storm-games.world/api/programs?repo=$STORM_GAMES_WORLD_REPO"
-const val STORM_GAMES_WORLD_RELEASE_URL_PREFIX = "https://stormgamesworld.ru/programs?repo=$STORM_GAMES_WORLD_REPO"
-const val STORM_GAMES_WORLD_ALT_RELEASE_URL_PREFIX = "https://storm-games.world/programs?repo=$STORM_GAMES_WORLD_REPO"
-const val STORM_GAMES_WORLD_DOWNLOAD_URL_PREFIX = "https://stormgamesworld.ru/uploads/programs/$STORM_GAMES_WORLD_REPO/"
-const val STORM_GAMES_WORLD_ALT_DOWNLOAD_URL_PREFIX = "https://storm-games.world/uploads/programs/$STORM_GAMES_WORLD_REPO/"
+const val STORM_GAMES_WORLD_HOST = "https://stormgamesworld.ru"
+const val STORM_GAMES_WORLD_ALT_HOST = "https://storm-games.world"
+const val STORM_GAMES_WORLD_API_URL = "$STORM_GAMES_WORLD_HOST/api/programs?repo=$STORM_GAMES_WORLD_REPO"
+const val STORM_GAMES_WORLD_ALT_API_URL = "$STORM_GAMES_WORLD_ALT_HOST/api/programs?repo=$STORM_GAMES_WORLD_REPO"
+const val STORM_GAMES_WORLD_RELEASES_API_URL = "$STORM_GAMES_WORLD_HOST/api/programs/releases?repo=$STORM_GAMES_WORLD_REPO"
+const val STORM_GAMES_WORLD_ALT_RELEASES_API_URL = "$STORM_GAMES_WORLD_ALT_HOST/api/programs/releases?repo=$STORM_GAMES_WORLD_REPO"
+const val STORM_GAMES_WORLD_RELEASE_URL_PREFIX = "$STORM_GAMES_WORLD_HOST/programs?repo=$STORM_GAMES_WORLD_REPO"
+const val STORM_GAMES_WORLD_ALT_RELEASE_URL_PREFIX = "$STORM_GAMES_WORLD_ALT_HOST/programs?repo=$STORM_GAMES_WORLD_REPO"
+const val STORM_GAMES_WORLD_DOWNLOAD_URL_PREFIX = "$STORM_GAMES_WORLD_HOST/uploads/programs/$STORM_GAMES_WORLD_REPO/"
+const val STORM_GAMES_WORLD_ALT_DOWNLOAD_URL_PREFIX = "$STORM_GAMES_WORLD_ALT_HOST/uploads/programs/$STORM_GAMES_WORLD_REPO/"
 
 enum class GitHubUpdateChannel(val preferenceValue: String) {
     STABLE("stable"),

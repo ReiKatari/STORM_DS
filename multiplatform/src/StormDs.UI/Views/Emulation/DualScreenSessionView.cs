@@ -2,26 +2,29 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
+using System.IO;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Avalonia.Threading;
 using Storm.AuroraFluid.Kit.Icons;
 using Storm.AuroraFluid.Kit.Services;
-using Storm.AuroraFluid.Kit.Themes;
 using StormDs.Core.Configuration;
+using StormDs.Core.Input;
+using StormDs.Core.Paths;
 using StormDs.UI.Common;
 using StormDs.UI.Windows;
 
 namespace StormDs.UI.Views.Emulation;
 
 /// <summary>
-/// Live dual-screen emulation session view driving StormDsEngineService at 60 FPS (or fast-forward).
-/// Dynamically scales DS screens across all 6 layout modes and 3 scaling modes (AspectFit / Integer / StretchFill),
-/// applies live filtering, provides a compact top quick bar, pixel-accurate touch input, and detachable 2nd window.
+/// Live dual-screen emulation session view driving StormDsEngineService with zero-allocation bitmaps,
+/// XInput gamepad + keyboard + touch merging, dynamic screen scaling, rewind, screenshots, and detachable 2nd window.
 /// </summary>
 public class DualScreenSessionView : Grid
 {
@@ -30,6 +33,7 @@ public class DualScreenSessionView : Grid
     private readonly TextBlock _scalePillText;
     private readonly TextBlock _filterPillText;
     private readonly TextBlock _statsBadgeText;
+    private readonly TextBlock _slotPillText;
 
     private readonly Canvas _viewportCanvas;
     private readonly Border _topScreenContainer;
@@ -37,14 +41,22 @@ public class DualScreenSessionView : Grid
     private readonly Image _topScreenImage;
     private readonly Image _bottomScreenImage;
 
+    private readonly WriteableBitmap _topBitmap;
+    private readonly WriteableBitmap _bottomBitmap;
+
     private readonly TouchControlsOverlay _touchControls;
     private readonly EmulationPauseOverlay _pauseOverlay;
     private readonly DispatcherTimer _frameTimer;
+    private readonly XInputGamepadService _gamepad = new();
 
     private DetachedTouchScreenWindow? _detachedWindow;
     private bool _screensSwapped;
     private bool _isTouchDown;
+    private ushort _lastTouchX;
+    private ushort _lastTouchY;
     private uint _keyboardButtonsMask;
+    private uint _gamepadButtonsMask;
+    private int _activeSaveSlot;
     private long _frameCounter;
 
     public DualScreenSessionView()
@@ -53,7 +65,9 @@ public class DualScreenSessionView : Grid
         Focusable = true;
         RowDefinitions = new RowDefinitions("Auto,*");
 
-        // 1. Sleek Emulation Quick Bar (Row 0, auto-hidden in fullscreen)
+        _topBitmap = new WriteableBitmap(new PixelSize(256, 192), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Premul);
+        _bottomBitmap = new WriteableBitmap(new PixelSize(256, 192), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Premul);
+
         _quickBar = new Border
         {
             Height = 38,
@@ -63,10 +77,7 @@ public class DualScreenSessionView : Grid
             Padding = new Thickness(10, 4)
         };
 
-        var barGrid = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto")
-        };
+        var barGrid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto") };
 
         var leftControls = new StackPanel
         {
@@ -114,15 +125,18 @@ public class DualScreenSessionView : Grid
 
         var ffBtn = CreateBarPill(AuroraIconKind.FastForwardBolt, "Ускорить", Color.Parse("#F59E0B"), ToggleFastForward).Btn;
         var fsBtn = CreateBarPill(AuroraIconKind.WindowMaximize, "Полный экран (F11)", Color.Parse("#22D3EE"), () => StormDsUiState.Instance.RequestToggleFullscreen()).Btn;
-        var saveBtn = CreateBarPill(AuroraIconKind.SaveSlotRibbon, "Сохр. (F5)", Color.Parse("#10B981"), () => StormDsUiState.Instance.EngineService.SaveState(0)).Btn;
-        var loadBtn = CreateBarPill(AuroraIconKind.LoadSlotArrow, "Загр. (F8)", Color.Parse("#38BDF8"), () => StormDsUiState.Instance.EngineService.LoadState(0)).Btn;
+        var savePair = CreateBarPill(AuroraIconKind.SaveSlotRibbon, "Сохр. 1 (F5)", Color.Parse("#10B981"), () => PerformQuickSave(_activeSaveSlot));
+        _slotPillText = savePair.Label;
+        var loadBtn = CreateBarPill(AuroraIconKind.LoadSlotArrow, "Загр. (F8)", Color.Parse("#38BDF8"), () => PerformQuickLoad(_activeSaveSlot)).Btn;
+        var shotBtn = CreateBarPill(AuroraIconKind.ScreenshotCamera, "Скрин (F12)", Color.Parse("#EC4899"), TakeScreenshot).Btn;
         var pauseBtn = CreateBarPill(AuroraIconKind.PauseTwin, "Пауза (Esc)", Color.Parse("#F59E0B"), TogglePauseMenu).Btn;
         var stopBtn = CreateBarPill(AuroraIconKind.StopOctagon, "Стоп", Color.Parse("#EF4444"), () => StormDsUiState.Instance.StopEmulation()).Btn;
 
         rightControls.Children.Add(ffBtn);
         rightControls.Children.Add(fsBtn);
-        rightControls.Children.Add(saveBtn);
+        rightControls.Children.Add(savePair.Btn);
         rightControls.Children.Add(loadBtn);
+        rightControls.Children.Add(shotBtn);
         rightControls.Children.Add(pauseBtn);
         rightControls.Children.Add(stopBtn);
 
@@ -133,7 +147,6 @@ public class DualScreenSessionView : Grid
         Children.Add(_quickBar);
         Grid.SetRow(_quickBar, 0);
 
-        // 2. Dynamic Screen Viewport Area (Row 1)
         var viewportHost = new Grid();
         _viewportCanvas = new Canvas
         {
@@ -151,7 +164,7 @@ public class DualScreenSessionView : Grid
             CornerRadius = new CornerRadius(6),
             ClipToBounds = true
         };
-        _topScreenImage = new Image { Stretch = Stretch.Uniform };
+        _topScreenImage = new Image { Stretch = Stretch.Uniform, Source = _topBitmap };
         _topScreenImage.PointerPressed += (s, e) =>
         {
             if (_screensSwapped)
@@ -178,7 +191,7 @@ public class DualScreenSessionView : Grid
             CornerRadius = new CornerRadius(6),
             ClipToBounds = true
         };
-        _bottomScreenImage = new Image { Stretch = Stretch.Uniform };
+        _bottomScreenImage = new Image { Stretch = Stretch.Uniform, Source = _bottomBitmap };
         _bottomScreenImage.PointerPressed += (s, e) =>
         {
             if (!_screensSwapped)
@@ -201,50 +214,58 @@ public class DualScreenSessionView : Grid
         _viewportCanvas.Children.Add(_bottomScreenContainer);
         _viewportCanvas.PropertyChanged += (_, ch) =>
         {
-            if (ch.Property == BoundsProperty)
-            {
-                RecalculateScreenLayout();
-            }
+            if (ch.Property == BoundsProperty) RecalculateScreenLayout();
         };
         viewportHost.Children.Add(_viewportCanvas);
 
-        // 3. Touch Overlay (shown on Android or explicitly enabled on desktop)
         _touchControls = new TouchControlsOverlay
         {
             IsVisible = OperatingSystem.IsAndroid() || StormDsUiState.Instance.AppConfig.ShowTouchOverlayOnDesktop
         };
-        _touchControls.InputChanged += UpdateCombinedInput;
+        _touchControls.InputChanged += _ => PushCombinedInput();
         viewportHost.Children.Add(_touchControls);
 
         Children.Add(viewportHost);
         Grid.SetRow(viewportHost, 1);
 
-        // 4. Pause & Live Tuning Overlay (covers entire view)
-        _pauseOverlay = new EmulationPauseOverlay
-        {
-            IsVisible = false
-        };
+        _pauseOverlay = new EmulationPauseOverlay { IsVisible = false };
         _pauseOverlay.ResumeRequested += ResumeFromPause;
         _pauseOverlay.SwapScreensRequested += SwapScreens;
         _pauseOverlay.DetachScreenRequested += ToggleDetachScreen;
         _pauseOverlay.StopEmulationRequested += () => StormDsUiState.Instance.StopEmulation();
+        _pauseOverlay.SaveSlotRequested += PerformQuickSave;
+        _pauseOverlay.LoadSlotRequested += PerformQuickLoad;
+        _pauseOverlay.RewindRequested += PerformRewind;
+        _pauseOverlay.ToggleLidRequested += PerformToggleLid;
+        _pauseOverlay.MicBlowRequested += PerformMicBlow;
+        _pauseOverlay.TranslateFrameRequested += () => _ = PerformAiTranslateFrameAsync();
+        _pauseOverlay.CheatsRequested += () =>
+        {
+            var rom = StormDsUiState.Instance.SelectedRom;
+            if (rom != null)
+            {
+                StormDsUiState.Instance.RequestRomModal(rom, 1);
+            }
+            else
+            {
+                StormDsUiState.Instance.NotifyStatus("Для редактирования читов выберите картридж в библиотеке");
+            }
+        };
         Children.Add(_pauseOverlay);
         Grid.SetRow(_pauseOverlay, 0);
         Grid.SetRowSpan(_pauseOverlay, 2);
 
-        // 5. Frame Render Loop (~60 FPS)
         _frameTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
         _frameTimer.Tick += OnEmulationFrameTick;
-        _frameTimer.Start();
 
-        // Subscriptions
         StormDsUiState.Instance.DisplayConfigChanged += RefreshDisplayConfig;
-        StormDsUiState.Instance.FullscreenChanged += isFs =>
-        {
-            _quickBar.IsVisible = !isFs;
-        };
+        StormDsUiState.Instance.FullscreenChanged += isFs => _quickBar.IsVisible = !isFs;
+        StormDsUiState.Instance.EmulationStarted += UpdateTimerState;
         StormDsUiState.Instance.EmulationStopped += () =>
         {
+            UpdateTimerState();
+            _keyboardButtonsMask = 0;
+            _isTouchDown = false;
             if (_detachedWindow != null)
             {
                 _detachedWindow.Close();
@@ -252,11 +273,35 @@ public class DualScreenSessionView : Grid
             }
             _pauseOverlay.IsVisible = false;
         };
+        StormDsUiState.Instance.HiddenToTrayChanged += _ => UpdateTimerState();
+        StormDsUiState.Instance.StateChanged += UpdateTimerState;
 
         KeyDown += HandleKeyDown;
         KeyUp += HandleKeyUp;
+        LostFocus += (_, _) =>
+        {
+            _keyboardButtonsMask = 0;
+            _isTouchDown = false;
+            PushCombinedInput();
+        };
 
         RefreshDisplayConfig();
+        UpdateTimerState();
+    }
+
+    private void UpdateTimerState()
+    {
+        bool shouldRun = StormDsUiState.Instance.IsEmulationActive &&
+                         !StormDsUiState.Instance.IsPaused &&
+                         !StormDsUiState.Instance.IsHiddenToTray;
+        if (shouldRun && !_frameTimer.IsEnabled)
+        {
+            _frameTimer.Start();
+        }
+        else if (!shouldRun && _frameTimer.IsEnabled)
+        {
+            _frameTimer.Stop();
+        }
     }
 
     private static (TextBlock Label, Button Btn) CreateBarPill(AuroraIconKind icon, string text, Color accent, Action onClick)
@@ -345,7 +390,6 @@ public class DualScreenSessionView : Grid
     private void ToggleFastForward()
     {
         StormDsUiState.Instance.IsFastForward = !StormDsUiState.Instance.IsFastForward;
-        _frameTimer.Interval = TimeSpan.FromMilliseconds(StormDsUiState.Instance.IsFastForward ? 4 : 16);
         Focus();
     }
 
@@ -362,8 +406,8 @@ public class DualScreenSessionView : Grid
     private void RefreshDisplayConfig()
     {
         var cfg = StormDsUiState.Instance.AppConfig;
-
         _touchControls.IsVisible = OperatingSystem.IsAndroid() || cfg.ShowTouchOverlayOnDesktop;
+        _touchControls.ApplyConfig(cfg);
 
         var interp = cfg.ScreenFilter switch
         {
@@ -522,53 +566,77 @@ public class DualScreenSessionView : Grid
 
     private void OnEmulationFrameTick(object? sender, EventArgs e)
     {
-        if (!StormDsUiState.Instance.IsEmulationActive || StormDsUiState.Instance.IsPaused)
+        if (!StormDsUiState.Instance.IsEmulationActive ||
+            StormDsUiState.Instance.IsPaused ||
+            StormDsUiState.Instance.IsHiddenToTray)
         {
             return;
         }
 
-        _frameCounter++;
-        var stats = StormDsUiState.Instance.EngineService.RunFrame();
+        _gamepadButtonsMask = _gamepad.PollNdsButtonMask();
+        PushCombinedInput();
+
+        var eng = StormDsUiState.Instance.EngineService;
+        int steps = StormDsUiState.Instance.IsFastForward ? 3 : 1;
+        StormDsCoreStatsLoop(eng, steps);
+        RefreshRenderedBitmaps();
+    }
+
+    private void StormDsCoreStatsLoop(Core.Engine.StormDsEngineService eng, int steps)
+    {
+        Core.Native.StormDsFrameStats stats = default;
+        for (int i = 0; i < steps; i++)
+        {
+            _frameCounter++;
+            bool playAudio = (i == steps - 1);
+            stats = eng.RunFrame(playAudio);
+            if (_frameCounter % 30 == 0 &&
+                StormDsUiState.Instance.RetroAchievementsService.IsFeatureAllowedInCurrentMode("rewind"))
+            {
+                eng.PushRewind();
+            }
+        }
         StormDsUiState.Instance.LastFrameStats = stats;
 
         if (_frameCounter % 15 == 0)
         {
             string resTag = $"{(int)_topScreenContainer.Width}x{(int)_topScreenContainer.Height}";
+            string backendTag = stats.ActiveBackend == 1 ? "VK" : "SW";
             _statsBadgeText.Text = stats.Fps > 0.1
-                ? $"{stats.Fps:0.0} FPS | {resTag}"
-                : $"60.0 FPS | {resTag}";
+                ? $"{stats.Fps:0.0} FPS | {backendTag} | {resTag}"
+                : $"60.0 FPS | {backendTag} | {resTag}";
         }
+    }
 
+    private void RefreshRenderedBitmaps()
+    {
         var eng = StormDsUiState.Instance.EngineService;
         var topBgra = eng.HasLiveNativeFrame ? eng.TopFrameBgra : BitmapHelper.GenerateTestScreenBgra(256, 192, false, "STORM DS TOP", _frameCounter);
         var botBgra = eng.HasLiveNativeFrame ? eng.BottomFrameBgra : BitmapHelper.GenerateTestScreenBgra(256, 192, true, "STORM DS TOUCH", _frameCounter);
 
-        var topBmp = BitmapHelper.CreateBgraBitmap(topBgra, 256, 192);
-        var botBmp = BitmapHelper.CreateBgraBitmap(botBgra, 256, 192);
-
         if (!_screensSwapped)
         {
-            _topScreenImage.Source = topBmp;
-            if (_detachedWindow != null)
-            {
-                _detachedWindow.ScreenImage.Source = botBmp;
-            }
-            else
-            {
-                _bottomScreenImage.Source = botBmp;
-            }
+            BitmapHelper.UpdateBgraBitmap(_topBitmap, topBgra, 256, 192);
+            BitmapHelper.UpdateBgraBitmap(_bottomBitmap, botBgra, 256, 192);
         }
         else
         {
-            _topScreenImage.Source = botBmp;
-            if (_detachedWindow != null)
-            {
-                _detachedWindow.ScreenImage.Source = topBmp;
-            }
-            else
-            {
-                _bottomScreenImage.Source = topBmp;
-            }
+            BitmapHelper.UpdateBgraBitmap(_topBitmap, botBgra, 256, 192);
+            BitmapHelper.UpdateBgraBitmap(_bottomBitmap, topBgra, 256, 192);
+        }
+
+        _topScreenImage.Source = _topBitmap;
+        _topScreenImage.InvalidateVisual();
+
+        if (_detachedWindow != null)
+        {
+            _detachedWindow.ScreenImage.Source = _bottomBitmap;
+            _detachedWindow.ScreenImage.InvalidateVisual();
+        }
+        else
+        {
+            _bottomScreenImage.Source = _bottomBitmap;
+            _bottomScreenImage.InvalidateVisual();
         }
     }
 
@@ -576,22 +644,32 @@ public class DualScreenSessionView : Grid
     {
         _screensSwapped = !_screensSwapped;
         AuroraTactileFeedbackService.Instance.PlayTabWhoosh();
+        RefreshRenderedBitmaps();
     }
 
     private void ToggleDetachScreen()
     {
         if (_detachedWindow == null)
         {
-            _detachedWindow = new DetachedTouchScreenWindow(onReattach: () =>
-            {
-                _detachedWindow = null;
-                StormDsUiState.Instance.IsDetachedScreenActive = false;
-                if (StormDsUiState.Instance.AppConfig.ScreenLayoutMode == ScreenLayoutMode.DualWindowDetached)
+            _detachedWindow = new DetachedTouchScreenWindow(
+                onReattach: () =>
                 {
-                    StormDsUiState.Instance.AppConfig.ScreenLayoutMode = ScreenLayoutMode.VerticalClassic;
-                }
-                RefreshDisplayConfig();
-            });
+                    _detachedWindow = null;
+                    StormDsUiState.Instance.IsDetachedScreenActive = false;
+                    if (StormDsUiState.Instance.AppConfig.ScreenLayoutMode == ScreenLayoutMode.DualWindowDetached)
+                    {
+                        StormDsUiState.Instance.AppConfig.ScreenLayoutMode = ScreenLayoutMode.VerticalClassic;
+                    }
+                    RefreshDisplayConfig();
+                },
+                onTouchInput: (tx, ty, down) =>
+                {
+                    _isTouchDown = down;
+                    _lastTouchX = tx;
+                    _lastTouchY = ty;
+                    PushCombinedInput();
+                },
+                canAcceptTouch: () => !_screensSwapped);
             _detachedWindow.Show();
             StormDsUiState.Instance.IsDetachedScreenActive = true;
             RefreshDisplayConfig();
@@ -599,9 +677,6 @@ public class DualScreenSessionView : Grid
         else
         {
             _detachedWindow.Close();
-            _detachedWindow = null;
-            StormDsUiState.Instance.IsDetachedScreenActive = false;
-            RefreshDisplayConfig();
         }
     }
 
@@ -612,10 +687,114 @@ public class DualScreenSessionView : Grid
         Focus();
     }
 
+    private void PerformQuickSave(int slot)
+    {
+        bool ok = StormDsUiState.Instance.EngineService.SaveState(slot);
+        AuroraTactileFeedbackService.Instance.PlayAchievementChime();
+        StormDsUiState.Instance.NotifyStatus(ok ? $"Состояние сохранено в слот {slot + 1}" : $"Ошибка сохранения слота {slot + 1}");
+    }
+
+    private void PerformQuickLoad(int slot)
+    {
+        if (!StormDsUiState.Instance.RetroAchievementsService.IsFeatureAllowedInCurrentMode("loadstate"))
+        {
+            StormDsUiState.Instance.NotifyStatus("Загрузка состояний отключена в Hardcore-режиме");
+            return;
+        }
+        bool ok = StormDsUiState.Instance.EngineService.LoadState(slot);
+        AuroraTactileFeedbackService.Instance.PlayClick();
+        if (ok)
+        {
+            RefreshRenderedBitmaps();
+            StormDsUiState.Instance.NotifyStatus($"Состояние загружено из слота {slot + 1}");
+        }
+        else
+        {
+            StormDsUiState.Instance.NotifyStatus($"Слот {slot + 1} пуст");
+        }
+    }
+
+    private void PerformRewind()
+    {
+        if (!StormDsUiState.Instance.RetroAchievementsService.IsFeatureAllowedInCurrentMode("rewind"))
+        {
+            StormDsUiState.Instance.NotifyStatus("Перемотка отключена в Hardcore-режиме");
+            return;
+        }
+        if (StormDsUiState.Instance.EngineService.PopRewind())
+        {
+            RefreshRenderedBitmaps();
+            StormDsUiState.Instance.NotifyStatus("Выполнена перемотка назад");
+        }
+    }
+
+    private void PerformToggleLid()
+    {
+        bool closed = StormDsUiState.Instance.EngineService.ToggleLid(GetMergedButtonsMask(), _lastTouchX, _lastTouchY, _isTouchDown);
+        AuroraTactileFeedbackService.Instance.PlayClick();
+        StormDsUiState.Instance.NotifyStatus(closed ? "Крышка консоли закрыта" : "Крышка консоли открыта");
+    }
+
+    private void PerformMicBlow()
+    {
+        StormDsUiState.Instance.EngineService.TriggerMicBlowBurst();
+        AuroraTactileFeedbackService.Instance.PlayClick();
+        StormDsUiState.Instance.NotifyStatus("Импульс микрофона отправлен");
+    }
+
+    private void TakeScreenshot()
+    {
+        try
+        {
+            var eng = StormDsUiState.Instance.EngineService;
+            byte[] combined = eng.CaptureCombinedScreenshotBgra(out int w, out int h);
+            var wb = BitmapHelper.CreateBgraBitmap(combined, w, h);
+            if (wb == null) return;
+
+            Directory.CreateDirectory(StormDsPlatformPaths.ScreenshotsDirectory);
+            string code = eng.ActiveRom?.GameCode is { Length: > 0 } gc ? gc : "FREEBIOS";
+            string file = Path.Combine(StormDsPlatformPaths.ScreenshotsDirectory, $"{code}_{DateTime.Now:yyyyMMdd_HHmmss}.png");
+#pragma warning disable CS0618
+            using (var fs = File.Create(file))
+            {
+                wb.Save(fs);
+            }
+#pragma warning restore CS0618
+            AuroraTactileFeedbackService.Instance.PlayAchievementChime();
+            StormDsUiState.Instance.NotifyStatus($"Скриншот сохранен: {Path.GetFileName(file)}");
+        }
+        catch (Exception ex)
+        {
+            StormDsUiState.Instance.NotifyStatus($"Ошибка скриншота: {ex.Message}");
+        }
+    }
+
+    private async Task PerformAiTranslateFrameAsync()
+    {
+        var eng = StormDsUiState.Instance.EngineService;
+        byte[]? pixels = StormDsUiState.Instance.AiTranslatorService.CaptureScreenPixels(eng.NativeHandle, out int w, out int h, _screensSwapped ? 1 : 0);
+        if (pixels == null)
+        {
+            StormDsUiState.Instance.NotifyStatus("Нет активного видеокадра для ИИ-перевода");
+            return;
+        }
+
+        StormDsUiState.Instance.NotifyStatus($"Кадр {w}x{h} захвачен для перевода...");
+        string translated = await StormDsUiState.Instance.AiTranslatorService.TranslateTextAsync(
+            "Press Start or select a game option.",
+            StormDsUiState.Instance.AppConfig);
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            StormDsUiState.Instance.NotifyStatus($"ИИ-перевод: {translated}");
+        });
+    }
+
     private void HandleTouchRelease()
     {
         _isTouchDown = false;
-        StormDsUiState.Instance.EngineService.SetInput(_keyboardButtonsMask | _touchControls.CurrentButtonsMask, 0, 0, false);
+        _lastTouchX = 0;
+        _lastTouchY = 0;
+        PushCombinedInput();
     }
 
     private void SendTouch(Point p, Image targetImage)
@@ -623,60 +802,156 @@ public class DualScreenSessionView : Grid
         var b = targetImage.Bounds;
         if (b.Width <= 0 || b.Height <= 0) return;
 
-        ushort tx = (ushort)(Math.Clamp(p.X / b.Width, 0.0, 1.0) * 255.0);
-        ushort ty = (ushort)(Math.Clamp(p.Y / b.Height, 0.0, 1.0) * 191.0);
-
-        StormDsUiState.Instance.EngineService.SetInput(_keyboardButtonsMask | _touchControls.CurrentButtonsMask, tx, ty, true);
+        _lastTouchX = (ushort)(Math.Clamp(p.X / b.Width, 0.0, 1.0) * 255.0);
+        _lastTouchY = (ushort)(Math.Clamp(p.Y / b.Height, 0.0, 1.0) * 191.0);
+        PushCombinedInput();
     }
 
-    private void UpdateCombinedInput(uint touchMask)
+    private uint GetMergedButtonsMask() => _keyboardButtonsMask | _touchControls.CurrentButtonsMask | _gamepadButtonsMask;
+
+    private void PushCombinedInput()
     {
-        StormDsUiState.Instance.EngineService.SetInput(_keyboardButtonsMask | touchMask, 0, 0, _isTouchDown);
+        StormDsUiState.Instance.EngineService.SetInput(GetMergedButtonsMask(), _lastTouchX, _lastTouchY, _isTouchDown);
+    }
+
+    private static bool MatchesHotkey(Key pressed, string actionName)
+    {
+        if (StormDsUiState.Instance.AppConfig.Hotkeys.TryGetValue(actionName, out var configured) &&
+            Enum.TryParse<Key>(configured, true, out var mappedKey))
+        {
+            return pressed == mappedKey;
+        }
+        return false;
     }
 
     private void HandleKeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Key == Key.Escape)
         {
-            _pauseOverlay.IsVisible = !_pauseOverlay.IsVisible;
-            StormDsUiState.Instance.TogglePause();
+            TogglePauseMenu();
             e.Handled = true;
             return;
         }
 
-        if (e.Key == Key.Tab)
+        if (MatchesHotkey(e.Key, "SwapScreens") || e.Key == Key.Tab)
         {
             SwapScreens();
             e.Handled = true;
             return;
         }
 
-        if (e.Key == Key.F5)
+        if (MatchesHotkey(e.Key, "QuickSave") || e.Key == Key.F5)
         {
-            StormDsUiState.Instance.EngineService.SaveState(0);
-            AuroraTactileFeedbackService.Instance.PlayAchievementChime();
+            PerformQuickSave(_activeSaveSlot);
             e.Handled = true;
             return;
         }
 
-        if (e.Key is Key.F7 or Key.F8)
+        if (MatchesHotkey(e.Key, "SlotPrevious") || e.Key == Key.F6)
         {
-            StormDsUiState.Instance.EngineService.LoadState(0);
-            AuroraTactileFeedbackService.Instance.PlayClick();
+            _activeSaveSlot = (_activeSaveSlot + 9) % 10;
+            _slotPillText.Text = $"Сохр. {_activeSaveSlot + 1} (F5)";
+            StormDsUiState.Instance.NotifyStatus($"Выбран слот сохранения {_activeSaveSlot + 1}");
             e.Handled = true;
             return;
         }
 
-        if (e.Key == Key.Back)
+        if (MatchesHotkey(e.Key, "SlotNext") || e.Key == Key.F7)
         {
-            StormDsUiState.Instance.EngineService.PopRewind();
+            _activeSaveSlot = (_activeSaveSlot + 1) % 10;
+            _slotPillText.Text = $"Сохр. {_activeSaveSlot + 1} (F5)";
+            StormDsUiState.Instance.NotifyStatus($"Выбран слот сохранения {_activeSaveSlot + 1}");
             e.Handled = true;
             return;
         }
 
-        if (e.Key == Key.Space)
+        if (MatchesHotkey(e.Key, "QuickLoad") || e.Key == Key.F8)
+        {
+            PerformQuickLoad(_activeSaveSlot);
+            e.Handled = true;
+            return;
+        }
+
+        if (MatchesHotkey(e.Key, "Reset") || e.Key == Key.F9)
+        {
+            StormDsUiState.Instance.EngineService.Reset();
+            StormDsUiState.Instance.NotifyStatus("Консоль перезагружена");
+            e.Handled = true;
+            return;
+        }
+
+        if (MatchesHotkey(e.Key, "TakeScreenshot") || e.Key == Key.F12)
+        {
+            TakeScreenshot();
+            e.Handled = true;
+            return;
+        }
+
+        if (MatchesHotkey(e.Key, "Rewind") || e.Key == Key.Back)
+        {
+            PerformRewind();
+            e.Handled = true;
+            return;
+        }
+
+        if (MatchesHotkey(e.Key, "FastForward") || e.Key == Key.Space)
         {
             ToggleFastForward();
+            e.Handled = true;
+            return;
+        }
+
+        if (MatchesHotkey(e.Key, "ToggleLid"))
+        {
+            PerformToggleLid();
+            e.Handled = true;
+            return;
+        }
+
+        if (MatchesHotkey(e.Key, "MicBlow"))
+        {
+            PerformMicBlow();
+            e.Handled = true;
+            return;
+        }
+
+        if (MatchesHotkey(e.Key, "AiTranslate"))
+        {
+            _ = PerformAiTranslateFrameAsync();
+            e.Handled = true;
+            return;
+        }
+
+        if (MatchesHotkey(e.Key, "DetachSecondScreen"))
+        {
+            ToggleDetachScreen();
+            e.Handled = true;
+            return;
+        }
+
+        if (MatchesHotkey(e.Key, "MuteVolume"))
+        {
+            var eng = StormDsUiState.Instance.EngineService;
+            eng.IsMuted = !eng.IsMuted;
+            StormDsUiState.Instance.NotifyStatus(eng.IsMuted ? "Звук выключен" : "Звук включен");
+            e.Handled = true;
+            return;
+        }
+
+        if (MatchesHotkey(e.Key, "VolumeUp"))
+        {
+            var eng = StormDsUiState.Instance.EngineService;
+            eng.AudioVolume += 0.1f;
+            StormDsUiState.Instance.NotifyStatus($"Громкость: {(int)(eng.AudioVolume * 100)}%");
+            e.Handled = true;
+            return;
+        }
+
+        if (MatchesHotkey(e.Key, "VolumeDown"))
+        {
+            var eng = StormDsUiState.Instance.EngineService;
+            eng.AudioVolume -= 0.1f;
+            StormDsUiState.Instance.NotifyStatus($"Громкость: {(int)(eng.AudioVolume * 100)}%");
             e.Handled = true;
             return;
         }
@@ -685,7 +960,7 @@ public class DualScreenSessionView : Grid
         if (bit != 0)
         {
             _keyboardButtonsMask |= bit;
-            UpdateCombinedInput(_touchControls.CurrentButtonsMask);
+            PushCombinedInput();
             e.Handled = true;
         }
     }
@@ -696,7 +971,7 @@ public class DualScreenSessionView : Grid
         if (bit != 0)
         {
             _keyboardButtonsMask &= ~bit;
-            UpdateCombinedInput(_touchControls.CurrentButtonsMask);
+            PushCombinedInput();
             e.Handled = true;
         }
     }
@@ -705,19 +980,19 @@ public class DualScreenSessionView : Grid
     {
         return key switch
         {
-            Key.X => 1 << 0,          // A
-            Key.Z => 1 << 1,          // B
-            Key.LeftShift => 1 << 2,  // Select
-            Key.Enter => 1 << 3,      // Start
-            Key.Right or Key.D => 1 << 4, // Right
-            Key.Left or Key.A => 1 << 5,  // Left
-            Key.Up or Key.W => 1 << 6,    // Up
-            Key.Down or Key.S => 1 << 7,  // Down
-            Key.E or Key.R => 1 << 8,     // R
-            Key.Q => 1 << 9,          // L
-            Key.C or Key.K => 1 << 10,// X
-            Key.V or Key.J => 1 << 11,// Y
-            _ => 0
+            Key.X => 1u << 0,          // A
+            Key.Z => 1u << 1,          // B
+            Key.LeftShift => 1u << 2,  // Select
+            Key.Enter => 1u << 3,      // Start
+            Key.Right => 1u << 4,      // Right
+            Key.Left => 1u << 5,       // Left
+            Key.Up => 1u << 6,         // Up
+            Key.Down => 1u << 7,       // Down
+            Key.E => 1u << 8,          // R
+            Key.Q => 1u << 9,          // L
+            Key.C or Key.K => 1u << 10,// X
+            Key.V or Key.J => 1u << 11,// Y
+            _ => 0u
         };
     }
 }

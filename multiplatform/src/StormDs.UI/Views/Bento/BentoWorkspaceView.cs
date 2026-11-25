@@ -8,6 +8,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Platform.Storage;
 using Storm.AuroraFluid.Kit.Controls;
 using Storm.AuroraFluid.Kit.Icons;
 using Storm.AuroraFluid.Kit.Services;
@@ -146,6 +147,27 @@ public class BentoWorkspaceView : Grid
         scanFolderBtn.PointerPressed += async (s, e) =>
         {
             AuroraTactileFeedbackService.Instance.PlayClick();
+            var top = TopLevel.GetTopLevel(this);
+            if (top?.StorageProvider != null)
+            {
+                var folders = await top.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+                {
+                    Title = StormDs.Core.Localization.StormDsLoc.T("RomFolderBtn"),
+                    AllowMultiple = false
+                });
+                string? folderPath = folders.Count > 0 ? folders[0].TryGetLocalPath() : null;
+                if (!string.IsNullOrWhiteSpace(folderPath))
+                {
+                    if (!StormDsUiState.Instance.AppConfig.RomDirectories.Contains(folderPath))
+                    {
+                        StormDsUiState.Instance.AppConfig.RomDirectories.Add(folderPath);
+                        StormDsUiState.Instance.SaveConfig();
+                    }
+                    await StormDsUiState.Instance.LibraryService.ScanDirectoriesAsync(new[] { folderPath });
+                    StormDsUiState.Instance.NotifyStatus(folderPath);
+                    return;
+                }
+            }
             await StormDsUiState.Instance.LibraryService.ScanDirectoriesAsync();
         };
         rightStack.Children.Add(scanFolderBtn);

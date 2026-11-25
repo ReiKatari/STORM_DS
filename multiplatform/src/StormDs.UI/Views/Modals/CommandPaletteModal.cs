@@ -102,10 +102,10 @@ public class CommandPaletteModal : AuroraGlassCard
             CycleTheme();
         }));
 
-        _allActions.Add((AuroraIconKind.UpdateRocket, "Проверить обновления", "Двухзеркальный запрос GitHub и STORM Official Git", () =>
+        _allActions.Add((AuroraIconKind.UpdateRocket, "Проверить обновления", "Двухзеркальный запрос GitHub и STORM GAMES WORLD", () =>
         {
             CloseRequested?.Invoke();
-            StormDsUiState.Instance.SetNavSection(NavSectionKind.Settings);
+            StormDsUiState.Instance.RequestUpdateCheck(true);
         }));
     }
 
@@ -142,35 +142,63 @@ public class CommandPaletteModal : AuroraGlassCard
 
         foreach (var action in matches)
         {
-            var row = new Border
-            {
-                Height = 44,
-                Padding = new Thickness(10, 4),
-                CornerRadius = new CornerRadius(8),
-                Background = new SolidColorBrush(Color.FromArgb(30, 255, 255, 255)),
-                Cursor = new Cursor(StandardCursorType.Hand)
-            };
-
-            var g = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
-            g.Children.Add(new AuroraVectorIcon { Kind = action.Icon, Size = 18, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) });
-
-            var s = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-            s.Children.Add(new TextBlock { Text = action.Title, FontSize = 12, FontWeight = FontWeight.Bold, Foreground = Brushes.White });
-            s.Children.Add(new TextBlock { Text = action.Sub, FontSize = 9.5, Foreground = new SolidColorBrush(Color.Parse("#94A3B8")) });
-            g.Children.Add(s);
-            Grid.SetColumn(s, 1);
-
-            row.Child = g;
-
-            row.PointerEntered += (sender, e) => row.Background = new SolidColorBrush(Color.FromArgb(60, 56, 189, 248));
-            row.PointerExited += (sender, e) => row.Background = new SolidColorBrush(Color.FromArgb(30, 255, 255, 255));
-            row.PointerPressed += (sender, e) =>
-            {
-                AuroraTactileFeedbackService.Instance.PlayClick();
-                action.Action();
-            };
-
+            var row = CreatePaletteRow(action.Icon, action.Title, action.Sub, action.Action);
             _resultsStack.Children.Add(row);
         }
+
+        string lang = StormDsUiState.Instance.AppConfig.Language;
+        var roms = string.IsNullOrWhiteSpace(clean)
+            ? StormDsUiState.Instance.LibraryService.AllRoms.Take(6)
+            : StormDsUiState.Instance.LibraryService.AllRoms
+                .Where(r =>
+                    r.GetDisplayTitle(lang).ToLowerInvariant().Contains(clean) ||
+                    r.GameCode.ToLowerInvariant().Contains(clean))
+                .Take(12);
+
+        foreach (var rom in roms)
+        {
+            var captured = rom;
+            string title = captured.GetDisplayTitle(lang);
+            string sub = $"Запустить ROM | {captured.GameCode} | CRC {captured.Crc32Hex}";
+            _resultsStack.Children.Add(CreatePaletteRow(AuroraIconKind.RomCartridge, title, sub, () =>
+            {
+                CloseRequested?.Invoke();
+                StormDsUiState.Instance.SelectRom(captured);
+                StormDsUiState.Instance.StartEmulation(captured);
+            }));
+        }
+    }
+
+    private static Border CreatePaletteRow(AuroraIconKind icon, string title, string sub, Action onExecute)
+    {
+        var row = new Border
+        {
+            Height = 44,
+            Padding = new Thickness(10, 4),
+            CornerRadius = new CornerRadius(8),
+            Background = StormThemeBrushes.RowSurface,
+            Cursor = new Cursor(StandardCursorType.Hand)
+        };
+
+        var g = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
+        g.Children.Add(new AuroraVectorIcon { Kind = icon, Size = 18, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) });
+
+        var s = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        s.Children.Add(new TextBlock { Text = title, FontSize = 12, FontWeight = FontWeight.Bold, Foreground = StormThemeBrushes.PrimaryText });
+        s.Children.Add(new TextBlock { Text = sub, FontSize = 9.5, Foreground = StormThemeBrushes.SecondaryText });
+        g.Children.Add(s);
+        Grid.SetColumn(s, 1);
+
+        row.Child = g;
+
+        row.PointerEntered += (_, _) => row.Background = StormThemeBrushes.HoverSurface;
+        row.PointerExited += (_, _) => row.Background = StormThemeBrushes.RowSurface;
+        row.PointerPressed += (_, _) =>
+        {
+            AuroraTactileFeedbackService.Instance.PlayClick();
+            onExecute();
+        };
+
+        return row;
     }
 }

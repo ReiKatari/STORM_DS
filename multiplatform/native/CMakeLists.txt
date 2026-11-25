@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 project(storm_ds_core
-    VERSION 8.9.0
+    VERSION 8.9.1
     DESCRIPTION "STORM DS Cross-Platform C++26 Native Emulation Core"
     LANGUAGES C CXX)
 
@@ -92,7 +92,7 @@ set(STORM_CORE_SOURCES
     "${MELONDS_CORE_DIR}/src/GPU3D_Soft.cpp"
     "${MELONDS_CORE_DIR}/src/GPU3D_Vulkan.cpp"
     "${MELONDS_CORE_DIR}/src/VulkanDispatch.cpp"
-    "${MELONDS_CORE_DIR}/src/VulkanContext.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/VulkanContext_compat.cpp"
     "${MELONDS_CORE_DIR}/src/GPU3D_Texcache.cpp"
     "${MELONDS_CORE_DIR}/src/GPU3D_TexcacheVulkan.cpp"
     "${MELONDS_CORE_DIR}/src/Mic.cpp"

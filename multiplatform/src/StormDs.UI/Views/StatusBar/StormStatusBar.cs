@@ -119,6 +119,23 @@ public class StormStatusBar : Border
 
         StormDsUiState.Instance.LibraryService.LibraryChanged += UpdateCount;
         StormDsUiState.Instance.FilterChanged += UpdateCount;
+        StormDsUiState.Instance.StatusNotification += msg =>
+        {
+            if (!string.IsNullOrWhiteSpace(msg))
+            {
+                _wfcText.Text = msg;
+                DispatcherTimer.RunOnce(() => _wfcText.Text = "Синхронизация активна", TimeSpan.FromSeconds(4));
+            }
+        };
+        StormThemeBrushes.BindTheme(this, () =>
+        {
+            Background = StormThemeBrushes.ChromeSurface;
+            BorderBrush = StormThemeBrushes.SubtleBorder;
+            _countText.Foreground = StormThemeBrushes.BodyText;
+            _latencyText.Foreground = StormThemeBrushes.Accent;
+            _wfcText.Foreground = StormThemeBrushes.AccentSecondary;
+            _clockText.Foreground = StormThemeBrushes.SecondaryText;
+        });
         UpdateCount();
     }
 

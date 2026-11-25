@@ -1,5 +1,6 @@
 #include "Platform.h"
 #include "net/MPInterface.h"
+#include "storm_ds_internal.h"
 
 #include <cassert>
 #include <cstdarg>
@@ -434,12 +435,12 @@ u64 GetUSCount()
 
 void WriteNDSSave(const u8* savedata, u32 savelen, u32 writeoffset, u32 writelen, void* userdata)
 {
-    (void)savedata; (void)savelen; (void)writeoffset; (void)writelen; (void)userdata;
+    StormDS::Internal::OnWriteNDSSave(userdata, savedata, savelen, writeoffset, writelen);
 }
 
 void WriteGBASave(const u8* savedata, u32 savelen, u32 writeoffset, u32 writelen, void* userdata)
 {
-    (void)savedata; (void)savelen; (void)writeoffset; (void)writelen; (void)userdata;
+    StormDS::Internal::OnWriteGBASave(userdata, savedata, savelen, writeoffset, writelen);
 }
 
 void WriteFirmware(const Firmware& firmware, u32 writeoffset, u32 writelen, void* userdata)
@@ -483,8 +484,7 @@ void Mic_Start(void* userdata) { (void)userdata; }
 void Mic_Stop(void* userdata) { (void)userdata; }
 int Mic_ReadInput(s16* data, int maxlength, void* userdata)
 {
-    (void)data; (void)maxlength; (void)userdata;
-    return 0;
+    return StormDS::Internal::OnMicReadInput(userdata, data, maxlength);
 }
 
 AACDecoder* AAC_Init() { return new AACDecoder(); }
@@ -496,10 +496,18 @@ bool AAC_DecodeFrame(AACDecoder* dec, const void* input, int inputlen, void* out
     return false;
 }
 
-bool Addon_KeyDown(KeyType type, void* userdata) { (void)type; (void)userdata; return false; }
+bool Addon_KeyDown(KeyType type, void* userdata)
+{
+    return StormDS::Internal::OnAddonKeyDown(userdata, static_cast<int>(type));
+}
+
 void Addon_RumbleStart(u32 len, void* userdata) { (void)len; (void)userdata; }
 void Addon_RumbleStop(void* userdata) { (void)userdata; }
-float Addon_MotionQuery(MotionQueryType type, void* userdata) { (void)type; (void)userdata; return 0.0f; }
+
+float Addon_MotionQuery(MotionQueryType type, void* userdata)
+{
+    return StormDS::Internal::OnAddonMotionQuery(userdata, static_cast<int>(type));
+}
 
 DynamicLibrary* DynamicLibrary_Load(const char* lib)
 {

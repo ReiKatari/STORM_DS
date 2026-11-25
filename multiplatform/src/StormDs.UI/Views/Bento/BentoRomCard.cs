@@ -199,6 +199,13 @@ public class BentoRomCard : AuroraGlassCard
         UpdateSelectionVisual();
 
         StormDsUiState.Instance.RomSelected += (r) => UpdateSelectionVisual();
+        StormThemeBrushes.BindTheme(this, () =>
+        {
+            _titleText.Foreground = StormThemeBrushes.PrimaryText;
+            _sizeText.Foreground = StormThemeBrushes.SecondaryText;
+            _codeText.Foreground = StormThemeBrushes.Accent;
+            unitBadge.BorderBrush = StormThemeBrushes.Accent;
+        });
     }
 
     private void UpdateFavoriteVisual()

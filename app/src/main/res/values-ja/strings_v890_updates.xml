@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="update_dialog_title">アップデートが利用可能</string>
+    <string name="update_dialog_title_stormds">STORM DS のアップデートがあります</string>
+    <string name="update_dialog_whats_new">更新内容：</string>
+    <string name="update_dialog_current_label">現在</string>
+    <string name="update_dialog_new_label">新バージョン</string>
+    <string name="update_dialog_update_now">今すぐ更新</string>
+    <string name="update_dialog_remind_later">後で通知</string>
+    <string name="update_dialog_skip_version">スキップ</string>
+    <string name="update_dialog_open_page">リリースページを開く</string>
+    <string name="update_dialog_preparing">ダウンロードを準備中...</string>
+    <string name="update_dialog_speed_fmt">%1$.1f MB/s</string>
+    <string name="update_dialog_size_mb_fmt">%1$.1f MB</string>
+    <string name="update_dialog_retry">再試行</string>
+    <string name="update_install_permission_required">アップデートを適用するには、この提供元からのアプリインストールを許可してください</string>
+</resources>

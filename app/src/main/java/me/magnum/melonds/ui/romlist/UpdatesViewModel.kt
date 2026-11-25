@@ -51,7 +51,7 @@ class UpdatesViewModel @Inject constructor(
     fun checkForUpdatesManually() {
         viewModelScope.launch {
             _manualUpdateResult.emit(ManualUpdateResult.Checking)
-            val result = updatesRepository.checkNewUpdate(ignorePreferences = true)
+            val result = updatesRepository.checkNewUpdateManually()
             result.onSuccess { update ->
                 if (update != null) {
                     _manualUpdateResult.emit(ManualUpdateResult.UpdateAvailable(update))

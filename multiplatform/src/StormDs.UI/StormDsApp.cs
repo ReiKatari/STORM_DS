@@ -34,13 +34,21 @@ public class StormDsApp : Application
         // 1. Verify 0% duplicate icon geometries across the catalog
         AuroraIconCatalog.VerifyZeroDuplicates();
 
-        // 2. Initialize and Apply Themes & Accent
+        // 2. Initialize and Apply Themes, Accent & Typography
         var uiState = StormDsUiState.Instance;
         string savedTheme = uiState.AppConfig.Theme;
         if (string.IsNullOrWhiteSpace(savedTheme)) savedTheme = AuroraThemeManager.ThemeMidnight;
         string themeKey = savedTheme.Replace("STORM ", "").Trim();
 
-        AuroraThemeManager.Instance.ApplyTheme(themeKey);
+        AuroraAccentKind? parsedAccent = Enum.TryParse<AuroraAccentKind>(uiState.AppConfig.AccentName, true, out var acc)
+            ? acc
+            : null;
+        AuroraTypographyPreset? parsedTypo = Enum.TryParse<AuroraTypographyPreset>(uiState.AppConfig.TypographyName, true, out var typ)
+            ? typ
+            : null;
+
+        AuroraThemeManager.Instance.ApplyTheme(themeKey, parsedAccent, parsedTypo);
+        AuroraTactileFeedbackService.Instance.Enabled = uiState.AppConfig.UiTactileAudioEnabled;
 
         // 3. Multi-Language Synchronization across all 11 languages
         if (!string.IsNullOrWhiteSpace(uiState.AppConfig.Language))
@@ -54,27 +62,38 @@ public class StormDsApp : Application
             var mainWindow = new StormDsMainWindow();
             desktop.MainWindow = mainWindow;
 
-            // Build Law 1 compliant zero-icon/zero-emoji tray menu
             var trayIcon = new TrayIcon
             {
                 ToolTipText = $"STORM DS {StormDsLoc.AppVersion}"
             };
+
+            string iconPath = System.IO.Path.Combine(AppContext.BaseDirectory, "assets", "AppIcon.ico");
+            if (System.IO.File.Exists(iconPath))
+            {
+                try
+                {
+                    trayIcon.Icon = new Avalonia.Controls.WindowIcon(iconPath);
+                }
+                catch
+                {
+                }
+            }
 
             var trayMenu = new NativeMenu();
 
             var titleItem = new NativeMenuItem($"STORM DS {StormDsLoc.AppVersion}") { IsEnabled = false };
             trayMenu.Items.Add(titleItem);
 
-            var statusItem = new NativeMenuItem("Готов к эмуляции") { IsEnabled = false };
+            var statusItem = new NativeMenuItem(StormDsLoc.T("TrayReady")) { IsEnabled = false };
             trayMenu.Items.Add(statusItem);
 
             trayMenu.Items.Add(new NativeMenuItemSeparator());
 
-            var openItem = new NativeMenuItem("Открыть главное окно");
+            var openItem = new NativeMenuItem(StormDsLoc.T("TrayOpenWindow"));
             openItem.Click += (s, e) => AuroraTrayManager.Instance.ShowAndActivate();
             trayMenu.Items.Add(openItem);
 
-            var resumeItem = new NativeMenuItem("Продолжить эмуляцию");
+            var resumeItem = new NativeMenuItem(StormDsLoc.T("TrayContinue"));
             resumeItem.Click += (s, e) =>
             {
                 AuroraTrayManager.Instance.ShowAndActivate();
@@ -89,7 +108,7 @@ public class StormDsApp : Application
             };
             trayMenu.Items.Add(resumeItem);
 
-            var pauseItem = new NativeMenuItem("Пауза эмуляции");
+            var pauseItem = new NativeMenuItem(StormDsLoc.T("TrayPause"));
             pauseItem.Click += (s, e) =>
             {
                 if (StormDsUiState.Instance.IsEmulationActive && !StormDsUiState.Instance.IsPaused)
@@ -99,7 +118,7 @@ public class StormDsApp : Application
             };
             trayMenu.Items.Add(pauseItem);
 
-            var settingsItem = new NativeMenuItem("Настройки");
+            var settingsItem = new NativeMenuItem(StormDsLoc.T("TraySettings"));
             settingsItem.Click += (s, e) =>
             {
                 AuroraTrayManager.Instance.ShowAndActivate();
@@ -109,23 +128,45 @@ public class StormDsApp : Application
 
             trayMenu.Items.Add(new NativeMenuItemSeparator());
 
-            var exitItem = new NativeMenuItem("Выход");
+            var exitItem = new NativeMenuItem(StormDsLoc.T("TrayExit"));
             exitItem.Click += (s, e) => AuroraTrayManager.Instance.RequestExit();
             trayMenu.Items.Add(exitItem);
 
             trayIcon.Menu = trayMenu;
 
+            StormDsLoc.LanguageChanged += _ =>
+            {
+                statusItem.Header = StormDsLoc.T("TrayReady");
+                openItem.Header = StormDsLoc.T("TrayOpenWindow");
+                resumeItem.Header = StormDsLoc.T("TrayContinue");
+                pauseItem.Header = StormDsLoc.T("TrayPause");
+                settingsItem.Header = StormDsLoc.T("TraySettings");
+                exitItem.Header = StormDsLoc.T("TrayExit");
+            };
+
             var trayIcons = new TrayIcons { trayIcon };
             TrayIcon.SetIcons(this, trayIcons);
 
-            // Wire AuroraTrayManager with Law 1 Close-to-Tray lifecycle
+            // Wire AuroraTrayManager with Close-to-Tray lifecycle and hidden state tracking
             AuroraTrayManager.Instance.AttachToWindow(
                 mainWindow,
                 "STORM DS",
                 StormDsLoc.AppVersion,
                 trayIcon,
-                onShowRequested: () => mainWindow.Activate()
+                onShowRequested: () =>
+                {
+                    StormDsUiState.Instance.SetHiddenToTray(false);
+                    mainWindow.Activate();
+                }
             );
+
+            mainWindow.Closing += (_, _) =>
+            {
+                if (!AuroraTrayManager.Instance.IsExitRequestedFromTray)
+                {
+                    StormDsUiState.Instance.SetHiddenToTray(true);
+                }
+            };
         }
         else if (ApplicationLifetime is ISingleViewApplicationLifetime singleView)
         {

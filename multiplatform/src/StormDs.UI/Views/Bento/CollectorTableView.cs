@@ -29,8 +29,6 @@ public class CollectorTableView : Border
 
     public CollectorTableView()
     {
-        Background = new SolidColorBrush(Color.FromArgb(100, 15, 18, 28));
-        BorderBrush = new SolidColorBrush(Color.FromArgb(50, 255, 255, 255));
         BorderThickness = new Thickness(1);
         CornerRadius = new CornerRadius(12);
         ClipToBounds = true;
@@ -41,7 +39,6 @@ public class CollectorTableView : Border
         var header = new Grid
         {
             Height = 36,
-            Background = new SolidColorBrush(Color.FromArgb(80, 255, 255, 255)),
             ColumnDefinitions = new ColumnDefinitions("60,*,100,80,90,100,80,120")
         };
 
@@ -64,6 +61,13 @@ public class CollectorTableView : Border
 
         StormDsUiState.Instance.FilterChanged += RefreshRows;
         StormDsUiState.Instance.StateChanged += RefreshRows;
+        StormThemeBrushes.BindTheme(this, () =>
+        {
+            Background = StormThemeBrushes.GlassPanel;
+            BorderBrush = StormThemeBrushes.SubtleBorder;
+            header.Background = StormThemeBrushes.CardSurface;
+            RefreshRows();
+        });
         RefreshRows();
     }
 
@@ -205,7 +209,7 @@ public class CollectorTableView : Border
             FontWeight = bold ? FontWeight.Bold : FontWeight.Normal,
             Foreground = hexColor != null
                 ? new SolidColorBrush(Color.Parse(hexColor))
-                : new SolidColorBrush(Color.Parse("#E2E8F0")),
+                : StormThemeBrushes.BodyText,
             VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis
         };

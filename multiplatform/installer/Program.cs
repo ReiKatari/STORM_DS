@@ -23,7 +23,7 @@ namespace StormDs.Installer;
 
 public static class Program
 {
-    public const string AppVersion = "8.9.0";
+    public const string AppVersion = "8.9.1";
 
     // Target setup directory strictly by program name WITHOUT version suffix.
     public static string GetDefaultInstallDirectory(bool perMachine)

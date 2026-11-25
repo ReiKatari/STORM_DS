@@ -135,7 +135,14 @@ public class CustomTitleBar : Grid
 
         AuroraThemeManager.Instance.ThemeChanged += t =>
         {
-            if (_themeLabelText != null) _themeLabelText.Text = t.DisplayName;
+            if (_themeLabelText != null)
+            {
+                _themeLabelText.Text = t.DisplayName;
+                _themeLabelText.Foreground = StormThemeBrushes.PrimaryText;
+            }
+            titleBrand.Foreground = StormThemeBrushes.Accent;
+            versionLabel.Foreground = StormThemeBrushes.SecondaryText;
+            if (_clockText != null) _clockText.Foreground = StormThemeBrushes.SecondaryText;
         };
 
         SetColumn(badgesStack, 1);

@@ -11,14 +11,20 @@ public sealed class DsiTitleMetadata
 {
     public ulong TitleId { get; set; }
     public string TitleIdHex => $"{TitleId:X16}";
+    public uint TitleIdLow => (uint)(TitleId & 0xFFFFFFFFUL);
+    public string GameCode { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public long SizeBytes { get; set; }
     public byte Category { get; set; }
     public byte Version { get; set; }
+    public bool PublicSavExists { get; set; }
+    public uint[]? IconRgba32 { get; set; }
 }
 
 public sealed class DsiNandSummaryModel
 {
+    public string ResolvedNandPath { get; set; } = string.Empty;
+    public bool IsImageValid { get; set; }
     public ulong TotalCapacityBytes { get; set; }
     public ulong FreeSpaceBytes { get; set; }
     public int InstalledTitleCount { get; set; }
@@ -28,19 +34,39 @@ public sealed class DsiNandSummaryModel
 
 /// <summary>
 /// Service managing DSiWare NAND filesystem images, title installation, deletion,
-/// and automated save signature repair per 7.7.4+ standards.
+/// and per-title save signature repair.
 /// </summary>
 public sealed class DsiNandService
 {
+    public static string? ResolveNandImageFile(string? explicitPath)
+    {
+        if (!string.IsNullOrWhiteSpace(explicitPath) && File.Exists(explicitPath))
+        {
+            return explicitPath;
+        }
+
+        string dir = (!string.IsNullOrWhiteSpace(explicitPath) && Directory.Exists(explicitPath))
+            ? explicitPath
+            : StormDsPlatformPaths.NandDirectory;
+
+        if (!Directory.Exists(dir)) return null;
+
+        return Directory.EnumerateFiles(dir, "*.*", SearchOption.TopDirectoryOnly)
+            .FirstOrDefault(f => Path.GetExtension(f).ToLowerInvariant() is ".bin" or ".img" or ".nand");
+    }
+
     public unsafe (DsiNandSummaryModel Summary, List<DsiTitleMetadata> Titles) ScanNand(string? nandPath = null)
     {
-        string targetPath = !string.IsNullOrWhiteSpace(nandPath) ? nandPath : StormDsPlatformPaths.NandDirectory;
-        var summary = new DsiNandSummaryModel();
+        string? imageFile = ResolveNandImageFile(nandPath);
+        var summary = new DsiNandSummaryModel
+        {
+            ResolvedNandPath = imageFile ?? string.Empty
+        };
         var titles = new List<DsiTitleMetadata>();
 
-        if (StormDsNative.IsAvailable && File.Exists(targetPath))
+        if (StormDsNative.IsAvailable && !string.IsNullOrWhiteSpace(imageFile) && File.Exists(imageFile))
         {
-            byte[] pathBytes = Encoding.UTF8.GetBytes(targetPath + "\0");
+            byte[] pathBytes = Encoding.UTF8.GetBytes(imageFile + "\0");
             fixed (byte* pPath = pathBytes)
             {
                 StormDsNandSummary nativeSummary = default;
@@ -51,6 +77,7 @@ public sealed class DsiNandService
                 int res = StormDsNative.storm_ds_nand_scan(pPath, &nativeSummary, nativeTitles, maxTitles, &outCount);
                 if (res == 0)
                 {
+                    summary.IsImageValid = true;
                     summary.TotalCapacityBytes = nativeSummary.TotalCapacityBytes;
                     summary.FreeSpaceBytes = nativeSummary.FreeSpaceBytes;
                     summary.InstalledTitleCount = (int)nativeSummary.InstalledTitleCount;
@@ -59,13 +86,19 @@ public sealed class DsiNandService
 
                     for (nuint i = 0; i < outCount; i++)
                     {
+                        var icon = new uint[1024];
+                        for (int px = 0; px < 1024; px++) icon[px] = nativeTitles[i].IconRgba[px];
+
                         titles.Add(new DsiTitleMetadata
                         {
                             TitleId = nativeTitles[i].TitleId,
+                            GameCode = nativeTitles[i].GetGameCode(),
                             Name = nativeTitles[i].GetName(),
                             SizeBytes = (long)nativeTitles[i].SizeBytes,
                             Category = nativeTitles[i].Category,
-                            Version = (byte)nativeTitles[i].Version
+                            Version = (byte)nativeTitles[i].Version,
+                            PublicSavExists = nativeTitles[i].PublicSavExists != 0,
+                            IconRgba32 = icon
                         });
                     }
                     return (summary, titles);
@@ -73,42 +106,20 @@ public sealed class DsiNandService
             }
         }
 
-        // Managed folder fallback
-        string titleDir = Path.Combine(targetPath, "title");
-        if (Directory.Exists(titleDir))
-        {
-            var appFiles = Directory.EnumerateFiles(titleDir, "*.app", SearchOption.AllDirectories);
-            ulong fakeId = 0x0003000400000001;
-            foreach (string app in appFiles)
-            {
-                var fi = new FileInfo(app);
-                titles.Add(new DsiTitleMetadata
-                {
-                    TitleId = fakeId++,
-                    Name = Path.GetFileNameWithoutExtension(app),
-                    SizeBytes = fi.Length,
-                    Category = 4,
-                    Version = 1
-                });
-            }
-            summary.InstalledTitleCount = titles.Count;
-            summary.TotalCapacityBytes = 256 * 1024 * 1024; // 256 MB standard DSi NAND
-            summary.FreeSpaceBytes = 120 * 1024 * 1024;
-        }
-
         return (summary, titles);
     }
 
     public unsafe bool ImportTitle(string nandPath, string appOrNdsPath)
     {
-        if (StormDsNative.IsAvailable && File.Exists(nandPath) && File.Exists(appOrNdsPath))
+        string? imageFile = ResolveNandImageFile(nandPath);
+        if (StormDsNative.IsAvailable && !string.IsNullOrWhiteSpace(imageFile) && File.Exists(imageFile) && File.Exists(appOrNdsPath))
         {
-            byte[] nandBytes = Encoding.UTF8.GetBytes(nandPath + "\0");
+            byte[] nandBytes = Encoding.UTF8.GetBytes(imageFile + "\0");
             byte[] appBytes = Encoding.UTF8.GetBytes(appOrNdsPath + "\0");
             fixed (byte* pNand = nandBytes)
             fixed (byte* pApp = appBytes)
             {
-                return StormDsNative.storm_ds_nand_import_title(pNand, pApp) == 0;
+                return StormDsNative.storm_ds_nand_import_title(pNand, pApp) == 1;
             }
         }
         return false;
@@ -116,9 +127,10 @@ public sealed class DsiNandService
 
     public unsafe bool DeleteTitle(string nandPath, ulong titleId)
     {
-        if (StormDsNative.IsAvailable && File.Exists(nandPath))
+        string? imageFile = ResolveNandImageFile(nandPath);
+        if (StormDsNative.IsAvailable && !string.IsNullOrWhiteSpace(imageFile) && File.Exists(imageFile))
         {
-            byte[] nandBytes = Encoding.UTF8.GetBytes(nandPath + "\0");
+            byte[] nandBytes = Encoding.UTF8.GetBytes(imageFile + "\0");
             fixed (byte* pNand = nandBytes)
             {
                 return StormDsNative.storm_ds_nand_delete_title(pNand, titleId) == 0;
@@ -127,14 +139,15 @@ public sealed class DsiNandService
         return false;
     }
 
-    public unsafe bool RepairSaves(string nandPath)
+    public unsafe bool RepairSaves(string nandPath, uint titleIdLow = 0)
     {
-        if (StormDsNative.IsAvailable && File.Exists(nandPath))
+        string? imageFile = ResolveNandImageFile(nandPath);
+        if (StormDsNative.IsAvailable && !string.IsNullOrWhiteSpace(imageFile) && File.Exists(imageFile))
         {
-            byte[] nandBytes = Encoding.UTF8.GetBytes(nandPath + "\0");
+            byte[] nandBytes = Encoding.UTF8.GetBytes(imageFile + "\0");
             fixed (byte* pNand = nandBytes)
             {
-                return StormDsNative.storm_ds_nand_repair_saves(pNand) == 0;
+                return StormDsNative.storm_ds_nand_repair_saves(pNand, titleIdLow) == 0;
             }
         }
         return false;

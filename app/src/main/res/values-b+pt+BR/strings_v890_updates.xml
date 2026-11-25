@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="update_dialog_title">Atualização disponível</string>
+    <string name="update_dialog_title_stormds">Atualização do STORM DS Disponível</string>
+    <string name="update_dialog_whats_new">Novidades:</string>
+    <string name="update_dialog_current_label">Instalada</string>
+    <string name="update_dialog_new_label">Nova versão</string>
+    <string name="update_dialog_update_now">Atualizar agora</string>
+    <string name="update_dialog_remind_later">Lembrar depois</string>
+    <string name="update_dialog_skip_version">Pular versão</string>
+    <string name="update_dialog_open_page">Abrir página da versão</string>
+    <string name="update_dialog_preparing">Preparando download...</string>
+    <string name="update_dialog_speed_fmt">%1$.1f MB/s</string>
+    <string name="update_dialog_size_mb_fmt">%1$.1f MB</string>
+    <string name="update_dialog_retry">Tentar novamente</string>
+    <string name="update_install_permission_required">Permita a instalação de aplicativos desta fonte para aplicar a atualização</string>
+</resources>

@@ -111,3 +111,7 @@
 -keep class org.apache.commons.compress.** { *; }
 -dontwarn com.google.crypto.tink.**
 -keep class com.google.crypto.tink.** { *; }
+
+# Keep GitHub / STORM mirror updater Retrofit API and DTOs under R8
+-keep class me.magnum.melonds.github.dtos.** { *; }
+-keep interface me.magnum.melonds.github.GitHubApi { *; }

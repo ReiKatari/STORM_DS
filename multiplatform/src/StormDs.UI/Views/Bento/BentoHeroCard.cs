@@ -261,6 +261,12 @@ public class BentoHeroCard : AuroraGlassCard
         Content = grid;
 
         StormDsUiState.Instance.RomSelected += UpdateWithRom;
+        StormThemeBrushes.BindTheme(this, () =>
+        {
+            _titleText.Foreground = StormThemeBrushes.PrimaryText;
+            _metaText.Foreground = StormThemeBrushes.SecondaryText;
+            _descText.Foreground = StormThemeBrushes.SecondaryText;
+        });
         UpdateWithRom(StormDsUiState.Instance.SelectedRom);
     }
 

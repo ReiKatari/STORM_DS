@@ -57,6 +57,12 @@ public class NavDockView : Border
         Child = stack;
 
         StormDsUiState.Instance.NavSectionChanged += (k) => UpdateActiveStyles();
+        StormThemeBrushes.BindTheme(this, () =>
+        {
+            Background = StormThemeBrushes.GlassPanel;
+            BorderBrush = StormThemeBrushes.StrongBorder;
+            UpdateActiveStyles();
+        });
         UpdateActiveStyles();
     }
 

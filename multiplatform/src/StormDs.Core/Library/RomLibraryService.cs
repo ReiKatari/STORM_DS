@@ -46,6 +46,34 @@ public sealed class RomLibraryService
 
     public event Action? LibraryChanged;
 
+    public RomLibraryService()
+    {
+        LoadCache();
+    }
+
+    private void LoadCache()
+    {
+        try
+        {
+            string cachePath = Path.Combine(StormDsPlatformPaths.CacheDirectory, "rom_library.json");
+            if (!File.Exists(cachePath)) return;
+            string json = File.ReadAllText(cachePath);
+            var list = JsonSerializer.Deserialize(json, StormDsJsonContext.Default.ListRomMetadataRecord);
+            if (list != null)
+            {
+                lock (_syncLock)
+                {
+                    _roms.Clear();
+                    _roms.AddRange(list.Where(r => !string.IsNullOrWhiteSpace(r.FilePath) && File.Exists(r.FilePath)));
+                }
+            }
+        }
+        catch
+        {
+            // Ignore stale cache
+        }
+    }
+
     /// <summary>
     /// Scans discovered ROM directories asynchronously, updating the in-memory catalog and disk cache.
     /// </summary>
@@ -142,6 +170,7 @@ public sealed class RomLibraryService
             RomFilter.DsiEnhanced => query.Where(r => r.UnitCode == NdsUnitCode.DsiEnhanced),
             RomFilter.DsiWare => query.Where(r => r.UnitCode == NdsUnitCode.DsiWare),
             RomFilter.Favorites => query.Where(r => r.IsFavorite),
+            RomFilter.WithAchievements => query.Where(r => !string.IsNullOrWhiteSpace(r.GameCode)),
             _ => query
         };
 
@@ -312,9 +341,18 @@ public sealed class RomLibraryService
             var meta = NdsCartridgeParser.ParseFile(filePath, out _);
             if (meta != null)
             {
-                if (!_roms.Any(r => string.Equals(r.FilePath, filePath, StringComparison.OrdinalIgnoreCase)))
+                bool added = false;
+                lock (_syncLock)
                 {
-                    _roms.Add(meta);
+                    if (!_roms.Any(r => string.Equals(r.FilePath, filePath, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        _roms.Add(meta);
+                        added = true;
+                    }
+                }
+                if (added)
+                {
+                    SaveCache();
                     LibraryChanged?.Invoke();
                 }
                 return meta;

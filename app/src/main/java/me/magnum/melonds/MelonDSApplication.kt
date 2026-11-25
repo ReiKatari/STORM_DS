@@ -38,6 +38,7 @@ class MelonDSApplication : Application(), Configuration.Provider {
         var appContext: Context? = null
             private set
         const val NOTIFICATION_CHANNEL_ID_BACKGROUND_TASKS = "channel_cheat_importing"
+        const val NOTIFICATION_CHANNEL_ID_APP_UPDATES = "channel_app_updates"
         private const val NOTIFICATION_ID_HARDCORE_OFFLINE_LOSS = 2002
         private val isMigrating = java.util.concurrent.atomic.AtomicBoolean(false)
         @Volatile
@@ -515,8 +516,13 @@ class MelonDSApplication : Application(), Configuration.Provider {
             .setName(getString(R.string.notification_channel_background_tasks))
             .build()
 
+        val updatesChannel = NotificationChannelCompat.Builder(NOTIFICATION_CHANNEL_ID_APP_UPDATES, NotificationManagerCompat.IMPORTANCE_LOW)
+            .setName(getString(R.string.update_dialog_title_stormds))
+            .build()
+
         val notificationManager = NotificationManagerCompat.from(this)
         notificationManager.createNotificationChannel(defaultChannel)
+        notificationManager.createNotificationChannel(updatesChannel)
     }
 
     @OptIn(DelicateCoroutinesApi::class)

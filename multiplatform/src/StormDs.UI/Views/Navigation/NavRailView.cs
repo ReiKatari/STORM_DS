@@ -69,6 +69,13 @@ public class NavRailView : Border
         Child = rootGrid;
 
         StormDsUiState.Instance.NavSectionChanged += (k) => UpdateActiveStyles();
+        StormDs.Core.Localization.StormDsLoc.LanguageChanged += _ => UpdateActiveStyles();
+        StormThemeBrushes.BindTheme(this, () =>
+        {
+            Background = StormThemeBrushes.GlassPanel;
+            BorderBrush = StormThemeBrushes.SubtleBorder;
+            UpdateActiveStyles();
+        });
         UpdateActiveStyles();
     }
 

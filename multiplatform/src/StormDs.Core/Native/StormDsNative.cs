@@ -2,8 +2,11 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using StormDs.Core.Configuration;
+using StormDs.Core.Paths;
 
 namespace StormDs.Core.Native;
 
@@ -173,6 +176,7 @@ public struct StormDsConfig
     public int Slot2AddonType;
     public int SolarLuxLevel;
     public int ScreenLayoutMode;
+    public byte JitEnable;
 }
 
 [StructLayout(LayoutKind.Sequential, Pack = 8)]
@@ -213,20 +217,17 @@ public struct StormDsFrameStats
 {
     public double Fps;
     public double FrameTimeMs;
-    public uint DrawCalls;
-    public uint TriangleCount;
-    public ulong VramUsageBytes;
+    public int ActiveBackend;
+    public int AudioFramesWritten;
+    public uint FrameIndex;
     public byte FastForwardActive;
-    public byte RewindAvailable;
-    public uint RewindBufferFrames;
 }
 
 [StructLayout(LayoutKind.Sequential, Pack = 8)]
 public unsafe struct StormDsCheatEntry
 {
-    public uint Address;
-    public uint Value;
-    public uint Type;
+    public fixed uint CodeWords[64];
+    public int CodeWordCount;
     public byte Enabled;
     public fixed byte Name[64];
 
@@ -268,11 +269,22 @@ public unsafe struct StormDsNandTitleInfo
     public ulong SizeBytes;
     public uint Version;
     public byte Category;
+    public byte PublicSavExists;
+    public fixed byte GameCode[8];
     public fixed byte Name[128];
+    public fixed uint IconRgba[1024];
 
     public readonly string GetName()
     {
         fixed (byte* ptr = Name)
+        {
+            return Marshal.PtrToStringUTF8((nint)ptr) ?? string.Empty;
+        }
+    }
+
+    public readonly string GetGameCode()
+    {
+        fixed (byte* ptr = GameCode)
         {
             return Marshal.PtrToStringUTF8((nint)ptr) ?? string.Empty;
         }
@@ -406,31 +418,60 @@ public static unsafe partial class StormDsNative
         return rc == 1 ? 0 : -1;
     }
 
-    private static void FillNativeConfig(in StormDsConfig src, out StormDsNativeConfig dst)
+    private static void WriteFixedUtf8(byte* dst, int capacity, string? value)
     {
-        dst = default;
-        dst.ConsoleType = src.ConsoleMode == 2 ? 1 : 0;
-        dst.DirectBoot = src.DirectBoot != 0 ? 1 : 0;
-        dst.RendererBackend = src.RendererBackend;
-        dst.VulkanTierMode = src.VulkanCompatibilityTier;
-        dst.CompositorMode = src.VulkanCompositorMode;
-        dst.UpscaleFactor = Math.Clamp(src.InternalResolutionScale, 1, 8);
-        dst.JitEnable = 1;
-        dst.Arm9Overclock = Math.Max(1, src.Arm9Overclock);
-        dst.AudioInterpolation = src.AudioInterpolation;
-        dst.DspBassBoost = src.DspBassBoost;
-        dst.MicMode = src.MicMode;
+        if (dst == null || capacity <= 0) return;
+        new Span<byte>(dst, capacity).Clear();
+        if (string.IsNullOrWhiteSpace(value)) return;
+        byte[] bytes = Encoding.UTF8.GetBytes(value.Trim());
+        int len = Math.Min(bytes.Length, capacity - 1);
+        Marshal.Copy(bytes, 0, (nint)dst, len);
+        dst[len] = 0;
     }
 
-    public static nint storm_ds_create(in StormDsConfig config)
+    private static void FillNativeConfig(in StormDsConfig src, StormDsNativeConfig* dst, StormDsAppConfig? appConfig = null)
     {
-        FillNativeConfig(in config, out StormDsNativeConfig raw);
+        if (dst == null) return;
+        *dst = default;
+        dst->ConsoleType = src.ConsoleMode == 2 ? 1 : 0;
+        dst->DirectBoot = src.DirectBoot != 0 ? 1 : 0;
+        dst->RendererBackend = src.RendererBackend;
+        dst->VulkanTierMode = src.VulkanCompatibilityTier;
+        dst->CompositorMode = src.VulkanCompositorMode;
+        dst->UpscaleFactor = Math.Clamp(src.InternalResolutionScale, 1, 8);
+        dst->JitEnable = src.JitEnable != 0 ? 1 : 0;
+        dst->Arm9Overclock = Math.Max(1, src.Arm9Overclock);
+        dst->AudioInterpolation = src.AudioInterpolation;
+        dst->DspBassBoost = src.DspBassBoost;
+        dst->MicMode = src.MicMode;
+
+        if (appConfig != null)
+        {
+            if (appConfig.UseExternalBios)
+            {
+                WriteFixedUtf8(dst->Bios9Path, 512, appConfig.Bios9Path);
+                WriteFixedUtf8(dst->Bios7Path, 512, appConfig.Bios7Path);
+                WriteFixedUtf8(dst->FirmwarePath, 512, appConfig.FirmwarePath);
+                WriteFixedUtf8(dst->DsiBios9Path, 512, appConfig.DsiBios9Path);
+                WriteFixedUtf8(dst->DsiBios7Path, 512, appConfig.DsiBios7Path);
+                WriteFixedUtf8(dst->DsiFirmwarePath, 512, appConfig.DsiFirmwarePath);
+            }
+            WriteFixedUtf8(dst->DsiNandPath, 512, appConfig.DsiNandPath);
+        }
+        WriteFixedUtf8(dst->SaveDir, 512, StormDsPlatformPaths.SavesDirectory);
+    }
+
+    public static nint storm_ds_create(in StormDsConfig config, StormDsAppConfig? appConfig = null)
+    {
+        StormDsNativeConfig raw = default;
+        FillNativeConfig(in config, &raw, appConfig);
         return storm_ds_create_raw(&raw);
     }
 
-    public static int storm_ds_update_config(nint handle, in StormDsConfig config)
+    public static int storm_ds_update_config(nint handle, in StormDsConfig config, StormDsAppConfig? appConfig = null)
     {
-        FillNativeConfig(in config, out StormDsNativeConfig raw);
+        StormDsNativeConfig raw = default;
+        FillNativeConfig(in config, &raw, appConfig);
         return storm_ds_update_config_raw(handle, &raw) == 1 ? 0 : -1;
     }
 
@@ -455,11 +496,26 @@ public static unsafe partial class StormDsNative
         return rc == 1 ? 0 : -1;
     }
 
-    public static int storm_ds_load_rom(nint handle, byte* romData, nuint dataSize, byte* saveBuffer, nuint saveCapacity, nuint* outSaveSize)
+    public static int storm_ds_load_rom(
+        nint handle,
+        byte* romData,
+        nuint dataSize,
+        byte* saveBuffer,
+        nuint saveCapacity,
+        nuint* outSaveSize,
+        string? romPath = null,
+        string? sramPath = null)
     {
         if (outSaveSize != null) *outSaveSize = 0;
-        int rc = storm_ds_load_rom_raw(handle, romData, dataSize, null, null);
-        return rc == 1 ? 0 : -1;
+        byte[]? romPathBytes = !string.IsNullOrWhiteSpace(romPath) ? Encoding.UTF8.GetBytes(romPath + "\0") : null;
+        byte[]? sramPathBytes = !string.IsNullOrWhiteSpace(sramPath) ? Encoding.UTF8.GetBytes(sramPath + "\0") : null;
+
+        fixed (byte* pRomPath = romPathBytes)
+        fixed (byte* pSramPath = sramPathBytes)
+        {
+            int rc = storm_ds_load_rom_raw(handle, romData, dataSize, pRomPath, pSramPath);
+            return rc == 1 ? 0 : -1;
+        }
     }
 
     public static int storm_ds_boot_firmware(nint handle, int consoleMode)
@@ -467,9 +523,11 @@ public static unsafe partial class StormDsNative
         return storm_ds_boot_firmware_raw(handle) == 1 ? 0 : -1;
     }
 
-    public static void storm_ds_set_input(nint handle, uint buttons, ushort touchX, ushort touchY, byte touchDown)
+    public static void storm_ds_set_input(nint handle, uint buttons, ushort touchX, ushort touchY, byte touchDown, int lidClosed = 0)
     {
-        storm_ds_set_input_raw(handle, buttons, touchX, touchY, touchDown != 0 ? 1 : 0, 0);
+        // melonDS NDS::SetKeyMask uses active-low (0xFFF = all buttons released)
+        uint activeLowMask = (~buttons) & 0xFFFU;
+        storm_ds_set_input_raw(handle, activeLowMask, touchX, touchY, touchDown != 0 ? 1 : 0, lidClosed);
     }
 
     public static void storm_ds_set_motion_and_slot2(nint handle, float gyroX, float gyroY, float gyroZ, float accelX, float accelY, float accelZ, int slot2Type, int solarLux)
@@ -477,85 +535,115 @@ public static unsafe partial class StormDsNative
         storm_ds_set_motion_and_slot2_raw(handle, slot2Type, solarLux, 0, gyroX, gyroY, gyroZ, 0);
     }
 
-    public static void storm_ds_set_mic_state(nint handle, int micMode, byte* pcmSamples, nuint sampleCount)
+    public static void storm_ds_set_motion_and_slot2_full(
+        nint handle,
+        int slot2Type,
+        int solarLux,
+        uint guitarMask,
+        float gyroX,
+        float gyroY,
+        float gyroZ,
+        uint pedometerSteps)
     {
-        storm_ds_set_mic_state_raw(handle, micMode, (short*)pcmSamples, (int)(sampleCount / 2));
+        storm_ds_set_motion_and_slot2_raw(handle, slot2Type, solarLux, guitarMask, gyroX, gyroY, gyroZ, pedometerSteps);
     }
 
-    public static int storm_ds_run_frame(nint handle, StormDsFrameStats* outStats)
+    public static void storm_ds_set_mic_state(nint handle, int micMode, byte* pcmSamples, nuint sampleBytes)
     {
-        return storm_ds_run_frame_with_buffers(handle, null, null, outStats);
+        storm_ds_set_mic_state_raw(handle, micMode, (short*)pcmSamples, (int)((long)sampleBytes / 2));
     }
 
-    public static int storm_ds_run_frame_with_buffers(nint handle, byte[]? topBgra, byte[]? bottomBgra, StormDsFrameStats* outStats)
+    public static int storm_ds_run_frame_with_buffers(
+        nint handle,
+        byte[] topBgra,
+        byte[] bottomBgra,
+        StormDsFrameStats* outStats,
+        short[]? audioLrOut = null,
+        int maxAudioFrames = 0)
     {
+        if (topBgra == null || bottomBgra == null || topBgra.Length < 256 * 192 * 4 || bottomBgra.Length < 256 * 192 * 4) return -1;
         StormDsNativeFrameStats rawStats = default;
-        short* audioBuf = stackalloc short[2048 * 2];
-        int rc;
-        if (topBgra != null && bottomBgra != null && topBgra.Length >= 256 * 192 * 4 && bottomBgra.Length >= 256 * 192 * 4)
-        {
-            fixed (byte* pTop = topBgra)
-            fixed (byte* pBot = bottomBgra)
-            {
-                rc = storm_ds_run_frame_raw(handle, (uint*)pTop, (uint*)pBot, 256, 192, audioBuf, 2048, &rawStats);
-            }
-        }
-        else
-        {
-            rc = storm_ds_run_frame_raw(handle, null, null, 256, 192, audioBuf, 2048, &rawStats);
-        }
 
-        if (outStats != null)
+        fixed (byte* pTop = topBgra)
+        fixed (byte* pBot = bottomBgra)
+        fixed (short* pAudio = (audioLrOut != null && maxAudioFrames > 0) ? audioLrOut : null)
         {
-            outStats->FrameTimeMs = rawStats.CoreFrameMs > 0.01f ? rawStats.CoreFrameMs : 16.6;
-            outStats->Fps = outStats->FrameTimeMs > 0.1 ? Math.Min(240.0, 1000.0 / outStats->FrameTimeMs) : 60.0;
-            outStats->DrawCalls = 64;
-            outStats->TriangleCount = 2048;
-            outStats->VramUsageBytes = 656 * 1024;
-            outStats->RewindAvailable = 1;
-            outStats->RewindBufferFrames = rawStats.FrameIndex;
+            int rc = storm_ds_run_frame_raw(
+                handle,
+                (uint*)pTop,
+                (uint*)pBot,
+                256,
+                192,
+                pAudio,
+                pAudio != null ? Math.Min(maxAudioFrames, audioLrOut!.Length / 2) : 0,
+                &rawStats);
+
+            if (outStats != null)
+            {
+                double frameMs = rawStats.CoreFrameMs > 0.01f ? rawStats.CoreFrameMs : 16.666;
+                outStats->FrameTimeMs = frameMs;
+                outStats->Fps = Math.Min(240.0, 1000.0 / frameMs);
+                outStats->ActiveBackend = rawStats.ActiveBackend;
+                outStats->AudioFramesWritten = rawStats.AudioFramesWritten;
+                outStats->FrameIndex = rawStats.FrameIndex;
+                outStats->FastForwardActive = 0;
+            }
+            return rc == 1 ? 0 : -1;
         }
-        return rc == 1 ? 0 : -1;
     }
 
-    public static int storm_ds_tap_ocr_screen(nint handle, int screenIndex, byte* outBgraBuffer, nuint bufferCapacity, int* outWidth, int* outHeight)
+    public static int storm_ds_tap_ocr_screen(nint handle, int screenIndex, byte* outBgraBuffer, nuint bufferBytes, int* outWidth, int* outHeight)
     {
         if (outWidth != null) *outWidth = 256;
         if (outHeight != null) *outHeight = 192;
-        if (outBgraBuffer == null || bufferCapacity < 256 * 192 * 4) return -1;
+        if (outBgraBuffer == null || bufferBytes < 256 * 192 * 4) return -1;
         return storm_ds_tap_ocr_screen_raw(handle, screenIndex, (uint*)outBgraBuffer) == 1 ? 0 : -1;
     }
 
     public static int storm_ds_save_state(nint handle, int slotIndex, byte* outBuffer, nuint bufferCapacity, nuint* outWritten)
     {
-        string tmp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"storm_ds_slot_{slotIndex}.mln");
-        byte[] pathBytes = Encoding.UTF8.GetBytes(tmp + " ");
-        fixed (byte* pPath = pathBytes)
+        string tmp = Path.Combine(Path.GetTempPath(), $"storm_ds_slot_{slotIndex}_{Environment.ProcessId}.mln");
+        byte[] pathBytes = Encoding.UTF8.GetBytes(tmp + "\0");
+        try
         {
-            int rc = storm_ds_save_state_raw(handle, pPath);
-            if (rc == 1 && System.IO.File.Exists(tmp))
+            fixed (byte* pPath = pathBytes)
             {
-                byte[] bytes = System.IO.File.ReadAllBytes(tmp);
-                int copyLen = (int)Math.Min((nuint)bytes.Length, bufferCapacity);
-                if (outBuffer != null && copyLen > 0) Marshal.Copy(bytes, 0, (nint)outBuffer, copyLen);
-                if (outWritten != null) *outWritten = (nuint)copyLen;
-                return 0;
+                int rc = storm_ds_save_state_raw(handle, pPath);
+                if (rc == 1 && File.Exists(tmp))
+                {
+                    byte[] bytes = File.ReadAllBytes(tmp);
+                    int copyLen = (int)Math.Min((nuint)bytes.Length, bufferCapacity);
+                    if (outBuffer != null && copyLen > 0) Marshal.Copy(bytes, 0, (nint)outBuffer, copyLen);
+                    if (outWritten != null) *outWritten = (nuint)copyLen;
+                    return 0;
+                }
             }
+            return -1;
         }
-        return -1;
+        finally
+        {
+            try { if (File.Exists(tmp)) File.Delete(tmp); } catch { }
+        }
     }
 
     public static int storm_ds_load_state(nint handle, int slotIndex, byte* inBuffer, nuint inSize)
     {
         if (inBuffer == null || inSize == 0) return -1;
-        string tmp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"storm_ds_slot_{slotIndex}_load.mln");
-        byte[] bytes = new byte[(int)inSize];
-        Marshal.Copy((nint)inBuffer, bytes, 0, bytes.Length);
-        System.IO.File.WriteAllBytes(tmp, bytes);
-        byte[] pathBytes = Encoding.UTF8.GetBytes(tmp + " ");
-        fixed (byte* pPath = pathBytes)
+        string tmp = Path.Combine(Path.GetTempPath(), $"storm_ds_slot_{slotIndex}_{Environment.ProcessId}_load.mln");
+        try
         {
-            return storm_ds_load_state_raw(handle, pPath) == 1 ? 0 : -1;
+            byte[] bytes = new byte[(int)inSize];
+            Marshal.Copy((nint)inBuffer, bytes, 0, bytes.Length);
+            File.WriteAllBytes(tmp, bytes);
+            byte[] pathBytes = Encoding.UTF8.GetBytes(tmp + "\0");
+            fixed (byte* pPath = pathBytes)
+            {
+                return storm_ds_load_state_raw(handle, pPath) == 1 ? 0 : -1;
+            }
+        }
+        finally
+        {
+            try { if (File.Exists(tmp)) File.Delete(tmp); } catch { }
         }
     }
 
@@ -572,9 +660,12 @@ public static unsafe partial class StormDsNative
             raw[i] = default;
             for (int c = 0; c < 63; c++) raw[i].Name[c] = entries[i].Name[c];
             raw[i].Enabled = entries[i].Enabled;
-            raw[i].CodeWords[0] = entries[i].Address;
-            raw[i].CodeWords[1] = entries[i].Value;
-            raw[i].CodeWordCount = 2;
+            int wc = Math.Clamp(entries[i].CodeWordCount, 0, 64);
+            for (int w = 0; w < wc; w++)
+            {
+                raw[i].CodeWords[w] = entries[i].CodeWords[w];
+            }
+            raw[i].CodeWordCount = wc;
         }
         return storm_ds_set_cheats_raw(handle, raw, n) == 1 ? 0 : -1;
     }
@@ -585,6 +676,12 @@ public static unsafe partial class StormDsNative
         int maxT = (int)Math.Min(titleCapacity, 64);
         StormDsNativeNandTitleInfo* rawTitles = stackalloc StormDsNativeNandTitleInfo[maxT];
         int rc = storm_ds_nand_scan_raw(nandPathUtf8, &rawSum, rawTitles, maxT);
+        if (rc != 1 || rawSum.Valid == 0)
+        {
+            if (outTitleCount != null) *outTitleCount = 0;
+            return -1;
+        }
+
         if (outSummary != null)
         {
             outSummary->TotalCapacityBytes = rawSum.TotalBytes;
@@ -605,10 +702,13 @@ public static unsafe partial class StormDsNative
                 outTitles[i].SizeBytes = rawTitles[i].SizeBytes;
                 outTitles[i].Version = 1;
                 outTitles[i].Category = 4;
+                outTitles[i].PublicSavExists = (byte)(rawTitles[i].PublicSavExists != 0 ? 1 : 0);
+                for (int c = 0; c < 7; c++) outTitles[i].GameCode[c] = rawTitles[i].GameCode[c];
                 for (int c = 0; c < 127; c++) outTitles[i].Name[c] = rawTitles[i].Title[c];
+                for (int px = 0; px < 1024; px++) outTitles[i].IconRgba[px] = rawTitles[i].IconRgba[px];
             }
         }
-        return rc >= 0 ? 0 : -1;
+        return 0;
     }
 
     public static int storm_ds_nand_delete_title(byte* nandPathUtf8, ulong titleId)
@@ -616,8 +716,8 @@ public static unsafe partial class StormDsNative
         return storm_ds_nand_delete_title_raw(nandPathUtf8, (uint)(titleId & 0xFFFFFFFFUL)) == 1 ? 0 : -1;
     }
 
-    public static int storm_ds_nand_repair_saves(byte* nandPathUtf8)
+    public static int storm_ds_nand_repair_saves(byte* nandPathUtf8, uint titleIdLow = 0)
     {
-        return storm_ds_nand_repair_saves_raw(nandPathUtf8, 0) == 1 ? 0 : -1;
+        return storm_ds_nand_repair_saves_raw(nandPathUtf8, titleIdLow) == 1 ? 0 : -1;
     }
 }

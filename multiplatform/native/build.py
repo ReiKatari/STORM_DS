@@ -68,7 +68,19 @@ def prepare_compat_sources():
     with open(dst_spu, "w", encoding="utf-8") as f:
         f.write(tsp_fixed)
 
-    print("Prepared compat sources: DSi_NWifi_compat.cpp, GPU2D_Soft_compat.cpp, GPU2D_Soft_Compatibility_compat.cpp, FATStorage_compat.cpp, SPU_compat.cpp")
+    # VulkanContext_compat.cpp
+    src_vkc = os.path.join(MELONDS_DIR, "VulkanContext.cpp")
+    dst_vkc = os.path.join(NATIVE_DIR, "src", "VulkanContext_compat.cpp")
+    with open(src_vkc, "r", encoding="utf-8", errors="ignore") as f:
+        tvc = f.read()
+    tvc_fixed = tvc.replace(
+        "VK_KHR_ANDROID_SURFACE_EXTENSION_NAME",
+        '"VK_KHR_win32_surface"'
+    )
+    with open(dst_vkc, "w", encoding="utf-8") as f:
+        f.write(tvc_fixed)
+
+    print("Prepared compat sources: DSi_NWifi_compat.cpp, GPU2D_Soft_compat.cpp, GPU2D_Soft_Compatibility_compat.cpp, FATStorage_compat.cpp, SPU_compat.cpp, VulkanContext_compat.cpp")
 
 def build_windows_x64():
     print("=== Building Windows x64 (MSVC /std:c++latest) ===")

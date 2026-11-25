@@ -6,7 +6,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
-using System.Threading.Tasks;
 using StormDs.Core.Configuration;
 using StormDs.Core.Engine;
 using StormDs.Core.Library;
@@ -36,7 +35,7 @@ public enum BentoViewMode
 
 /// <summary>
 /// Central thread-safe UI state service holding loaded configuration, active ROM selection,
-/// engine session state, navigation tabs, and multiplatform services.
+/// engine session state, navigation tabs, and live multiplatform services.
 /// </summary>
 public sealed class StormDsUiState
 {
@@ -52,6 +51,7 @@ public sealed class StormDsUiState
     public NetplayWfcService NetplayService { get; }
     public RetroAchievementsService RetroAchievementsService { get; }
     public AiTranslatorService AiTranslatorService { get; }
+    public Slot2PeripheralService Slot2Service { get; }
 
     public NavSectionKind ActiveNavSection { get; private set; } = NavSectionKind.Library;
     public RomFilter ActiveFilter { get; private set; } = RomFilter.All;
@@ -62,13 +62,15 @@ public sealed class StormDsUiState
     public RomMetadataRecord? SelectedRom { get; private set; }
     public bool IsEmulationActive { get; private set; }
     public bool IsPaused { get; private set; }
+    public bool IsHiddenToTray { get; private set; }
     public bool IsDetachedScreenActive { get; set; }
     public bool IsFastForward { get; set; }
     public bool IsFullscreen { get; private set; }
+    public string StatusBannerText { get; private set; } = string.Empty;
     public StormDsFrameStats LastFrameStats { get; set; }
     public string ProbedGpuName { get; private set; } = "GPU Probe Pending";
     public string VulkanTierBadge { get; private set; } = "Vulkan 1.4 Zero-Copy";
-    public uint VulkanApiVersion { get; private set; } = 0x00401000; // Vulkan 1.1
+    public uint VulkanApiVersion { get; private set; } = 0x00401000;
 
     public event Action? StateChanged;
     public event Action<RomMetadataRecord?>? RomSelected;
@@ -80,6 +82,11 @@ public sealed class StormDsUiState
     public event Action? UiScaleChanged;
     public event Action<bool>? FullscreenChanged;
     public event Action? FullscreenToggled;
+    public event Action<bool>? UpdateCheckRequested;
+    public event Action<RomMetadataRecord, int>? RomModalRequested;
+    public event Action<bool>? HiddenToTrayChanged;
+    public event Action? SettingsSaved;
+    public event Action<string>? StatusNotification;
 
     private StormDsUiState()
     {
@@ -92,19 +99,76 @@ public sealed class StormDsUiState
         NetplayService = new NetplayWfcService();
         RetroAchievementsService = new RetroAchievementsService();
         AiTranslatorService = new AiTranslatorService();
+        Slot2Service = new Slot2PeripheralService();
 
+        SyncServicesFromConfig();
         ProbeVulkanHardware();
 
-        // Listen for library changes
         LibraryService.LibraryChanged += () =>
         {
-            // Auto-select first ROM if none selected (Law 21)
             if (SelectedRom == null && LibraryService.AllRoms.Count > 0)
             {
                 SelectRom(LibraryService.AllRoms[0]);
             }
             StateChanged?.Invoke();
         };
+    }
+
+    public void SyncServicesFromConfig()
+    {
+        RetroAchievementsService.Username = AppConfig.RetroAchievementsUsername;
+        RetroAchievementsService.Token = AppConfig.RetroAchievementsToken;
+        RetroAchievementsService.IsHardcoreMode = AppConfig.RetroAchievementsHardcoreMode;
+        RetroAchievementsService.IsRichPresenceEnabled = AppConfig.RetroAchievementsRichPresence;
+
+        Slot2Service.ActiveAddon = AppConfig.Slot2AddonType;
+        Slot2Service.GbaRomPath = AppConfig.GbaRomPath;
+        Slot2Service.GbaSavePath = AppConfig.GbaSavePath;
+        Slot2Service.SolarLuxLevel = AppConfig.SolarLuxLevel;
+
+        if (AppConfig.LanDiscoveryEnabled)
+        {
+            NetplayService.StartLanDiscovery(AppConfig.LanPort > 0 ? AppConfig.LanPort : NetplayWfcService.DefaultLanPort);
+        }
+        else
+        {
+            NetplayService.StopLanDiscovery();
+        }
+    }
+
+    public PerRomProfile LoadRomProfile(string gameCode)
+    {
+        if (string.IsNullOrWhiteSpace(gameCode)) return new PerRomProfile();
+        string path = StormDsPlatformPaths.GetRomProfileFilePath(gameCode);
+        if (File.Exists(path))
+        {
+            try
+            {
+                string json = File.ReadAllText(path);
+                var p = JsonSerializer.Deserialize(json, StormDsJsonContext.Default.PerRomProfile);
+                if (p != null) return p;
+            }
+            catch
+            {
+            }
+        }
+        return new PerRomProfile { GameCode = gameCode.Trim() };
+    }
+
+    public void SaveRomProfile(PerRomProfile profile)
+    {
+        if (profile == null || string.IsNullOrWhiteSpace(profile.GameCode)) return;
+        try
+        {
+            Directory.CreateDirectory(StormDsPlatformPaths.ProfilesDirectory);
+            string path = StormDsPlatformPaths.GetRomProfileFilePath(profile.GameCode);
+            string json = JsonSerializer.Serialize(profile, StormDsJsonContext.Default.PerRomProfile);
+            File.WriteAllText(path, json);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[StormDsUiState] Error saving ROM profile: {ex.Message}");
+        }
     }
 
     private unsafe void ProbeVulkanHardware()
@@ -118,28 +182,11 @@ public sealed class StormDsUiState
                 if (res == 0)
                 {
                     string devName = caps.GetDeviceName();
-                    if (!string.IsNullOrWhiteSpace(devName))
-                    {
-                        ProbedGpuName = devName;
-                    }
-                    else
-                    {
-                        ProbedGpuName = "Vulkan Universal Device";
-                    }
-
+                    ProbedGpuName = !string.IsNullOrWhiteSpace(devName) ? devName : "Vulkan Universal Device";
                     VulkanApiVersion = caps.ApiVersion;
-                    if (caps.SupportsZeroCopy == 1)
-                    {
-                        VulkanTierBadge = "Vulkan 1.4 Zero-Copy";
-                    }
-                    else if (caps.ApiVersion >= 0x00401000)
-                    {
-                        VulkanTierBadge = "Vulkan 1.1 Compat";
-                    }
-                    else
-                    {
-                        VulkanTierBadge = "Vulkan 1.0 Legacy";
-                    }
+                    VulkanTierBadge = caps.SupportsZeroCopy == 1
+                        ? "Vulkan 1.4 Zero-Copy"
+                        : (caps.ApiVersion >= 0x00401000 ? "Vulkan 1.1 Compat" : "Vulkan 1.0 Legacy");
                     return;
                 }
             }
@@ -172,7 +219,7 @@ public sealed class StormDsUiState
         return new StormDsAppConfig();
     }
 
-    public void SaveConfig()
+    public void SaveConfig(bool notifyUser = false)
     {
         try
         {
@@ -180,11 +227,34 @@ public sealed class StormDsUiState
             string cfgPath = Path.Combine(StormDsPlatformPaths.ConfigDirectory, "config.json");
             string json = JsonSerializer.Serialize(AppConfig, StormDsJsonContext.Default.StormDsAppConfig);
             File.WriteAllText(cfgPath, json);
+            SyncServicesFromConfig();
+            if (IsEmulationActive)
+            {
+                var profile = SelectedRom != null ? LoadRomProfile(SelectedRom.GameCode) : null;
+                EngineService.UpdateRuntimeConfig(AppConfig, profile);
+                EngineService.SetMotionAndSlot2(
+                    0f, 0f, 0f, 0f, 0f, 0f,
+                    (int)(profile?.Slot2AddonType ?? Slot2Service.ActiveAddon),
+                    profile?.SolarLuxLevel ?? Slot2Service.SolarLuxLevel,
+                    Slot2Service.GuitarHeroButtons,
+                    (uint)Slot2Service.PedometerSteps);
+            }
+            SettingsSaved?.Invoke();
+            if (notifyUser)
+            {
+                NotifyStatus("Конфигурация сохранена");
+            }
         }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"[StormDsUiState] Notice: Config save error: {ex.Message}");
         }
+    }
+
+    public void NotifyStatus(string text)
+    {
+        StatusBannerText = text ?? string.Empty;
+        StatusNotification?.Invoke(StatusBannerText);
     }
 
     public void SelectRom(RomMetadataRecord? rom)
@@ -249,8 +319,9 @@ public sealed class StormDsUiState
     public bool StartEmulation(RomMetadataRecord? rom = null, bool bootBios = false)
     {
         var targetRom = rom ?? SelectedRom;
+        PerRomProfile? profile = targetRom != null ? LoadRomProfile(targetRom.GameCode) : null;
 
-        EngineService.Initialize(AppConfig);
+        EngineService.Initialize(AppConfig, profile);
 
         bool success = false;
         if (bootBios)
@@ -259,7 +330,7 @@ public sealed class StormDsUiState
         }
         else if (targetRom != null)
         {
-            success = EngineService.LoadRom(targetRom.FilePath, AppConfig);
+            success = EngineService.LoadRom(targetRom.FilePath, AppConfig, profile);
             if (success)
             {
                 targetRom.PlayCount++;
@@ -270,11 +341,22 @@ public sealed class StormDsUiState
                     if (AppConfig.RecentRoms.Count > 30) AppConfig.RecentRoms.RemoveAt(AppConfig.RecentRoms.Count - 1);
                 }
                 SaveConfig();
+
+                CheatService.LoadCheatsForGame(targetRom.GameCode);
+                bool cheatsAllowed = (profile?.CheatsEnabled ?? AppConfig.CheatsEnabled) &&
+                                     RetroAchievementsService.IsFeatureAllowedInCurrentMode("cheats");
+                CheatService.ApplyCheatsToNative(EngineService.NativeHandle, cheatsAllowed);
+
+                EngineService.SetMotionAndSlot2(
+                    0f, 0f, 0f, 0f, 0f, 0f,
+                    (int)(profile?.Slot2AddonType ?? Slot2Service.ActiveAddon),
+                    profile?.SolarLuxLevel ?? Slot2Service.SolarLuxLevel,
+                    Slot2Service.GuitarHeroButtons,
+                    (uint)Slot2Service.PedometerSteps);
             }
         }
         else
         {
-            // FreeBIOS fallback boot
             success = EngineService.BootFirmware(ConsoleMode.Nds);
         }
 
@@ -300,6 +382,23 @@ public sealed class StormDsUiState
         StateChanged?.Invoke();
     }
 
+    public void SetHiddenToTray(bool hidden)
+    {
+        if (IsHiddenToTray == hidden) return;
+        IsHiddenToTray = hidden;
+        HiddenToTrayChanged?.Invoke(hidden);
+        StateChanged?.Invoke();
+    }
+
+    public void ApplyLiveCheats()
+    {
+        if (!IsEmulationActive || EngineService.NativeHandle == nint.Zero) return;
+        var profile = SelectedRom != null ? LoadRomProfile(SelectedRom.GameCode) : null;
+        bool cheatsAllowed = (profile?.CheatsEnabled ?? AppConfig.CheatsEnabled) &&
+                             RetroAchievementsService.IsFeatureAllowedInCurrentMode("cheats");
+        CheatService.ApplyCheatsToNative(EngineService.NativeHandle, cheatsAllowed);
+    }
+
     public void NotifyDisplayConfigChanged()
     {
         DisplayConfigChanged?.Invoke();
@@ -321,6 +420,16 @@ public sealed class StormDsUiState
     {
         IsFullscreen = active;
         FullscreenChanged?.Invoke(active);
+    }
+
+    public void RequestUpdateCheck(bool manual = true)
+    {
+        UpdateCheckRequested?.Invoke(manual);
+    }
+
+    public void RequestRomModal(RomMetadataRecord rom, int tabIdx = 0)
+    {
+        RomModalRequested?.Invoke(rom, tabIdx);
     }
 
     public IReadOnlyList<RomMetadataRecord> GetFilteredRoms()

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -33,12 +34,82 @@ public sealed class GitHubReleaseResponse
     [JsonPropertyName("body")]
     public string Body { get; set; } = string.Empty;
 
+    [JsonPropertyName("html_url")]
+    public string HtmlUrl { get; set; } = string.Empty;
+
+    [JsonPropertyName("published_at")]
+    public string PublishedAt { get; set; } = string.Empty;
+
+    [JsonPropertyName("created_at")]
+    public string CreatedAt { get; set; } = string.Empty;
+
+    [JsonPropertyName("draft")]
+    public bool Draft { get; set; }
+
+    [JsonPropertyName("prerelease")]
+    public bool Prerelease { get; set; }
+
     [JsonPropertyName("assets")]
     public List<GitHubAssetInfo>? Assets { get; set; }
 }
 
-public sealed class StormMirrorResponse
+public sealed class StormMirrorAssetItem
 {
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+
+    [JsonPropertyName("downloadUrl")]
+    public string DownloadUrl { get; set; } = string.Empty;
+
+    [JsonPropertyName("size")]
+    public long Size { get; set; }
+
+    [JsonPropertyName("contentType")]
+    public string ContentType { get; set; } = string.Empty;
+}
+
+public sealed class StormMirrorReleaseItem
+{
+    [JsonPropertyName("version")]
+    public string Version { get; set; } = string.Empty;
+
+    [JsonPropertyName("title")]
+    public string Title { get; set; } = string.Empty;
+
+    [JsonPropertyName("notes")]
+    public string Notes { get; set; } = string.Empty;
+
+    [JsonPropertyName("createdAt")]
+    public string CreatedAt { get; set; } = string.Empty;
+
+    [JsonPropertyName("publishedAt")]
+    public string PublishedAt { get; set; } = string.Empty;
+
+    [JsonPropertyName("isPrerelease")]
+    public bool IsPrerelease { get; set; }
+
+    [JsonPropertyName("assets")]
+    public List<StormMirrorAssetItem>? Assets { get; set; }
+}
+
+public sealed class StormMirrorRepositoryBlock
+{
+    [JsonPropertyName("releases")]
+    public List<StormMirrorReleaseItem>? Releases { get; set; }
+}
+
+public sealed class StormMirrorReleasesResponse
+{
+    [JsonPropertyName("success")]
+    public bool Success { get; set; }
+
+    [JsonPropertyName("releases")]
+    public List<StormMirrorReleaseItem>? Releases { get; set; }
+
+    [JsonPropertyName("repository")]
+    public StormMirrorRepositoryBlock? Repository { get; set; }
+
+    // Legacy single-release mirror payload fields
     [JsonPropertyName("version")]
     public string Version { get; set; } = string.Empty;
 
@@ -53,10 +124,20 @@ public sealed class StormMirrorResponse
 }
 
 [JsonSerializable(typeof(GitHubReleaseResponse))]
-[JsonSerializable(typeof(StormMirrorResponse))]
+[JsonSerializable(typeof(List<GitHubReleaseResponse>))]
+[JsonSerializable(typeof(StormMirrorReleasesResponse))]
+[JsonSerializable(typeof(StormMirrorRepositoryBlock))]
+[JsonSerializable(typeof(StormMirrorReleaseItem))]
+[JsonSerializable(typeof(StormMirrorAssetItem))]
 internal partial class AuroraUpdateJsonContext : JsonSerializerContext
 {
 }
+
+public sealed record AuroraDownloadProgress(
+    long DownloadedBytes,
+    long TotalBytes,
+    double SpeedMbPerSec
+);
 
 public sealed record AuroraUpdateCheckResult(
     bool IsUpdateAvailable,
@@ -65,7 +146,13 @@ public sealed record AuroraUpdateCheckResult(
     string DownloadUrl,
     string Changelog,
     string? ExpectedSha256,
-    string SourceMirror
+    string SourceMirror,
+    string ReleasePageUrl = "",
+    string AssetName = "",
+    long AssetSizeBytes = 0,
+    DateTimeOffset? PublishedAtUtc = null,
+    bool CheckSucceeded = false,
+    string? ErrorMessage = null
 );
 
 /// <summary>
@@ -76,16 +163,57 @@ public sealed class AuroraDualMirrorUpdater
 {
     private static readonly HttpClient s_httpClient = new()
     {
-        Timeout = TimeSpan.FromSeconds(25)
+        Timeout = TimeSpan.FromSeconds(30)
     };
 
     static AuroraDualMirrorUpdater()
     {
-        s_httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("STORM-AuroraFluid-Updater/8.9.0 (Windows; Android; Linux)");
+        s_httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("STORM-AuroraFluid-Updater/8.9.1 (Windows; Android; Linux)");
+    }
+
+    public static bool TryParseSemanticVersion(string? raw, out Version version)
+    {
+        version = new Version(0, 0, 0);
+        if (string.IsNullOrWhiteSpace(raw)) return false;
+
+        string clean = raw.Trim().TrimStart('v', 'V').Trim();
+        int dashIdx = clean.IndexOf('-');
+        if (dashIdx > 0) clean = clean[..dashIdx];
+        int plusIdx = clean.IndexOf('+');
+        if (plusIdx > 0) clean = clean[..plusIdx];
+
+        if (clean.Count(c => c == '.') == 1)
+        {
+            clean += ".0";
+        }
+
+        return Version.TryParse(clean, out version!);
+    }
+
+    public static GitHubAssetInfo? SelectBestWindowsAsset(IReadOnlyList<GitHubAssetInfo>? assets)
+    {
+        if (assets == null || assets.Count == 0) return null;
+
+        var windowsAssets = assets
+            .Where(a => !string.IsNullOrWhiteSpace(a.Name) &&
+                        !string.IsNullOrWhiteSpace(a.DownloadUrl) &&
+                        !a.Name.EndsWith(".apk", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (windowsAssets.Count == 0) return null;
+
+        return windowsAssets.FirstOrDefault(a =>
+                   a.Name.Contains("setup", StringComparison.OrdinalIgnoreCase) &&
+                   a.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+               ?? windowsAssets.FirstOrDefault(a =>
+                   a.Name.Contains("windows", StringComparison.OrdinalIgnoreCase) &&
+                   a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+               ?? windowsAssets.FirstOrDefault(a => a.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+               ?? windowsAssets.FirstOrDefault(a => a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
-    /// Checks for updates against GitHub Releases and fails over to STORM mirror if inaccessible.
+    /// Checks GitHub Releases API and STORM GAMES WORLD mirrors in parallel and selects the newest Windows release.
     /// </summary>
     public async Task<AuroraUpdateCheckResult> CheckForUpdateAsync(
         string githubOwner,
@@ -93,38 +221,86 @@ public sealed class AuroraDualMirrorUpdater
         Version currentVersion,
         CancellationToken cancellationToken = default)
     {
-        // 1. Primary Check: GitHub Releases API
+        var ghTask = TryCheckGitHubAsync(githubOwner, githubRepo, currentVersion, cancellationToken);
+        var mirrorTask = TryCheckStormMirrorAsync(githubRepo, currentVersion, cancellationToken);
+
+        await Task.WhenAll(ghTask, mirrorTask).ConfigureAwait(false);
+
+        var (ghOk, ghBest) = await ghTask.ConfigureAwait(false);
+        var (mirrorOk, mirrorBest) = await mirrorTask.ConfigureAwait(false);
+
+        bool anySucceeded = ghOk || mirrorOk;
+
+        AuroraUpdateCheckResult? bestCandidate = null;
+        if (ghBest != null && mirrorBest != null)
+        {
+            bestCandidate = mirrorBest.LatestVersion > ghBest.LatestVersion ? mirrorBest : ghBest;
+        }
+        else
+        {
+            bestCandidate = ghBest ?? mirrorBest;
+        }
+
+        if (bestCandidate != null && bestCandidate.LatestVersion > currentVersion)
+        {
+            return bestCandidate with { CheckSucceeded = true };
+        }
+
+        if (!anySucceeded)
+        {
+            return new AuroraUpdateCheckResult(
+                IsUpdateAvailable: false,
+                CurrentVersion: currentVersion,
+                LatestVersion: currentVersion,
+                DownloadUrl: string.Empty,
+                Changelog: string.Empty,
+                ExpectedSha256: null,
+                SourceMirror: "None",
+                CheckSucceeded: false,
+                ErrorMessage: "Не удалось подключиться ни к GitHub Releases, ни к зеркалу STORM GAMES WORLD."
+            );
+        }
+
+        string sourceLabel = ghOk ? "GitHub" : "STORM GAMES WORLD";
+        return new AuroraUpdateCheckResult(
+            IsUpdateAvailable: false,
+            CurrentVersion: currentVersion,
+            LatestVersion: currentVersion,
+            DownloadUrl: string.Empty,
+            Changelog: string.Empty,
+            ExpectedSha256: null,
+            SourceMirror: sourceLabel,
+            ReleasePageUrl: $"https://github.com/{githubOwner}/{githubRepo}/releases",
+            CheckSucceeded: true
+        );
+    }
+
+    private static async Task<(bool Succeeded, AuroraUpdateCheckResult? Best)> TryCheckGitHubAsync(
+        string githubOwner,
+        string githubRepo,
+        Version currentVersion,
+        CancellationToken ct)
+    {
+        bool ok = false;
+        var candidates = new List<AuroraUpdateCheckResult>();
+
         try
         {
-            var ghUrl = $"https://api.github.com/repos/{githubOwner}/{githubRepo}/releases/latest";
-            using var req = new HttpRequestMessage(HttpMethod.Get, ghUrl);
-            using var resp = await s_httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            var listUrl = $"https://api.github.com/repos/{githubOwner}/{githubRepo}/releases?per_page=10";
+            using var req = new HttpRequestMessage(HttpMethod.Get, listUrl);
+            using var resp = await s_httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
 
             if (resp.IsSuccessStatusCode)
             {
-                await using var stream = await resp.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-                var ghRelease = await JsonSerializer.DeserializeAsync(stream, AuroraUpdateJsonContext.Default.GitHubReleaseResponse, cancellationToken).ConfigureAwait(false);
-
-                if (ghRelease != null)
+                ok = true;
+                await using var stream = await resp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+                var releases = await JsonSerializer.DeserializeAsync(stream, AuroraUpdateJsonContext.Default.ListGitHubReleaseResponse, ct).ConfigureAwait(false);
+                if (releases != null)
                 {
-                    var cleanTag = ghRelease.TagName.TrimStart('v', 'V').Trim();
-                    if (Version.TryParse(cleanTag, out var remoteVersion) && remoteVersion > currentVersion)
+                    foreach (var rel in releases.Where(r => !r.Draft && !r.Prerelease))
                     {
-                        var downloadUrl = string.Empty;
-                        if (ghRelease.Assets != null && ghRelease.Assets.Count > 0)
-                        {
-                            downloadUrl = ghRelease.Assets[0].DownloadUrl;
-                        }
-
-                        return new AuroraUpdateCheckResult(
-                            IsUpdateAvailable: true,
-                            CurrentVersion: currentVersion,
-                            LatestVersion: remoteVersion,
-                            DownloadUrl: downloadUrl,
-                            Changelog: ghRelease.Body ?? string.Empty,
-                            ExpectedSha256: null,
-                            SourceMirror: "GitHub Releases"
-                        );
+                        var mapped = MapGitHubRelease(rel, githubOwner, githubRepo, currentVersion);
+                        if (mapped != null) candidates.Add(mapped);
                     }
                 }
             }
@@ -135,43 +311,25 @@ public sealed class AuroraDualMirrorUpdater
         }
         catch
         {
-            // Failover to secondary mirrors
+            // Fallback to /releases/latest
         }
 
-        // 2. Secondary Failover: STORM GAMES WORLD Mirror
-        string[] mirrorUrls =
-        {
-            $"https://stormgamesworld.ru/api/programs?repo={githubRepo}",
-            $"https://storm-games.world/api/programs?repo={githubRepo}"
-        };
-
-        foreach (var mirrorUrl in mirrorUrls)
+        if (candidates.Count == 0)
         {
             try
             {
-                using var mirrorReq = new HttpRequestMessage(HttpMethod.Get, mirrorUrl);
-                using var mirrorResp = await s_httpClient.SendAsync(mirrorReq, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
-
-                if (mirrorResp.IsSuccessStatusCode)
+                var latestUrl = $"https://api.github.com/repos/{githubOwner}/{githubRepo}/releases/latest";
+                using var req = new HttpRequestMessage(HttpMethod.Get, latestUrl);
+                using var resp = await s_httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+                if (resp.IsSuccessStatusCode)
                 {
-                    await using var stream = await mirrorResp.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-                    var mirrorData = await JsonSerializer.DeserializeAsync(stream, AuroraUpdateJsonContext.Default.StormMirrorResponse, cancellationToken).ConfigureAwait(false);
-
-                    if (mirrorData != null)
+                    ok = true;
+                    await using var stream = await resp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+                    var rel = await JsonSerializer.DeserializeAsync(stream, AuroraUpdateJsonContext.Default.GitHubReleaseResponse, ct).ConfigureAwait(false);
+                    if (rel != null && !rel.Draft)
                     {
-                        var cleanVer = mirrorData.Version.TrimStart('v', 'V').Trim();
-                        if (Version.TryParse(cleanVer, out var remoteVer) && remoteVer > currentVersion)
-                        {
-                            return new AuroraUpdateCheckResult(
-                                IsUpdateAvailable: true,
-                                CurrentVersion: currentVersion,
-                                LatestVersion: remoteVer,
-                                DownloadUrl: mirrorData.DownloadUrl,
-                                Changelog: mirrorData.Changelog ?? string.Empty,
-                                ExpectedSha256: mirrorData.Sha256,
-                                SourceMirror: "STORM GAMES WORLD Mirror"
-                            );
-                        }
+                        var mapped = MapGitHubRelease(rel, githubOwner, githubRepo, currentVersion);
+                        if (mapped != null) candidates.Add(mapped);
                     }
                 }
             }
@@ -181,100 +339,333 @@ public sealed class AuroraDualMirrorUpdater
             }
             catch
             {
-                // Continue to next mirror
+                // Ignore and rely on mirror
             }
         }
 
+        var best = candidates.OrderByDescending(c => c.LatestVersion).FirstOrDefault();
+        return (ok, best);
+    }
+
+    private static AuroraUpdateCheckResult? MapGitHubRelease(
+        GitHubReleaseResponse rel,
+        string owner,
+        string repo,
+        Version currentVersion)
+    {
+        if (!TryParseSemanticVersion(rel.TagName, out var remoteVersion) || remoteVersion <= currentVersion)
+        {
+            return null;
+        }
+
+        var asset = SelectBestWindowsAsset(rel.Assets);
+        if (asset == null) return null;
+
+        DateTimeOffset? published = DateTimeOffset.TryParse(
+            !string.IsNullOrWhiteSpace(rel.PublishedAt) ? rel.PublishedAt : rel.CreatedAt,
+            out var dto)
+            ? dto
+            : null;
+
+        string pageUrl = !string.IsNullOrWhiteSpace(rel.HtmlUrl)
+            ? rel.HtmlUrl
+            : $"https://github.com/{owner}/{repo}/releases/tag/{rel.TagName}";
+
         return new AuroraUpdateCheckResult(
-            IsUpdateAvailable: false,
+            IsUpdateAvailable: true,
             CurrentVersion: currentVersion,
-            LatestVersion: currentVersion,
-            DownloadUrl: string.Empty,
-            Changelog: string.Empty,
+            LatestVersion: remoteVersion,
+            DownloadUrl: asset.DownloadUrl,
+            Changelog: rel.Body ?? string.Empty,
             ExpectedSha256: null,
-            SourceMirror: "None"
+            SourceMirror: "GitHub",
+            ReleasePageUrl: pageUrl,
+            AssetName: asset.Name,
+            AssetSizeBytes: asset.Size,
+            PublishedAtUtc: published,
+            CheckSucceeded: true
         );
     }
 
+    private static async Task<(bool Succeeded, AuroraUpdateCheckResult? Best)> TryCheckStormMirrorAsync(
+        string githubRepo,
+        Version currentVersion,
+        CancellationToken ct)
+    {
+        string[] mirrorUrls =
+        {
+            $"https://stormgamesworld.ru/api/programs/releases?repo={githubRepo}",
+            $"https://stormgamesworld.ru/api/programs?repo={githubRepo}",
+            $"https://storm-games.world/api/programs/releases?repo={githubRepo}",
+            $"https://storm-games.world/api/programs?repo={githubRepo}"
+        };
+
+        bool anyOk = false;
+        var candidates = new List<AuroraUpdateCheckResult>();
+
+        foreach (var mirrorUrl in mirrorUrls)
+        {
+            try
+            {
+                bool isAlt = mirrorUrl.Contains("storm-games.world", StringComparison.OrdinalIgnoreCase);
+                string host = isAlt ? "https://storm-games.world" : "https://stormgamesworld.ru";
+
+                using var req = new HttpRequestMessage(HttpMethod.Get, mirrorUrl);
+                using var resp = await s_httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+                if (!resp.IsSuccessStatusCode) continue;
+
+                anyOk = true;
+                await using var stream = await resp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+                var data = await JsonSerializer.DeserializeAsync(stream, AuroraUpdateJsonContext.Default.StormMirrorReleasesResponse, ct).ConfigureAwait(false);
+                if (data == null) continue;
+
+                var list = data.Repository?.Releases ?? data.Releases;
+                if (list != null && list.Count > 0)
+                {
+                    foreach (var item in list.Where(r => !r.IsPrerelease))
+                    {
+                        if (!TryParseSemanticVersion(item.Version, out var remoteVer) || remoteVer <= currentVersion) continue;
+
+                        var mappedAssets = (item.Assets ?? []).Select(a => new GitHubAssetInfo
+                        {
+                            Name = a.Name,
+                            DownloadUrl = NormalizeMirrorDownloadUrl(a.DownloadUrl, a.Name, host, githubRepo),
+                            Size = a.Size
+                        }).ToList();
+
+                        var asset = SelectBestWindowsAsset(mappedAssets);
+                        if (asset == null)
+                        {
+                            string verStr = remoteVer.ToString();
+                            string setupName = $"{githubRepo}_{verStr}_Setup.exe";
+                            asset = new GitHubAssetInfo
+                            {
+                                Name = setupName,
+                                DownloadUrl = $"{host}/uploads/programs/{githubRepo}/{setupName}",
+                                Size = 0
+                            };
+                        }
+
+                        DateTimeOffset? published = DateTimeOffset.TryParse(
+                            !string.IsNullOrWhiteSpace(item.PublishedAt) ? item.PublishedAt : item.CreatedAt,
+                            out var dto)
+                            ? dto
+                            : null;
+
+                        candidates.Add(new AuroraUpdateCheckResult(
+                            IsUpdateAvailable: true,
+                            CurrentVersion: currentVersion,
+                            LatestVersion: remoteVer,
+                            DownloadUrl: asset.DownloadUrl,
+                            Changelog: item.Notes ?? string.Empty,
+                            ExpectedSha256: null,
+                            SourceMirror: "STORM GAMES WORLD",
+                            ReleasePageUrl: $"{host}/programs?repo={githubRepo}&tag={item.Version}",
+                            AssetName: asset.Name,
+                            AssetSizeBytes: asset.Size,
+                            PublishedAtUtc: published,
+                            CheckSucceeded: true
+                        ));
+                    }
+                }
+                else if (TryParseSemanticVersion(data.Version, out var singleVer) && singleVer > currentVersion && !string.IsNullOrWhiteSpace(data.DownloadUrl))
+                {
+                    string normUrl = NormalizeMirrorDownloadUrl(data.DownloadUrl, Path.GetFileName(data.DownloadUrl), host, githubRepo);
+                    if (!normUrl.EndsWith(".apk", StringComparison.OrdinalIgnoreCase))
+                    {
+                        candidates.Add(new AuroraUpdateCheckResult(
+                            IsUpdateAvailable: true,
+                            CurrentVersion: currentVersion,
+                            LatestVersion: singleVer,
+                            DownloadUrl: normUrl,
+                            Changelog: data.Changelog ?? string.Empty,
+                            ExpectedSha256: string.IsNullOrWhiteSpace(data.Sha256) ? null : data.Sha256,
+                            SourceMirror: "STORM GAMES WORLD",
+                            ReleasePageUrl: $"{host}/programs?repo={githubRepo}",
+                            AssetName: Path.GetFileName(normUrl),
+                            AssetSizeBytes: 0,
+                            PublishedAtUtc: null,
+                            CheckSucceeded: true
+                        ));
+                    }
+                }
+
+                if (candidates.Count > 0) break;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch
+            {
+                // Try next mirror URL
+            }
+        }
+
+        var best = candidates.OrderByDescending(c => c.LatestVersion).FirstOrDefault();
+        return (anyOk, best);
+    }
+
+    private static string NormalizeMirrorDownloadUrl(string rawUrl, string fileName, string host, string repo)
+    {
+        string trimmed = (rawUrl ?? string.Empty).Trim();
+        if (string.IsNullOrEmpty(trimmed))
+        {
+            return $"{host}/uploads/programs/{repo}/{fileName}";
+        }
+        if (trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            return trimmed;
+        }
+        if (trimmed.StartsWith('/'))
+        {
+            return $"{host}{trimmed}";
+        }
+        return trimmed.Contains('/')
+            ? $"{host}/{trimmed}"
+            : $"{host}/uploads/programs/{repo}/{trimmed}";
+    }
+
     /// <summary>
-    /// Downloads the update package with progress reporting, magic binary verification, and SHA-256 integrity check.
+    /// Simple overload retaining 0..1 normalized progress callbacks.
     /// </summary>
-    public async Task<bool> DownloadAndVerifyAsync(
+    public Task<bool> DownloadAndVerifyAsync(
         string downloadUrl,
         string destinationFilePath,
         string? expectedSha256 = null,
         IProgress<double>? progress = null,
         CancellationToken cancellationToken = default)
     {
+        IProgress<AuroraDownloadProgress>? detailed = progress == null
+            ? null
+            : new Progress<AuroraDownloadProgress>(p =>
+            {
+                if (p.TotalBytes > 0)
+                {
+                    progress.Report((double)p.DownloadedBytes / p.TotalBytes);
+                }
+            });
+
+        return DownloadAndVerifyAsync(downloadUrl, destinationFilePath, expectedSha256, detailed, cancellationToken);
+    }
+
+    /// <summary>
+    /// Downloads the update package with live EMA MB/s progress, magic binary verification, and SHA-256 check.
+    /// </summary>
+    public async Task<bool> DownloadAndVerifyAsync(
+        string downloadUrl,
+        string destinationFilePath,
+        string? expectedSha256,
+        IProgress<AuroraDownloadProgress>? detailedProgress,
+        CancellationToken cancellationToken = default,
+        string? githubRepo = null)
+    {
         if (string.IsNullOrWhiteSpace(downloadUrl)) return false;
+
+        Directory.CreateDirectory(Path.GetDirectoryName(destinationFilePath) ?? Path.GetTempPath());
+        var candidateUrls = new List<string> { downloadUrl };
+        string fileName = Path.GetFileName(destinationFilePath);
+        if (!string.IsNullOrWhiteSpace(githubRepo) && !string.IsNullOrWhiteSpace(fileName))
+        {
+            string sgw1 = $"https://stormgamesworld.ru/uploads/programs/{githubRepo}/{fileName}";
+            string sgw2 = $"https://storm-games.world/uploads/programs/{githubRepo}/{fileName}";
+            if (!candidateUrls.Any(u => string.Equals(u, sgw1, StringComparison.OrdinalIgnoreCase))) candidateUrls.Add(sgw1);
+            if (!candidateUrls.Any(u => string.Equals(u, sgw2, StringComparison.OrdinalIgnoreCase))) candidateUrls.Add(sgw2);
+        }
 
         var tempPath = destinationFilePath + ".tmp";
 
-        try
+        foreach (var url in candidateUrls)
         {
-            using var resp = await s_httpClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
-            resp.EnsureSuccessStatusCode();
-
-            long totalBytes = resp.Content.Headers.ContentLength ?? -1L;
-            await using var inStream = await resp.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-            await using var outStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None);
-
-            var buffer = new byte[81920];
-            long bytesReadTotal = 0;
-            int read;
-
-            while ((read = await inStream.ReadAsync(buffer, cancellationToken).ConfigureAwait(false)) > 0)
+            try
             {
-                await outStream.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
-                bytesReadTotal += read;
+                if (File.Exists(tempPath)) File.Delete(tempPath);
 
-                if (totalBytes > 0 && progress != null)
+                using var resp = await s_httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+                if (!resp.IsSuccessStatusCode) continue;
+
+                long totalBytes = resp.Content.Headers.ContentLength ?? -1L;
+                await using var inStream = await resp.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+                await using (var outStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
                 {
-                    progress.Report((double)bytesReadTotal / totalBytes);
+                    var buffer = new byte[81920];
+                    long bytesReadTotal = 0;
+                    long lastSampleBytes = 0;
+                    long lastSampleTicks = Environment.TickCount64;
+                    double emaSpeed = 0.0;
+
+                    detailedProgress?.Report(new AuroraDownloadProgress(0, totalBytes, 0.0));
+
+                    int read;
+                    while ((read = await inStream.ReadAsync(buffer, cancellationToken).ConfigureAwait(false)) > 0)
+                    {
+                        await outStream.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+                        bytesReadTotal += read;
+
+                        long nowTicks = Environment.TickCount64;
+                        long dtMs = nowTicks - lastSampleTicks;
+                        if (dtMs >= 250 || (totalBytes > 0 && bytesReadTotal >= totalBytes))
+                        {
+                            if (dtMs > 0)
+                            {
+                                double instant = ((bytesReadTotal - lastSampleBytes) / (1024.0 * 1024.0)) / (dtMs / 1000.0);
+                                emaSpeed = emaSpeed <= 0.01 ? instant : (emaSpeed * 0.65 + instant * 0.35);
+                                lastSampleTicks = nowTicks;
+                                lastSampleBytes = bytesReadTotal;
+                            }
+                            detailedProgress?.Report(new AuroraDownloadProgress(bytesReadTotal, totalBytes, emaSpeed));
+                        }
+                    }
+
+                    await outStream.FlushAsync(cancellationToken).ConfigureAwait(false);
                 }
-            }
 
-            await outStream.FlushAsync(cancellationToken).ConfigureAwait(false);
-            outStream.Close();
-
-            // 1. Magic Binary Verification (Law 9)
-            if (!VerifyBinaryMagicHeader(tempPath))
-            {
-                File.Delete(tempPath);
-                return false;
-            }
-
-            // 2. SHA-256 Hash Verification (Law 9)
-            if (!string.IsNullOrEmpty(expectedSha256))
-            {
-                using var sha = SHA256.Create();
-                await using var verifyStream = File.OpenRead(tempPath);
-                var hashBytes = await sha.ComputeHashAsync(verifyStream, cancellationToken).ConfigureAwait(false);
-                var computedHash = Convert.ToHexString(hashBytes);
-
-                if (!string.Equals(computedHash, expectedSha256, StringComparison.OrdinalIgnoreCase))
+                if (!VerifyBinaryMagicHeader(tempPath))
                 {
                     File.Delete(tempPath);
-                    return false;
+                    continue;
+                }
+
+                if (!string.IsNullOrEmpty(expectedSha256))
+                {
+                    using var sha = SHA256.Create();
+                    await using var verifyStream = File.OpenRead(tempPath);
+                    var hashBytes = await sha.ComputeHashAsync(verifyStream, cancellationToken).ConfigureAwait(false);
+                    var computedHash = Convert.ToHexString(hashBytes);
+
+                    if (!string.Equals(computedHash, expectedSha256, StringComparison.OrdinalIgnoreCase))
+                    {
+                        File.Delete(tempPath);
+                        continue;
+                    }
+                }
+
+                if (File.Exists(destinationFilePath))
+                {
+                    File.Delete(destinationFilePath);
+                }
+                File.Move(tempPath, destinationFilePath);
+                return true;
+            }
+            catch (OperationCanceledException)
+            {
+                if (File.Exists(tempPath))
+                {
+                    try { File.Delete(tempPath); } catch { }
+                }
+                throw;
+            }
+            catch
+            {
+                if (File.Exists(tempPath))
+                {
+                    try { File.Delete(tempPath); } catch { }
                 }
             }
+        }
 
-            // Safe Atomic Move
-            if (File.Exists(destinationFilePath))
-            {
-                File.Delete(destinationFilePath);
-            }
-            File.Move(tempPath, destinationFilePath);
-            return true;
-        }
-        catch
-        {
-            if (File.Exists(tempPath))
-            {
-                try { File.Delete(tempPath); } catch { }
-            }
-            throw;
-        }
+        return false;
     }
 
     /// <summary>
@@ -289,13 +680,11 @@ public sealed class AuroraDualMirrorUpdater
             int read = fs.Read(header, 0, 4);
             if (read < 2) return false;
 
-            // Windows Executable MZ check: 0x4D, 0x5A
             if (header[0] == 0x4D && header[1] == 0x5A)
             {
                 return true;
             }
 
-            // ZIP / APK check: 0x50, 0x4B, 0x03, 0x04
             if (read >= 4 && header[0] == 0x50 && header[1] == 0x4B && header[2] == 0x03 && header[3] == 0x04)
             {
                 return true;

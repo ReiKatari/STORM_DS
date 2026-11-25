@@ -9,12 +9,14 @@ public sealed record LanguageInfo(string Code, string NativeName, string English
 
 /// <summary>
 /// 11-Language localization dictionary for STORM DS adhering to Sentence case, 0% '&' (always 'и' / 'and'),
-/// and version '8.9.0' without 'v' per ecosystem laws.
+/// and version '8.9.1' without 'v' per ecosystem laws.
 /// Supported languages: ru, en, de, fr, zh, ko, ja, es, it, pt, hi.
 /// </summary>
 public static class StormDsLoc
 {
-    public const string AppVersion = "8.9.0";
+    public const string AppVersion = "8.9.1";
+
+    public static event Action<string>? LanguageChanged;
 
     public static readonly IReadOnlyList<LanguageInfo> SupportedLanguages =
     [
@@ -40,10 +42,17 @@ public static class StormDsLoc
         {
             if (SupportedLanguages.Any(l => string.Equals(l.Code, value, StringComparison.OrdinalIgnoreCase)))
             {
-                s_currentLanguage = value.ToLowerInvariant();
+                string next = value.ToLowerInvariant();
+                if (!string.Equals(s_currentLanguage, next, StringComparison.OrdinalIgnoreCase))
+                {
+                    s_currentLanguage = next;
+                    LanguageChanged?.Invoke(next);
+                }
             }
         }
     }
+
+    public static string T(string key) => Get(key);
 
     public static string Get(string key, string? lang = null)
     {
@@ -172,7 +181,63 @@ public static class StormDsLoc
             ["StateSaved"] = "Состояние успешно сохранено",
             ["StateLoaded"] = "Состояние успешно восстановлено",
             ["AchievementUnlocked"] = "Достижение разблокировано!",
-            ["VersionLabel"] = "Версия 8.9.0"
+            ["VersionLabel"] = "Версия 8.9.1",
+            ["TrayReady"] = "Готов к эмуляции",
+            ["TrayOpenWindow"] = "Открыть главное окно",
+            ["TrayContinue"] = "Продолжить эмуляцию",
+            ["TrayPause"] = "Пауза эмуляции",
+            ["TraySettings"] = "Настройки",
+            ["TrayExit"] = "Выход",
+            ["MenuFile"] = "Файл",
+            ["MenuOpenRom"] = "Открыть ROM или архив (.nds/.dsi/.zip)...",
+            ["MenuScanFolder"] = "Добавить папку с играми...",
+            ["MenuRescanLibrary"] = "Пересканировать библиотеку",
+            ["MenuExit"] = "Выход",
+            ["MenuEmulation"] = "Эмуляция",
+            ["MenuPause"] = "Приостановить",
+            ["MenuResume"] = "Продолжить",
+            ["MenuReset"] = "Сброс консоли",
+            ["MenuQuickSave"] = "Быстрое сохранение",
+            ["MenuQuickLoad"] = "Быстрая загрузка",
+            ["MenuScreenshot"] = "Сделать скриншот",
+            ["MenuTools"] = "Инструменты",
+            ["MenuDsiNand"] = "Менеджер DSiWare NAND",
+            ["MenuAchievements"] = "Достижения RetroAchievements",
+            ["MenuNetplay"] = "Сетевая игра WFC",
+            ["MenuAiTranslator"] = "ИИ-переводчик экрана",
+            ["MenuCommandPalette"] = "Палитра команд (Ctrl+K)",
+            ["MenuSettings"] = "Конфигурация",
+            ["MenuHelp"] = "Справка",
+            ["MenuCheckUpdates"] = "Проверить обновления",
+            ["MenuAbout"] = "О программе STORM DS",
+            ["NavShortLibrary"] = "Библиотека",
+            ["NavShortFavorites"] = "Избранное",
+            ["NavShortRecent"] = "Недавние",
+            ["NavShortNand"] = "NAND",
+            ["NavShortAwards"] = "Награды",
+            ["NavShortNet"] = "Сеть",
+            ["NavShortAi"] = "ИИ",
+            ["NavShortSettings"] = "Опции",
+            ["NavDockLibrary"] = "Игры",
+            ["NavDockFavorites"] = "Топ",
+            ["NavDockRecent"] = "История",
+            ["FilterAll"] = "Все игры",
+            ["FilterNds"] = "Картриджи NDS",
+            ["FilterDsiEnhanced"] = "DSi Enhanced",
+            ["FilterDsiWare"] = "DSiWare",
+            ["FilterFavorites"] = "Избранное",
+            ["FilterWithAchievements"] = "С достижениями",
+            ["ViewModeToggle"] = "Вид",
+            ["RomFolderBtn"] = "Папка ROM",
+            ["CartridgeInspector"] = "ИНСПЕКТОР КАРТРИДЖА",
+            ["LaunchGame"] = "Запустить игру",
+            ["LaunchBios"] = "Запустить меню консоли",
+            ["SaveSlotsHeader"] = "СЛОТЫ СОХРАНЕНИЙ (F5/F7)",
+            ["CartridgeProfile"] = "ПРОФИЛЬ КАРТРИДЖА",
+            ["PropsBtn"] = "Свойства",
+            ["CheatsBtn"] = "Читы",
+            ["AwardsBtn"] = "Награды",
+            ["SettingsSavedMsg"] = "Настройки сохранены"
         },
         ["en"] = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -265,7 +330,63 @@ public static class StormDsLoc
             ["StateSaved"] = "State saved successfully",
             ["StateLoaded"] = "State restored successfully",
             ["AchievementUnlocked"] = "Achievement unlocked!",
-            ["VersionLabel"] = "Version 8.9.0"
+            ["VersionLabel"] = "Version 8.9.1",
+            ["TrayReady"] = "Ready for emulation",
+            ["TrayOpenWindow"] = "Open main window",
+            ["TrayContinue"] = "Resume emulation",
+            ["TrayPause"] = "Pause emulation",
+            ["TraySettings"] = "Settings",
+            ["TrayExit"] = "Exit",
+            ["MenuFile"] = "File",
+            ["MenuOpenRom"] = "Open ROM or archive (.nds/.dsi/.zip)...",
+            ["MenuScanFolder"] = "Add ROM folder...",
+            ["MenuRescanLibrary"] = "Rescan library",
+            ["MenuExit"] = "Exit",
+            ["MenuEmulation"] = "Emulation",
+            ["MenuPause"] = "Pause",
+            ["MenuResume"] = "Resume",
+            ["MenuReset"] = "Reset console",
+            ["MenuQuickSave"] = "Quick save",
+            ["MenuQuickLoad"] = "Quick load",
+            ["MenuScreenshot"] = "Capture screenshot",
+            ["MenuTools"] = "Tools",
+            ["MenuDsiNand"] = "DSiWare NAND manager",
+            ["MenuAchievements"] = "RetroAchievements",
+            ["MenuNetplay"] = "WFC netplay",
+            ["MenuAiTranslator"] = "AI screen translator",
+            ["MenuCommandPalette"] = "Command palette (Ctrl+K)",
+            ["MenuSettings"] = "Configuration",
+            ["MenuHelp"] = "Help",
+            ["MenuCheckUpdates"] = "Check for updates",
+            ["MenuAbout"] = "About STORM DS",
+            ["NavShortLibrary"] = "Library",
+            ["NavShortFavorites"] = "Favorites",
+            ["NavShortRecent"] = "Recent",
+            ["NavShortNand"] = "NAND",
+            ["NavShortAwards"] = "Awards",
+            ["NavShortNet"] = "Netplay",
+            ["NavShortAi"] = "AI",
+            ["NavShortSettings"] = "Settings",
+            ["NavDockLibrary"] = "Games",
+            ["NavDockFavorites"] = "Top",
+            ["NavDockRecent"] = "History",
+            ["FilterAll"] = "All games",
+            ["FilterNds"] = "NDS cartridges",
+            ["FilterDsiEnhanced"] = "DSi Enhanced",
+            ["FilterDsiWare"] = "DSiWare",
+            ["FilterFavorites"] = "Favorites",
+            ["FilterWithAchievements"] = "With achievements",
+            ["ViewModeToggle"] = "View",
+            ["RomFolderBtn"] = "ROM folder",
+            ["CartridgeInspector"] = "CARTRIDGE INSPECTOR",
+            ["LaunchGame"] = "Launch game",
+            ["LaunchBios"] = "Launch console menu",
+            ["SaveSlotsHeader"] = "SAVE SLOTS (F5/F7)",
+            ["CartridgeProfile"] = "CARTRIDGE PROFILE",
+            ["PropsBtn"] = "Properties",
+            ["CheatsBtn"] = "Cheats",
+            ["AwardsBtn"] = "Awards",
+            ["SettingsSavedMsg"] = "Settings saved"
         },
         ["de"] = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -284,7 +405,7 @@ public static class StormDsLoc
             ["AudioSettings"] = "Ton- und Mikrofoneinstellungen",
             ["InputSettings"] = "Steuerung und Bildschirme",
             ["SystemSettings"] = "System und BIOS",
-            ["VersionLabel"] = "Version 8.9.0"
+            ["VersionLabel"] = "Version 8.9.1"
         },
         ["fr"] = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -303,7 +424,7 @@ public static class StormDsLoc
             ["AudioSettings"] = "Paramètres audio et microphone",
             ["InputSettings"] = "Contrôles et affichage",
             ["SystemSettings"] = "Système et BIOS",
-            ["VersionLabel"] = "Version 8.9.0"
+            ["VersionLabel"] = "Version 8.9.1"
         },
         ["zh"] = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -322,7 +443,7 @@ public static class StormDsLoc
             ["AudioSettings"] = "音频和麦克风设置",
             ["InputSettings"] = "控制和双屏布局",
             ["SystemSettings"] = "系统和 BIOS",
-            ["VersionLabel"] = "版本 8.9.0"
+            ["VersionLabel"] = "版本 8.9.1"
         },
         ["ko"] = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -341,7 +462,7 @@ public static class StormDsLoc
             ["AudioSettings"] = "오디오 및 마이크 설정",
             ["InputSettings"] = "입력 및 듀얼 스크린",
             ["SystemSettings"] = "시스템 및 BIOS",
-            ["VersionLabel"] = "버전 8.9.0"
+            ["VersionLabel"] = "버전 8.9.1"
         },
         ["ja"] = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -360,7 +481,7 @@ public static class StormDsLoc
             ["AudioSettings"] = "サウンドとマイク設定",
             ["InputSettings"] = "操作とデュアル画面",
             ["SystemSettings"] = "システムとBIOS",
-            ["VersionLabel"] = "バージョン 8.9.0"
+            ["VersionLabel"] = "バージョン 8.9.1"
         },
         ["es"] = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -379,7 +500,7 @@ public static class StormDsLoc
             ["AudioSettings"] = "Ajustes de audio y micrófono",
             ["InputSettings"] = "Controles y pantallas",
             ["SystemSettings"] = "Sistema y BIOS",
-            ["VersionLabel"] = "Versión 8.9.0"
+            ["VersionLabel"] = "Versión 8.9.1"
         },
         ["it"] = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -398,7 +519,7 @@ public static class StormDsLoc
             ["AudioSettings"] = "Impostazioni audio e microfono",
             ["InputSettings"] = "Controlli e schermi",
             ["SystemSettings"] = "Sistema e BIOS",
-            ["VersionLabel"] = "Versione 8.9.0"
+            ["VersionLabel"] = "Versione 8.9.1"
         },
         ["pt"] = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -417,7 +538,7 @@ public static class StormDsLoc
             ["AudioSettings"] = "Configurações de áudio e microfone",
             ["InputSettings"] = "Controles e telas",
             ["SystemSettings"] = "Sistema e BIOS",
-            ["VersionLabel"] = "Versão 8.9.0"
+            ["VersionLabel"] = "Versão 8.9.1"
         },
         ["hi"] = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -436,7 +557,7 @@ public static class StormDsLoc
             ["AudioSettings"] = "ऑडियो और माइक्रोफ़ोन सेटिंग्स",
             ["InputSettings"] = "नियंत्रण और स्क्रीन लेआउट",
             ["SystemSettings"] = "सिस्टम और BIOS",
-            ["VersionLabel"] = "संस्करण 8.9.0"
+            ["VersionLabel"] = "संस्करण 8.9.1"
         }
     };
 }

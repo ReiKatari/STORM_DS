@@ -33,18 +33,24 @@ public static class BitmapHelper
                 PixelFormat.Bgra8888,
                 AlphaFormat.Premul);
 
-            using (var locked = wb.Lock())
-            {
-                int copyBytes = Math.Min(bgraPixels.Length, locked.RowBytes * height);
-                Marshal.Copy(bgraPixels, 0, locked.Address, copyBytes);
-            }
-
+            UpdateBgraBitmap(wb, bgraPixels, width, height);
             return wb;
         }
         catch
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// Updates an existing WriteableBitmap in-place with zero per-frame allocation.
+    /// </summary>
+    public static void UpdateBgraBitmap(WriteableBitmap wb, byte[] bgraPixels, int width, int height)
+    {
+        if (bgraPixels.Length == 0 || width <= 0 || height <= 0) return;
+        using var locked = wb.Lock();
+        int copyBytes = Math.Min(bgraPixels.Length, locked.RowBytes * height);
+        Marshal.Copy(bgraPixels, 0, locked.Address, copyBytes);
     }
 
     /// <summary>

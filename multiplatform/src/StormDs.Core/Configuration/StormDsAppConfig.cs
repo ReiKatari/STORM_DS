@@ -187,6 +187,7 @@ public sealed class StormDsAppConfig
     public string DsiFirmwarePath { get; set; } = string.Empty;
     public string DsiNandPath { get; set; } = string.Empty;
     public int Arm9Overclock { get; set; } = 1;
+    public bool JitEnable { get; set; } = true;
     public bool RandomizeMacAddress { get; set; }
 
     // Slot-2 Peripherals
@@ -216,12 +217,17 @@ public sealed class StormDsAppConfig
     public string AiTranslatorTargetLanguage { get; set; } = "ru";
     public bool AiTranslatorAutoSpeakTts { get; set; }
 
-    // UI and Localization
+    // UI, Updates and Localization
     public string Language { get; set; } = "ru";
     public string Theme { get; set; } = "STORM MIDNIGHT";
+    public string AccentName { get; set; } = "DefaultThemeAccent";
+    public string TypographyName { get; set; } = "Inter";
+    public bool AutoCheckUpdates { get; set; } = true;
+    public string SkippedUpdateVersion { get; set; } = string.Empty;
     public bool FirstRomAutoSelect { get; set; } = true;
     public List<string> RecentRoms { get; set; } = [];
     public List<string> FavoriteRoms { get; set; } = [];
+    public List<string> RomDirectories { get; set; } = [];
 
     public static Dictionary<string, string> GetDefaultHotkeys()
     {
@@ -291,7 +297,8 @@ public sealed class StormDsAppConfig
             RandomizeMacAddress = (byte)(RandomizeMacAddress ? 1 : 0),
             Slot2AddonType = (int)(profile?.Slot2AddonType ?? Slot2AddonType),
             SolarLuxLevel = Math.Clamp(profile?.SolarLuxLevel ?? SolarLuxLevel, 0, 10),
-            ScreenLayoutMode = (int)(profile?.ScreenLayoutMode ?? ScreenLayoutMode)
+            ScreenLayoutMode = (int)(profile?.ScreenLayoutMode ?? ScreenLayoutMode),
+            JitEnable = (byte)(JitEnable ? 1 : 0)
         };
 
         return config;

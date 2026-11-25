@@ -1,10 +1,12 @@
 package me.magnum.melonds.github.services
 
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.SystemClock
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -29,86 +31,147 @@ class GitHubUpdateInstallManager(private val context: Context) : UpdateInstallMa
         return File(context.cacheDir, "updates").apply { mkdirs() }
     }
 
+    fun canRequestPackageInstalls(): Boolean {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
+            runCatching { context.packageManager.canRequestPackageInstalls() }.getOrDefault(true)
+    }
+
+    private val notificationHelper by lazy { UpdateNotificationHelper(context) }
+
     override fun downloadAndInstallUpdate(update: AppUpdate): Flow<DownloadProgress> = flow {
-        val updatesFolder = getUpdatesDirectory()
-        if (!updatesFolder.isDirectory && !updatesFolder.mkdirs()) {
-            emit(DownloadProgress.DownloadFailed)
-            return@flow
-        }
+        val versionLabel = update.releaseTag.ifBlank { update.newVersion.toString() }
+        var finishedCleanly = false
+        try {
+            val updatesFolder = getUpdatesDirectory()
+            if (!updatesFolder.isDirectory && !updatesFolder.mkdirs()) {
+                notificationHelper.showFailed(versionLabel)
+                finishedCleanly = true
+                emit(DownloadProgress.DownloadFailed)
+                return@flow
+            }
 
-        val destinationFile = File(updatesFolder, "update.apk")
-        if (destinationFile.isFile && !destinationFile.delete()) {
-            emit(DownloadProgress.DownloadFailed)
-            return@flow
-        }
+            val destinationFile = File(updatesFolder, "update.apk")
+            if (destinationFile.isFile && !destinationFile.delete()) {
+                notificationHelper.showFailed(versionLabel)
+                finishedCleanly = true
+                emit(DownloadProgress.DownloadFailed)
+                return@flow
+            }
 
-        if (!hasTrustedOrigin(update)) {
-            Log.w(TAG, "Rejected update with an unexpected release origin: ${update.sourceReleaseUrl}")
-            emit(DownloadProgress.DownloadFailed)
-            return@flow
-        }
+            if (!hasTrustedOrigin(update)) {
+                Log.w(TAG, "Rejected update with an unexpected release origin: ${update.sourceReleaseUrl}")
+                notificationHelper.showFailed(versionLabel)
+                finishedCleanly = true
+                emit(DownloadProgress.DownloadFailed)
+                return@flow
+            }
 
-        val candidateUrls = buildCandidateDownloadUrls(update)
-        var downloadedSuccessfully = false
+            val primaryUrl = update.downloadUri.toString()
+            val candidateUrls = buildCandidateDownloadUrls(update)
+            var verifiedApkReady = false
 
-        for (candidateUrl in candidateUrls) {
-            try {
-                if (destinationFile.isFile) {
-                    destinationFile.delete()
-                }
-                val activeConnection = HttpRedirectHelper.openConnectionWithRedirects(
-                    initialUrl = candidateUrl,
-                    maxRedirects = 10,
-                    connectTimeoutMs = 20_000,
-                    readTimeoutMs = 30_000,
-                    userAgent = "STORM-DS-Updater",
-                    accept = "application/octet-stream, */*",
-                )
-
+            for (candidateUrl in candidateUrls) {
                 try {
-                    val totalSize = activeConnection.contentLengthLong.takeIf { it > 0L } ?: update.binarySize
-                    var downloaded = 0L
-                    emit(DownloadProgress.DownloadUpdate(totalSize, 0L))
+                    if (destinationFile.isFile) {
+                        destinationFile.delete()
+                    }
+                    val activeConnection = HttpRedirectHelper.openConnectionWithRedirects(
+                        initialUrl = candidateUrl,
+                        maxRedirects = 10,
+                        connectTimeoutMs = 20_000,
+                        readTimeoutMs = 30_000,
+                        userAgent = "STORM-DS-Updater",
+                        accept = "application/octet-stream, */*",
+                    )
 
-                    activeConnection.inputStream.use { input ->
-                        destinationFile.outputStream().use { output ->
-                            val buffer = ByteArray(64 * 1024)
-                            while (true) {
-                                val read = input.read(buffer)
-                                if (read <= 0) break
-                                output.write(buffer, 0, read)
-                                downloaded += read
-                                if (totalSize > 0L) {
-                                    emit(DownloadProgress.DownloadUpdate(totalSize, downloaded))
+                    var streamCompleted = false
+                    try {
+                        val headerSize = activeConnection.contentLengthLong.takeIf { it > 0L } ?: 0L
+                        val totalSize = headerSize.takeIf { it > 0L } ?: update.binarySize.takeIf { it > 0L } ?: 0L
+                        var downloaded = 0L
+                        var lastEmitMs = SystemClock.elapsedRealtime()
+                        var lastPct = -1
+                        emit(DownloadProgress.DownloadUpdate(totalSize, 0L))
+                        notificationHelper.showProgress(versionLabel, 0L, totalSize)
+
+                        activeConnection.inputStream.use { input ->
+                            destinationFile.outputStream().use { output ->
+                                val buffer = ByteArray(64 * 1024)
+                                while (true) {
+                                    val read = input.read(buffer)
+                                    if (read < 0) break
+                                    if (read == 0) continue
+                                    output.write(buffer, 0, read)
+                                    downloaded += read
+                                    val nowMs = SystemClock.elapsedRealtime()
+                                    val pct = if (totalSize > 0L) ((downloaded * 100L) / totalSize).toInt().coerceIn(0, 100) else -1
+                                    if ((nowMs - lastEmitMs) >= 60L || (pct >= 0 && pct > lastPct) || (totalSize > 0L && downloaded >= totalSize)) {
+                                        emit(DownloadProgress.DownloadUpdate(totalSize, downloaded))
+                                        notificationHelper.showProgress(versionLabel, downloaded, totalSize)
+                                        lastEmitMs = nowMs
+                                        lastPct = pct
+                                    }
                                 }
+                                output.flush()
                             }
-                            output.flush()
+                        }
+                        if (totalSize > 0L && downloaded > 0L) {
+                            emit(DownloadProgress.DownloadUpdate(totalSize, downloaded))
+                        }
+                        streamCompleted = destinationFile.length() > 0L
+                    } finally {
+                        activeConnection.disconnect()
+                    }
+
+                    if (streamCompleted) {
+                        val enforceExactSize = (candidateUrl == primaryUrl) && update.binarySize > 0L
+                        if (validateDownloadedApk(update, destinationFile, enforceExactSize)) {
+                            verifiedApkReady = true
+                            break
+                        } else {
+                            Log.w(TAG, "Downloaded APK from $candidateUrl failed validation, deleting and trying next mirror")
+                            runCatching { destinationFile.delete() }
                         }
                     }
-                    downloadedSuccessfully = true
-                } finally {
-                    activeConnection.disconnect()
+                } catch (e: Throwable) {
+                    Log.w(TAG, "Download attempt failed from $candidateUrl, trying next mirror if available", e)
+                    runCatching { if (destinationFile.isFile) destinationFile.delete() }
                 }
-
-                if (downloadedSuccessfully && destinationFile.length() > 0L) {
-                    break
-                } else {
-                    downloadedSuccessfully = false
-                }
-            } catch (e: Throwable) {
-                Log.w(TAG, "Download attempt failed from $candidateUrl, trying next mirror if available", e)
             }
-        }
 
-        if (!downloadedSuccessfully) {
-            emit(DownloadProgress.DownloadFailed)
-            return@flow
-        }
+            if (!verifiedApkReady) {
+                runCatching { if (destinationFile.isFile) destinationFile.delete() }
+                notificationHelper.showFailed(versionLabel)
+                finishedCleanly = true
+                emit(DownloadProgress.DownloadFailed)
+                return@flow
+            }
 
-        if (validateDownloadedApk(update, destinationFile) && openInstaller(destinationFile)) {
-            emit(DownloadProgress.DownloadComplete)
-        } else {
-            emit(DownloadProgress.DownloadFailed)
+            if (!canRequestPackageInstalls()) {
+                notificationHelper.showInstallPermissionRequired(versionLabel)
+                finishedCleanly = true
+                emit(DownloadProgress.InstallPermissionRequired(destinationFile.absolutePath))
+                return@flow
+            }
+
+            val installIntent = buildInstallIntent(destinationFile)
+            if (installIntent != null && openInstaller(destinationFile)) {
+                notificationHelper.cancel()
+                finishedCleanly = true
+                emit(DownloadProgress.DownloadComplete)
+            } else {
+                if (installIntent != null) {
+                    notificationHelper.showReadyToInstall(versionLabel, installIntent)
+                } else {
+                    notificationHelper.showFailed(versionLabel)
+                }
+                finishedCleanly = true
+                emit(DownloadProgress.DownloadFailed)
+            }
+        } finally {
+            if (!finishedCleanly) {
+                notificationHelper.cancel()
+            }
         }
     }.flowOn(Dispatchers.IO)
 
@@ -127,7 +190,11 @@ class GitHubUpdateInstallManager(private val context: Context) : UpdateInstallMa
     }
 
     @Suppress("DEPRECATION")
-    internal fun validateDownloadedApk(update: AppUpdate, apkFile: File): Boolean {
+    internal fun validateDownloadedApk(
+        update: AppUpdate,
+        apkFile: File,
+        enforceExactSize: Boolean = true,
+    ): Boolean {
         if (!apkFile.isFile || apkFile.length() <= 0L) return reject("missing_apk")
         val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             PackageManager.GET_SIGNING_CERTIFICATES
@@ -146,35 +213,47 @@ class GitHubUpdateInstallManager(private val context: Context) : UpdateInstallMa
             installed = installed.toValidationMetadata(),
             expectedVersion = update.newVersion,
             requireSemanticVersionMatch = update.type == AppUpdate.Type.PRODUCTION,
-            expectedSize = update.binarySize,
+            expectedSize = if (enforceExactSize) update.binarySize else 0L,
             actualSize = apkFile.length(),
         )
         return rejection == null || reject(rejection.name.lowercase())
     }
 
     private fun hasTrustedOrigin(update: AppUpdate): Boolean {
-        val validReleaseOrigin = update.sourceReleaseUrl.startsWith("${GITHUB_RELEASE_URL_PREFIX}tag/") ||
-            update.sourceReleaseUrl.startsWith(STORM_GAMES_WORLD_RELEASE_URL_PREFIX) ||
-            update.sourceReleaseUrl.startsWith(STORM_GAMES_WORLD_ALT_RELEASE_URL_PREFIX)
+        val validReleaseOrigin = update.sourceReleaseUrl.startsWith("${GITHUB_RELEASE_URL_PREFIX}tag/", ignoreCase = true) ||
+            update.sourceReleaseUrl.startsWith(STORM_GAMES_WORLD_RELEASE_URL_PREFIX, ignoreCase = true) ||
+            update.sourceReleaseUrl.startsWith(STORM_GAMES_WORLD_ALT_RELEASE_URL_PREFIX, ignoreCase = true)
         val downloadUrl = update.downloadUri.toString()
-        val validDownloadOrigin = downloadUrl.startsWith("${GITHUB_RELEASE_URL_PREFIX}download/") ||
-            downloadUrl.startsWith(STORM_GAMES_WORLD_DOWNLOAD_URL_PREFIX) ||
-            downloadUrl.startsWith(STORM_GAMES_WORLD_ALT_DOWNLOAD_URL_PREFIX)
+        val validDownloadOrigin = downloadUrl.startsWith("${GITHUB_RELEASE_URL_PREFIX}download/", ignoreCase = true) ||
+            downloadUrl.startsWith(STORM_GAMES_WORLD_DOWNLOAD_URL_PREFIX, ignoreCase = true) ||
+            downloadUrl.startsWith(STORM_GAMES_WORLD_ALT_DOWNLOAD_URL_PREFIX, ignoreCase = true)
         return validReleaseOrigin && validDownloadOrigin
     }
 
-    private fun openInstaller(destinationFile: File): Boolean {
+    fun buildInstallIntent(destinationFile: File): Intent? {
+        if (!destinationFile.isFile || destinationFile.length() <= 0L) {
+            return null
+        }
         val fileUri = runCatching {
             UpdateContentProvider.getUpdateFileUri(context, destinationFile)
         }.onFailure {
             Log.e(TAG, "Failed to resolve content URI for update APK", it)
-        }.getOrNull() ?: return false
-        val installIntent = Intent(Intent.ACTION_VIEW).apply {
+        }.getOrNull() ?: return null
+        return Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(fileUri, APK_MIME)
+            clipData = ClipData.newRawUri("update.apk", fileUri)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
         }
-        context.startActivity(installIntent)
-        return true
+    }
+
+    fun openInstaller(destinationFile: File): Boolean {
+        val installIntent = buildInstallIntent(destinationFile) ?: return false
+        return runCatching {
+            context.startActivity(installIntent)
+            true
+        }.onFailure {
+            Log.e(TAG, "Failed to launch APK installer intent", it)
+        }.getOrDefault(false)
     }
 
     @Suppress("DEPRECATION")
@@ -193,9 +272,12 @@ class GitHubUpdateInstallManager(private val context: Context) : UpdateInstallMa
     private fun signerDigests(packageInfo: PackageInfo): Set<String> {
         val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             val signingInfo = packageInfo.signingInfo
-            signingInfo?.apkContentsSigners?.takeIf { it.isNotEmpty() }
-                ?: signingInfo?.signingCertificateHistory
-                ?: emptyArray()
+            if (signingInfo != null) {
+                signingInfo.apkContentsSigners?.takeIf { it.isNotEmpty() }
+                    ?: signingInfo.signingCertificateHistory.orEmpty()
+            } else {
+                emptyArray()
+            }
         } else {
             packageInfo.signatures.orEmpty()
         }

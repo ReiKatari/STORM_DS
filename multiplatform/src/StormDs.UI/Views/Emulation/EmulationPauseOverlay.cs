@@ -11,15 +11,13 @@ using Avalonia.Media;
 using Storm.AuroraFluid.Kit.Controls;
 using Storm.AuroraFluid.Kit.Icons;
 using Storm.AuroraFluid.Kit.Services;
-using Storm.AuroraFluid.Kit.Themes;
-using StormDs.Core.Configuration;
 using StormDs.UI.Common;
 
 namespace StormDs.UI.Views.Emulation;
 
 /// <summary>
 /// Translucent Aurora Pause & Live-Tuning Overlay (ESC).
-/// Instant live sliders and toggles right over the paused frame.
+/// Supports Save/Load per slot, lid hinge toggle, mic blow, rewind, AI translation, and cheats.
 /// </summary>
 public class EmulationPauseOverlay : Border
 {
@@ -29,6 +27,11 @@ public class EmulationPauseOverlay : Border
     public event Action? StopEmulationRequested;
     public event Action? TranslateFrameRequested;
     public event Action? CheatsRequested;
+    public event Action? ToggleLidRequested;
+    public event Action? MicBlowRequested;
+    public event Action<int>? SaveSlotRequested;
+    public event Action<int>? LoadSlotRequested;
+    public event Action? RewindRequested;
 
     public EmulationPauseOverlay()
     {
@@ -38,24 +41,16 @@ public class EmulationPauseOverlay : Border
 
         var centerCard = new AuroraGlassCard
         {
-            Width = 520,
+            Width = 540,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
             Padding = new Thickness(24, 20),
             SpotlightEnabled = true
         };
 
-        var stack = new StackPanel
-        {
-            Spacing = 14
-        };
+        var stack = new StackPanel { Spacing = 14 };
 
-        // Header
-        var headerRow = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("*,Auto")
-        };
-
+        var headerRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
         var titleStack = new StackPanel { Spacing = 2 };
         titleStack.Children.Add(new TextBlock
         {
@@ -71,7 +66,6 @@ public class EmulationPauseOverlay : Border
             Foreground = new SolidColorBrush(Color.Parse("#94A3B8"))
         });
         headerRow.Children.Add(titleStack);
-        Grid.SetColumn(titleStack, 0);
 
         var resumeBtn = new AuroraVolumetricButton
         {
@@ -94,14 +88,11 @@ public class EmulationPauseOverlay : Border
         Grid.SetColumn(resumeBtn, 1);
 
         stack.Children.Add(headerRow);
-
-        // Separator
         stack.Children.Add(new Border { Height = 1, Background = new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)) });
 
-        // Save / Load Slots Row (Slots 1..4)
         var slotsLabel = new TextBlock
         {
-            Text = "БЫСТРЫЕ СОХРАНЕНИЯ (СЛОТЫ 1..4)",
+            Text = "БЫСТРЫЕ СОХРАНЕНИЯ И ЗАГРУЗКА (СЛОТЫ 1..4)",
             FontSize = 10,
             FontWeight = FontWeight.Bold,
             Foreground = new SolidColorBrush(Color.Parse("#CBD5E1"))
@@ -112,61 +103,69 @@ public class EmulationPauseOverlay : Border
         for (int i = 0; i < 4; i++)
         {
             int slot = i;
-            var slotBtn = new Button
+            var card = new Border
             {
                 Margin = new Thickness(3),
-                Padding = new Thickness(6, 6),
-                Background = new SolidColorBrush(Color.FromArgb(50, 255, 255, 255)),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(80, 255, 255, 255)),
+                Padding = new Thickness(6),
+                Background = new SolidColorBrush(Color.FromArgb(42, 255, 255, 255)),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(75, 255, 255, 255)),
                 BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(8),
-                Cursor = new Cursor(StandardCursorType.Hand),
-                HorizontalContentAlignment = HorizontalAlignment.Center
+                CornerRadius = new CornerRadius(8)
             };
-            var sPanel = new StackPanel { Spacing = 2, HorizontalAlignment = HorizontalAlignment.Center };
-            sPanel.Children.Add(new TextBlock { Text = $"Слот {slot + 1}", FontSize = 11, FontWeight = FontWeight.Bold, Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Center });
-            sPanel.Children.Add(new TextBlock { Text = "Сохранить", FontSize = 9, Foreground = new SolidColorBrush(Color.Parse("#38BDF8")), HorizontalAlignment = HorizontalAlignment.Center });
-            slotBtn.Content = sPanel;
-            slotBtn.Click += (s, e) =>
+
+            var sPanel = new StackPanel { Spacing = 4 };
+            sPanel.Children.Add(new TextBlock
             {
-                AuroraTactileFeedbackService.Instance.PlayClick();
-                StormDsUiState.Instance.EngineService.SaveState(slot);
-            };
-            slotsGrid.Children.Add(slotBtn);
+                Text = $"Слот {slot + 1}",
+                FontSize = 11,
+                FontWeight = FontWeight.Bold,
+                Foreground = Brushes.White,
+                HorizontalAlignment = HorizontalAlignment.Center
+            });
+
+            var btnRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*"), ColumnSpacing = 4 };
+            var saveBtn = CreateMiniSlotButton("Сохр.", Color.Parse("#10B981"), () =>
+            {
+                if (SaveSlotRequested != null) SaveSlotRequested(slot);
+                else StormDsUiState.Instance.EngineService.SaveState(slot);
+            });
+            var loadBtn = CreateMiniSlotButton("Загр.", Color.Parse("#38BDF8"), () =>
+            {
+                if (!StormDsUiState.Instance.RetroAchievementsService.IsFeatureAllowedInCurrentMode("loadstate"))
+                {
+                    StormDsUiState.Instance.NotifyStatus("Загрузка состояний заблокирована в Hardcore-режиме");
+                    return;
+                }
+                if (LoadSlotRequested != null) LoadSlotRequested(slot);
+                else StormDsUiState.Instance.EngineService.LoadState(slot);
+            });
+            btnRow.Children.Add(saveBtn);
+            btnRow.Children.Add(loadBtn);
+            Grid.SetColumn(loadBtn, 1);
+
+            sPanel.Children.Add(btnRow);
+            card.Child = sPanel;
+            slotsGrid.Children.Add(card);
         }
         stack.Children.Add(slotsGrid);
 
-        // Live Tuning Controls Grid (2 columns)
         var tuningGrid = new UniformGrid { Columns = 2 };
-
-        // 1. Swap Screens
         tuningGrid.Children.Add(CreateActionTile(AuroraIconKind.SwapScreens, "Сменить экраны (Tab)", "Поменять местами верх и низ", () => SwapScreensRequested?.Invoke()));
-
-        // 2. Detach 2nd Screen
         tuningGrid.Children.Add(CreateActionTile(AuroraIconKind.DetachWindow, "Открепить 2-й экран", "Полноэкранный сенсор в окно", () => DetachScreenRequested?.Invoke()));
-
-        // 3. Simulated Mic Blow
-        tuningGrid.Children.Add(CreateActionTile(AuroraIconKind.MicPulse, "Дунуть в микрофон", "Имитировать поток воздуха", () =>
+        tuningGrid.Children.Add(CreateActionTile(AuroraIconKind.MicPulse, "Дунуть в микрофон", "Имитировать поток воздуха (M)", () =>
         {
-            StormDsUiState.Instance.EngineService.SetMicState(MicMode.SimulatedBlow);
-            AuroraTactileFeedbackService.Instance.PlayClick();
+            if (MicBlowRequested != null) MicBlowRequested();
+            else StormDsUiState.Instance.EngineService.TriggerMicBlowBurst();
         }));
-
-        // 4. Lid Hinge Close/Open
-        tuningGrid.Children.Add(CreateActionTile(AuroraIconKind.LidHinge, "Закрыть/открыть крышку", "Спящий режим NDS", () =>
+        tuningGrid.Children.Add(CreateActionTile(AuroraIconKind.LidHinge, "Закрыть/открыть крышку", "Спящий режим NDS (L)", () =>
         {
-            AuroraTactileFeedbackService.Instance.PlayClick();
+            ToggleLidRequested?.Invoke();
         }));
-
-        // 5. AI Translation
-        tuningGrid.Children.Add(CreateActionTile(AuroraIconKind.AiTranslatorSpark, "ИИ-перевод кадра", "OCR экрана и моментальный перевод", () => TranslateFrameRequested?.Invoke()));
-
-        // 6. Cheats
+        tuningGrid.Children.Add(CreateActionTile(AuroraIconKind.AiTranslatorSpark, "ИИ-перевод кадра", "Захват экрана и перевод (T)", () => TranslateFrameRequested?.Invoke()));
         tuningGrid.Children.Add(CreateActionTile(AuroraIconKind.CheatMatrix, "Читы ActionReplay", "Активация чит-кодов", () => CheatsRequested?.Invoke()));
 
         stack.Children.Add(tuningGrid);
 
-        // Bottom Exit Row
         var bottomRow = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("*,Auto"),
@@ -181,11 +180,19 @@ public class EmulationPauseOverlay : Border
         };
         var rwStack = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
         rwStack.Children.Add(new AuroraVectorIcon { Kind = AuroraIconKind.RewindVortex, Size = 15, VerticalAlignment = VerticalAlignment.Center });
-        rwStack.Children.Add(new TextBlock { Text = "Перемотка назад (Backspace)", FontSize = 11, Foreground = new SolidColorBrush(Color.Parse("#94A3B8")), VerticalAlignment = VerticalAlignment.Center });
+        rwStack.Children.Add(new TextBlock { Text = "Перемотка назад", FontSize = 11, Foreground = new SolidColorBrush(Color.Parse("#94A3B8")), VerticalAlignment = VerticalAlignment.Center });
         rewindBtn.Content = rwStack;
-        rewindBtn.Click += (s, e) => StormDsUiState.Instance.EngineService.PopRewind();
+        rewindBtn.Click += (s, e) =>
+        {
+            if (!StormDsUiState.Instance.RetroAchievementsService.IsFeatureAllowedInCurrentMode("rewind"))
+            {
+                StormDsUiState.Instance.NotifyStatus("Перемотка недоступна в Hardcore-режиме");
+                return;
+            }
+            if (RewindRequested != null) RewindRequested();
+            else StormDsUiState.Instance.EngineService.PopRewind();
+        };
         bottomRow.Children.Add(rewindBtn);
-        Grid.SetColumn(rewindBtn, 0);
 
         var exitBtn = new AuroraVolumetricButton
         {
@@ -213,6 +220,30 @@ public class EmulationPauseOverlay : Border
         Child = centerCard;
     }
 
+    private static Button CreateMiniSlotButton(string text, Color accent, Action onClick)
+    {
+        var btn = new Button
+        {
+            Height = 24,
+            Padding = new Thickness(4, 1),
+            Background = new SolidColorBrush(Color.FromArgb(45, accent.R, accent.G, accent.B)),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(120, accent.R, accent.G, accent.B)),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(5),
+            Cursor = new Cursor(StandardCursorType.Hand),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Content = new TextBlock { Text = text, FontSize = 9.5, FontWeight = FontWeight.Bold, Foreground = Brushes.White }
+        };
+        btn.Click += (s, e) =>
+        {
+            AuroraTactileFeedbackService.Instance.PlayClick();
+            onClick();
+        };
+        return btn;
+    }
+
     private static Border CreateActionTile(AuroraIconKind icon, string title, string sub, Action onClick)
     {
         var border = new Border
@@ -226,11 +257,7 @@ public class EmulationPauseOverlay : Border
             Cursor = new Cursor(StandardCursorType.Hand)
         };
 
-        var row = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("Auto,*")
-        };
-
+        var row = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
         row.Children.Add(new AuroraVectorIcon
         {
             Kind = icon,
@@ -251,7 +278,6 @@ public class EmulationPauseOverlay : Border
             AuroraTactileFeedbackService.Instance.PlayClick();
             onClick();
         };
-
         return border;
     }
 }

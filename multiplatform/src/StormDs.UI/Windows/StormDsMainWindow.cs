@@ -8,6 +8,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
 using Storm.AuroraFluid.Kit.Controls;
+using Storm.AuroraFluid.Kit.Platform;
 using Storm.AuroraFluid.Kit.Themes;
 using StormDs.Core.Localization;
 using StormDs.UI.Common;
@@ -58,12 +59,25 @@ public class StormDsMainWindow : Window
         UpdateThemeBackground();
         AuroraThemeManager.Instance.ThemeChanged += _ => UpdateThemeBackground();
 
-        _mainView = new StormDsMainView(this);
+        var rootShell = new Grid
+        {
+            RowDefinitions = new RowDefinitions("Auto,*")
+        };
+
+        var titleBar = new StormDs.UI.Views.TitleBar.CustomTitleBar(this);
+        rootShell.Children.Add(titleBar);
+        Grid.SetRow(titleBar, 0);
+
+        _mainView = new StormDsMainView(this, includeTitleBar: false);
         _scaledHost = new AuroraScaledLayoutControl { Child = _mainView };
-        Content = _scaledHost;
+        rootShell.Children.Add(_scaledHost);
+        Grid.SetRow(_scaledHost, 1);
+
+        Content = rootShell;
 
         StormDsUiState.Instance.UiScaleChanged += ApplyUiScale;
         StormDsUiState.Instance.FullscreenToggled += ToggleFullscreen;
+        StormDsUiState.Instance.FullscreenChanged += isFs => titleBar.IsVisible = !isFs;
 
         Opened += OnWindowOpened;
         Closing += OnWindowClosing;
@@ -72,6 +86,13 @@ public class StormDsMainWindow : Window
 
     private void OnWindowOpened(object? sender, EventArgs e)
     {
+        nint hwnd = TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+        if (hwnd != IntPtr.Zero)
+        {
+            AuroraWin32Interop.ApplyDwmDarkMode(hwnd, AuroraThemeManager.Instance.CurrentTheme.IsDark, enableMica: true);
+            AuroraWin32Interop.EnableElevatedDragDropBypass(hwnd);
+        }
+
         var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
         if (screen != null)
         {
@@ -187,5 +208,10 @@ public class StormDsMainWindow : Window
     {
         var theme = AuroraThemeManager.Instance.CurrentTheme;
         Background = theme.BackgroundBrush;
+        nint hwnd = TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+        if (hwnd != IntPtr.Zero)
+        {
+            AuroraWin32Interop.ApplyDwmDarkMode(hwnd, theme.IsDark, enableMica: true);
+        }
     }
 }

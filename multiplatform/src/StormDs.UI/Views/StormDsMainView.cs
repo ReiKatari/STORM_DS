@@ -4,12 +4,14 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using Storm.AuroraFluid.Kit.Controls;
 using Storm.AuroraFluid.Kit.Icons;
 using Storm.AuroraFluid.Kit.Platform;
@@ -24,6 +26,7 @@ using StormDs.UI.Views.Emulation;
 using StormDs.UI.Views.Inspector;
 using StormDs.UI.Views.Modals;
 using StormDs.UI.Views.Navigation;
+using StormDs.UI.Views.Sections;
 using StormDs.UI.Views.Settings;
 using StormDs.UI.Views.StatusBar;
 using StormDs.UI.Views.TitleBar;
@@ -32,18 +35,21 @@ namespace StormDs.UI.Views;
 
 /// <summary>
 /// Root view for Variant 1 (01 - Aurora Bento Command).
-/// Implements responsive layout (Landscape NavRail ↔ Portrait Bottom Dock),
+/// Implements responsive layout (Landscape NavRail <-> Portrait Bottom Dock),
 /// Custom TitleBar, Top Command & Menu Strip, Hero Bento Workspace,
 /// Fixed Right Glass Inspector (330px), Dual-Screen Emulation, and Everywhere Drag-and-Drop.
 /// </summary>
 public class StormDsMainView : Grid
 {
     private readonly Window? _hostWindow;
-    private readonly CustomTitleBar _titleBar;
+    private readonly CustomTitleBar? _titleBar;
     private readonly Grid _bodyHeaderGrid;
     private readonly NavRailView _navRail;
     private readonly NavDockView _navDock;
     private readonly BentoWorkspaceView _bentoWorkspace;
+    private readonly AchievementsView _achievementsView;
+    private readonly NetplayView _netplayView;
+    private readonly AiTranslatorView _aiTranslatorView;
     private readonly RomInspectorPane _inspectorPane;
     private readonly DualScreenSessionView _emulationView;
     private readonly SettingsView _settingsView;
@@ -53,26 +59,42 @@ public class StormDsMainView : Grid
     private readonly AuroraModalHost _modalHost;
     private readonly Grid _centerContentGrid;
 
-    public StormDsMainView(Window? hostWindow = null)
+    private Button? _fileMenuBtn;
+    private Button? _emuMenuBtn;
+    private Button? _toolsMenuBtn;
+    private Button? _configMenuBtn;
+    private Button? _nandMenuBtn;
+    private Button? _helpMenuBtn;
+    private TextBlock? _dsTitleText;
+    private TextBlock? _subTitleText;
+    private TextBlock? _stormTitleText;
+
+    public StormDsMainView(Window? hostWindow = null, bool includeTitleBar = true)
     {
         _hostWindow = hostWindow;
         ClipToBounds = true;
         Focusable = true;
 
-        // Overall Window Grid: TitleBar (Row 0), Body Header (Row 1), Main Workspace (Row 2), StatusBar (Row 3)
-        RowDefinitions = new RowDefinitions("Auto,Auto,*,Auto");
+        int rowOffset = includeTitleBar ? 1 : 0;
+        int totalRows = includeTitleBar ? 4 : 3;
+        RowDefinitions = includeTitleBar
+            ? new RowDefinitions("Auto,Auto,*,Auto")
+            : new RowDefinitions("Auto,*,Auto");
 
-        // 1. Desktop Custom TitleBar (Row 0)
-        _titleBar = new CustomTitleBar(_hostWindow);
-        Children.Add(_titleBar);
-        Grid.SetRow(_titleBar, 0);
+        // 1. Optional embedded Custom TitleBar (disabled on desktop where StormDsMainWindow hosts it unscaled)
+        if (includeTitleBar)
+        {
+            _titleBar = new CustomTitleBar(_hostWindow);
+            Children.Add(_titleBar);
+            Grid.SetRow(_titleBar, 0);
+        }
 
-        // 2. Top Command & Menu Strip + Body Header (Row 1)
+        // 2. Top Command & Menu Strip + Body Header
         _bodyHeaderGrid = BuildTopCommandAndHeader();
         Children.Add(_bodyHeaderGrid);
-        Grid.SetRow(_bodyHeaderGrid, 1);
+        Grid.SetRow(_bodyHeaderGrid, rowOffset);
 
-        // 3. Main Center Workspace (Row 2): Left NavRail (Col 0), Content (Col 1), Right Inspector (Col 2)
+        // 3. Main Center Workspace: Left NavRail (Col 0), Content (Col 1), Right Inspector (Col 2)
         var workspaceGrid = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto")
@@ -89,11 +111,19 @@ public class StormDsMainView : Grid
         _bentoWorkspace = new BentoWorkspaceView();
         _settingsView = new SettingsView { IsVisible = false };
         _nandManagerView = new DsiNandManagerView { IsVisible = false, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        _achievementsView = new AchievementsView { IsVisible = false };
+        _netplayView = new NetplayView { IsVisible = false };
+        _aiTranslatorView = new AiTranslatorView { IsVisible = false };
         _emulationView = new DualScreenSessionView { IsVisible = false };
+
+        _nandManagerView.CloseRequested += () => StormDsUiState.Instance.SetNavSection(NavSectionKind.Library);
 
         _centerContentGrid.Children.Add(_bentoWorkspace);
         _centerContentGrid.Children.Add(_settingsView);
         _centerContentGrid.Children.Add(_nandManagerView);
+        _centerContentGrid.Children.Add(_achievementsView);
+        _centerContentGrid.Children.Add(_netplayView);
+        _centerContentGrid.Children.Add(_aiTranslatorView);
         _centerContentGrid.Children.Add(_emulationView);
 
         workspaceGrid.Children.Add(_centerContentGrid);
@@ -108,27 +138,27 @@ public class StormDsMainView : Grid
         Grid.SetColumn(_inspectorPane, 2);
 
         Children.Add(workspaceGrid);
-        Grid.SetRow(workspaceGrid, 2);
+        Grid.SetRow(workspaceGrid, rowOffset + 1);
 
         // 4. Bottom Spatial Glass Dock (Floating, visible only on compact screens)
         _navDock = new NavDockView { IsVisible = false };
         Children.Add(_navDock);
-        Grid.SetRow(_navDock, 2);
+        Grid.SetRow(_navDock, rowOffset + 1);
 
-        // 5. Localized Bottom Status Bar (Row 3)
+        // 5. Localized Bottom Status Bar
         _statusBar = new StormStatusBar();
         Children.Add(_statusBar);
-        Grid.SetRow(_statusBar, 3);
+        Grid.SetRow(_statusBar, rowOffset + 2);
 
         // 6. Everywhere Drag-and-Drop Overlay
         _dropOverlay = new DropImportOverlay { IsVisible = false };
         Children.Add(_dropOverlay);
-        Grid.SetRowSpan(_dropOverlay, 4);
+        Grid.SetRowSpan(_dropOverlay, totalRows);
 
         // 7. Modal Host for ESC dismissal (Law 16)
         _modalHost = new AuroraModalHost { IsOpen = false };
         Children.Add(_modalHost);
-        Grid.SetRowSpan(_modalHost, 4);
+        Grid.SetRowSpan(_modalHost, totalRows);
 
         // Wire Everywhere Drag-and-Drop
         DragDrop.SetAllowDrop(this, true);
@@ -142,9 +172,19 @@ public class StormDsMainView : Grid
         StormDsUiState.Instance.EmulationStarted += () => SwitchToEmulation(true);
         StormDsUiState.Instance.EmulationStopped += () => SwitchToEmulation(false);
         StormDsUiState.Instance.FullscreenChanged += OnFullscreenChanged;
+        StormDsUiState.Instance.UpdateCheckRequested += manual => _ = CheckAndShowUpdateModalAsync(manual);
+        StormDsUiState.Instance.RomModalRequested += ShowRomModal;
+        StormDsLoc.LanguageChanged += _ => ApplyHeaderTextsAndTheme();
+        StormThemeBrushes.BindTheme(this, ApplyHeaderTextsAndTheme);
 
-        // Auto-scan default ROM directory in background
-        _ = StormDsUiState.Instance.LibraryService.ScanDirectoriesAsync();
+        // Auto-scan default + user ROM directories in background
+        _ = StormDsUiState.Instance.LibraryService.ScanDirectoriesAsync(StormDsUiState.Instance.AppConfig.RomDirectories);
+
+        // Non-blocking startup update check
+        if (StormDsUiState.Instance.AppConfig.AutoCheckUpdates)
+        {
+            DispatcherTimer.RunOnce(() => _ = CheckAndShowUpdateModalAsync(manual: false), TimeSpan.FromMilliseconds(1200));
+        }
     }
 
     private Grid BuildTopCommandAndHeader()
@@ -156,7 +196,7 @@ public class StormDsMainView : Grid
             Margin = new Thickness(0, 0, 0, 4)
         };
 
-        // Top Menu Bar: Файл, Эмуляция, Инструменты, Конфигурация, DSiWare NAND, Справка
+        // Top Menu Bar
         var menuStrip = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -164,12 +204,19 @@ public class StormDsMainView : Grid
             Margin = new Thickness(14, 2, 14, 2)
         };
 
-        menuStrip.Children.Add(CreateMenuButton("Файл", () => ShowFileMenu()));
-        menuStrip.Children.Add(CreateMenuButton("Эмуляция", () => ShowEmulationMenu()));
-        menuStrip.Children.Add(CreateMenuButton("Инструменты", () => ShowToolsMenu()));
-        menuStrip.Children.Add(CreateMenuButton("Конфигурация", () => StormDsUiState.Instance.SetNavSection(NavSectionKind.Settings)));
-        menuStrip.Children.Add(CreateMenuButton("DSiWare NAND", () => StormDsUiState.Instance.SetNavSection(NavSectionKind.DsiNand)));
-        menuStrip.Children.Add(CreateMenuButton("Справка", () => ShowHelpMenu()));
+        _fileMenuBtn = CreateMenuButton(StormDsLoc.T("MenuFile"), btn => ShowFileMenu(btn));
+        _emuMenuBtn = CreateMenuButton(StormDsLoc.T("MenuEmulation"), btn => ShowEmulationMenu(btn));
+        _toolsMenuBtn = CreateMenuButton(StormDsLoc.T("MenuTools"), btn => ShowToolsMenu(btn));
+        _configMenuBtn = CreateMenuButton(StormDsLoc.T("MenuSettings"), _ => StormDsUiState.Instance.SetNavSection(NavSectionKind.Settings));
+        _nandMenuBtn = CreateMenuButton("DSiWare NAND", _ => StormDsUiState.Instance.SetNavSection(NavSectionKind.DsiNand));
+        _helpMenuBtn = CreateMenuButton(StormDsLoc.T("MenuHelp"), btn => ShowHelpMenu(btn));
+
+        menuStrip.Children.Add(_fileMenuBtn);
+        menuStrip.Children.Add(_emuMenuBtn);
+        menuStrip.Children.Add(_toolsMenuBtn);
+        menuStrip.Children.Add(_configMenuBtn);
+        menuStrip.Children.Add(_nandMenuBtn);
+        menuStrip.Children.Add(_helpMenuBtn);
 
         root.Children.Add(menuStrip);
         Grid.SetRow(menuStrip, 0);
@@ -188,37 +235,37 @@ public class StormDsMainView : Grid
             VerticalAlignment = VerticalAlignment.Center
         };
 
-        var stormText = new TextBlock
+        _stormTitleText = new TextBlock
         {
             Text = "STORM",
             FontSize = 18,
             FontWeight = FontWeight.Black,
-            Foreground = new SolidColorBrush(Color.Parse("#38BDF8")),
+            Foreground = StormThemeBrushes.Accent,
             VerticalAlignment = VerticalAlignment.Center
         };
 
-        var dsText = new TextBlock
+        _dsTitleText = new TextBlock
         {
             Text = "DS",
             FontSize = 18,
             FontWeight = FontWeight.Black,
-            Foreground = new SolidColorBrush(Color.Parse("#F8FAFC")),
+            Foreground = StormThemeBrushes.PrimaryText,
             VerticalAlignment = VerticalAlignment.Center
         };
 
-        var subText = new TextBlock
+        _subTitleText = new TextBlock
         {
-            Text = "- Эмулятор Nintendo DS и DSi нового поколения",
+            Text = "- " + StormDsLoc.T("AppSubtitle"),
             FontSize = 12,
             FontWeight = FontWeight.Normal,
-            Foreground = new SolidColorBrush(Color.Parse("#94A3B8")),
+            Foreground = StormThemeBrushes.SecondaryText,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(4, 0, 0, 0)
         };
 
-        brandStack.Children.Add(stormText);
-        brandStack.Children.Add(dsText);
-        brandStack.Children.Add(subText);
+        brandStack.Children.Add(_stormTitleText);
+        brandStack.Children.Add(_dsTitleText);
+        brandStack.Children.Add(_subTitleText);
         headerBar.Children.Add(brandStack);
         Grid.SetColumn(brandStack, 0);
 
@@ -243,7 +290,7 @@ public class StormDsMainView : Grid
                 double hw = headerBar.Bounds.Width;
                 if (hw > 0)
                 {
-                    subText.IsVisible = hw >= 880;
+                    _subTitleText.IsVisible = hw >= 880;
                     searchBox.Width = hw >= 980 ? 320 : Math.Max(200, hw * 0.34);
                 }
             }
@@ -255,7 +302,33 @@ public class StormDsMainView : Grid
         return root;
     }
 
-    private Button CreateMenuButton(string text, Action onClick)
+    private void ApplyHeaderTextsAndTheme()
+    {
+        _bodyHeaderGrid.Background = StormThemeBrushes.ChromeSurface;
+        if (_stormTitleText != null) _stormTitleText.Foreground = StormThemeBrushes.Accent;
+        if (_dsTitleText != null) _dsTitleText.Foreground = StormThemeBrushes.PrimaryText;
+        if (_subTitleText != null)
+        {
+            _subTitleText.Foreground = StormThemeBrushes.SecondaryText;
+            _subTitleText.Text = "- " + StormDsLoc.T("AppSubtitle");
+        }
+        SetMenuButtonText(_fileMenuBtn, StormDsLoc.T("MenuFile"));
+        SetMenuButtonText(_emuMenuBtn, StormDsLoc.T("MenuEmulation"));
+        SetMenuButtonText(_toolsMenuBtn, StormDsLoc.T("MenuTools"));
+        SetMenuButtonText(_configMenuBtn, StormDsLoc.T("MenuSettings"));
+        SetMenuButtonText(_helpMenuBtn, StormDsLoc.T("MenuHelp"));
+    }
+
+    private static void SetMenuButtonText(Button? btn, string label)
+    {
+        if (btn?.Content is TextBlock tb)
+        {
+            tb.Text = label;
+            tb.Foreground = StormThemeBrushes.BodyText;
+        }
+    }
+
+    private Button CreateMenuButton(string text, Action<Button> onClick)
     {
         var btn = new Button
         {
@@ -271,46 +344,251 @@ public class StormDsMainView : Grid
             Text = text,
             FontSize = 11.5,
             FontWeight = FontWeight.Medium,
-            Foreground = new SolidColorBrush(Color.Parse("#CBD5E1"))
+            Foreground = StormThemeBrushes.BodyText
         };
         btn.Content = tb;
 
-        btn.PointerEntered += (s, e) => btn.Background = new SolidColorBrush(Color.FromArgb(40, 255, 255, 255));
+        btn.PointerEntered += (s, e) => btn.Background = StormThemeBrushes.HoverSurface;
         btn.PointerExited += (s, e) => btn.Background = Brushes.Transparent;
         btn.Click += (s, e) =>
         {
             AuroraTactileFeedbackService.Instance.PlayClick();
-            onClick();
+            onClick(btn);
         };
 
         return btn;
     }
 
-    private void ShowFileMenu()
+    private static MenuItem CreateMenuItem(string header, Action action, bool enabled = true)
     {
-        _ = StormDsUiState.Instance.LibraryService.ScanDirectoriesAsync();
-    }
-
-    private void ShowEmulationMenu()
-    {
-        if (StormDsUiState.Instance.IsEmulationActive)
+        var item = new MenuItem { Header = header, IsEnabled = enabled };
+        item.Click += (_, _) =>
         {
-            StormDsUiState.Instance.TogglePause();
-        }
-        else
+            AuroraTactileFeedbackService.Instance.PlayClick();
+            action();
+        };
+        return item;
+    }
+
+    private void ShowFileMenu(Button anchor)
+    {
+        var flyout = new MenuFlyout();
+        flyout.Items.Add(CreateMenuItem(StormDsLoc.T("MenuOpenRom"), () => _ = PickAndOpenRomAsync()));
+        flyout.Items.Add(CreateMenuItem(StormDsLoc.T("MenuScanFolder"), () => _ = PickAndScanFolderAsync()));
+        flyout.Items.Add(CreateMenuItem(StormDsLoc.T("MenuRescanLibrary"), () => _ = StormDsUiState.Instance.LibraryService.ScanDirectoriesAsync()));
+        flyout.Items.Add(new Separator());
+        flyout.Items.Add(CreateMenuItem(StormDsLoc.T("MenuExit"), () => AuroraTrayManager.Instance.RequestExit()));
+        flyout.ShowAt(anchor, true);
+    }
+
+    private void ShowEmulationMenu(Button anchor)
+    {
+        bool active = StormDsUiState.Instance.IsEmulationActive;
+        bool paused = StormDsUiState.Instance.IsPaused;
+        var flyout = new MenuFlyout();
+        flyout.Items.Add(CreateMenuItem(
+            active ? (paused ? StormDsLoc.T("MenuResume") : StormDsLoc.T("MenuPause")) : StormDsLoc.T("LaunchGame"),
+            () =>
+            {
+                if (active) StormDsUiState.Instance.TogglePause();
+                else StormDsUiState.Instance.StartEmulation();
+            }));
+        flyout.Items.Add(CreateMenuItem(StormDsLoc.T("LaunchBios"), () => StormDsUiState.Instance.StartEmulation(bootBios: true)));
+        flyout.Items.Add(new Separator());
+        flyout.Items.Add(CreateMenuItem(StormDsLoc.T("MenuReset"), () => StormDsUiState.Instance.EngineService.Reset(), active));
+        flyout.Items.Add(CreateMenuItem(StormDsLoc.T("MenuQuickSave"), () => StormDsUiState.Instance.EngineService.SaveState(0), active));
+        flyout.Items.Add(CreateMenuItem(StormDsLoc.T("MenuQuickLoad"), () =>
         {
-            StormDsUiState.Instance.StartEmulation();
+            if (StormDsUiState.Instance.RetroAchievementsService.IsFeatureAllowedInCurrentMode("loadstate"))
+                StormDsUiState.Instance.EngineService.LoadState(0);
+        }, active));
+        flyout.ShowAt(anchor, true);
+    }
+
+    private void ShowToolsMenu(Button anchor)
+    {
+        var flyout = new MenuFlyout();
+        flyout.Items.Add(CreateMenuItem(StormDsLoc.T("MenuDsiNand"), () => StormDsUiState.Instance.SetNavSection(NavSectionKind.DsiNand)));
+        flyout.Items.Add(CreateMenuItem(StormDsLoc.T("MenuAchievements"), () => StormDsUiState.Instance.SetNavSection(NavSectionKind.Achievements)));
+        flyout.Items.Add(CreateMenuItem(StormDsLoc.T("MenuNetplay"), () => StormDsUiState.Instance.SetNavSection(NavSectionKind.Netplay)));
+        flyout.Items.Add(CreateMenuItem(StormDsLoc.T("MenuAiTranslator"), () => StormDsUiState.Instance.SetNavSection(NavSectionKind.AiTranslator)));
+        flyout.Items.Add(new Separator());
+        flyout.Items.Add(CreateMenuItem(StormDsLoc.T("MenuCommandPalette"), ShowCommandPalette));
+        flyout.ShowAt(anchor, true);
+    }
+
+    private void ShowHelpMenu(Button anchor)
+    {
+        var flyout = new MenuFlyout();
+        flyout.Items.Add(CreateMenuItem(StormDsLoc.T("MenuCheckUpdates"), () => StormDsUiState.Instance.RequestUpdateCheck(true)));
+        flyout.Items.Add(CreateMenuItem(StormDsLoc.T("MenuAbout"), ShowAboutModal));
+        flyout.ShowAt(anchor, true);
+    }
+
+    private void ShowAboutModal()
+    {
+        var card = new AuroraGlassCard
+        {
+            Width = 440,
+            Padding = new Thickness(22),
+            SpotlightEnabled = true
+        };
+        var sp = new StackPanel { Spacing = 10 };
+        sp.Children.Add(new TextBlock
+        {
+            Text = $"STORM DS {StormDsLoc.AppVersion}",
+            FontSize = 18,
+            FontWeight = FontWeight.Black,
+            Foreground = StormThemeBrushes.Accent
+        });
+        sp.Children.Add(new TextBlock
+        {
+            Text = StormDsLoc.T("AppSubtitle"),
+            FontSize = 12.5,
+            Foreground = StormThemeBrushes.PrimaryText,
+            TextWrapping = TextWrapping.Wrap
+        });
+        sp.Children.Add(new TextBlock
+        {
+            Text = $"GPU: {StormDsUiState.Instance.ProbedGpuName} ({StormDsUiState.Instance.VulkanTierBadge})",
+            FontSize = 11.5,
+            Foreground = StormThemeBrushes.SecondaryText,
+            TextWrapping = TextWrapping.Wrap
+        });
+        var closeBtn = new AuroraVolumetricButton { Height = 32, Width = 140, HorizontalAlignment = HorizontalAlignment.Right };
+        closeBtn.Content = new TextBlock { Text = StormDsLoc.T("ActionClose"), Foreground = Brushes.White, FontWeight = FontWeight.SemiBold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        closeBtn.Click += (_, _) => _modalHost.Dismiss();
+        sp.Children.Add(closeBtn);
+        card.Content = sp;
+        _modalHost.Content = card;
+        _modalHost.IsOpen = true;
+    }
+
+    private async Task PickAndOpenRomAsync()
+    {
+        var top = TopLevel.GetTopLevel(this);
+        if (top?.StorageProvider == null) return;
+        var files = await top.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = StormDsLoc.T("MenuOpenRom"),
+            AllowMultiple = false,
+            FileTypeFilter = new[]
+            {
+                new FilePickerFileType("Nintendo DS ROMs") { Patterns = new[] { "*.nds", "*.dsi", "*.srl", "*.ids", "*.zip" } },
+                FilePickerFileTypes.All
+            }
+        });
+        string? localPath = files.Count > 0 ? files[0].TryGetLocalPath() : null;
+        if (!string.IsNullOrWhiteSpace(localPath) && File.Exists(localPath))
+        {
+            StormDsUiState.Instance.StartRomEmulationFromPath(localPath);
+            AuroraTactileFeedbackService.Instance.PlayLaunchChord();
         }
     }
 
-    private void ShowToolsMenu()
+    private async Task PickAndScanFolderAsync()
     {
-        StormDsUiState.Instance.SetNavSection(NavSectionKind.DsiNand);
+        var top = TopLevel.GetTopLevel(this);
+        if (top?.StorageProvider == null) return;
+        var folders = await top.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = StormDsLoc.T("MenuScanFolder"),
+            AllowMultiple = false
+        });
+        string? folderPath = folders.Count > 0 ? folders[0].TryGetLocalPath() : null;
+        if (!string.IsNullOrWhiteSpace(folderPath) && Directory.Exists(folderPath))
+        {
+            if (!StormDsUiState.Instance.AppConfig.RomDirectories.Contains(folderPath))
+            {
+                StormDsUiState.Instance.AppConfig.RomDirectories.Add(folderPath);
+                StormDsUiState.Instance.SaveConfig();
+            }
+            await StormDsUiState.Instance.LibraryService.ScanDirectoriesAsync(new[] { folderPath });
+            StormDsUiState.Instance.NotifyStatus(folderPath);
+        }
     }
 
-    private void ShowHelpMenu()
+    private async Task CheckAndShowUpdateModalAsync(bool manual)
     {
-        StormDsUiState.Instance.SetNavSection(NavSectionKind.Settings);
+        StormUpdateModal? modal = null;
+        if (manual)
+        {
+            modal = new StormUpdateModal(
+                StormUpdateModal.UpdateModalMode.Checking,
+                onRetry: () => _ = CheckAndShowUpdateModalAsync(true));
+            modal.CloseRequested += () => _modalHost.Dismiss();
+            _modalHost.Content = modal;
+            _modalHost.IsOpen = true;
+        }
+
+        try
+        {
+            var curVer = AuroraDualMirrorUpdater.TryParseSemanticVersion(StormDsLoc.AppVersion, out var parsed)
+                ? parsed
+                : new Version(8, 9, 0);
+
+            var updater = new AuroraDualMirrorUpdater();
+            var res = await updater.CheckForUpdateAsync("ReiKatari", "STORM_DS", curVer);
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (res.IsUpdateAvailable)
+                {
+                    string cleanNew = res.LatestVersion.ToString().TrimStart('v', 'V');
+                    if (!manual && string.Equals(StormDsUiState.Instance.AppConfig.SkippedUpdateVersion, cleanNew, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return;
+                    }
+
+                    AuroraTactileFeedbackService.Instance.PlayAchievementChime();
+                    if (modal == null)
+                    {
+                        modal = new StormUpdateModal(
+                            StormUpdateModal.UpdateModalMode.UpdateAvailable,
+                            res,
+                            onRetry: () => _ = CheckAndShowUpdateModalAsync(true));
+                        modal.CloseRequested += () => _modalHost.Dismiss();
+                        _modalHost.Content = modal;
+                        _modalHost.IsOpen = true;
+                    }
+                    else
+                    {
+                        modal.UpdateState(StormUpdateModal.UpdateModalMode.UpdateAvailable, res);
+                    }
+                }
+                else if (manual && modal != null)
+                {
+                    var mode = res.CheckSucceeded
+                        ? StormUpdateModal.UpdateModalMode.UpToDate
+                        : StormUpdateModal.UpdateModalMode.Error;
+                    modal.UpdateState(mode, res);
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            if (manual && modal != null)
+            {
+                var curVer = AuroraDualMirrorUpdater.TryParseSemanticVersion(StormDsLoc.AppVersion, out var parsed)
+                    ? parsed
+                    : new Version(8, 9, 0);
+                var errRes = new AuroraUpdateCheckResult(
+                    IsUpdateAvailable: false,
+                    CurrentVersion: curVer,
+                    LatestVersion: curVer,
+                    DownloadUrl: string.Empty,
+                    Changelog: string.Empty,
+                    ExpectedSha256: null,
+                    SourceMirror: "None",
+                    CheckSucceeded: false,
+                    ErrorMessage: ex.Message);
+
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    modal.UpdateState(StormUpdateModal.UpdateModalMode.Error, errRes);
+                });
+            }
+        }
     }
 
     private void ShowCommandPalette()
@@ -336,6 +614,14 @@ public class StormDsMainView : Grid
         _bentoWorkspace.IsVisible = section is NavSectionKind.Library or NavSectionKind.Favorites or NavSectionKind.Recent;
         _settingsView.IsVisible = section == NavSectionKind.Settings;
         _nandManagerView.IsVisible = section == NavSectionKind.DsiNand;
+        _achievementsView.IsVisible = section == NavSectionKind.Achievements;
+        _netplayView.IsVisible = section == NavSectionKind.Netplay;
+        _aiTranslatorView.IsVisible = section == NavSectionKind.AiTranslator;
+
+        if (_nandManagerView.IsVisible) _nandManagerView.RefreshNandList();
+        if (_achievementsView.IsVisible) _achievementsView.RefreshData();
+        if (_netplayView.IsVisible) _netplayView.RefreshData();
+        if (_aiTranslatorView.IsVisible) _aiTranslatorView.RefreshConfig();
 
         if (section == NavSectionKind.Favorites)
         {
@@ -349,11 +635,15 @@ public class StormDsMainView : Grid
 
     private void SwitchToEmulation(bool active)
     {
+        var sec = StormDsUiState.Instance.ActiveNavSection;
         _emulationView.IsVisible = active;
         _bodyHeaderGrid.IsVisible = !active;
-        _bentoWorkspace.IsVisible = !active && StormDsUiState.Instance.ActiveNavSection is NavSectionKind.Library or NavSectionKind.Favorites or NavSectionKind.Recent;
-        _settingsView.IsVisible = !active && StormDsUiState.Instance.ActiveNavSection == NavSectionKind.Settings;
-        _nandManagerView.IsVisible = !active && StormDsUiState.Instance.ActiveNavSection == NavSectionKind.DsiNand;
+        _bentoWorkspace.IsVisible = !active && sec is NavSectionKind.Library or NavSectionKind.Favorites or NavSectionKind.Recent;
+        _settingsView.IsVisible = !active && sec == NavSectionKind.Settings;
+        _nandManagerView.IsVisible = !active && sec == NavSectionKind.DsiNand;
+        _achievementsView.IsVisible = !active && sec == NavSectionKind.Achievements;
+        _netplayView.IsVisible = !active && sec == NavSectionKind.Netplay;
+        _aiTranslatorView.IsVisible = !active && sec == NavSectionKind.AiTranslator;
         UpdateResponsiveChrome();
 
         if (active)
@@ -364,7 +654,7 @@ public class StormDsMainView : Grid
 
     private void OnFullscreenChanged(bool isFullscreen)
     {
-        _titleBar.IsVisible = !isFullscreen;
+        if (_titleBar != null) _titleBar.IsVisible = !isFullscreen;
         _statusBar.IsVisible = !isFullscreen;
         if (!isFullscreen)
         {
@@ -409,7 +699,14 @@ public class StormDsMainView : Grid
         // ESC -> dismiss modal (Law 16)
         if (e.Key == Key.Escape && _modalHost.IsOpen)
         {
-            _modalHost.Dismiss();
+            if (_modalHost.Content is StormUpdateModal updModal)
+            {
+                updModal.RequestSafeClose();
+            }
+            else
+            {
+                _modalHost.Dismiss();
+            }
             e.Handled = true;
             return;
         }
@@ -444,15 +741,10 @@ public class StormDsMainView : Grid
             }
             else if (File.Exists(localPath))
             {
-                // Dropped a single ROM or archive
-                var rec = NdsCartridgeParser.ParseFile(localPath, out byte[]? iconBgra);
-                if (rec != null)
-                {
-                    StormDsUiState.Instance.SelectRom(rec);
-                    StormDsUiState.Instance.StartEmulation(rec);
-                    AuroraTactileFeedbackService.Instance.PlayLaunchChord();
-                    break;
-                }
+                // Dropped a single ROM or .zip archive
+                StormDsUiState.Instance.StartRomEmulationFromPath(localPath);
+                AuroraTactileFeedbackService.Instance.PlayLaunchChord();
+                break;
             }
         }
     }

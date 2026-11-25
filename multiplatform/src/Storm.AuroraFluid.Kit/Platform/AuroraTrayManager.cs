@@ -46,35 +46,38 @@ public sealed class AuroraTrayManager
                 ShowAndActivate(onShowRequested);
             };
 
-            var menu = new NativeMenu();
-
-            // 1. Top Info Header (App Title & Version, zero icons, zero emojis)
-            var infoItem = new NativeMenuItem($"{appTitle} {appVersion}")
+            if (trayIcon.Menu == null || trayIcon.Menu.Items.Count == 0)
             {
-                IsEnabled = false
-            };
-            menu.Items.Add(infoItem);
-            menu.Items.Add(new NativeMenuItemSeparator());
+                var menu = new NativeMenu();
 
-            // 2. Open / Restore Item
-            var openItem = new NativeMenuItem("Открыть главное окно");
-            openItem.Click += (sender, e) =>
-            {
-                ShowAndActivate(onShowRequested);
-            };
-            menu.Items.Add(openItem);
+                // 1. Top Info Header (App Title & Version, zero icons, zero emojis)
+                var infoItem = new NativeMenuItem($"{appTitle} {appVersion}")
+                {
+                    IsEnabled = false
+                };
+                menu.Items.Add(infoItem);
+                menu.Items.Add(new NativeMenuItemSeparator());
 
-            menu.Items.Add(new NativeMenuItemSeparator());
+                // 2. Open / Restore Item
+                var openItem = new NativeMenuItem("Открыть главное окно");
+                openItem.Click += (sender, e) =>
+                {
+                    ShowAndActivate(onShowRequested);
+                };
+                menu.Items.Add(openItem);
 
-            // 3. Exit Item (The ONLY way to exit per Law 1)
-            var exitItem = new NativeMenuItem("Выход");
-            exitItem.Click += (sender, e) =>
-            {
-                RequestExit();
-            };
-            menu.Items.Add(exitItem);
+                menu.Items.Add(new NativeMenuItemSeparator());
 
-            trayIcon.Menu = menu;
+                // 3. Exit Item (The ONLY way to exit per Law 1)
+                var exitItem = new NativeMenuItem("Выход");
+                exitItem.Click += (sender, e) =>
+                {
+                    RequestExit();
+                };
+                menu.Items.Add(exitItem);
+
+                trayIcon.Menu = menu;
+            }
         }
     }
 

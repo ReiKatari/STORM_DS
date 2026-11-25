@@ -1,12 +1,17 @@
 #include "storm_ds_core_abi.h"
+#include "storm_ds_internal.h"
 #include "VulkanCompatProbe.h"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -20,6 +25,9 @@
 #include "FreeBIOS.h"
 #include "CRC32.h"
 #include "GPU3D_Soft.h"
+#include "GPU3D_Vulkan.h"
+#include "VulkanContext.h"
+#include "VulkanDispatch.h"
 #include "DSi_NAND.h"
 
 namespace
@@ -60,7 +68,14 @@ struct StormDsSession
     StormDsConfig config {};
     std::unique_ptr<melonDS::NDS> nds;
     bool is_dsi = false;
+    bool vulkan_context_acquired = false;
+    int32_t active_backend = 3;
+    melonDS::VulkanRenderer3D* vk_renderer = nullptr;
     uint32_t frame_counter = 0;
+
+    std::string sram_path;
+    std::string gba_sram_path;
+    bool sram_dirty = false;
 
     std::vector<std::vector<uint8_t>> rewind_buffer;
     size_t rewind_max_states = 60;
@@ -80,7 +95,162 @@ struct StormDsSession
     uint32_t pedometer_steps = 0;
 
     int32_t mic_mode = 0;
+    std::mutex mic_mtx;
+    std::vector<int16_t> mic_pcm_queue;
+    uint32_t mic_noise_seed = 0x13579BDFu;
+    uint32_t mic_phase = 0;
 };
+
+template <size_t ExpectedSize>
+std::unique_ptr<std::array<melonDS::u8, ExpectedSize>> TryLoadBiosImage(const char* path)
+{
+    if (!path || path[0] == '\0') return nullptr;
+    auto* f = melonDS::Platform::OpenFile(path, melonDS::Platform::FileMode::Read);
+    if (!f) return nullptr;
+    auto len = melonDS::Platform::FileLength(f);
+    if (len < ExpectedSize)
+    {
+        melonDS::Platform::CloseFile(f);
+        return nullptr;
+    }
+    auto img = std::make_unique<std::array<melonDS::u8, ExpectedSize>>();
+    melonDS::u64 read = melonDS::Platform::FileRead(img->data(), 1, ExpectedSize, f);
+    melonDS::Platform::CloseFile(f);
+    if (read != ExpectedSize) return nullptr;
+    return img;
+}
+
+bool WriteBytesAtomically(const std::string& path, const uint8_t* data, size_t len)
+{
+    if (path.empty() || !data || len == 0) return false;
+    try
+    {
+        std::filesystem::path dstPath = std::filesystem::u8path(path);
+        if (dstPath.has_parent_path())
+        {
+            std::filesystem::create_directories(dstPath.parent_path());
+        }
+        std::string tmpPath = path + ".tmp";
+        auto* f = melonDS::Platform::OpenFile(tmpPath, melonDS::Platform::FileMode::Write);
+        if (!f) return false;
+        melonDS::u64 written = melonDS::Platform::FileWrite(data, 1, len, f);
+        melonDS::Platform::FileFlush(f);
+        melonDS::Platform::CloseFile(f);
+        if (written != len) return false;
+
+        std::error_code ec;
+        std::filesystem::path tmpFsPath = std::filesystem::u8path(tmpPath);
+        std::filesystem::rename(tmpFsPath, dstPath, ec);
+        if (ec)
+        {
+            std::filesystem::copy_file(tmpFsPath, dstPath, std::filesystem::copy_options::overwrite_existing, ec);
+            std::filesystem::remove(tmpFsPath, ec);
+        }
+        return !ec;
+    }
+    catch (...)
+    {
+        return false;
+    }
+}
+
+}
+
+namespace StormDS::Internal
+{
+
+void OnWriteNDSSave(void* userdata, const uint8_t* savedata, uint32_t savelen, uint32_t writeoffset, uint32_t writelen)
+{
+    (void)writeoffset;
+    (void)writelen;
+    auto* s = static_cast<StormDsSession*>(userdata);
+    if (!s || !savedata || savelen == 0) return;
+    s->sram_dirty = true;
+    if (!s->sram_path.empty())
+    {
+        if (WriteBytesAtomically(s->sram_path, savedata, savelen))
+        {
+            s->sram_dirty = false;
+        }
+    }
+}
+
+void OnWriteGBASave(void* userdata, const uint8_t* savedata, uint32_t savelen, uint32_t writeoffset, uint32_t writelen)
+{
+    (void)writeoffset;
+    (void)writelen;
+    auto* s = static_cast<StormDsSession*>(userdata);
+    if (!s || !savedata || savelen == 0 || s->gba_sram_path.empty()) return;
+    WriteBytesAtomically(s->gba_sram_path, savedata, savelen);
+}
+
+int OnMicReadInput(void* userdata, int16_t* data, int maxlength)
+{
+    auto* s = static_cast<StormDsSession*>(userdata);
+    if (!s || !data || maxlength <= 0) return 0;
+
+    {
+        std::lock_guard<std::mutex> lock(s->mic_mtx);
+        if (!s->mic_pcm_queue.empty())
+        {
+            int toCopy = std::min<int>(maxlength, (int)s->mic_pcm_queue.size());
+            std::memcpy(data, s->mic_pcm_queue.data(), (size_t)toCopy * sizeof(int16_t));
+            s->mic_pcm_queue.erase(s->mic_pcm_queue.begin(), s->mic_pcm_queue.begin() + toCopy);
+            return toCopy;
+        }
+    }
+
+    if (s->mic_mode == 1)
+    {
+        // Simulated Blow: airy low-mid turbulence + soft sub-harmonic blow envelope
+        for (int i = 0; i < maxlength; ++i)
+        {
+            s->mic_noise_seed = s->mic_noise_seed * 1664525u + 1013904223u;
+            int16_t noise = (int16_t)((s->mic_noise_seed >> 16) & 0xFFFF);
+            float breath = std::sinf((float)(s->mic_phase++) * 0.14f) * 9000.0f;
+            int32_t mixed = (int32_t)(noise / 2) + (int32_t)breath;
+            data[i] = (int16_t)std::clamp(mixed, -32767, 32767);
+        }
+        return maxlength;
+    }
+
+    if (s->mic_mode == 2)
+    {
+        // White Noise
+        for (int i = 0; i < maxlength; ++i)
+        {
+            s->mic_noise_seed = s->mic_noise_seed * 1664525u + 1013904223u;
+            data[i] = (int16_t)(((s->mic_noise_seed >> 16) & 0xFFFF) / 3);
+        }
+        return maxlength;
+    }
+
+    std::memset(data, 0, (size_t)maxlength * sizeof(int16_t));
+    return 0;
+}
+
+bool OnAddonKeyDown(void* userdata, int keyType)
+{
+    auto* s = static_cast<StormDsSession*>(userdata);
+    if (!s || keyType < 0 || keyType >= 4) return false;
+    return (s->guitar_mask & (1u << keyType)) != 0;
+}
+
+float OnAddonMotionQuery(void* userdata, int motionQueryType)
+{
+    auto* s = static_cast<StormDsSession*>(userdata);
+    if (!s) return 0.0f;
+    switch (motionQueryType)
+    {
+        case melonDS::Platform::MotionAccelerationX: return s->gyro_x;
+        case melonDS::Platform::MotionAccelerationY: return s->gyro_y;
+        case melonDS::Platform::MotionAccelerationZ: return s->gyro_z;
+        case melonDS::Platform::MotionRotationX: return s->gyro_x;
+        case melonDS::Platform::MotionRotationY: return s->gyro_y;
+        case melonDS::Platform::MotionRotationZ: return s->gyro_z;
+        default: return 0.0f;
+    }
+}
 
 }
 
@@ -106,11 +276,50 @@ STORM_API void* storm_ds_create(const StormDsConfig* cfg)
     melonDS::NDSArgs args;
     args.ARM9BIOS = std::make_unique<melonDS::ARM9BIOSImage>(melonDS::bios_arm9_bin);
     args.ARM7BIOS = std::make_unique<melonDS::ARM7BIOSImage>(melonDS::bios_arm7_bin);
-    args.Firmware = melonDS::Firmware(0);
-    args.Renderer3D = std::make_unique<melonDS::SoftRenderer>();
+    args.Firmware = melonDS::Firmware(cfg && cfg->console_type == 1 ? 1 : 0);
+    args.OutputSampleRate = 48000.0;
 
-    if (cfg && cfg->audio_interpolation > 0) {
-        args.Interpolation = (melonDS::AudioInterpolation)cfg->audio_interpolation;
+    if (cfg) {
+        if (auto ext9 = TryLoadBiosImage<melonDS::ARM9BIOSSize>(cfg->bios9_path)) {
+            args.ARM9BIOS = std::move(ext9);
+        }
+        if (auto ext7 = TryLoadBiosImage<melonDS::ARM7BIOSSize>(cfg->bios7_path)) {
+            args.ARM7BIOS = std::move(ext7);
+        }
+        if (cfg->firmware_path[0] != '\0') {
+            if (auto* fwFile = melonDS::Platform::OpenFile(cfg->firmware_path, melonDS::Platform::FileMode::Read)) {
+                melonDS::Firmware extFw(fwFile);
+                melonDS::Platform::CloseFile(fwFile);
+                if (extFw.Buffer() != nullptr) {
+                    args.Firmware = std::move(extFw);
+                }
+            }
+        }
+        if (cfg->jit_enable == 0) {
+            args.JIT = std::nullopt;
+        } else {
+            args.JIT = melonDS::JITArgs();
+        }
+        if (cfg->audio_interpolation >= 0 && cfg->audio_interpolation <= 4) {
+            args.Interpolation = (melonDS::AudioInterpolation)cfg->audio_interpolation;
+        }
+    }
+
+    int32_t requestedBackend = cfg ? cfg->renderer_backend : 0;
+    if (requestedBackend == 0 || requestedBackend == 1) {
+        if (melonDS::VulkanDispatch::Initialize() && melonDS::VulkanContext::Get().Acquire()) {
+            s->vulkan_context_acquired = true;
+            auto vk = melonDS::VulkanRenderer3D::New();
+            if (vk) {
+                s->vk_renderer = vk.get();
+                args.Renderer3D = std::move(vk);
+                s->active_backend = 1;
+            }
+        }
+    }
+    if (!args.Renderer3D) {
+        args.Renderer3D = std::make_unique<melonDS::SoftRenderer>();
+        s->active_backend = 3;
     }
 
     if (cfg && cfg->console_type == 1 && cfg->dsi_nand_path[0] != '\0') {
@@ -119,10 +328,14 @@ STORM_API void* storm_ds_create(const StormDsConfig* cfg)
             melonDS::DSi_NAND::NANDImage nand(nand_file, nullptr);
             if (nand) {
                 s->is_dsi = true;
+                auto dsi9 = TryLoadBiosImage<melonDS::DSiBIOSSize>(cfg->dsi_bios9_path);
+                auto dsi7 = TryLoadBiosImage<melonDS::DSiBIOSSize>(cfg->dsi_bios7_path);
+                if (!dsi9) dsi9 = std::make_unique<melonDS::DSiBIOSImage>(melonDS::BrokenBIOS<melonDS::DSiBIOSSize>);
+                if (!dsi7) dsi7 = std::make_unique<melonDS::DSiBIOSImage>(melonDS::BrokenBIOS<melonDS::DSiBIOSSize>);
                 melonDS::DSiArgs dsiArgs {
                     std::move(args),
-                    std::make_unique<melonDS::DSiBIOSImage>(melonDS::BrokenBIOS<melonDS::DSiBIOSSize>),
-                    std::make_unique<melonDS::DSiBIOSImage>(melonDS::BrokenBIOS<melonDS::DSiBIOSSize>),
+                    std::move(dsi9),
+                    std::move(dsi7),
                     std::move(nand),
                     std::nullopt,
                     false,
@@ -138,6 +351,11 @@ STORM_API void* storm_ds_create(const StormDsConfig* cfg)
         s->nds = std::make_unique<melonDS::NDS>(std::move(args), s);
     }
 
+    if (s->vk_renderer && cfg) {
+        int scale = std::clamp(cfg->upscale_factor, 1, 8);
+        s->vk_renderer->SetRenderSettings(true, true, scale, false, 0.0f, 0.0f, false, false, false, s->nds->GPU);
+    }
+
     if (cfg && cfg->arm9_overclock > 1) {
         s->nds->SetARM9OverclockMultiplier(cfg->arm9_overclock);
     }
@@ -149,6 +367,19 @@ STORM_API void storm_ds_destroy(void* handle)
 {
     auto* s = (StormDsSession*)handle;
     if (!s) return;
+    if (s->nds && s->sram_dirty && !s->sram_path.empty()) {
+        const uint8_t* saveBuf = s->nds->GetNDSSave();
+        uint32_t saveLen = s->nds->GetNDSSaveLength();
+        if (saveBuf && saveLen > 0) {
+            WriteBytesAtomically(s->sram_path, saveBuf, saveLen);
+        }
+    }
+    s->vk_renderer = nullptr;
+    s->nds.reset();
+    if (s->vulkan_context_acquired) {
+        melonDS::VulkanContext::Get().Release();
+        s->vulkan_context_acquired = false;
+    }
     delete s;
 }
 
@@ -157,8 +388,18 @@ STORM_API int32_t storm_ds_update_config(void* handle, const StormDsConfig* cfg)
     auto* s = (StormDsSession*)handle;
     if (!s || !cfg) return 0;
     s->config = *cfg;
-    if (s->nds && cfg->arm9_overclock > 0) {
-        s->nds->SetARM9OverclockMultiplier(cfg->arm9_overclock);
+    if (s->nds) {
+        if (cfg->arm9_overclock > 0) {
+            s->nds->SetARM9OverclockMultiplier(cfg->arm9_overclock);
+        }
+        if (cfg->audio_interpolation >= 0 && cfg->audio_interpolation <= 4) {
+            s->nds->SPU.SetInterpolation((melonDS::AudioInterpolation)cfg->audio_interpolation);
+        }
+        s->nds->SetJITArgs(cfg->jit_enable != 0 ? std::optional<melonDS::JITArgs>(melonDS::JITArgs()) : std::nullopt);
+        if (s->vk_renderer) {
+            int scale = std::clamp(cfg->upscale_factor, 1, 8);
+            s->vk_renderer->SetRenderSettings(true, true, scale, false, 0.0f, 0.0f, false, false, false, s->nds->GPU);
+        }
     }
     return 1;
 }
@@ -238,20 +479,19 @@ STORM_API int32_t storm_ds_load_rom(void* handle, const uint8_t* data, size_t le
     if (!cart) return 0;
 
     s->nds->SetNDSCart(std::move(cart));
+    s->sram_path = (sram_path && sram_path[0] != '\0') ? sram_path : "";
+    s->sram_dirty = false;
 
-    if (sram_path) {
-        FILE* sf = std::fopen(sram_path, "rb");
-        if (sf) {
-            std::fseek(sf, 0, SEEK_END);
-            long slen = std::ftell(sf);
-            std::fseek(sf, 0, SEEK_SET);
-            if (slen > 0) {
+    if (!s->sram_path.empty()) {
+        if (auto* sf = melonDS::Platform::OpenFile(s->sram_path, melonDS::Platform::FileMode::Read)) {
+            melonDS::u64 slen = melonDS::Platform::FileLength(sf);
+            if (slen > 0 && slen <= 16u * 1024u * 1024u) {
                 std::vector<uint8_t> sdata((size_t)slen);
-                if (std::fread(sdata.data(), 1, sdata.size(), sf) == sdata.size()) {
+                if (melonDS::Platform::FileRead(sdata.data(), 1, (melonDS::u64)sdata.size(), sf) == (melonDS::u64)sdata.size()) {
                     s->nds->SetNDSSave(sdata.data(), (melonDS::u32)sdata.size());
                 }
             }
-            std::fclose(sf);
+            melonDS::Platform::CloseFile(sf);
         }
     }
 
@@ -315,8 +555,15 @@ STORM_API void storm_ds_set_mic_state(void* handle, int32_t mic_mode, const int1
     auto* s = (StormDsSession*)handle;
     if (!s) return;
     s->mic_mode = mic_mode;
-    (void)pcm_samples;
-    (void)sample_count;
+    if (pcm_samples && sample_count > 0) {
+        std::lock_guard<std::mutex> lock(s->mic_mtx);
+        int32_t count = std::min<int32_t>(sample_count, 16384);
+        s->mic_pcm_queue.insert(s->mic_pcm_queue.end(), pcm_samples, pcm_samples + count);
+        if (s->mic_pcm_queue.size() > 16384) {
+            size_t excess = s->mic_pcm_queue.size() - 16384;
+            s->mic_pcm_queue.erase(s->mic_pcm_queue.begin(), s->mic_pcm_queue.begin() + (ptrdiff_t)excess);
+        }
+    }
 }
 
 STORM_API int32_t storm_ds_run_frame(void* handle, uint32_t* out_top_bgra, uint32_t* out_bottom_bgra, int32_t out_width, int32_t out_height, int16_t* out_audio_lr, int32_t max_audio_frames, StormDsFrameStats* out_stats)
@@ -372,7 +619,7 @@ STORM_API int32_t storm_ds_run_frame(void* handle, uint32_t* out_top_bgra, uint3
 
     if (out_stats) {
         out_stats->frame_index = s->frame_counter++;
-        out_stats->active_backend = s->config.renderer_backend;
+        out_stats->active_backend = s->active_backend;
         out_stats->active_vulkan_tier = s->config.vulkan_tier_mode;
         out_stats->active_compositor_mode = s->config.compositor_mode;
         out_stats->audio_frames_written = frames_written;

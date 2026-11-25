@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="update_dialog_title">Update Available</string>
+    <string name="update_dialog_title_stormds">STORM DS Update Available</string>
+    <string name="update_dialog_whats_new">What\'s new:</string>
+    <string name="update_dialog_current_label">Installed</string>
+    <string name="update_dialog_new_label">New Version</string>
+    <string name="update_dialog_update_now">Update Now</string>
+    <string name="update_dialog_remind_later">Remind Later</string>
+    <string name="update_dialog_skip_version">Skip Version</string>
+    <string name="update_dialog_open_page">Open Release Page</string>
+    <string name="update_dialog_preparing">Preparing download...</string>
+    <string name="update_dialog_speed_fmt">%1$.1f MB/s</string>
+    <string name="update_dialog_size_mb_fmt">%1$.1f MB</string>
+    <string name="update_dialog_retry">Retry</string>
+    <string name="update_install_permission_required">Allow installing apps from this source to apply the update</string>
+</resources>

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="update_dialog_title">Доступно обновление</string>
+    <string name="update_dialog_title_stormds">Доступно обновление STORM DS</string>
+    <string name="update_dialog_whats_new">Что нового:</string>
+    <string name="update_dialog_current_label">Текущая</string>
+    <string name="update_dialog_new_label">Новая</string>
+    <string name="update_dialog_update_now">Обновить сейчас</string>
+    <string name="update_dialog_remind_later">Напомнить позже</string>
+    <string name="update_dialog_skip_version">Пропустить версию</string>
+    <string name="update_dialog_open_page">Открыть страницу релиза</string>
+    <string name="update_dialog_preparing">Подготовка загрузки...</string>
+    <string name="update_dialog_speed_fmt">%1$.1f МБ/с</string>
+    <string name="update_dialog_size_mb_fmt">%1$.1f МБ</string>
+    <string name="update_dialog_retry">Повторить</string>
+    <string name="update_install_permission_required">Разрешите установку приложений из этого источника для применения обновления</string>
+</resources>

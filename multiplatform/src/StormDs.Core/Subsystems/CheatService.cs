@@ -16,9 +16,12 @@ public sealed class ActionReplayCheat
     public bool Enabled { get; set; } = true;
     public List<string> CodeLines { get; set; } = [];
 
-    public unsafe List<StormDsCheatEntry> CompileToNativeEntries()
+    /// <summary>
+    /// Compiles full multi-line ActionReplay code words without masking top opcode nibble.
+    /// </summary>
+    public unsafe StormDsCheatEntry? CompileToNativeEntry()
     {
-        var entries = new List<StormDsCheatEntry>();
+        var words = new List<uint>(64);
         foreach (string rawLine in CodeLines)
         {
             string line = rawLine.Trim();
@@ -27,25 +30,31 @@ public sealed class ActionReplayCheat
                 continue;
             }
 
-            // Standard AR format: XXXXXXXX YYYYYYYY
             string[] parts = line.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length >= 2 &&
-                uint.TryParse(parts[0], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out uint addr) &&
-                uint.TryParse(parts[1], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out uint val))
+            foreach (string part in parts)
             {
-                uint type = (addr >> 28) & 0x0F;
-                var entry = new StormDsCheatEntry
+                if (uint.TryParse(part, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out uint word))
                 {
-                    Address = addr & 0x0FFFFFFF,
-                    Value = val,
-                    Type = type,
-                    Enabled = (byte)(Enabled ? 1 : 0)
-                };
-                entry.SetName(Name);
-                entries.Add(entry);
+                    words.Add(word);
+                    if (words.Count >= 64) break;
+                }
             }
+            if (words.Count >= 64) break;
         }
-        return entries;
+
+        if (words.Count < 2) return null;
+
+        var entry = new StormDsCheatEntry
+        {
+            CodeWordCount = Math.Min(words.Count, 64),
+            Enabled = (byte)(Enabled ? 1 : 0)
+        };
+        for (int i = 0; i < entry.CodeWordCount; i++)
+        {
+            entry.CodeWords[i] = words[i];
+        }
+        entry.SetName(Name);
+        return entry;
     }
 }
 
@@ -148,16 +157,26 @@ public sealed class CheatService
     /// <summary>
     /// Compiles all active cheats and pushes them to the native emulation core.
     /// </summary>
-    public unsafe bool ApplyCheatsToNative(nint nativeHandle)
+    public unsafe bool ApplyCheatsToNative(nint nativeHandle, bool cheatsAllowed = true)
     {
         if (nativeHandle == nint.Zero || !StormDsNative.IsAvailable) return false;
+
+        if (!cheatsAllowed)
+        {
+            StormDsNative.storm_ds_set_cheats(nativeHandle, null, 0);
+            return true;
+        }
 
         List<StormDsCheatEntry> nativeEntries = [];
         lock (_lock)
         {
             foreach (var cheat in _cheats.Where(c => c.Enabled))
             {
-                nativeEntries.AddRange(cheat.CompileToNativeEntries());
+                var compiled = cheat.CompileToNativeEntry();
+                if (compiled.HasValue)
+                {
+                    nativeEntries.Add(compiled.Value);
+                }
             }
         }
 
