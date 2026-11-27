@@ -3,7 +3,7 @@
     <string name="custom_cover_pick">Escolher capa personalizada</string>
     <string name="custom_cover_reset">Redefinir capa personalizada</string>
     <string name="custom_cover_error">Não foi possível carregar a imagem</string>
-    <string name="rom_config_overclock_arm9">Overclock ARM9</string>
+    <string name="rom_config_overclock_arm9">Frequência da CPU ARM9</string>
     <string name="rom_config_overclock_default">Padrão</string>
     <string name="rom_config_speed_multiplier">Velocidade de avanço rápido</string>
     <string name="rom_config_speed_unlimited">Sem limite</string>

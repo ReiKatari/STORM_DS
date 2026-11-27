@@ -137,7 +137,7 @@ fun RomContextMenu(
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        val hours = formatHoursLabel(rom.totalPlayTime)
+                        val hours = formatHoursLabel(context, rom.totalPlayTime)
                         Text(
                             text = if (hours.isNotEmpty()) "${romPlatformLabel(rom)} · $hours" else romPlatformLabel(rom),
                             color = colors.text3,

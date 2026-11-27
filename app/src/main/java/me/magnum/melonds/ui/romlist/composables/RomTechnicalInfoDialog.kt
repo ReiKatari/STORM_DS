@@ -205,7 +205,7 @@ fun RomTechnicalInfoDialog(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             HardwareBadge(
-                                label = "GAME CODE",
+                                label = stringResource(R.string.rom_info_game_code_label),
                                 value = rom.gameCode.ifBlank { "NTR-XXXX" },
                                 isAccent = true,
                             )
@@ -219,11 +219,11 @@ fun RomTechnicalInfoDialog(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             HardwareBadge(
-                                label = "UNIT CODE",
+                                label = stringResource(R.string.rom_info_unit_code_label),
                                 value = unitCodeStr,
                             )
                             HardwareBadge(
-                                label = "CRC32 / HASH",
+                                label = stringResource(R.string.rom_info_crc32_label),
                                 value = if (rom.retroAchievementsHash.isNotBlank()) rom.retroAchievementsHash.take(10).uppercase() else "-",
                             )
                         }

@@ -436,7 +436,7 @@ public class StormDsMainView : Grid
     {
         var card = new AuroraGlassCard
         {
-            Width = 440,
+            Width = 500,
             Padding = new Thickness(22),
             SpotlightEnabled = true
         };
@@ -457,11 +457,32 @@ public class StormDsMainView : Grid
         });
         sp.Children.Add(new TextBlock
         {
-            Text = $"GPU: {StormDsUiState.Instance.ProbedGpuName} ({StormDsUiState.Instance.VulkanTierBadge})",
+            Text = $"{StormDsLoc.T("GpuDeviceLabel")}: {StormDsUiState.Instance.ProbedGpuName} ({StormDsUiState.Instance.VulkanTierBadge})",
             FontSize = 11.5,
             Foreground = StormThemeBrushes.SecondaryText,
             TextWrapping = TextWrapping.Wrap
         });
+        sp.Children.Add(new TextBlock
+        {
+            Text = StormDsLoc.T("AboutCreditsTitle"),
+            FontSize = 13,
+            FontWeight = FontWeight.Bold,
+            Foreground = StormThemeBrushes.Accent,
+            Margin = new Thickness(0, 4, 0, 0)
+        });
+        var creditsScroll = new ScrollViewer
+        {
+            MaxHeight = 200,
+            Content = new TextBlock
+            {
+                Text = StormDsLoc.T("AboutCreditsBody"),
+                FontSize = 11,
+                LineHeight = 16,
+                Foreground = StormThemeBrushes.SecondaryText,
+                TextWrapping = TextWrapping.Wrap
+            }
+        };
+        sp.Children.Add(creditsScroll);
         var closeBtn = new AuroraVolumetricButton { Height = 32, Width = 140, HorizontalAlignment = HorizontalAlignment.Right };
         closeBtn.Content = new TextBlock { Text = StormDsLoc.T("ActionClose"), FontWeight = FontWeight.SemiBold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         closeBtn.Click += (_, _) => _modalHost.Dismiss();

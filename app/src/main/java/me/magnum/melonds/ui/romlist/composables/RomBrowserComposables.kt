@@ -1454,13 +1454,6 @@ fun AlphabetIndexBar(
     }
 }
 
-internal fun formatPlayTime(duration: Duration): String {
-    if (duration == Duration.ZERO) return ""
-    val hours = duration.inWholeHours
-    val minutes = (duration.inWholeMinutes % 60)
-    return when {
-        hours >= 1 -> "${hours}h ${minutes}m"
-        minutes >= 1 -> "${minutes}m"
-        else -> "<1m"
-    }
+internal fun formatPlayTime(context: android.content.Context, duration: Duration): String {
+    return formatHoursLabel(context, duration)
 }

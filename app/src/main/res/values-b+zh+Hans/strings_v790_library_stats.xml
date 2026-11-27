@@ -3,7 +3,7 @@
     <string name="custom_cover_pick">选择自定义封面</string>
     <string name="custom_cover_reset">重置自定义封面</string>
     <string name="custom_cover_error">无法加载图像</string>
-    <string name="rom_config_overclock_arm9">ARM9 超频</string>
+    <string name="rom_config_overclock_arm9">ARM9 CPU 频率</string>
     <string name="rom_config_overclock_default">默认</string>
     <string name="rom_config_speed_multiplier">快进速度</string>
     <string name="rom_config_speed_unlimited">无限制</string>

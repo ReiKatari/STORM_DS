@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 project(storm_ds_core
-    VERSION 8.9.2
+    VERSION 8.9.3
     DESCRIPTION "STORM DS Cross-Platform C++26 Native Emulation Core"
     LANGUAGES C CXX)
 

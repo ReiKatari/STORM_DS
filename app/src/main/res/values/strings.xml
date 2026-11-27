@@ -1286,14 +1286,12 @@
     <string name="about_app_title">About and credits</string>
     <string name="about_app_description">High-performance fork of STORM DS (powered by melonDS core) for Android, featuring Vulkan 3D, RetroArch shaders, and RetroAchievements.</string>
     <string name="about_app_summary">STORM DS, melonDS, STORM DS, authors and open source licenses</string>
-    <string name="about_fork_info_title">Project base: STORM DS fork</string>
-    <string name="about_fork_info_summary">STORM DS is an advanced fork of STORM DS (developed by SapphireRhodonite and contributors), which is an Android port of the melonDS core (StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura and team). Includes extensive Slot-1 DSiWare direct boot fixes, NAND/Firmware integrity protection, RetroAchievements offline play and sync, external dual display on TV/monitors via USB-C/HDMI, fast ROM scanner, HUD positioning, and custom themes.</string>
+    <string name="about_fork_info_title">Project base: WatermelonDS fork</string>
+    <string name="about_fork_info_summary">STORM DS is an enhanced fork of WatermelonDS (created by SapphireRhodonite, rafaelvcaetano and contributors), built on top of the melonDS core (StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura and team). Includes direct Slot-1 DSiWare boot fixes, NAND integrity protection, offline RetroAchievements sync, dual display over USB-C/HDMI, fast ROM scanner, and custom themes.</string>
     <string name="about_version_title">Version</string>
     <string name="about_credits_title">Credits and acknowledgements</string>
     <string name="about_credits_jpeacekeeper_title">JPeacekeeper (4PDA)</string>
     <string name="about_credits_jpeacekeeper_summary">Invaluable testing contributions, detailed DSi bug reports, frame rate standardization, and ongoing project improvements</string>
-    <string name="about_credits_watermelonds_title">STORM DS (Android port)</string>
-    <string name="about_credits_watermelonds_summary">SapphireRhodonite, rafaelvcaetano and contributors - Android port, Vulkan rendering fastpaths, librashader integration, modern UI and touch controls</string>
     <string name="about_credits_melonds_title">melonDS (original core)</string>
     <string name="about_credits_melonds_summary">StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura and melonDS team - original high-accuracy Nintendo DS / DSi core emulator</string>
     <string name="about_credits_melonds_ds_title">melonDS DS (RetroArch core)</string>
@@ -1301,7 +1299,7 @@
     <string name="about_credits_drastic_title">DraStic and fastDS inspirations</string>
     <string name="about_credits_drastic_summary">Exophase and DraStic / fastDS creators - screen preset inspirations, quick display layouts, and touch ergonomic concepts</string>
     <string name="about_credits_libraries_title">Open source libraries and tools</string>
-    <string name="about_credits_libraries_summary">Google Oboe (AAudio/OpenSL ES), librashader (RetroArch Slang shaders), RetroAchievements (rcheevos), libslirp (Wi-Fi), libadrenotools (Adreno/Turnip drivers)</string>
+    <string name="about_credits_libraries_summary">melonDS, FreeBIOS, Dolphin ARMJIT, Teakra, Oboe, librashader, libadrenotools, rcheevos, ENet, libslirp, Zstandard, Google ML Kit, Jetpack Compose, Avalonia UI, SkiaSharp</string>
     <string name="about_github_title">STORM DS repository</string>
     <string name="about_github_summary">https://github.com/ReiKatari/STORM_DS</string>
     <string name="button_color_theme">Button color style</string>
@@ -1529,7 +1527,7 @@
     <string name="card_style_3d_boxart">3D boxart</string>
 
     <!-- JIT Overclock and CPU Tuning -->
-    <string name="arm9_overclock_title">ARM9 CPU clock (overclock)</string>
+    <string name="arm9_overclock_title">ARM9 CPU frequency</string>
     <string name="arm9_overclock_summary">Overclock CPU to eliminate frame drops in demanding 3D games</string>
     <string name="arm9_overclock_1x">67 MHz (default / 1x)</string>
     <string name="arm9_overclock_2x">133 MHz (DSi mode / 2x)</string>
@@ -1848,4 +1846,23 @@
     <string name="performance_mode_active_standard">standard mode active</string>
     <string name="performance_mode_locked_by_lite">Managed by simplified mode</string>
     <string name="performance_mode_active_lite">simplified mode active</string>
+    <string name="about_credits_melon_android_title">melonDS Android</string>
+    <string name="about_credits_melon_android_summary">Yopolo and Guillaume - original melonDS Android port and touch layout foundation</string>
+    <string name="about_credits_drivers_vulkan_title">Vulkan, Mesa Turnip, PanVK and libadrenotools</string>
+    <string name="about_credits_drivers_vulkan_summary">Khronos Group (Vulkan, OpenGL ES, SPIR-V), Mesa Freedreno / Turnip, malisx2 PanVK and bylaws (libadrenotools custom driver loader)</string>
+    <string name="about_credits_shaders_title">librashader and Libretro Shaders</string>
+    <string name="about_credits_shaders_summary">SnowflakePowered (librashader Rust pipeline), Libretro Slang Shaders team and Zenju (xBRZ scaling concepts)</string>
+    <string name="about_credits_core_engines_title">Core JIT, DSi DSP and storage engines</string>
+    <string name="about_credits_core_engines_summary">Dolphin Emulator Team (ARM64/x64 JIT emitters), Teakra (DSi DSP), SoundTouch, blip_buf, FreeBIOS and ChaN (FatFs)</string>
+    <string name="about_credits_audio_netplay_title">Audio, LAN NiFi and Nintendo WFC</string>
+    <string name="about_credits_audio_netplay_summary">Google Oboe (AAudio/OpenSL ES), ENet, libslirp, Wiimmfi, Kaeru WFC and AltWFC / WFCZwei communities</string>
+    <string name="about_credits_achievements_cheats_title">Achievements, cheats and box art</string>
+    <string name="about_credits_achievements_cheats_summary">RetroAchievements (rcheevos), xperia64 (Jusrcheat), DeadSkullzJr (usrcheat database) and Libretro Thumbnails</string>
+    <string name="about_credits_fonts_archives_title">Pixel fonts, archives and translation stack</string>
+    <string name="about_credits_fonts_archives_summary">TakWolf (Fusion / Ark Pixel), Galmuri, Cubic 11, Zstandard, FAAD2, miniz, tiny-AES-c, xxHash, Commons Compress, junrar, Tukaani XZ and Google ML Kit</string>
+    <string name="rom_details_overview_tab">Overview</string>
+    <string name="v870_rom_header_netplay_label">Netplay</string>
+    <string name="v870_rom_header_saves_label">Saves</string>
+    <string name="rom_info_unit_code_label">Unit code</string>
+    <string name="rom_info_crc32_label">CRC32 / Hash</string>
 </resources>

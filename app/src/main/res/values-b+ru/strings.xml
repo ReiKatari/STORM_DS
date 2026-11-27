@@ -561,7 +561,7 @@
   </string-array>
   <string-array name="game_runtime_mic_source_options">
     <item>По умолчанию</item>
-    <item>Отключен</item>
+    <item>Отключён</item>
     <item>Шум / Дуновение</item>
     <item>Микрофон устройства</item>
   </string-array>
@@ -705,7 +705,7 @@
     <item>Высокая (Плавная)</item>
   </string-array>
   <string-array name="mic_source_options">
-    <item>Нет</item>
+    <item>Отключён</item>
     <item>Шум / Дуновение</item>
     <item>Микрофон устройства</item>
   </string-array>
@@ -785,7 +785,7 @@
   <string name="category_save_files">Сохранения</string>
   <string name="category_save_files_summary">Пути файлов сохранений, автосохранение и слоты</string>
   <string name="theme">Тема оформления</string>
-  <string name="fast_forward_max_speed">Макс. скорость быстрой перемотки</string>
+  <string name="fast_forward_max_speed">Максимальная скорость быстрой перемотки</string>
   <string name="frame_limit_speed_disabled_hardcore">Отключено в хардкорном режиме RetroAchievements</string>
   <string name="rewind_description">Позволяет отматывать игровой процесс назад в реальном времени</string>
   <string name="rewind_save_period">Интервал сохранения снимков</string>
@@ -883,7 +883,7 @@
   <string name="generate_new_mac_address">Сгенерировать новый MAC-адрес</string>
   <string name="generate_new_mac_address_description">Обновить MAC-адрес сетевого адаптера</string>
   <string name="enable_jit">Включить JIT-компилятор</string>
-  <string name="enable_jit_summary">Динамическая рекомпиляция CPU для максимальной скорости</string>
+  <string name="enable_jit_summary">Динамическая рекомпиляция ЦП для максимальной скорости</string>
   <string name="enable_storm_compiler">Включить STORM-компилятор</string>
   <string name="enable_storm_compiler_summary">Оптимизированный LLVM/Clang векторизованный ARM64 движок со скоростным пайплайном памяти</string>
   <string name="jit_not_supported">JIT не поддерживается на данном устройстве</string>
@@ -927,11 +927,11 @@
   <string name="external_layout_backup_error">Ошибка экспорта внутреннего макета</string>
   <string name="threaded_rendering">Многопоточный рендеринг</string>
   <string name="fps_counter_position">Позиция счетчика FPS</string>
-  <string name="threaded_rendering_summary">Использовать дополнительные потоки CPU для графики</string>
+  <string name="threaded_rendering_summary">Использовать дополнительные потоки ЦП для графики</string>
   <string name="video_vulkan_fastpath_enabled">Vulkan Fast-Path</string>
   <string name="video_vulkan_fastpath_enabled_summary">Ускоренная обработка команд Vulkan</string>
   <string name="video_vulkan_fastpath_warning_title">Предупреждение Vulkan Fast-Path</string>
-  <string name="video_vulkan_fastpath_warning_message">Быстрый путь Vulkan может вызвать артефакты на некоторых GPU.</string>
+  <string name="video_vulkan_fastpath_warning_message">Быстрый путь Vulkan может вызвать артефакты на некоторых ГПУ.</string>
   <string name="video_vulkan_fastpath_enable_action">Включить</string>
   <string name="video_hacks">Графические хаки и оптимизации</string>
   <string name="video_renderer_debug_tools_enabled">Инструменты отладки рендерера</string>
@@ -1221,14 +1221,12 @@
     <string name="about_app_title">О программе и благодарности</string>
     <string name="about_app_description">Мощный форк эмулятора STORM DS (на ядре melonDS) для Android с Vulkan 3D, поддержкой шейдеров RetroArch и RetroAchievements.</string>
     <string name="about_app_summary">STORM DS, melonDS, STORM DS, авторы и лицензии</string>
-    <string name="about_fork_info_title">Основа проекта: форк STORM DS</string>
-    <string name="about_fork_info_summary">STORM DS является расширенным форком STORM DS (автор SapphireRhodonite и авторы), который в свою очередь основан на ядре melonDS (StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura и команда). Включает глубокие доработки ядра DSi/DSiWare, прямого запуска Slot-1 без повреждения NAND, оффлайн-достижений RetroAchievements, вывода на ТВ/мониторы через USB-C/HDMI, быстрый проводник РОМов, позиционирование HUD и кастомные темы.</string>
+    <string name="about_fork_info_title">Основа проекта: форк WatermelonDS</string>
+    <string name="about_fork_info_summary">STORM DS является расширенным форком WatermelonDS (авторы SapphireRhodonite, rafaelvcaetano и контрибьюторы), основанным на ядре melonDS (StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura и команда). Включает исправления прямого запуска DSiWare, защиту целостности NAND, оффлайн-достижения RetroAchievements, вывод на внешний экран USB-C/HDMI, быстрый сканер и темы оформления.</string>
     <string name="about_version_title">Версия</string>
     <string name="about_credits_title">Благодарности авторам</string>
     <string name="about_credits_jpeacekeeper_title">JPeacekeeper (4PDA)</string>
     <string name="about_credits_jpeacekeeper_summary">Неоценимый вклад в тестирование, детальные отчеты об ошибках DSi/NAND, стандартизацию фреймрейта и развитие проекта STORM DS</string>
-    <string name="about_credits_watermelonds_title">STORM DS (Android Port)</string>
-    <string name="about_credits_watermelonds_summary">SapphireRhodonite, rafaelvcaetano и контрибьюторы - порт на Android, высокоскоростной Vulkan-рендер, поддержка шейдеров librashader, Material Design UI и сенсорный интерфейс</string>
     <string name="about_credits_melonds_title">melonDS (Оригинальное ядро)</string>
     <string name="about_credits_melonds_summary">StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura и команда melonDS - разработка эталонного ядра эмулятора Nintendo DS и Nintendo DSi</string>
     <string name="about_credits_melonds_ds_title">melonDS DS (RetroArch Core)</string>
@@ -1236,7 +1234,7 @@
     <string name="about_credits_drastic_title">Вдохновение DraStic и fastDS</string>
     <string name="about_credits_drastic_summary">Exophase и создатели DraStic / fastDS - идеи удобных пресетов экранов, быстрого переключения раскладок и эргономики сенсорного управления</string>
     <string name="about_credits_libraries_title">Сторонние библиотеки и инструменты</string>
-    <string name="about_credits_libraries_summary">Google Oboe (звук AAudio/OpenSL ES), librashader (шейдеры RetroArch Slang), RetroAchievements (rcheevos), libslirp (Wi-Fi), libadrenotools (драйверы Adreno/Turnip)</string>
+    <string name="about_credits_libraries_summary">melonDS, FreeBIOS, Dolphin ARMJIT, Teakra, Oboe, librashader, libadrenotools, rcheevos, ENet, libslirp, Zstandard, Google ML Kit, Jetpack Compose, Avalonia UI, SkiaSharp</string>
     <string name="about_github_title">Репозиторий STORM DS</string>
     <string name="about_github_summary">https://github.com/ReiKatari/STORM_DS</string>
     <string name="button_color_theme">Цвет экранных кнопок</string>
@@ -1462,7 +1460,7 @@
     <string name="card_style_3d_boxart">3D Boxart (Объемные боксы)</string>
 
     <!-- JIT Overclock  and  CPU Tuning -->
-    <string name="arm9_overclock_title">Частота CPU ARM9 (разгон)</string>
+    <string name="arm9_overclock_title">Частота ЦП ARM9</string>
     <string name="arm9_overclock_summary">Разгон виртуального процессора для устранения просадок FPS в тяжелых 3D-играх</string>
     <string name="arm9_overclock_1x">67 МГц (по умолчанию / 1x)</string>
     <string name="arm9_overclock_2x">133 МГц (режим DSi / 2x)</string>
@@ -1744,12 +1742,12 @@
     <string name="video_vulkan_category">Vulkan-хаки</string>
     <string name="video_vulkan_drs">Динамическое внутреннее разрешение</string>
     <string name="video_vulkan_drs_summary">Игра стремится к выбранному внутреннему разрешению, но при высокой нагрузке рендерится в более низком разрешении для удержания стабильных 60 fps. Пока включено, пропуск кадров отключен.</string>
-    <string name="vulkan_driver_mali_api_or_kernel_desc">Обнаружен %1$s, но malisx2 PanVK требует Android 10 (API 29)+, 64-битный процесс и узел ядра /dev/mali0. Используется системный драйвер GPU; ручной импорт ZIP остается разблокированным.</string>
-    <string name="vulkan_driver_mali_midgard_v6_desc">Обнаружен %1$s (Midgard / Bifrost v6). malisx2 PanVK требует Mali от Bifrost v7 (G31/G51/G52/G76) до 5th Gen v12 (G620/G720). Используется системный драйвер GPU; ручной импорт ZIP остается разблокированным.</string>
-    <string name="vulkan_driver_mali_panvk_advice">Arm Mali (%1$s): используйте системный драйвер GPU для максимальной совместимости или тестируйте сборки malisx2 PanVK на поддерживаемых GPU Mali от Bifrost v7 до 5th Gen v12.</string>
+    <string name="vulkan_driver_mali_api_or_kernel_desc">Обнаружен %1$s, но malisx2 PanVK требует Android 10 (API 29)+, 64-битный процесс и узел ядра /dev/mali0. Используется системный драйвер ГПУ; ручной импорт ZIP остается разблокированным.</string>
+    <string name="vulkan_driver_mali_midgard_v6_desc">Обнаружен %1$s (Midgard / Bifrost v6). malisx2 PanVK требует Mali от Bifrost v7 (G31/G51/G52/G76) до 5th Gen v12 (G620/G720). Используется системный драйвер ГПУ; ручной импорт ZIP остается разблокированным.</string>
+    <string name="vulkan_driver_mali_panvk_advice">Arm Mali (%1$s): используйте системный драйвер ГПУ для максимальной совместимости или тестируйте сборки malisx2 PanVK на поддерживаемых ГПУ Mali от Bifrost v7 до 5th Gen v12.</string>
     <string name="vulkan_driver_mali_supported_desc">Обнаружен %1$s с 64-битным драйвером ядра /dev/mali0 на Android %2$d+. Сборки malisx2 PanVK доступны в облачных репозиториях, либо вы можете импортировать совместимый ZIP вручную.</string>
     <string name="vulkan_driver_mali_supported_title">Поддерживается Arm Mali PanVK (%1$s)</string>
-    <string name="vulkan_driver_mali_v13_plus_desc">Обнаружен %1$s (v13+ / Immortalis-G925). malisx2 PanVK сейчас поддерживает GPU до Mali 5th Gen v12 (G720). Используется системный драйвер GPU; ручной импорт ZIP остается разблокированным.</string>
+    <string name="vulkan_driver_mali_v13_plus_desc">Обнаружен %1$s (v13+ / Immortalis-G925). malisx2 PanVK сейчас поддерживает ГПУ до Mali 5th Gen v12 (G720). Используется системный драйвер ГПУ; ручной импорт ZIP остается разблокированным.</string>
     <string name="waiting_for_combo">Удерживайте две разные кнопки на одном контроллере. Первая кнопка может сработать до завершения комбинации; используйте неназначенную кнопку в качестве модификатора, чтобы избежать этого.</string>
     <string-array name="frameskip_manual_value_options">
         <item>0 (не пропускать)</item>
@@ -1771,4 +1769,23 @@
     <string name="performance_mode_active_standard">активен стандартный режим</string>
     <string name="performance_mode_locked_by_lite">Управляется упрощённым режимом</string>
     <string name="performance_mode_active_lite">активен упрощённый режим</string>
+    <string name="about_credits_melon_android_title">melonDS Android (Оригинальный порт)</string>
+    <string name="about_credits_melon_android_summary">Yopolo и Guillaume - оригинальный порт melonDS для Android и базовая система сенсорных раскладок</string>
+    <string name="about_credits_drivers_vulkan_title">Vulkan, Mesa Turnip, PanVK и libadrenotools</string>
+    <string name="about_credits_drivers_vulkan_summary">Khronos Group (Vulkan, OpenGL ES, SPIR-V), Mesa Freedreno / Turnip, malisx2 PanVK и bylaws (загрузчик драйверов libadrenotools)</string>
+    <string name="about_credits_shaders_title">librashader и шейдеры Libretro</string>
+    <string name="about_credits_shaders_summary">SnowflakePowered (конвейер librashader на Rust), команда Libretro Slang Shaders и Zenju (алгоритмы масштабирования xBRZ)</string>
+    <string name="about_credits_core_engines_title">Движки ЦП JIT, DSi DSP и ФС</string>
+    <string name="about_credits_core_engines_summary">Команда Dolphin Emulator (эмиттеры ARM64/x64 JIT), Teakra (DSi DSP), SoundTouch, blip_buf, FreeBIOS и ChaN (FatFs)</string>
+    <string name="about_credits_audio_netplay_title">Звук, сеть NiFi LAN и серверы WFC</string>
+    <string name="about_credits_audio_netplay_summary">Google Oboe (AAudio/OpenSL ES), ENet, libslirp, Wiimmfi, Kaeru WFC и AltWFC / WFCZwei</string>
+    <string name="about_credits_achievements_cheats_title">Достижения, чит-коды и обложки</string>
+    <string name="about_credits_achievements_cheats_summary">Команда RetroAchievements (rcheevos), xperia64 (Jusrcheat), DeadSkullzJr (база чит-кодов) и Libretro Thumbnails</string>
+    <string name="about_credits_fonts_archives_title">Шрифты, архивы и ИИ-перевод</string>
+    <string name="about_credits_fonts_archives_summary">TakWolf (Fusion / Ark Pixel), Galmuri, Cubic 11, Zstandard, FAAD2, miniz, tiny-AES-c, xxHash, Commons Compress, junrar, Tukaani XZ и Google ML Kit</string>
+    <string name="rom_details_overview_tab">Обзор</string>
+    <string name="v870_rom_header_netplay_label">Сеть</string>
+    <string name="v870_rom_header_saves_label">Сохранения</string>
+    <string name="rom_info_unit_code_label">Код устройства</string>
+    <string name="rom_info_crc32_label">CRC32 / Хеш</string>
 </resources>

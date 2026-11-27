@@ -337,7 +337,7 @@ public class SettingsView : Grid
 
         p.Children.Add(CreateComboBoxRow(
             "Рендерер:",
-            new[] { "Авто (Рекомендуется)", "Vulkan Hardware", "OpenGL ES", "Software CPU" },
+            new[] { "Авто (Рекомендуется)", "Vulkan Hardware", "OpenGL ES", "Программный рендер (ЦП)" },
             (int)cfg.RendererBackend,
             (idx) => cfg.RendererBackend = (RendererBackend)idx));
 
@@ -694,8 +694,8 @@ public class SettingsView : Grid
 
         int ocIdx = cfg.Arm9Overclock switch { 1 => 0, 2 => 1, 3 => 2, 4 => 3, _ => 0 };
         p.Children.Add(CreateComboBoxRow(
-            "Разгон процессора ARM9:",
-            new[] { "1x (67 MHz штатная)", "2x (134 MHz стабильная)", "3x (201 MHz турбо)", "4x (268 MHz максимум)" },
+            "Частота ЦП ARM9:",
+            new[] { "67 МГц (по умолчанию / 1x)", "133 МГц (режим DSi / 2x)", "200 МГц (разгон 3x)", "266 МГц (турбо-режим 4x)" },
             ocIdx,
             (idx) => cfg.Arm9Overclock = idx + 1));
 

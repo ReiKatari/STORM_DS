@@ -176,7 +176,7 @@
     <string name="v870_submenu_cat_controls">音声と操作</string>
     <string name="v870_submenu_items_count">%1$d 項目</string>
     <string name="v870_toggle_on">ON</string>
-    <string name="v870_toggle_off">OFF</string>
+    <string name="v870_toggle_off">オフ</string>
     <string name="v870_submenu_desc_rom">このゲームの個別設定とオーバーレイ</string>
     <string name="v870_submenu_desc_video">シェーダー・フィルター・GPU</string>
     <string name="v870_submenu_desc_audio">オーディオとマイク設定</string>

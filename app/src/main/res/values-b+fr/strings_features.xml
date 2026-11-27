@@ -20,9 +20,9 @@
     <string name="feature_stats_top_by_time">Jeux les plus joués par durée</string>
     <string name="feature_stats_top_by_launches">Jeux les plus lancés</string>
     <string name="feature_stats_launches_count">Lancements : %1$d</string>
-    <string name="feature_stats_time_hm">%1$dh %2$dm</string>
-    <string name="feature_stats_time_m">%1$dm</string>
-    <string name="feature_stats_time_less_than_min">&lt;1m</string>
+    <string name="feature_stats_time_hm">%1$d h %2$d min</string>
+    <string name="feature_stats_time_m">%1$d min</string>
+    <string name="feature_stats_time_less_than_min">&lt;1 min</string>
     <string name="feature_stats_empty_title">Aucune statistique pour le moment</string>
     <string name="feature_stats_empty_desc">Lancez un jeu pour commencer à suivre votre temps de jeu et votre activité quotidienne</string>
     <string name="feature_problem_report_menu_title">Signaler un problème</string>

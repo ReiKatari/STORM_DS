@@ -3,7 +3,7 @@
     <string name="custom_cover_pick">Choisir une jaquette personnalisée</string>
     <string name="custom_cover_reset">Réinitialiser la jaquette personnalisée</string>
     <string name="custom_cover_error">Impossible de charger l\'image</string>
-    <string name="rom_config_overclock_arm9">Overclocking ARM9</string>
+    <string name="rom_config_overclock_arm9">Fréquence CPU ARM9</string>
     <string name="rom_config_overclock_default">Par défaut</string>
     <string name="rom_config_speed_multiplier">Vitesse d\'avance rapide</string>
     <string name="rom_config_speed_unlimited">Illimitée</string>

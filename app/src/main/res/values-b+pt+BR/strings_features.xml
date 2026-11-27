@@ -20,9 +20,9 @@
     <string name="feature_stats_top_by_time">Jogos mais jogados por tempo</string>
     <string name="feature_stats_top_by_launches">Jogos mais iniciados</string>
     <string name="feature_stats_launches_count">Inicializações: %1$d</string>
-    <string name="feature_stats_time_hm">%1$dh %2$dm</string>
-    <string name="feature_stats_time_m">%1$dm</string>
-    <string name="feature_stats_time_less_than_min">&lt;1m</string>
+    <string name="feature_stats_time_hm">%1$d h %2$d min</string>
+    <string name="feature_stats_time_m">%1$d min</string>
+    <string name="feature_stats_time_less_than_min">&lt;1 min</string>
     <string name="feature_stats_empty_title">Ainda não há estatísticas</string>
     <string name="feature_stats_empty_desc">Inicie qualquer jogo para começar a registrar o tempo de jogo e a atividade diária</string>
     <string name="feature_problem_report_menu_title">Relatar um problema</string>

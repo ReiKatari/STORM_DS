@@ -20,9 +20,9 @@
     <string name="feature_stats_top_by_time">Game teratas menurut waktu bermain</string>
     <string name="feature_stats_top_by_launches">Game teratas menurut jumlah dijalankan</string>
     <string name="feature_stats_launches_count">Dijalankan: %1$d</string>
-    <string name="feature_stats_time_hm">%1$dj %2$dm</string>
-    <string name="feature_stats_time_m">%1$dm</string>
-    <string name="feature_stats_time_less_than_min">&lt;1m</string>
+    <string name="feature_stats_time_hm">%1$d j %2$d mnt</string>
+    <string name="feature_stats_time_m">%1$d mnt</string>
+    <string name="feature_stats_time_less_than_min">&lt;1 mnt</string>
     <string name="feature_stats_empty_title">Belum ada statistik</string>
     <string name="feature_stats_empty_desc">Jalankan game apa pun untuk mulai mencatat waktu bermain dan aktivitas harian</string>
     <string name="feature_problem_report_menu_title">Laporkan masalah</string>

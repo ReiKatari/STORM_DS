@@ -262,7 +262,7 @@ fun RomGridCard(
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                 )
-                val hours = formatHoursLabel(rom.totalPlayTime)
+                val hours = formatHoursLabel(androidx.compose.ui.platform.LocalContext.current, rom.totalPlayTime)
                 if (hours.isNotEmpty()) {
                     Text(
                         text = hours,

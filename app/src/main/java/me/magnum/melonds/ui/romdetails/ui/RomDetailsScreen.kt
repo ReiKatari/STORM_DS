@@ -2,15 +2,14 @@ package me.magnum.melonds.ui.romdetails.ui
 
 import android.view.KeyEvent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.Surface
@@ -19,15 +18,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.unit.dp
 import androidx.window.core.layout.WindowSizeClass
 import kotlinx.coroutines.launch
 import me.magnum.melonds.domain.model.rom.Rom
+import me.magnum.melonds.ui.common.UnifiedBackButton
+import me.magnum.melonds.ui.common.WatermelonRowSeparator
 import me.magnum.melonds.ui.romdetails.model.OfflineAchievementsUiState
 import me.magnum.melonds.ui.romdetails.model.RomConfigUiState
 import me.magnum.melonds.ui.romdetails.model.RomConfigUpdateEvent
@@ -59,10 +62,10 @@ fun RomDetailsScreen(
 ) {
     val colors = watermelon
     val pagerState = rememberPagerState(
-        initialPage = RomDetailsTab.CONFIG.tabIndex,
+        initialPage = RomDetailsTab.OVERVIEW.tabIndex,
         pageCount = { RomDetailsTab.entries.size },
     )
-    androidx.compose.runtime.LaunchedEffect(pagerState.currentPage) {
+    LaunchedEffect(pagerState.currentPage) {
         if (pagerState.currentPage != RomDetailsTab.RETRO_ACHIEVEMENTS.tabIndex) {
             onAchievementFocused(null)
         }
@@ -107,98 +110,115 @@ fun RomDetailsScreen(
         false
     }
 
-    val pagerContent: @Composable (contentPadding: PaddingValues) -> Unit = { contentPadding ->
-        HorizontalPager(
-            modifier = Modifier.fillMaxSize(),
-            state = pagerState,
-            userScrollEnabled = false,
-        ) {
-            val pageFocusRequester = pageFocusRequesters[it]
-            when (it) {
-                RomDetailsTab.CONFIG.tabIndex -> {
-                    RomConfigUi(
-                        modifier = Modifier.fillMaxSize().focusRequester(pageFocusRequester),
-                        contentPadding = contentPadding,
-                        rom = rom,
-                        romConfigUiState = romConfigUiState,
-                        onConfigUpdate = onRomConfigUpdate,
-                        onCustomInputConfigEdited = onCustomInputConfigEdited,
-                        onSettingFocused = { title, value -> onSettingFocused(title, value) },
-                    )
-                }
-                RomDetailsTab.CHEATS.tabIndex -> {
-                    RomCheatsUi(
-                        rom = rom,
-                        modifier = Modifier.fillMaxSize().focusRequester(pageFocusRequester),
-                    )
-                }
-                RomDetailsTab.RETRO_ACHIEVEMENTS.tabIndex -> {
-                    RomRetroAchievementsUi(
-                        modifier = Modifier.fillMaxSize().focusRequester(pageFocusRequester),
-                        contentPadding = contentPadding,
-                        retroAchievementsUiState = retroAchievementsUiState,
-                        offlineAchievementsUiState = offlineAchievementsUiState,
-                        onLogin = onRetroAchievementsLogin,
-                        onRetryLoad = onRetroAchievementsRetryLoad,
-                        onViewAchievement = onViewAchievement,
-                        onSyncOfflineNow = onOfflineSyncNow,
-                        onAchievementFocused = { onAchievementFocused(it) },
-                    )
-                }
-                RomDetailsTab.OFFLINE_ACHIEVEMENTS.tabIndex -> {
-                    RomOfflineAchievementsUi(
-                        modifier = Modifier.fillMaxSize().focusRequester(pageFocusRequester),
-                        contentPadding = contentPadding,
-                        offlineAchievementsUiState = offlineAchievementsUiState,
-                        onSyncOfflineNow = onOfflineSyncNow,
-                    )
-                }
-            }
-        }
-    }
+    val currentTab = RomDetailsTab.entries[pagerState.currentPage]
 
     Surface(color = colors.bg, modifier = Modifier.fillMaxSize().then(keyHandlingModifier)) {
-        if (isLandscape) {
-            Row(Modifier.fillMaxSize().systemBarsPadding()) {
-                RomHeroSidePanel(
-                    rom = rom,
-                    boxArtUrl = boxArtUrl,
-                    raCoverUrl = raCoverUrl,
-                    initialFocusRequester = focusRequester,
-                    onLaunchRom = { onLaunchRom(rom) },
-                    onNavigateBack = onNavigateBack,
-                    onSendSaveFile = onSendSaveFile,
-                    onImportSaveFile = onImportSaveFile,
-                )
-                Column(Modifier.fillMaxSize().background(colors.bg)) {
-                    RomDetailsTabRow(
-                        currentTab = RomDetailsTab.entries[pagerState.currentPage],
-                        onTabClicked = navigateToTab,
-                    )
-                    androidx.compose.foundation.layout.Box(Modifier.weight(1f).fillMaxWidth()) {
-                        pagerContent(PaddingValues())
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Compact Header Strip (always unobtrusive at top so tabs use the full viewport)
+            RomDetailsCompactTopBar(
+                rom = rom,
+                boxArtUrl = boxArtUrl,
+                raCoverUrl = raCoverUrl,
+                showQuickLaunch = currentTab != RomDetailsTab.OVERVIEW,
+                onLaunchRom = { onLaunchRom(rom) },
+                modifier = Modifier.statusBarsPadding(),
+            )
+
+            // Tab Strip (Overview | Config | Cheats | Achievements | Offline)
+            RomDetailsTabRow(
+                currentTab = currentTab,
+                onTabClicked = navigateToTab,
+            )
+
+            // Full-Screen Pager Body
+            HorizontalPager(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                state = pagerState,
+                userScrollEnabled = false,
+            ) { pageIndex ->
+                val pageFocusRequester = pageFocusRequesters[pageIndex]
+                when (pageIndex) {
+                    RomDetailsTab.OVERVIEW.tabIndex -> {
+                        RomOverviewTab(
+                            rom = rom,
+                            boxArtUrl = boxArtUrl,
+                            raCoverUrl = raCoverUrl,
+                            isLandscape = isLandscape,
+                            initialFocusRequester = focusRequester,
+                            onLaunchRom = { onLaunchRom(rom) },
+                            onSendSaveFile = onSendSaveFile,
+                            onImportSaveFile = onImportSaveFile,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .focusRequester(pageFocusRequester),
+                        )
+                    }
+                    RomDetailsTab.CONFIG.tabIndex -> {
+                        RomConfigUi(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .focusRequester(pageFocusRequester),
+                            contentPadding = PaddingValues(bottom = 12.dp),
+                            rom = rom,
+                            romConfigUiState = romConfigUiState,
+                            onConfigUpdate = onRomConfigUpdate,
+                            onCustomInputConfigEdited = onCustomInputConfigEdited,
+                            onSettingFocused = { title, value -> onSettingFocused(title, value) },
+                        )
+                    }
+                    RomDetailsTab.CHEATS.tabIndex -> {
+                        RomCheatsUi(
+                            rom = rom,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .focusRequester(pageFocusRequester),
+                        )
+                    }
+                    RomDetailsTab.RETRO_ACHIEVEMENTS.tabIndex -> {
+                        RomRetroAchievementsUi(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .focusRequester(pageFocusRequester),
+                            contentPadding = PaddingValues(bottom = 12.dp),
+                            retroAchievementsUiState = retroAchievementsUiState,
+                            offlineAchievementsUiState = offlineAchievementsUiState,
+                            onLogin = onRetroAchievementsLogin,
+                            onRetryLoad = onRetroAchievementsRetryLoad,
+                            onViewAchievement = onViewAchievement,
+                            onSyncOfflineNow = onOfflineSyncNow,
+                            onAchievementFocused = { onAchievementFocused(it) },
+                        )
+                    }
+                    RomDetailsTab.OFFLINE_ACHIEVEMENTS.tabIndex -> {
+                        RomOfflineAchievementsUi(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .focusRequester(pageFocusRequester),
+                            contentPadding = PaddingValues(bottom = 12.dp),
+                            offlineAchievementsUiState = offlineAchievementsUiState,
+                            onSyncOfflineNow = onOfflineSyncNow,
+                        )
                     }
                 }
             }
-        } else {
-            Column(Modifier.fillMaxSize()) {
-                RomHeroVertical(
-                    rom = rom,
-                    boxArtUrl = boxArtUrl,
-                    raCoverUrl = raCoverUrl,
-                    initialFocusRequester = focusRequester,
-                    onLaunchRom = { onLaunchRom(rom) },
-                    onNavigateBack = onNavigateBack,
-                    onSendSaveFile = onSendSaveFile,
-                    onImportSaveFile = onImportSaveFile,
-                    modifier = Modifier.systemBarsPadding(),
-                )
-                RomDetailsTabRow(
-                    currentTab = RomDetailsTab.entries[pagerState.currentPage],
-                    onTabClicked = navigateToTab,
-                )
-                androidx.compose.foundation.layout.Box(Modifier.weight(1f).fillMaxWidth()) {
-                    pagerContent(PaddingValues())
+
+            // Unified Bottom-Centered Circular Back Button Footer
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(colors.bg)
+                    .navigationBarsPadding(),
+            ) {
+                WatermelonRowSeparator()
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 10.dp, bottom = 14.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    UnifiedBackButton(onClick = onNavigateBack)
                 }
             }
         }

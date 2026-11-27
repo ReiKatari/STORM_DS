@@ -31,18 +31,18 @@ class GitHubUpdatePolicyAndSelectorTest {
         val candidateVersion = Version(Version.ReleaseType.FINAL, 8, 9, 2)
         val installedVersion = Version(Version.ReleaseType.FINAL, 8, 9, 1)
         val release = ReleaseDto(
-            tagName = "8.9.2",
-            name = "STORM DS 8.9.2",
+            tagName = "8.9.3",
+            name = "STORM DS 8.9.3",
             body = "Release notes",
             prerelease = false,
             createdAt = "2026-11-25T10:00:00Z",
             publishedAt = "2026-11-25T10:00:00Z",
-            htmlUrl = "https://github.com/ReiKatari/STORM_DS/releases/tag/8.9.2",
+            htmlUrl = "https://github.com/ReiKatari/STORM_DS/releases/tag/8.9.3",
             assets = listOf(
                 AssetDto(
                     id = 1L,
-                    url = "https://github.com/ReiKatari/STORM_DS/releases/download/8.9.2/STORM_DS_8.9.2.apk",
-                    name = "STORM_DS_8.9.2.apk",
+                    url = "https://github.com/ReiKatari/STORM_DS/releases/download/8.9.3/STORM_DS_8.9.3.apk",
+                    name = "STORM_DS_8.9.3.apk",
                     contentType = "application/vnd.android.package-archive",
                     size = 75_000_000L,
                 ),

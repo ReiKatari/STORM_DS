@@ -3,13 +3,13 @@
     <string name="custom_cover_pick">Выбрать свою обложку</string>
     <string name="custom_cover_reset">Сбросить свою обложку</string>
     <string name="custom_cover_error">Не удалось загрузить изображение</string>
-    <string name="rom_config_overclock_arm9">Разгон ARM9</string>
+    <string name="rom_config_overclock_arm9">Частота ЦП ARM9</string>
     <string name="rom_config_overclock_default">По умолчанию</string>
     <string name="rom_config_speed_multiplier">Скорость перемотки</string>
     <string name="rom_config_speed_unlimited">Без ограничений</string>
-    <string name="rom_config_vulkan_driver">Драйвер Vulkan GPU</string>
+    <string name="rom_config_vulkan_driver">Драйвер Vulkan ГПУ</string>
     <string name="rom_config_vulkan_driver_global">Глобальный драйвер</string>
-    <string name="rom_config_vulkan_driver_system">Системный драйвер GPU</string>
+    <string name="rom_config_vulkan_driver_system">Системный драйвер ГПУ</string>
     <string name="rom_filter_unplayed">Не запускались</string>
     <string name="rom_filter_recently_played">Недавно играли</string>
     <string name="rom_filter_has_saves">С сохранениями</string>

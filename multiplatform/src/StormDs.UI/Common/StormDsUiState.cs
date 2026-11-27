@@ -68,7 +68,7 @@ public sealed class StormDsUiState
     public bool IsFullscreen { get; private set; }
     public string StatusBannerText { get; private set; } = string.Empty;
     public StormDsFrameStats LastFrameStats { get; set; }
-    public string ProbedGpuName { get; private set; } = "GPU Probe Pending";
+    public string ProbedGpuName { get; private set; } = StormDs.Core.Localization.StormDsLoc.T("GpuProbePending");
     public string VulkanTierBadge { get; private set; } = "Software 3D";
     public uint VulkanApiVersion { get; private set; } = 0x00401000;
     private bool _vulkanProbedOk;
@@ -200,7 +200,7 @@ public sealed class StormDsUiState
 
         _vulkanProbedOk = false;
         _vulkanSupportsZeroCopy = false;
-        ProbedGpuName = "Software Rasterizer (CPU)";
+        ProbedGpuName = StormDs.Core.Localization.StormDsLoc.T("SoftwareRendererCpu");
         RefreshVulkanTierBadge();
     }
 

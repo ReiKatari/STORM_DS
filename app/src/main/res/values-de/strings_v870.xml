@@ -42,7 +42,7 @@
     <string name="v870_rom_header_gamecode_copied">GameCode %1$s kopiert!</string>
     <string name="v870_rom_header_copy_gamecode">GameCode kopieren</string>
     <string name="v870_rom_header_view_cover">Cover ansehen</string>
-    <string name="v870_rom_header_cover_label">Cover</string>
+    <string name="v870_rom_header_cover_label">Coverbild</string>
     <string name="v870_cover_load_failed">Bild konnte nicht geladen werden</string>
     <string name="v870_cover_open_file_failed">Speicherfehler: Datei konnte nicht geöffnet werden</string>
     <string name="v870_cover_save_failed">Bild konnte nicht gespeichert werden</string>
@@ -80,7 +80,7 @@
     <string name="v870_netplay_title">Online- und Lokal-Mehrspieler</string>
     <string name="v870_netplay_subtitle">Lokaler NiFi-Mehrspieler (WLAN / Hotspot) und WFC-Server</string>
     <string name="v870_netplay_tab_nifi">Lokales LAN NiFi</string>
-    <string name="v870_netplay_tab_wfc">WFC Online</string>
+    <string name="v870_netplay_tab_wfc">WFC-Online</string>
     <string name="v870_netplay_your_ip">Ihre IP: %1$s</string>
     <string name="v870_netplay_player_label">Spieler: %1$s</string>
     <string name="v870_netplay_nifi_instructions">Verbinden Sie die Geräte mit demselben WLAN oder Hotspot. Ein Spieler erstellt einen Raum (Host), der andere tritt bei oder gibt die Host-IP ein.</string>

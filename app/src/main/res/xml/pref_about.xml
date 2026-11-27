@@ -52,12 +52,6 @@
                 app:iconSpaceReserved="false" />
 
         <Preference
-                android:key="credits_watermelonds"
-                android:title="@string/about_credits_watermelonds_title"
-                android:summary="@string/about_credits_watermelonds_summary"
-                app:iconSpaceReserved="false" />
-
-        <Preference
                 android:key="credits_melonds"
                 android:title="@string/about_credits_melonds_title"
                 android:summary="@string/about_credits_melonds_summary"
@@ -70,9 +64,51 @@
                 app:iconSpaceReserved="false" />
 
         <Preference
+                android:key="credits_melon_android_origins"
+                android:title="@string/about_credits_melon_android_title"
+                android:summary="@string/about_credits_melon_android_summary"
+                app:iconSpaceReserved="false" />
+
+        <Preference
                 android:key="credits_drastic"
                 android:title="@string/about_credits_drastic_title"
                 android:summary="@string/about_credits_drastic_summary"
+                app:iconSpaceReserved="false" />
+
+        <Preference
+                android:key="credits_drivers_vulkan"
+                android:title="@string/about_credits_drivers_vulkan_title"
+                android:summary="@string/about_credits_drivers_vulkan_summary"
+                app:iconSpaceReserved="false" />
+
+        <Preference
+                android:key="credits_shaders"
+                android:title="@string/about_credits_shaders_title"
+                android:summary="@string/about_credits_shaders_summary"
+                app:iconSpaceReserved="false" />
+
+        <Preference
+                android:key="credits_core_engines"
+                android:title="@string/about_credits_core_engines_title"
+                android:summary="@string/about_credits_core_engines_summary"
+                app:iconSpaceReserved="false" />
+
+        <Preference
+                android:key="credits_audio_netplay"
+                android:title="@string/about_credits_audio_netplay_title"
+                android:summary="@string/about_credits_audio_netplay_summary"
+                app:iconSpaceReserved="false" />
+
+        <Preference
+                android:key="credits_achievements_cheats"
+                android:title="@string/about_credits_achievements_cheats_title"
+                android:summary="@string/about_credits_achievements_cheats_summary"
+                app:iconSpaceReserved="false" />
+
+        <Preference
+                android:key="credits_fonts_archives"
+                android:title="@string/about_credits_fonts_archives_title"
+                android:summary="@string/about_credits_fonts_archives_summary"
                 app:iconSpaceReserved="false" />
 
         <Preference

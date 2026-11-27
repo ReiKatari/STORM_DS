@@ -243,7 +243,7 @@ fun RomListRow(
                 text = romPlatformLabel(rom),
                 fontSize = 8.sp,
             )
-            val hours = formatHoursLabel(rom.totalPlayTime)
+            val hours = formatHoursLabel(androidx.compose.ui.platform.LocalContext.current, rom.totalPlayTime)
             if (hours.isNotEmpty()) {
                 Text(
                     text = hours,
@@ -348,7 +348,7 @@ private fun buildSubtitle(rom: Rom, context: android.content.Context): String {
         parts += context.getString(R.string.rom_last_played_format, rel)
     }
     if (rom.totalPlayTime != Duration.ZERO) {
-        parts += context.getString(R.string.rom_total_play_time_format, formatPlayTime(rom.totalPlayTime))
+        parts += context.getString(R.string.rom_total_play_time_format, formatPlayTime(context, rom.totalPlayTime))
     }
     if (parts.isEmpty()) {
         parts += rom.fileName

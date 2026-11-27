@@ -21,7 +21,7 @@ class AboutPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.pref_about, rootKey)
 
-        val vName = (runCatching { requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName }.getOrNull() ?: "8.6.0")
+        val vName = (runCatching { requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName }.getOrNull() ?: "8.9.3")
             .removePrefix("v")
             .removePrefix("V")
         findPreference<Preference>("about_version")?.summary = vName
@@ -100,11 +100,6 @@ class AboutPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             true
         }
 
-        findPreference<Preference>("credits_watermelonds")?.setOnPreferenceClickListener {
-            openExternalUrl("https://github.com/SapphireRhodonite/WatermelonDS")
-            true
-        }
-
         findPreference<Preference>("credits_melonds")?.setOnPreferenceClickListener {
             openExternalUrl("https://melonds.kuribo64.net/")
             true
@@ -115,8 +110,43 @@ class AboutPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             true
         }
 
+        findPreference<Preference>("credits_melon_android_origins")?.setOnPreferenceClickListener {
+            openExternalUrl("https://github.com/melonDS-emu/melonDS-android")
+            true
+        }
+
         findPreference<Preference>("credits_drastic")?.setOnPreferenceClickListener {
             openExternalUrl("https://drastic-ds.com/")
+            true
+        }
+
+        findPreference<Preference>("credits_drivers_vulkan")?.setOnPreferenceClickListener {
+            openExternalUrl("https://github.com/bylaws/libadrenotools")
+            true
+        }
+
+        findPreference<Preference>("credits_shaders")?.setOnPreferenceClickListener {
+            openExternalUrl("https://github.com/SnowflakePowered/librashader")
+            true
+        }
+
+        findPreference<Preference>("credits_core_engines")?.setOnPreferenceClickListener {
+            openExternalUrl("https://github.com/dolphin-emu/dolphin")
+            true
+        }
+
+        findPreference<Preference>("credits_audio_netplay")?.setOnPreferenceClickListener {
+            openExternalUrl("https://github.com/google/oboe")
+            true
+        }
+
+        findPreference<Preference>("credits_achievements_cheats")?.setOnPreferenceClickListener {
+            openExternalUrl("https://retroachievements.org/")
+            true
+        }
+
+        findPreference<Preference>("credits_fonts_archives")?.setOnPreferenceClickListener {
+            openExternalUrl("https://github.com/TakWolf/fusion-pixel-font")
             true
         }
 
@@ -124,15 +154,26 @@ class AboutPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             AlertDialog.Builder(requireContext())
                 .setTitle(R.string.about_credits_libraries_title)
                 .setMessage(
-                    "• melonDS Core (Arisotura and melonDS team)\n" +
-                    "• DraStic Open-Source Replacement BIOS\n" +
-                    "• Librashader (SnowflakePowered - RetroArch Slang Shaders)\n" +
-                    "• rcheevos (RetroAchievements C Library)\n" +
-                    "• Google ML Kit Text Recognition and Translation\n" +
-                    "• Jetpack Compose, Material 3 and AndroidX\n" +
-                    "• Dagger Hilt, Kotlin Coroutines and Serialization\n" +
-                    "• OkHttp, Retrofit, Room and Markwon\n" +
-                    "• Picasso and Coil Image Loaders"
+                    "• melonDS Core (Arisotura, StapleButter, Nadia, RSDuck & team)\n" +
+                    "• FreeBIOS (DraStic Open-Source Replacement BIOS)\n" +
+                    "• Dolphin ARMJIT Emitters (ARM64 & x64 JIT)\n" +
+                    "• Teakra (Nintendo DSi DSP Engine)\n" +
+                    "• SoundTouch, blip_buf & FAAD2 Audio Processing\n" +
+                    "• Khronos Vulkan, OpenGL ES, SPIR-V & PanVK\n" +
+                    "• Mesa Freedreno / Turnip & libadrenotools (bylaws)\n" +
+                    "• librashader (SnowflakePowered) & Libretro Slang Shaders\n" +
+                    "• Google Oboe (AAudio / OpenSL ES Low-Latency Audio)\n" +
+                    "• ENet & libslirp (NiFi LAN & Nintendo WFC Networking)\n" +
+                    "• Wiimmfi, Kaeru WFC & AltWFC / WFCZwei\n" +
+                    "• rcheevos (RetroAchievements) & Libretro Thumbnails\n" +
+                    "• Jusrcheat (xperia64) & DeadSkullzJr Cheat Database\n" +
+                    "• FatFs (ChaN), Zstandard (zstd), miniz, tiny-AES-c & xxHash\n" +
+                    "• Apache Commons Compress, junrar & Tukaani XZ\n" +
+                    "• Google ML Kit Text Recognition & Offline Translation\n" +
+                    "• Jetpack Compose, Material 3, AndroidX & CameraX\n" +
+                    "• Dagger Hilt, Kotlin Coroutines, Serialization & Gson\n" +
+                    "• OkHttp, Retrofit, Room, Markwon, Picasso & Coil\n" +
+                    "• Avalonia UI, SkiaSharp & .NET 10 (Windows Edition)"
                 )
                 .setPositiveButton(android.R.string.ok, null)
                 .show()

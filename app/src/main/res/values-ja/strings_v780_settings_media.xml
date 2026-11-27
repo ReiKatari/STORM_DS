@@ -12,7 +12,7 @@
     <string name="v780_video_reset_enhancements_action">リセット</string>
     <string name="v780_video_reset_enhancements_success">グラフィック拡張をデフォルトにリセットしました</string>
     <string name="v780_audio_latency_approx_low">~12 ms</string>
-    <string name="v780_audio_latency_approx_medium">~24 ms</string>
+    <string name="v780_audio_latency_approx_medium">約24 ms</string>
     <string name="v780_audio_latency_approx_high">~48 ms</string>
     <string name="v780_mic_permission_granted">権限付与済み</string>
     <string name="v780_mic_permission_required">録音権限が必要です</string>

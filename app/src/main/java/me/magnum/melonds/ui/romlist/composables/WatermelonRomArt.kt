@@ -171,11 +171,15 @@ fun RegionBadge(
     }
 }
 
-fun formatHoursLabel(duration: Duration): String {
+fun formatHoursLabel(context: Context, duration: Duration): String {
     if (duration == Duration.ZERO) return ""
-    val hours = duration.inWholeHours
-    val minutes = duration.inWholeMinutes % 60
-    return if (hours > 0) "${hours}h ${minutes}m" else "${minutes}m"
+    val hours = duration.inWholeHours.toInt()
+    val minutes = (duration.inWholeMinutes % 60).toInt()
+    return when {
+        hours > 0 -> context.getString(me.magnum.melonds.R.string.feature_stats_time_hm, hours, minutes)
+        minutes > 0 -> context.getString(me.magnum.melonds.R.string.feature_stats_time_m, minutes)
+        else -> context.getString(me.magnum.melonds.R.string.feature_stats_time_less_than_min)
+    }
 }
 
 fun romIconRequest(context: Context, rom: Rom): ImageRequest {

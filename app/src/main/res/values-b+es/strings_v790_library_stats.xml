@@ -3,7 +3,7 @@
     <string name="custom_cover_pick">Elegir portada propia</string>
     <string name="custom_cover_reset">Restablecer portada propia</string>
     <string name="custom_cover_error">No se pudo cargar la imagen</string>
-    <string name="rom_config_overclock_arm9">Overclock de ARM9</string>
+    <string name="rom_config_overclock_arm9">Frecuencia de CPU ARM9</string>
     <string name="rom_config_overclock_default">Por defecto</string>
     <string name="rom_config_speed_multiplier">Velocidad de avance rápido</string>
     <string name="rom_config_speed_unlimited">Sin límite</string>

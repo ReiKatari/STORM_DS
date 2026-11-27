@@ -182,6 +182,7 @@ private fun Content(
     val videoFilteringOptions = stringArrayResource(id = R.array.video_filtering_options)
     val translatorLangEntries = stringArrayResource(id = R.array.translator_source_lang_options)
     val translatorLangValues = stringArrayResource(id = R.array.translator_source_lang_values)
+    val arm9OverclockOptions = stringArrayResource(id = R.array.arm9_overclock_options)
     val useGlobal = stringResource(R.string.use_global_preference)
     val activityManager = context.getSystemService(ActivityManager::class.java)
     val supportsOpenGlRenderer = (activityManager?.deviceConfigurationInfo?.reqGlEsVersion ?: 0) >= GLES_3_2
@@ -417,37 +418,48 @@ private fun Content(
                     },
                 )
             }
+            ConfigToggleRow(
+                title = stringResource(R.string.label_rom_config_hg_engine_fix),
+                isOn = romConfig.useHgEngineFix,
+                showDivider = true,
+                onToggle = { onConfigUpdate(RomConfigUpdateEvent.UseHgEngineFixUpdate(it)) },
+            )
         }
         }
 
         if (showSystemCpu) {
-        ConfigSection(title = stringResource(R.string.rom_config_overclock_arm9)) {
+        ConfigSection(title = stringResource(R.string.pref_cat_core_compiler)) {
             val liteLockNotice = stringResource(R.string.performance_mode_locked_by_lite)
+            val normalizedGlobalArm9 = if (romConfig.globalArm9Overclock == 3) 2 else romConfig.globalArm9Overclock
+            fun arm9OptionLabel(multiplier: Int): String {
+                val idx = when (multiplier) {
+                    1 -> 0
+                    2 -> 1
+                    4 -> 2
+                    else -> -1
+                }
+                return arm9OverclockOptions.getOrNull(idx) ?: "${multiplier}x"
+            }
+            val globalArm9Label = arm9OptionLabel(normalizedGlobalArm9)
             val normalizedArm9 = if (romConfig.arm9Overclock == 3) 2 else romConfig.arm9Overclock
             val arm9Label = when (normalizedArm9) {
-                null -> useGlobalWithValue("${romConfig.globalArm9Overclock}x")
-                1 -> "1x (67 MHz)"
-                2 -> "2x (133 MHz)"
-                4 -> "4x (268 MHz)"
-                else -> "${normalizedArm9}x"
+                null -> useGlobalWithValue(globalArm9Label)
+                else -> arm9OptionLabel(normalizedArm9)
             }
             ConfigRow(
-                title = stringResource(R.string.rom_config_overclock_arm9),
-                value = if (romConfig.isLiteModeActive) "1x - $liteLockNotice" else arm9Label,
+                title = stringResource(R.string.arm9_overclock_title),
+                value = if (romConfig.isLiteModeActive) "${arm9OptionLabel(1)} - $liteLockNotice" else arm9Label,
                 enabled = !romConfig.isLiteModeActive,
                 showDivider = false,
                 onClick = {
                     if (romConfig.isLiteModeActive) return@ConfigRow
                     arm9OverclockDialogState.show(
-                        title = context.getString(R.string.rom_config_overclock_arm9),
+                        title = context.getString(R.string.arm9_overclock_title),
                         items = listOf(null, 1, 2, 4),
                         labelOf = {
                             when (it) {
-                                null -> useGlobalWithValue("${romConfig.globalArm9Overclock}x")
-                                1 -> "1x (67 MHz)"
-                                2 -> "2x (133 MHz)"
-                                4 -> "4x (268 MHz)"
-                                else -> "${it}x"
+                                null -> useGlobalWithValue(globalArm9Label)
+                                else -> arm9OptionLabel(it)
                             }
                         },
                         selected = normalizedArm9,
@@ -468,12 +480,12 @@ private fun Content(
                 else -> "${romConfig.fastForwardSpeedMultiplier}x"
             }
             ConfigRow(
-                title = stringResource(R.string.rom_config_speed_multiplier),
+                title = stringResource(R.string.fast_forward_max_speed),
                 value = speedLabel,
                 showDivider = true,
                 onClick = {
                     fastForwardSpeedDialogState.show(
-                        title = context.getString(R.string.rom_config_speed_multiplier),
+                        title = context.getString(R.string.fast_forward_max_speed),
                         items = listOf(null, -1f, 1.5f, 2f, 3f, 4f, 8f),
                         labelOf = {
                             when (it) {
@@ -522,23 +534,19 @@ private fun Content(
                     )
                 },
             )
-            ConfigToggleRow(
-                title = stringResource(R.string.label_rom_config_hg_engine_fix),
-                isOn = romConfig.useHgEngineFix,
-                showDivider = true,
-                onToggle = { onConfigUpdate(RomConfigUpdateEvent.UseHgEngineFixUpdate(it)) },
-            )
         }
         }
 
         if (showGraphics) {
         ConfigSection(title = stringResource(R.string.label_rom_config_video)) {
             val liteVideoLockNotice = stringResource(R.string.performance_mode_locked_by_lite)
+            val globalVulkanDisplayLabel = romConfig.globalVulkanDriverDisplayName
+                ?: stringResource(R.string.vulkan_driver_system_title)
             val vulkanDriverLabel = if (!romConfig.isCustomVulkanDriverSupported) {
                 stringResource(R.string.rom_config_vulkan_driver_blocked_value)
             } else {
                 when (romConfig.customVulkanDriverName) {
-                    null -> useGlobalWithValue(romConfig.globalVulkanDriverDisplayName)
+                    null -> useGlobalWithValue(globalVulkanDisplayLabel)
                     "__SYSTEM__" -> stringResource(R.string.rom_config_vulkan_driver_system)
                     else -> romConfig.availableVulkanDrivers.firstOrNull { it.first == romConfig.customVulkanDriverName }?.second
                         ?: romConfig.customVulkanDriverName.orEmpty()
@@ -556,7 +564,7 @@ private fun Content(
                         items = romConfig.availableVulkanDrivers.map { it.first },
                         labelOf = { driverId ->
                             when (driverId) {
-                                null -> useGlobalWithValue(romConfig.globalVulkanDriverDisplayName)
+                                null -> useGlobalWithValue(globalVulkanDisplayLabel)
                                 "__SYSTEM__" -> context.getString(R.string.rom_config_vulkan_driver_system)
                                 else -> romConfig.availableVulkanDrivers.firstOrNull { it.first == driverId }?.second ?: (driverId ?: "")
                             }
@@ -699,9 +707,9 @@ private fun Content(
         }
 
         if (showAudioControls) {
-        ConfigSection(title = stringResource(R.string.label_rom_config_input_mode)) {
+        ConfigSection(title = stringResource(R.string.key_mapping)) {
             ConfigRow(
-                title = stringResource(R.string.label_rom_config_input_mode),
+                title = stringResource(R.string.key_mapping),
                 value = if (romConfig.inputMode == RomInputMode.GLOBAL) {
                     useGlobalWithValue(globalInputModeLabel)
                 } else {
@@ -710,7 +718,7 @@ private fun Content(
                 showDivider = false,
                 onClick = {
                     inputModeDialogState.show(
-                        title = context.getString(R.string.label_rom_config_input_mode),
+                        title = context.getString(R.string.key_mapping),
                         items = RomInputMode.entries.toList(),
                         labelOf = {
                             if (it == RomInputMode.GLOBAL) {
@@ -740,7 +748,7 @@ private fun Content(
         if (showSystemCpu) {
         ConfigSection(title = stringResource(R.string.label_rom_config_retroachievements)) {
             ConfigRow(
-                title = stringResource(R.string.label_rom_config_retroachievements_for_rom),
+                title = stringResource(R.string.enable_retroachievements),
                 value = retroAchievementsModeLabel(
                     context = context,
                     value = romConfig.retroAchievementsEnabled,
@@ -748,7 +756,7 @@ private fun Content(
                 ),
                 onClick = {
                     retroAchievementsDialogState.show(
-                        title = context.getString(R.string.label_rom_config_retroachievements_for_rom),
+                        title = context.getString(R.string.enable_retroachievements),
                         items = listOf(null, true, false),
                         labelOf = { value ->
                             retroAchievementsModeLabel(
@@ -766,9 +774,9 @@ private fun Content(
         }
 
         if (showScreens) {
-        ConfigSection(title = stringResource(R.string.controller_layout)) {
+        ConfigSection(title = stringResource(R.string.layouts)) {
             ConfigRow(
-                title = stringResource(R.string.controller_layout),
+                title = stringResource(R.string.layouts),
                 value = romConfig.layoutName ?: useGlobalWithValue(globalLayoutLabel),
                 showDivider = false,
                 onClick = {
@@ -778,21 +786,29 @@ private fun Content(
                     layoutSelectorLauncher.launch(intent)
                 },
             )
-            fun dualScreenPresetLabel(preset: me.magnum.melonds.domain.model.DualScreenPreset?): String {
+        }
+
+        ConfigSection(title = stringResource(R.string.dual_screen_presets_settings_title)) {
+            fun dualScreenPresetShortLabel(preset: me.magnum.melonds.domain.model.DualScreenPreset): String {
                 return when (preset) {
-                    null -> useGlobal
                     me.magnum.melonds.domain.model.DualScreenPreset.OFF -> context.getString(R.string.dual_screen_preset_off)
                     me.magnum.melonds.domain.model.DualScreenPreset.INTERNAL_TOP_EXTERNAL_BOTTOM -> context.getString(R.string.dual_screen_preset_internal_top_external_bottom)
                     me.magnum.melonds.domain.model.DualScreenPreset.INTERNAL_BOTTOM_EXTERNAL_TOP -> context.getString(R.string.dual_screen_preset_internal_bottom_external_top)
                 }
             }
+            fun dualScreenPresetLabel(preset: me.magnum.melonds.domain.model.DualScreenPreset?): String {
+                return when (preset) {
+                    null -> useGlobalWithValue(dualScreenPresetShortLabel(romConfig.globalDualScreenPreset))
+                    else -> dualScreenPresetShortLabel(preset)
+                }
+            }
             ConfigRow(
-                title = stringResource(R.string.label_rom_config_dual_screen_preset),
+                title = stringResource(R.string.dual_screen_presets_settings_title),
                 value = dualScreenPresetLabel(romConfig.dualScreenPreset),
-                showDivider = true,
+                showDivider = false,
                 onClick = {
                     dualScreenPresetDialogState.show(
-                        title = context.getString(R.string.label_rom_config_dual_screen_preset),
+                        title = context.getString(R.string.dual_screen_presets_settings_title),
                         items = listOf(null) + me.magnum.melonds.domain.model.DualScreenPreset.entries,
                         labelOf = { dualScreenPresetLabel(it) },
                         selected = romConfig.dualScreenPreset,
@@ -800,22 +816,22 @@ private fun Content(
                     )
                 },
             )
-            fun dualScreenBooleanLabel(value: Boolean?): String {
+            fun dualScreenBooleanLabel(value: Boolean?, globalValue: Boolean): String {
                 return when (value) {
-                    null -> useGlobal
+                    null -> useGlobalWithValue(context.getString(if (globalValue) R.string.on else R.string.off))
                     true -> context.getString(R.string.on)
                     false -> context.getString(R.string.off)
                 }
             }
             ConfigRow(
                 title = stringResource(R.string.keep_ds_ratio),
-                value = dualScreenBooleanLabel(romConfig.dualScreenKeepAspectRatio),
+                value = dualScreenBooleanLabel(romConfig.dualScreenKeepAspectRatio, romConfig.globalDualScreenKeepAspectRatio),
                 showDivider = true,
                 onClick = {
                     dualScreenKeepAspectRatioDialogState.show(
                         title = context.getString(R.string.keep_ds_ratio),
                         items = listOf(null, true, false),
-                        labelOf = { dualScreenBooleanLabel(it) },
+                        labelOf = { dualScreenBooleanLabel(it, romConfig.globalDualScreenKeepAspectRatio) },
                         selected = romConfig.dualScreenKeepAspectRatio,
                         onSelect = { onConfigUpdate(RomConfigUpdateEvent.DualScreenKeepAspectRatioUpdate(it)) },
                     )
@@ -823,13 +839,13 @@ private fun Content(
             )
             ConfigRow(
                 title = stringResource(R.string.dual_screen_integer_scale),
-                value = dualScreenBooleanLabel(romConfig.dualScreenIntegerScale),
+                value = dualScreenBooleanLabel(romConfig.dualScreenIntegerScale, romConfig.globalDualScreenIntegerScale),
                 showDivider = true,
                 onClick = {
                     dualScreenIntegerScaleDialogState.show(
                         title = context.getString(R.string.dual_screen_integer_scale),
                         items = listOf(null, true, false),
-                        labelOf = { dualScreenBooleanLabel(it) },
+                        labelOf = { dualScreenBooleanLabel(it, romConfig.globalDualScreenIntegerScale) },
                         selected = romConfig.dualScreenIntegerScale,
                         onSelect = { onConfigUpdate(RomConfigUpdateEvent.DualScreenIntegerScaleUpdate(it)) },
                     )
@@ -838,19 +854,23 @@ private fun Content(
         }
         }
 
-        if (showScreens) {
+        if (showSystemCpu) {
         ConfigSection(title = stringResource(R.string.label_rom_config_translator_section)) {
-            fun translatorLangLabel(langCode: String?): String {
-                if (langCode.isNullOrBlank()) return useGlobal
+            fun resolveLangName(langCode: String?): String {
+                if (langCode.isNullOrBlank()) return context.getString(R.string.not_set)
                 val idx = translatorLangValues.indexOf(langCode)
                 return if (idx in translatorLangEntries.indices) translatorLangEntries[idx] else langCode
             }
+            fun translatorLangLabel(langCode: String?): String {
+                if (langCode.isNullOrBlank()) return useGlobalWithValue(resolveLangName(romConfig.globalTranslatorSourceLang))
+                return resolveLangName(langCode)
+            }
             ConfigRow(
-                title = stringResource(R.string.label_rom_config_translator_source_lang),
+                title = stringResource(R.string.translator_source_lang),
                 value = translatorLangLabel(romConfig.translatorSourceLang),
                 onClick = {
                     translatorSourceLangDialogState.show(
-                        title = context.getString(R.string.label_rom_config_translator_source_lang),
+                        title = context.getString(R.string.translator_source_lang),
                         items = listOf(null) + translatorLangValues.toList(),
                         labelOf = { translatorLangLabel(it) },
                         selected = romConfig.translatorSourceLang,

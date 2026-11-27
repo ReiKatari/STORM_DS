@@ -3,8 +3,8 @@
     <string name="vulkan_driver_hub_title">Центр драйверов Vulkan</string>
     <string name="vulkan_driver_tab_installed">Установленные (%1$d)</string>
     <string name="vulkan_driver_tab_repositories">Репозитории (%1$d)</string>
-    <string name="vulkan_driver_tab_recommended">Для вашего GPU</string>
-    <string name="vulkan_driver_gpu_chip_label">GPU</string>
+    <string name="vulkan_driver_tab_recommended">Для вашего ГПУ</string>
+    <string name="vulkan_driver_gpu_chip_label">ГПУ</string>
     <string name="vulkan_driver_api_label">Vulkan API</string>
     <string name="vulkan_driver_active_label">Активный драйвер</string>
     <string name="vulkan_driver_custom_tag">Кастомный</string>
@@ -20,7 +20,7 @@
     <string name="vulkan_driver_storm_quick_subtitle">Автовыбор бинарника для Adreno 6xx/7xx или Gen8 с 4 быстрых зеркал</string>
     <string name="vulkan_driver_install_storm">Установить STORM DRIVER</string>
     <string name="vulkan_driver_reinstall_storm">Переустановить STORM DRIVER</string>
-    <string name="vulkan_driver_system_title">Системный драйвер GPU</string>
+    <string name="vulkan_driver_system_title">Системный драйвер ГПУ</string>
     <string name="vulkan_driver_system_subtitle">Встроенный системный драйвер Vulkan из прошивки устройства</string>
     <string name="vulkan_driver_import_zip">Импорт ZIP</string>
     <string name="vulkan_driver_clear_caches">Очистить кэш шейдеров</string>
@@ -64,14 +64,14 @@
     <string name="vulkan_driver_adreno8xx_warn_title">Предупреждение совместимости Adreno 8xx</string>
     <string name="vulkan_driver_adreno8xx_warn_message">Драйвер %1$s не помечен как совместимый с Adreno 830/840 (Gen8). Обычные сборки Turnip могут вызывать чёрный экран или вылеты. Установить всё равно?</string>
     <string name="vulkan_driver_install_anyway">Всё равно установить</string>
-    <string name="rom_config_vulkan_driver_blocked_value">Системный (заблокировано для GPU)</string>
+    <string name="rom_config_vulkan_driver_blocked_value">Системный (заблокировано для ГПУ)</string>
     <string name="vulkan_driver_recommended_badge">Рекомендуемый</string>
-    <string name="vulkan_driver_incompatible_gpu_badge">Несовместим с этим GPU</string>
+    <string name="vulkan_driver_incompatible_gpu_badge">Несовместим с этим ГПУ</string>
     <string name="vulkan_driver_non_adreno_title">Режим драйверов для %1$s</string>
-    <string name="vulkan_driver_non_adreno_mali_desc">Репозитории Turnip скрыты, так как они работают только на Qualcomm Adreno (/dev/kgsl-3d0). Для ARM Mali и Immortalis рекомендуется системный драйвер GPU. Mesa PanVK требует ядра Panfrost или Panthor вместо стокового /dev/mali0. Ручной импорт ZIP разблокирован для кастомных пакетов.</string>
-    <string name="vulkan_driver_non_adreno_other_desc">Обнаружен GPU: %1$s. Репозитории Adreno Turnip требуют Qualcomm Adreno 6xx/7xx/8xx и скрыты. Для стабильности рекомендуется системный драйвер GPU, ручной импорт ZIP разблокирован.</string>
+    <string name="vulkan_driver_non_adreno_mali_desc">Репозитории Turnip скрыты, так как они работают только на Qualcomm Adreno (/dev/kgsl-3d0). Для ARM Mali и Immortalis рекомендуется системный драйвер ГПУ. Mesa PanVK требует ядра Panfrost или Panthor вместо стокового /dev/mali0. Ручной импорт ZIP разблокирован для кастомных пакетов.</string>
+    <string name="vulkan_driver_non_adreno_other_desc">Обнаружен ГПУ: %1$s. Репозитории Adreno Turnip требуют Qualcomm Adreno 6xx/7xx/8xx и скрыты. Для стабильности рекомендуется системный драйвер ГПУ, ручной импорт ZIP разблокирован.</string>
     <string name="vulkan_driver_non_adreno_panfrost_detected">Обнаружено ядро Panfrost / Panthor: вы можете вручную импортировать совместимый ZIP-архив PanVK.</string>
-    <string name="vulkan_driver_non_adreno_no_online_repos">Онлайн-репозитории Adreno Turnip не совместимы с этим GPU. Используйте системный драйвер GPU или импортируйте совместимый ZIP-пакет вручную.</string>
-    <string name="vulkan_driver_imported_incompatible_notice">Установлен %1$s, но он несовместим с %2$s. При вылетах или чёрном экране переключитесь на системный драйвер GPU.</string>
-    <string name="video_prefs_recommended_system_driver">Рекомендуется: системный драйвер GPU (доступен ручной импорт ZIP)</string>
+    <string name="vulkan_driver_non_adreno_no_online_repos">Онлайн-репозитории Adreno Turnip не совместимы с этим ГПУ. Используйте системный драйвер ГПУ или импортируйте совместимый ZIP-пакет вручную.</string>
+    <string name="vulkan_driver_imported_incompatible_notice">Установлен %1$s, но он несовместим с %2$s. При вылетах или чёрном экране переключитесь на системный драйвер ГПУ.</string>
+    <string name="video_prefs_recommended_system_driver">Рекомендуется: системный драйвер ГПУ (доступен ручной импорт ZIP)</string>
 </resources>

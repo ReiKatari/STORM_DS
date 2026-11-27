@@ -176,7 +176,7 @@
     <string name="v870_submenu_cat_controls">Áudio e controles</string>
     <string name="v870_submenu_items_count">%1$d itens</string>
     <string name="v870_toggle_on">ON</string>
-    <string name="v870_toggle_off">OFF</string>
+    <string name="v870_toggle_off">DESLIGADO</string>
     <string name="v870_submenu_desc_rom">Ajustes e overlays deste jogo</string>
     <string name="v870_submenu_desc_video">Shaders, filtros e GPU</string>
     <string name="v870_submenu_desc_audio">Fluxos de áudio e microfone</string>

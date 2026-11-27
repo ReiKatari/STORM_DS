@@ -164,7 +164,7 @@ fun ExternalLibraryGameInfo(
                 }
                 if (rom.totalPlayTime != Duration.ZERO) {
                     Text(
-                        text = formatHoursLabel(rom.totalPlayTime),
+                        text = formatHoursLabel(androidx.compose.ui.platform.LocalContext.current, rom.totalPlayTime),
                         color = Color.White.copy(alpha = 0.55f),
                         fontFamily = WatermelonMono,
                         fontSize = 11.sp,

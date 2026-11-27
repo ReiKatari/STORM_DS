@@ -368,7 +368,7 @@
     <string name="external_hint_open">Öffnen</string>
     <string name="external_hint_favorite">Favorit</string>
     <string name="save_state_slot_quick">SCHNELL</string>
-    <string name="save_state_slot_number">SLOT %1$d</string>
+    <string name="save_state_slot_number">PLATZ %1$d</string>
     <string name="save_state_empty_slot">Leerer Slot</string>
     <string name="cheats_footer_note">CHEATS WERDEN BEIM FORTSETZEN ANGEWENDET · IM HARDCORE-MODUS NICHT VERFÜGBAR</string>
     <string name="external_choose_on_device">Auf dem Gerät auswählen</string>
@@ -651,7 +651,7 @@
     <string name="label_rom_config_gba_save_path">GBA-Speicherpfad</string>
     <string name="rom_details_configuration_tab">Konfiguration</string>
     <string name="rom_details_audio_tab">Audio</string>
-    <string name="retro_achievements_tab">Retro and #8203;Achievements</string>
+    <string name="retro_achievements_tab">RetroAchievements</string>
     <string name="rom_details_offline_achievements_tab">Offline</string>
     <string name="theme_option_light">Hell</string>
     <string name="theme_option_dark">Dunkel</string>
@@ -730,7 +730,7 @@
     <string name="label_height">Höhe</string>
     <string name="label_alpha">Transparenz</string>
     <string name="label_aspect_ratio">Seitenverhältnis:</string>
-    <string name="aspect_ratio_4_3">4:3 (Original)</string>
+    <string name="aspect_ratio_4_3">4:3 (Originalformat)</string>
     <string name="aspect_ratio_16_9">16:9 (Breitbild)</string>
     <string name="aspect_ratio_unrestricted">Uneingeschränkt</string>
     <string name="keep_ds_ratio">DS-Seitenverhältnis beibehalten</string>
@@ -1028,14 +1028,12 @@
     <string name="about_app_title">Über die App und Danksagungen</string>
     <string name="about_app_description">Leistungsstarker Fork von STORM DS (basierend auf dem melonDS-Core) für Android mit Vulkan 3D, RetroArch-Shadern und RetroAchievements.</string>
     <string name="about_app_summary">STORM DS, melonDS, STORM DS, Autoren und Open-Source-Lizenzen</string>
-    <string name="about_fork_info_title">Projektbasis: STORM DS-Fork</string>
-    <string name="about_fork_info_summary">STORM DS ist ein erweiterter Fork von STORM DS (entwickelt von SapphireRhodonite und Mitwirkenden), einem Android-Port des melonDS-Cores (StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura und Team). Enthält umfangreiche Slot-1 DSiWare-Direktstart-Korrekturen, NAND/Firmware-Integritätsschutz, RetroAchievements-Offline-Spiel und Synchronisierung, externe Dual-Display-Ausgabe auf TV/Monitore über USB-C/HDMI, schnellen ROM-Scanner, HUD-Positionierung und eigene Themes.</string>
+    <string name="about_fork_info_title">Projektbasis: Fork von WatermelonDS</string>
+    <string name="about_fork_info_summary">STORM DS ist ein erweiterter Fork von WatermelonDS (von SapphireRhodonite, rafaelvcaetano und Mitwirkenden) auf Basis des melonDS-Kerns (StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura und Team). Bietet direkten DSiWare-Boot, NAND-Schutz, Offline-RetroAchievements, USB-C/HDMI-Zweitbildschirm, schnellen ROM-Scanner und Designs.</string>
     <string name="about_version_title">Version</string>
     <string name="about_credits_title">Danksagungen und Anerkennungen</string>
     <string name="about_credits_jpeacekeeper_title">JPeacekeeper (4PDA)</string>
     <string name="about_credits_jpeacekeeper_summary">Unschätzbare Testbeiträge, detaillierte DSi-Fehlerberichte, Bildraten-Standardisierung und kontinuierliche Projektverbesserungen</string>
-    <string name="about_credits_watermelonds_title">STORM DS (Android-Port)</string>
-    <string name="about_credits_watermelonds_summary">SapphireRhodonite, rafaelvcaetano und Mitwirkende - Android-Portierung, Vulkan-Rendering-Fastpaths, librashader-Integration, moderne Benutzeroberfläche und Touch-Steuerung</string>
     <string name="about_credits_melonds_title">melonDS (Ursprünglicher Core)</string>
     <string name="about_credits_melonds_summary">StapleButter, Nadia, RSDuck, genericretrogeek, Arisotura und das melonDS-Team - originaler hochpräziser Nintendo DS / DSi-Emulator-Core</string>
     <string name="about_credits_melonds_ds_title">melonDS DS (RetroArch-Core)</string>
@@ -1043,7 +1041,7 @@
     <string name="about_credits_drastic_title">Inspirationen von DraStic und fastDS</string>
     <string name="about_credits_drastic_summary">Exophase sowie die Schöpfer von DraStic und fastDS - Bildschirmlayout-Inspirationen, Schnellanzeigen und ergonomische Touch-Konzepte</string>
     <string name="about_credits_libraries_title">Open-Source-Bibliotheken und Tools</string>
-    <string name="about_credits_libraries_summary">Google Oboe (AAudio/OpenSL ES), librashader (RetroArch Slang-Shader), RetroAchievements (rcheevos), libslirp (WLAN), libadrenotools (Adreno/Turnip-Treiber)</string>
+    <string name="about_credits_libraries_summary">melonDS, FreeBIOS, ARMJIT, Teakra, Oboe, librashader, libadrenotools, rcheevos, ENet, libslirp, Zstandard, ML Kit, Compose, Avalonia UI, SkiaSharp</string>
     <string name="about_github_title">STORM DS Repository</string>
     <string name="about_github_summary">https://github.com/ReiKatari/STORM_DS</string>
     <string name="button_color_theme">Tastenfarbstil</string>
@@ -1210,7 +1208,7 @@
     <string name="card_style_glassmorphism">Glassmorphism</string>
     <string name="card_style_flat_minimal">Flach minimal</string>
     <string name="card_style_3d_boxart">3D-Boxart</string>
-    <string name="arm9_overclock_title">ARM9-CPU-Takt (Übertaktung)</string>
+    <string name="arm9_overclock_title">ARM9-CPU-Taktfrequenz</string>
     <string name="arm9_overclock_summary">CPU übertakten, um Bildrateneinbrüche in anspruchsvollen 3D-Spielen zu verhindern</string>
     <string name="arm9_overclock_1x">67 MHz (Standard / 1x)</string>
     <string name="arm9_overclock_2x">133 MHz (DSi-Modus / 2x)</string>
@@ -1526,4 +1524,23 @@
     <string name="performance_mode_active_standard">Standardmodus aktiv</string>
     <string name="performance_mode_locked_by_lite">Vom vereinfachten Modus verwaltet</string>
     <string name="performance_mode_active_lite">vereinfachter Modus aktiv</string>
+    <string name="about_credits_melon_android_title">melonDS Android</string>
+    <string name="about_credits_melon_android_summary">Yopolo und Guillaume - ursprünglicher melonDS-Android-Port</string>
+    <string name="about_credits_drivers_vulkan_title">Vulkan, Mesa Turnip, PanVK und libadrenotools</string>
+    <string name="about_credits_drivers_vulkan_summary">Khronos Group (Vulkan, OpenGL ES, SPIR-V), Mesa Freedreno / Turnip, malisx2 PanVK und bylaws (libadrenotools)</string>
+    <string name="about_credits_shaders_title">librashader und Libretro-Shader</string>
+    <string name="about_credits_shaders_summary">SnowflakePowered (librashader), Libretro Slang Shaders und Zenju (xBRZ)</string>
+    <string name="about_credits_core_engines_title">JIT, DSi DSP und Dateisystem</string>
+    <string name="about_credits_core_engines_summary">Dolphin Team (ARMJIT), Teakra (DSi DSP), SoundTouch, blip_buf, FreeBIOS und ChaN (FatFs)</string>
+    <string name="about_credits_audio_netplay_title">Audio, LAN NiFi und Nintendo WFC</string>
+    <string name="about_credits_audio_netplay_summary">Google Oboe, ENet, libslirp, Wiimmfi, Kaeru WFC und AltWFC / WFCZwei</string>
+    <string name="about_credits_achievements_cheats_title">Erfolge, Cheats und Cover</string>
+    <string name="about_credits_achievements_cheats_summary">RetroAchievements (rcheevos), xperia64 (Jusrcheat), DeadSkullzJr und Libretro Thumbnails</string>
+    <string name="about_credits_fonts_archives_title">Schriften, Archive und Übersetzung</string>
+    <string name="about_credits_fonts_archives_summary">TakWolf (Fusion / Ark Pixel), Galmuri, Cubic 11, Zstandard, FAAD2, miniz, Commons Compress, junrar, XZ und Google ML Kit</string>
+    <string name="rom_details_overview_tab">Übersicht</string>
+    <string name="v870_rom_header_netplay_label">Netzwerk</string>
+    <string name="v870_rom_header_saves_label">Spielstände</string>
+    <string name="rom_info_unit_code_label">Gerätecode</string>
+    <string name="rom_info_crc32_label">CRC32 / Hash</string>
 </resources>

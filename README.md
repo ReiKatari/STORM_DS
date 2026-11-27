@@ -1,19 +1,19 @@
 <h1 align="center">STORM DS</h1>
 
-<p align="center">Высокопроизводительный эмулятор двухэкранных портативных игровых консолей <b>Nintendo DS</b> и <b>Nintendo DSi</b> для <b>Android</b> с аппаратным 3D-рендерером <b>Vulkan</b> и <b>OpenGL ES 3.0+</b>, движком реальной 3D-глубины, объёмными 3D-скинами корпусов, шейдерным конвейером <b>librashader (Slang)</b>, встроенным экранным AI-переводчиком с многоголосой озвучкой и поддержкой <b>RetroAchievements</b>.</p>
+<p align="center">Высокопроизводительный эмулятор двухэкранных портативных игровых консолей <b>Nintendo DS</b> и <b>Nintendo DSi</b> для <b>Android</b> и <b>Windows</b> с аппаратным 3D-рендерером <b>Vulkan</b> и <b>OpenGL ES 3.0+</b>, движком реальной 3D-глубины, объёмными 3D-скинами корпусов, шейдерным конвейером <b>librashader (Slang)</b>, встроенным экранным AI-переводчиком с многоголосой озвучкой и поддержкой <b>RetroAchievements</b>.</p>
 
 ---
 
 ## **1. О проекте и архитектура**
 
-**STORM DS** — специализированный эмулятор портативных игровых систем **Nintendo DS (NTR)** и **Nintendo DSi / DSiWare (TWL)** для операционной системы **Android**. Проект является форком эмулятора **WatermelonDS** (на базе портов **melonDS Android** от Yopolo и оригинального ядра **melonDS** от Arisotura). **WatermelonDS является фундаментальной основой этого форка!**
+**STORM DS** - специализированный эмулятор портативных игровых систем **Nintendo DS (NTR)** и **Nintendo DSi / DSiWare (TWL)** для операционных систем **Android** и **Windows**. Проект является форком эмулятора **WatermelonDS** (на базе портов **melonDS Android** от Yopolo и оригинального ядра **melonDS** от Arisotura). **WatermelonDS является фундаментальной основой этого форка!**
 
 Архитектура **STORM DS** сочетает цикл-точную эмуляцию двух процессоров консоли (`ARM946E-S` и `ARM7TDMI`) с высокоскоростным `ARM64` / `ARMv7` JIT-рекомпилятором и современным многопоточным графическим конвейером:
 
 * **Двухпрофильный аппаратный 3D-рендерер Vulkan (`FastPath` и `Compatibility`)**:
   * Автоматическое профилирование лимитов драйвера устройства (`maxPerStageDescriptorSampledImages`, `maxPerStageDescriptorStorageImages`, `maxComputeWorkGroupInvocations`) при инициализации `VkDevice`;
   * Профиль **`FastPath`** задействует до 64 текстурных слотов за проход на современных видеоускорителях **Qualcomm Adreno**, **ARM Mali Valhall/Immortalis** и **Samsung Xclipse**;
-  * Профиль **`Compatibility`** гарантирует работу аппаратного рендерера **Vulkan** без принудительного сброса на OpenGL/Software на мобильных и старых GPU со строгим аппаратным лимитом в `16` дескрипторов сэмплеров на стадию шейдера (**Mali Utgard/Midgard/Bifrost**, **Adreno 5xx/6xx**, **PowerVR**), а также поддерживает безопасный гибридный режим композитинга (`GraphicsHardware`) при отказе compute-конвейера;
+  * Профиль **`Compatibility`** гарантирует работу аппаратного рендерера **Vulkan** без принудительного сброса на OpenGL/Software на мобильных и старых ГПУ со строгим аппаратным лимитом в `16` дескрипторов сэмплеров на стадию шейдера (**Mali Utgard/Midgard/Bifrost**, **Adreno 5xx/6xx**, **PowerVR**), а также поддерживает безопасный гибридный режим композитинга (`GraphicsHardware`) при отказе compute-конвейера;
   * Автоматическое восстановление после потери графического контекста (`VK_ERROR_DEVICE_LOST`) без вылета игры.
 * **Аппаратный рендерер OpenGL ES 3.0+ и эталонный Software Renderer**:
   * Аппаратное масштабирование внутреннего 3D-разрешения от нативного `1× (256×192)` до `16× (4096×3072)` со сглаживанием полигональных контуров и попиксельным 2D/3D-композитингом слоёв.
@@ -56,7 +56,7 @@
   * Сверхбыстрый прямой обход каталога `/storage/emulated/0/STORM DS`, пользовательские обложки (`PNG` / `JPG` / `WebP`) для ромхаков и фанатских переводов, умные фильтры библиотеки («Не запускались», «Недавно играли», «С сохранениями») и журнал игровых сессий в базе `Room` с экспортом статистики в `CSV` и `JSON`;
   * Индивидуальные профили игр с персональным разгоном процессора `ARM9`, множителем ускорения `Fast-Forward`, выбором видеодрайвера `Adreno / Turnip` и масштабированием внутреннего 3D-разрешения вплоть до `16× (4096×3072)`;
   * Прямой бинарный импорт готовых баз читов флеш-карт формата **`usrcheat.dat`** (`R4 / Acekard`), валидатор кодов `Action Replay` и встроенный сканер оперативной памяти **`RAM Cheat Finder`** (`8 / 16 / 32-bit`) с автогенерацией чит-кодов прямо во время игры;
-  * Поддержка комбинированных хоткеев физического геймпада (`Chord Hotkeys`), аппаратного турбо-режима (`10–30 Гц`), замедления времени (`Slow-Motion`), покадрового шага (`Frame Advance`) и сохранения чистых скриншотов экранов консоли в `PNG`.
+  * Поддержка комбинированных хоткеев физического геймпада (`Chord Hotkeys`), аппаратного турбо-режима (`10-30 Гц`), замедления времени (`Slow-Motion`), покадрового шага (`Frame Advance`) и сохранения чистых скриншотов экранов консоли в `PNG`.
 * **Сетевая игра (`Local Wi-Fi` и `Nintendo WFC / DWC`)**:
   * Локальный беспроводной мультиплеер и подключение к пользовательским серверам **Nintendo Wi-Fi Connection** (Wiimmfi / AltWFC) с автонастройкой DNS.
 
@@ -72,7 +72,7 @@
 | **Эмуляционное ядро** | `melonDS Core`, `ARM946E-S / ARM7TDMI JIT Recompiler` |
 | **Шейдерный конвейер** | `librashader` (Rust C-ABI, поддержка спецификации `RetroArch Slang`) |
 | **Аудиосистема** | `Google Oboe` (`AAudio` и `OpenSL ES` с низкой задержкой), `SPU 16-Channel Mixer` |
-| **Кастомные драйверы GPU** | `libadrenotools` (загрузка драйверов `Qualcomm Adreno` и `Mesa Turnip`) |
+| **Кастомные драйверы ГПУ** | `libadrenotools` (загрузка драйверов `Qualcomm Adreno` и `Mesa Turnip`) |
 | **Достижения и AI-модули** | `RetroAchievements API (rcheevos)`, `Google ML Kit OCR и Translation`, `FastLZ` |
 | **Базы данных и форматы** | `AndroidX Room SQLite`, `R4 / Acekard Binary CheatDB (usrcheat.dat)`, `JSON` |
 
@@ -80,20 +80,22 @@
 
 ## **4. Поддерживаемые платформы, форматы и установочный пакет**
 
-* **Операционная система**: Android `5.0+` (API 21+) - полная оптимизация под Android `8.0-16+` (API 36)
-* **Процессорные архитектуры**: `ARM64-v8a`, `ARMv7a (armeabi-v7a)`, `x86_64`
+* **Операционные системы**: Android `7.0+` (API 24+, целевая оптимизация под Android `8.0-16`, API 36) и Windows `10/11` (64-bit)
+* **Процессорные архитектуры**: Android (`ARM64-v8a`, `ARMv7a / armeabi-v7a`, `x86_64`), Windows (`x64`)
 * **Поддерживаемые форматы образов**: `.nds`, `.dsi`, `.srl`, `.ids`, `.app`, а также прямое чтение из сжатых архивов `.zip`, `.7z`, `.rar`
 * **Системная интеграция**: автоматическое создание рабочей директории `/storage/emulated/0/STORM DS/` и нативная регистрация профиля `appCategory="game"` для активации аппаратного ускорения **Samsung Game Booster**, **Xiaomi Game Turbo** и **ASUS Armoury Crate**
 
-| Вариант пакета APK | Имя файла | Назначение и целевые устройства |
+| Пакет поставки | Имя файла | Назначение и целевые устройства |
 | :--- | :--- | :--- |
-| **Универсальная сборка** | `STORM_DS_<версия>.apk` | Единый установочный пакет для всех устройств (`Qualcomm Adreno`, `ARM Mali / Immortalis`, `Samsung Xclipse`, `PowerVR`, `Google Tensor`, 64- и 32-битные системы) с менеджером видеодрайверов Vulkan и автоопределением поддерживаемых драйверов GPU |
+| **Android APK (универсальный)** | `STORM_DS_<версия>.apk` | Единый установочный пакет для всех устройств (`Qualcomm Adreno`, `ARM Mali / Immortalis`, `Samsung Xclipse`, `PowerVR`, `Google Tensor`, 64- и 32-битные системы) с менеджером видеодрайверов Vulkan и автоопределением поддерживаемых драйверов ГПУ |
+| **Windows Установщик** | `STORM_DS_<версия>_Setup.exe` | Инсталлятор для Windows 10/11 (x64) с цифровой подписью, ярлыками и автоматическим обновлением |
+| **Windows Portable** | `STORM_DS_<версия>.zip` | Портативная сборка для Windows 10/11 (x64) без установки в систему |
 
 ---
 
 ## **5. Установка, запуск и автообновление**
 
-1. Скачайте актуальный универсальный установочный пакет `STORM_DS_<версия>.apk` из раздела **Релизы и Установщики** в **STORM GAMES WORLD GIT** или на странице **Releases** в GitHub.
+1. Скачайте актуальный установочный пакет `STORM_DS_<версия>.apk` (для Android), `STORM_DS_<версия>_Setup.exe` или `STORM_DS_<версия>.zip` (для Windows) из раздела **Релизы и Установщики** в **STORM GAMES WORLD GIT** или на странице **Releases** в GitHub.
 2. Установите пакет APK на устройство Android и при первом запуске укажите папку с образами игр Nintendo DS / Nintendo DSi.
 3. Эмулятор готов к запуску игр сразу после установки благодаря встроенному системному модулю **FreeBIOS**. Для использования оригинального системного меню консоли или запуска дампов DSiWare при необходимости укажите файлы `bios7.bin`, `bios9.bin` и `firmware.bin` (или `dsi_bios7.bin`, `dsi_bios9.bin`, `dsi_firmware.bin`, `dsi_nand.bin`) в разделе **Настройки -> Система -> BIOS и прошивка**.
 4. Для расшифровки зашифрованных образов Nintendo DSi / DSiWare (`Modcrypt Area 1/2`) предусмотрены автоматическое предложение расшифровки прямо в эмуляторе и десктопная утилита **STORM DS DECRYPTOR**.
@@ -128,17 +130,25 @@ cd STORM_DS
 
 ## **7. Благодарности**
 
-* **SapphireRhodonite (автор WatermelonDS)** — за создание эмулятора WatermelonDS, послужившего фундаментальной основой этого форка, разработку высокопроизводительного порта на Android, аппаратный рендерер Vulkan, внедрение шейдерного конвейера librashader и инновационный интерфейс.
-* **rafaelvcaetano** — за развитие WatermelonDS, оптимизацию сенсорного управления, эргономику раскладок экранов и вклад в Android-эмуляцию.
-* **Arisotura (StapleButter) и MelonDS Team** — за выдающийся эмулятор melonDS и безупречную эмуляцию архитектуры Nintendo DS и Nintendo DSi.
-* **RSDuck, Nadia, GenericHeroGuy** — за фундаментальный вклад в развитие ядра melonDS, поддержку DSi и JIT-рекомпилятор ARM9/ARM7.
-* **Yopolo и Guillaume** — за разработку оригинального порта melonDS Android.
-* **JesseTG и команда melonDS DS (Libretro)** — за исследования структуры автозагрузки DSiWare и оптимизацию архитектуры ядра.
-* **Команда DeSmuME (Yabause, Zeromus, rogerman)** — за фундаментальные исследования архитектуры процессоров ARM9 и ARM7 консоли Nintendo DS.
-* **Команда RetroAchievements (rcheevos)** — за открытую платформу достижений, таблиц рекордов и соревновательных режимов в классических играх.
-* **Google Oboe Team** — за создание высокопроизводительной аудиобиблиотеки с поддержкой AAudio и OpenSL ES.
-* **Zenju** — за алгоритм высококачественного масштабирования пиксельной графики xBRZ.
-* **SnowflakePowered (librashader)** — за кроссплатформенную реализацию конвейера шейдеров RetroArch Slang на языке Rust.
-* **bylaws (libadrenotools)** — за библиотеку динамической загрузки кастомных видеодрайверов Qualcomm Adreno и Mesa Turnip.
-* **TakWolf (Fusion Pixel Font, Ark Pixel Font), Galmuri и Cubic 11** — за пиксельные шрифты с поддержкой кириллицы, латиницы и CJK для нативной отрисовки перевода в играх.
-* **xperia64 (Jusrcheat) и DeadSkullzJr** — за архитектуру бинарного редактора чит-кодов формата R4 и полную базу кодов Action Replay для библиотеки игр Nintendo DS и DSi.
+* **SapphireRhodonite (автор WatermelonDS)** - за создание эмулятора WatermelonDS, послужившего фундаментальной основой этого форка, разработку высокопроизводительного порта на Android, аппаратный рендерер Vulkan, внедрение шейдерного конвейера librashader и современный интерфейс.
+* **rafaelvcaetano** - за развитие WatermelonDS, оптимизацию сенсорного управления, эргономику раскладок экранов и вклад в Android-эмуляцию.
+* **Arisotura (StapleButter) и MelonDS Team** - за выдающийся эмулятор melonDS и безупречную эмуляцию архитектуры Nintendo DS и Nintendo DSi.
+* **RSDuck, Nadia, GenericHeroGuy** - за фундаментальный вклад в развитие ядра melonDS, поддержку DSi и JIT-рекомпилятор ARM9/ARM7.
+* **Yopolo и Guillaume** - за разработку оригинального порта melonDS Android.
+* **JesseTG и команда melonDS DS (Libretro)** - за исследования структуры автозагрузки DSiWare и оптимизацию архитектуры ядра.
+* **Команда DeSmuME (Yabause, Zeromus, rogerman)** - за фундаментальные исследования архитектуры процессоров ARM9 и ARM7 консоли Nintendo DS.
+* **Exophase и создатели DraStic / fastDS** - за открытую реализацию FreeBIOS и концепции удобных пресетов двух экранов.
+* **JPeacekeeper (4PDA)** - за неоценимый вклад в тестирование, детальные отчёты об ошибках DSi/NAND, стандартизацию кадровой синхронизации и развитие проекта.
+* **Dolphin Emulator Team** - за высокопроизводительные JIT-эмиттеры ARM64 и x64 (`ARMJIT`), используемые при динамической рекомпиляции ЦП.
+* **Команда Teakra, SoundTouch, blip_buf и FAAD2** - за эмуляцию звукового процессора Nintendo DSi DSP, точный ресемплинг и декодирование аудиопотока.
+* **ChaN (FatFs), Zstandard (zstd), miniz, tiny-AES-c и xxHash** - за работу с файловой системой NAND/SD, криптографию и сверхбыструю компрессию.
+* **Apache Commons Compress, junrar и Tukaani XZ** - за встроенную распаковку игровых архивов ZIP, 7z и RAR.
+* **Khronos Group (Vulkan, OpenGL ES, SPIR-V), Mesa Freedreno / Turnip, malisx2 PanVK и bylaws (libadrenotools)** - за открытые графические API, драйверы Qualcomm Adreno и ARM Mali и их динамическую загрузку.
+* **SnowflakePowered (librashader), Libretro (Slang Shaders и Thumbnails) и Zenju (xBRZ)** - за конвейер шейдеров RetroArch Slang на Rust, библиотеку шейдеров/обложек и алгоритмы пиксельного апскейлинга.
+* **Google Oboe Team** - за создание высокопроизводительной аудиобиблиотеки с поддержкой AAudio и OpenSL ES.
+* **ENet, libslirp и команды Wiimmfi, Kaeru WFC и AltWFC / WFCZwei** - за сетевые стеки локальной игры NiFi/LAN и поддержку онлайн-серверов Nintendo WFC.
+* **Команда RetroAchievements (rcheevos)** - за открытую платформу достижений, таблиц рекордов и соревновательных режимов в классических играх.
+* **TakWolf (Fusion Pixel Font, Ark Pixel Font), Galmuri и Cubic 11** - за пиксельные шрифты с поддержкой кириллицы, латиницы и CJK для нативной отрисовки перевода в играх.
+* **xperia64 (Jusrcheat) и DeadSkullzJr** - за архитектуру бинарного редактора чит-кодов формата R4 и полную базу кодов Action Replay для библиотеки игр Nintendo DS и DSi.
+* **Google ML Kit, Jetpack Compose, Material 3, AndroidX, CameraX, Dagger Hilt, Kotlin Coroutines, OkHttp, Retrofit, Room, Gson, Markwon, Picasso и Coil** - за фундамент мобильного приложения, оффлайн-перевод и работу с медиа.
+* **Avalonia UI, SkiaSharp и .NET 10** - за кроссплатформенный графический движок и интерфейс Windows-версии STORM DS.

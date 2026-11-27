@@ -23,7 +23,7 @@
     <string name="v870_ctx_group_tech">Технический паспорт и экспорт</string>
     <string name="v870_ctx_sub_tech">GameCode, CRC, размер и путь</string>
     <string name="v870_rom_config_cat_all">Все разделы</string>
-    <string name="v870_rom_config_cat_sys">Система и CPU</string>
+    <string name="v870_rom_config_cat_sys">Система и ЦП</string>
     <string name="v870_rom_config_cat_gfx">Графика и Vulkan</string>
     <string name="v870_rom_config_cat_scr">Экраны и корпус</string>
     <string name="v870_rom_config_cat_aud">Управление и звук</string>

@@ -26,7 +26,7 @@
     <string name="v780_input_clear_all_success">Все назначения кнопок очищены</string>
     <string name="v780_ra_hardcore_mode_detailed_summary">Соревновательный режим: во время активной сессии полностью блокируются загрузка быстрых сохранений, перемотка назад, замедление времени и чит-коды.</string>
     <string name="v780_about_copy_diagnostics_title">Скопировать сводку об устройстве и рендерере</string>
-    <string name="v780_about_copy_diagnostics_summary">Копирует в буфер обмена системную информацию, параметры GPU и поддержку Vulkan</string>
+    <string name="v780_about_copy_diagnostics_summary">Копирует в буфер обмена системную информацию, параметры ГПУ и поддержку Vulkan</string>
     <string name="v780_about_copy_diagnostics_success">Сводка об устройстве скопирована в буфер обмена</string>
     <string name="v780_diagnostics_vulkan_supported">Поддерживается</string>
     <string name="v780_diagnostics_vulkan_unsupported">Не поддерживается</string>

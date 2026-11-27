@@ -142,6 +142,10 @@ class RomDetailsViewModel @Inject constructor(
                     availableVulkanDrivers = overrides.availableVulkanDrivers,
                     isCustomVulkanDriverSupported = overrides.isCustomVulkanSupported,
                     isLiteModeActive = overrides.isLiteModeActive,
+                    globalDualScreenPreset = overrides.dualScreenPreset,
+                    globalDualScreenKeepAspectRatio = overrides.dualScreenKeepAspectRatio,
+                    globalDualScreenIntegerScale = overrides.dualScreenIntegerScale,
+                    globalTranslatorSourceLang = overrides.translatorSourceLang,
                 )
             }.collect {
                 uiStateFlow.value = RomConfigUiState.Ready(it)
@@ -269,9 +273,14 @@ class RomDetailsViewModel @Inject constructor(
         val availableVulkanDrivers: List<Pair<String?, String>>,
         val isCustomVulkanSupported: Boolean,
         val isLiteModeActive: Boolean,
+        val dualScreenPreset: me.magnum.melonds.domain.model.DualScreenPreset,
+        val dualScreenKeepAspectRatio: Boolean,
+        val dualScreenIntegerScale: Boolean,
+        val translatorSourceLang: String?,
     )
 
     private fun readGlobalRuntimeOverrides(): GlobalRuntimeOverrides {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(context)
         val customVulkanSupported = me.magnum.melonds.impl.AdrenoVulkanDriverSupport.isSupported(context)
         val systemLabel = context.getString(me.magnum.melonds.R.string.rom_config_vulkan_driver_system)
         val globalLabel = context.getString(me.magnum.melonds.R.string.rom_config_vulkan_driver_global)
@@ -295,6 +304,10 @@ class RomDetailsViewModel @Inject constructor(
             availableVulkanDrivers = driverOptions,
             isCustomVulkanSupported = customVulkanSupported,
             isLiteModeActive = settingsRepository.isLiteModeActive(),
+            dualScreenPreset = settingsRepository.getDualScreenPreset(),
+            dualScreenKeepAspectRatio = settingsRepository.isExternalDisplayKeepAspectRationEnabled(),
+            dualScreenIntegerScale = settingsRepository.isDualScreenIntegerScaleEnabled(),
+            translatorSourceLang = prefs.getString("translator_source_lang", "auto") ?: "auto",
         )
     }
 
@@ -310,6 +323,10 @@ class RomDetailsViewModel @Inject constructor(
             "video_vulkan_custom_driver_name",
             "video_vulkan_custom_driver_dir",
             "video_vulkan_custom_driver_display_name",
+            "dual_screen_preset",
+            "dual_screen_integer_scale",
+            "external_display_keep_ratio",
+            "translator_source_lang",
         )
         trySend(readGlobalRuntimeOverrides())
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
