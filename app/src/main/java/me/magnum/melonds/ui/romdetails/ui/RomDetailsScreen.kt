@@ -5,11 +5,18 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.Surface
@@ -114,27 +121,32 @@ fun RomDetailsScreen(
 
     Surface(color = colors.bg, modifier = Modifier.fillMaxSize().then(keyHandlingModifier)) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Compact Header Strip (always unobtrusive at top so tabs use the full viewport)
+            // Compact Header Strip matching SettingsActivity top statusBar + displayCutout insets
             RomDetailsCompactTopBar(
                 rom = rom,
                 boxArtUrl = boxArtUrl,
                 raCoverUrl = raCoverUrl,
                 showQuickLaunch = currentTab != RomDetailsTab.OVERVIEW,
                 onLaunchRom = { onLaunchRom(rom) },
-                modifier = Modifier.statusBarsPadding(),
+                modifier = Modifier
+                    .background(colors.bg)
+                    .windowInsetsPadding(WindowInsets.statusBars.union(WindowInsets.displayCutout).only(WindowInsetsSides.Top))
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
             )
 
             // Tab Strip (Overview | Config | Cheats | Achievements | Offline)
             RomDetailsTabRow(
                 currentTab = currentTab,
                 onTabClicked = navigateToTab,
+                modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
             )
 
             // Full-Screen Pager Body
             HorizontalPager(
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxWidth(),
+                    .fillMaxWidth()
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
                 state = pagerState,
                 userScrollEnabled = false,
             ) { pageIndex ->
@@ -209,6 +221,7 @@ fun RomDetailsScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(colors.bg)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
                     .navigationBarsPadding(),
             ) {
                 WatermelonRowSeparator()
