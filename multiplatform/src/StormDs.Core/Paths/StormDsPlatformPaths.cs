@@ -179,6 +179,11 @@ public static class StormDsPlatformPaths
         }
 
         string baseDirectory = AppContext.BaseDirectory;
+        if (File.Exists(Path.Combine(baseDirectory, ".portable")))
+        {
+            return Path.Combine(baseDirectory, "data");
+        }
+
         string portableMarker = Path.Combine(baseDirectory, PortableMarkerFileName);
         if (File.Exists(portableMarker))
         {
