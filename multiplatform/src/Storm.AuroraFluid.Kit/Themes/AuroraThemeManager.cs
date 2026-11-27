@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Media;
+using Avalonia.Styling;
 
 namespace Storm.AuroraFluid.Kit.Themes;
 
@@ -256,6 +257,8 @@ public sealed class AuroraThemeManager
         var theme = CurrentTheme;
         var (accentPrimary, accentSecondary) = ResolveAccentColors(theme, CurrentAccentOverride);
 
+        app.RequestedThemeVariant = theme.IsDark ? ThemeVariant.Dark : ThemeVariant.Light;
+
         // Core Brushes
         res["StormBgBrush"] = theme.BackgroundBrush;
         res["StormHeaderBrush"] = theme.HeaderBrush;
@@ -306,5 +309,33 @@ public sealed class AuroraThemeManager
         res["StormFontFamily"] = ResolveFontFamily(CurrentTypography);
         res["StormThemeId"] = theme.Id;
         res["StormIsDarkTheme"] = theme.IsDark;
+
+        // Native FluentTheme Control Brushes (ensures ComboBox, TextBox, Flyout, Menu contrast in STORM DAY & dark themes)
+        var fgBrush = (IBrush)res["StormTextPrimaryBrush"]!;
+        var secBrush = (IBrush)res["StormTextSecondaryBrush"]!;
+        res["SystemControlForegroundBaseHighBrush"] = fgBrush;
+        res["TextControlForeground"] = fgBrush;
+        res["TextControlForegroundPointerOver"] = fgBrush;
+        res["TextControlForegroundFocused"] = fgBrush;
+        res["TextControlBackground"] = theme.CardBrush;
+        res["TextControlBackgroundPointerOver"] = theme.HeaderBrush;
+        res["TextControlBackgroundFocused"] = theme.CardBrush;
+        res["TextControlBorderBrush"] = theme.BorderBrush;
+        res["TextControlBorderBrushPointerOver"] = (IBrush)res["StormAccentBrush"]!;
+        res["TextControlBorderBrushFocused"] = (IBrush)res["StormAccentBrush"]!;
+        res["ComboBoxForeground"] = fgBrush;
+        res["ComboBoxForegroundPointerOver"] = fgBrush;
+        res["ComboBoxBackground"] = theme.CardBrush;
+        res["ComboBoxBackgroundPointerOver"] = theme.HeaderBrush;
+        res["ComboBoxBackgroundPressed"] = theme.HeaderBrush;
+        res["ComboBoxBorderBrush"] = theme.BorderBrush;
+        res["ComboBoxDropDownBackground"] = theme.HeaderBrush;
+        res["ComboBoxDropDownBorderBrush"] = theme.BorderBrush;
+        res["ComboBoxItemForeground"] = fgBrush;
+        res["ComboBoxItemForegroundSelected"] = fgBrush;
+        res["ComboBoxPlaceHolderForeground"] = secBrush;
+        res["FlyoutPresenterBackground"] = theme.HeaderBrush;
+        res["MenuFlyoutPresenterBackground"] = theme.HeaderBrush;
+        res["MenuFlyoutPresenterBorderBrush"] = theme.BorderBrush;
     }
 }

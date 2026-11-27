@@ -114,18 +114,23 @@ public class AuroraVectorIcon : Control
                 }
             };
 
-            // Specular Rim Highlight Pen (Law 15 / Elevated Visuals)
-            var specularPen = new Pen(new SolidColorBrush(Color.FromArgb(50, 255, 255, 255)), 0.6);
+            // Specular Rim Highlight Pen (only on un-overridden multi-tone icons)
+            Pen? specularPen = CustomColorOverride == null
+                ? new Pen(new SolidColorBrush(Color.FromArgb(50, 255, 255, 255)), 0.6)
+                : null;
 
             context.DrawGeometry(primaryBrush, specularPen, primaryGeom);
 
             // Secondary Layer Geometry (Accent Detail / High-Tech Core)
-            var secColor = entry.SecondaryColor;
-            IBrush secondaryBrush = CustomColorOverride != null
-                ? CustomColorOverride
-                : new SolidColorBrush(Color.FromArgb(230, secColor.R, secColor.G, secColor.B));
+            if (!string.IsNullOrWhiteSpace(entry.SecondaryPath))
+            {
+                var secColor = entry.SecondaryColor;
+                IBrush secondaryBrush = CustomColorOverride != null
+                    ? CustomColorOverride
+                    : new SolidColorBrush(Color.FromArgb(230, secColor.R, secColor.G, secColor.B));
 
-            context.DrawGeometry(secondaryBrush, null, secondaryGeom);
+                context.DrawGeometry(secondaryBrush, null, secondaryGeom);
+            }
         }
     }
 }

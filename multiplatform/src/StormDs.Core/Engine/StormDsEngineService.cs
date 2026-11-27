@@ -32,11 +32,13 @@ public sealed class StormDsEngineService : IDisposable
     public byte[] BottomFrameBgra { get; } = new byte[256 * 192 * 4];
     public bool HasLiveNativeFrame { get; private set; }
     public bool IsLidClosed { get; private set; }
+    private bool _isMuted;
     public bool IsMuted
     {
-        get => _audioOutput?.IsMuted ?? false;
+        get => _isMuted;
         set
         {
+            _isMuted = value;
             if (_audioOutput != null) _audioOutput.IsMuted = value;
         }
     }
@@ -66,7 +68,7 @@ public sealed class StormDsEngineService : IDisposable
         {
             Shutdown();
 
-            _audioOutput = new WinMmAudioOutput { Volume = _audioVolume };
+            _audioOutput = new WinMmAudioOutput(config.AudioLatency) { Volume = _audioVolume, IsMuted = _isMuted };
             IsLidClosed = false;
             _micBurstFramesRemaining = 0;
 
@@ -194,18 +196,24 @@ public sealed class StormDsEngineService : IDisposable
     /// </summary>
     public void SetInput(uint buttonsBitmask, ushort touchX, ushort touchY, bool touchDown, bool? lidClosed = null)
     {
-        if (lidClosed.HasValue) IsLidClosed = lidClosed.Value;
-        if (StormDsNative.IsAvailable && _nativeHandle != nint.Zero)
+        lock (_engineLock)
         {
-            StormDsNative.storm_ds_set_input(_nativeHandle, buttonsBitmask, touchX, touchY, (byte)(touchDown ? 1 : 0), IsLidClosed ? 1 : 0);
+            if (lidClosed.HasValue) IsLidClosed = lidClosed.Value;
+            if (StormDsNative.IsAvailable && _nativeHandle != nint.Zero)
+            {
+                StormDsNative.storm_ds_set_input(_nativeHandle, buttonsBitmask, touchX, touchY, (byte)(touchDown ? 1 : 0), IsLidClosed ? 1 : 0);
+            }
         }
     }
 
     public bool ToggleLid(uint currentButtons, ushort touchX, ushort touchY, bool touchDown)
     {
-        IsLidClosed = !IsLidClosed;
-        SetInput(currentButtons, touchX, touchY, touchDown, IsLidClosed);
-        return IsLidClosed;
+        lock (_engineLock)
+        {
+            IsLidClosed = !IsLidClosed;
+            SetInput(currentButtons, touchX, touchY, touchDown, IsLidClosed);
+            return IsLidClosed;
+        }
     }
 
     /// <summary>
@@ -213,9 +221,12 @@ public sealed class StormDsEngineService : IDisposable
     /// </summary>
     public void SetMotionAndSlot2(float gyroX, float gyroY, float gyroZ, float accelX, float accelY, float accelZ, int slot2Type, int solarLux, uint guitarMask = 0, uint pedometerSteps = 0)
     {
-        if (StormDsNative.IsAvailable && _nativeHandle != nint.Zero)
+        lock (_engineLock)
         {
-            StormDsNative.storm_ds_set_motion_and_slot2_full(_nativeHandle, slot2Type, solarLux, guitarMask, gyroX, gyroY, gyroZ, pedometerSteps);
+            if (StormDsNative.IsAvailable && _nativeHandle != nint.Zero)
+            {
+                StormDsNative.storm_ds_set_motion_and_slot2_full(_nativeHandle, slot2Type, solarLux, guitarMask, gyroX, gyroY, gyroZ, pedometerSteps);
+            }
         }
     }
 
@@ -224,18 +235,21 @@ public sealed class StormDsEngineService : IDisposable
     /// </summary>
     public unsafe void SetMicState(MicMode micMode, byte[]? pcmSamples = null)
     {
-        if (StormDsNative.IsAvailable && _nativeHandle != nint.Zero)
+        lock (_engineLock)
         {
-            if (pcmSamples != null && pcmSamples.Length > 0)
+            if (StormDsNative.IsAvailable && _nativeHandle != nint.Zero)
             {
-                fixed (byte* pPcm = pcmSamples)
+                if (pcmSamples != null && pcmSamples.Length > 0)
                 {
-                    StormDsNative.storm_ds_set_mic_state(_nativeHandle, (int)micMode, pPcm, (nuint)pcmSamples.Length);
+                    fixed (byte* pPcm = pcmSamples)
+                    {
+                        StormDsNative.storm_ds_set_mic_state(_nativeHandle, (int)micMode, pPcm, (nuint)pcmSamples.Length);
+                    }
                 }
-            }
-            else
-            {
-                StormDsNative.storm_ds_set_mic_state(_nativeHandle, (int)micMode, null, 0);
+                else
+                {
+                    StormDsNative.storm_ds_set_mic_state(_nativeHandle, (int)micMode, null, 0);
+                }
             }
         }
     }

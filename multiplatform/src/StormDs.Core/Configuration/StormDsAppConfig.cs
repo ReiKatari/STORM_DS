@@ -225,9 +225,30 @@ public sealed class StormDsAppConfig
     public bool AutoCheckUpdates { get; set; } = true;
     public string SkippedUpdateVersion { get; set; } = string.Empty;
     public bool FirstRomAutoSelect { get; set; } = true;
+    public bool MinimizeToTrayOnClose { get; set; } = false;
+    public Dictionary<string, string> KeyMap { get; set; } = GetDefaultKeyMap();
     public List<string> RecentRoms { get; set; } = [];
     public List<string> FavoriteRoms { get; set; } = [];
     public List<string> RomDirectories { get; set; } = [];
+
+    public static Dictionary<string, string> GetDefaultKeyMap()
+    {
+        return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Up"] = "Up",
+            ["Down"] = "Down",
+            ["Left"] = "Left",
+            ["Right"] = "Right",
+            ["A"] = "X",
+            ["B"] = "Z",
+            ["X"] = "S",
+            ["Y"] = "A",
+            ["L"] = "Q",
+            ["R"] = "W",
+            ["Start"] = "Return",
+            ["Select"] = "RightShift"
+        };
+    }
 
     public static Dictionary<string, string> GetDefaultHotkeys()
     {

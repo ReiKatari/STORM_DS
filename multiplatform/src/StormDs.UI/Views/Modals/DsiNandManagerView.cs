@@ -40,8 +40,10 @@ public class DsiNandManagerView : AuroraGlassCard
 
     public DsiNandManagerView()
     {
-        Width = 640;
-        MaxHeight = 560;
+        HorizontalAlignment = HorizontalAlignment.Stretch;
+        MaxWidth = 900;
+        MaxHeight = 620;
+        Margin = new Thickness(16);
         Padding = new Thickness(20);
         SpotlightEnabled = true;
 
@@ -354,7 +356,7 @@ public class DsiNandManagerView : AuroraGlassCard
         var btn = new AuroraVolumetricButton { Height = 32, Padding = new Thickness(10, 2) };
         var s = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, VerticalAlignment = VerticalAlignment.Center };
         s.Children.Add(new AuroraVectorIcon { Kind = icon, Size = 13, VerticalAlignment = VerticalAlignment.Center });
-        s.Children.Add(new TextBlock { Text = label, FontSize = 11, FontWeight = FontWeight.Medium, Foreground = Brushes.White, VerticalAlignment = VerticalAlignment.Center });
+        s.Children.Add(new TextBlock { Text = label, FontSize = 11, FontWeight = FontWeight.Medium, VerticalAlignment = VerticalAlignment.Center });
         btn.Content = s;
         btn.Click += (_, _) =>
         {

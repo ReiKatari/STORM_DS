@@ -5,8 +5,10 @@ using System;
 using System.IO;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Chrome;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Platform;
 using Storm.AuroraFluid.Kit.Controls;
 using Storm.AuroraFluid.Kit.Platform;
 using Storm.AuroraFluid.Kit.Themes;
@@ -25,6 +27,7 @@ public class StormDsMainWindow : Window
 {
     private readonly AuroraScaledLayoutControl _scaledHost;
     private readonly StormDsMainView _mainView;
+    public StormDsMainView MainView => _mainView;
     private double _lastWorkWidth = 1920;
     private double _lastWorkHeight = 1040;
     private WindowState _preFullscreenState = WindowState.Normal;
@@ -39,9 +42,10 @@ public class StormDsMainWindow : Window
         Height = Math.Clamp(cfg.WindowHeight > 0 ? cfg.WindowHeight : 820, MinHeight, 2160);
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
 
-        // Modern frameless window with custom vector title bar
+        // Modern frameless window with custom vector title bar and zero OS/drawn title chrome overlap
         ExtendClientAreaToDecorationsHint = true;
         ExtendClientAreaTitleBarHeightHint = 42;
+        WindowDrawnDecorations.SetTitleBarDecorations(this, TitleBarDecorations.None);
 
         string iconPath = Path.Combine(AppContext.BaseDirectory, "assets", "AppIcon.ico");
         if (File.Exists(iconPath))
@@ -82,6 +86,15 @@ public class StormDsMainWindow : Window
         Opened += OnWindowOpened;
         Closing += OnWindowClosing;
         KeyDown += OnWindowKeyDown;
+        PropertyChanged += OnWindowPropertyChanged;
+    }
+
+    private void OnWindowPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs change)
+    {
+        if (change.Property == WindowStateProperty || change.Property == OffScreenMarginProperty)
+        {
+            Padding = WindowState == WindowState.Maximized ? OffScreenMargin : new Thickness(0);
+        }
     }
 
     private void OnWindowOpened(object? sender, EventArgs e)

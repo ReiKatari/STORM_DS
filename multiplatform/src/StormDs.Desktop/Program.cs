@@ -2,10 +2,13 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
+using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Storm.AuroraFluid.Kit.Icons;
 using Storm.AuroraFluid.Kit.Platform;
@@ -15,6 +18,8 @@ using StormDs.Core.Engine;
 using StormDs.Core.Localization;
 using StormDs.Core.Native;
 using StormDs.UI;
+using StormDs.UI.Common;
+using StormDs.UI.Windows;
 
 namespace StormDs.Desktop;
 
@@ -26,6 +31,21 @@ internal static class Program
         if (args.Contains("--smoke-test", StringComparer.OrdinalIgnoreCase))
         {
             return RunHeadlessSmokeTest();
+        }
+
+        string? verifyUiDir = null;
+        for (int i = 0; i < args.Length - 1; i++)
+        {
+            if (args[i].Equals("--verify-ui", StringComparison.OrdinalIgnoreCase))
+            {
+                verifyUiDir = args[i + 1];
+                break;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(verifyUiDir))
+        {
+            return BuildAvaloniaApp(verifyUiDir).StartWithClassicDesktopLifetime(Array.Empty<string>());
         }
 
         using var singleInstance = new AuroraSingleInstanceService("DS");
@@ -52,7 +72,7 @@ internal static class Program
         return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }
 
-    public static AppBuilder BuildAvaloniaApp()
+    public static AppBuilder BuildAvaloniaApp(string? verifyUiDir = null)
     {
         var builder = AppBuilder.Configure<StormDsApp>()
             .UsePlatformDetect()
@@ -83,6 +103,66 @@ internal static class Program
                 },
                 WmClass = "STORM DS"
             });
+
+        if (!string.IsNullOrWhiteSpace(verifyUiDir))
+        {
+            builder.AfterSetup(_ =>
+            {
+                DispatcherTimer.RunOnce(async () =>
+                {
+                    try
+                    {
+                        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop &&
+                            desktop.MainWindow is StormDsMainWindow win)
+                        {
+                            string prevTheme = StormDsUiState.Instance.AppConfig.Theme;
+                            Directory.CreateDirectory(verifyUiDir);
+                            win.WindowState = WindowState.Normal;
+                            win.Width = 1280;
+                            win.Height = 820;
+
+                            async Task SnapAsync(string fileName)
+                            {
+                                await Task.Delay(250);
+                                win.UpdateLayout();
+                                var sz = new PixelSize((int)Math.Max(1, win.Bounds.Width), (int)Math.Max(1, win.Bounds.Height));
+                                using var rtb = new RenderTargetBitmap(sz, new Vector(96, 96));
+                                rtb.Render(win);
+#pragma warning disable CS0618
+                                rtb.Save(Path.Combine(verifyUiDir, fileName));
+#pragma warning restore CS0618
+                            }
+
+                            AuroraThemeManager.Instance.ApplyTheme(AuroraThemeManager.ThemeFantasy);
+                            StormDsUiState.Instance.SetNavSection(NavSectionKind.Library);
+                            await SnapAsync("01_library_fantasy.png");
+
+                            StormDsUiState.Instance.SetNavSection(NavSectionKind.Settings);
+                            win.MainView.SelectSettingsTab(2);
+                            await SnapAsync("02_settings_input_fantasy.png");
+
+                            AuroraThemeManager.Instance.ApplyTheme(AuroraThemeManager.ThemeDay);
+                            win.MainView.SelectSettingsTab(7);
+                            await SnapAsync("03_settings_themes_day.png");
+
+                            win.MainView.SelectSettingsTab(3);
+                            await SnapAsync("05_settings_sliders_day.png");
+
+                            StormDsUiState.Instance.SetNavSection(NavSectionKind.Library);
+                            await SnapAsync("04_library_day.png");
+
+                            AuroraThemeManager.Instance.ApplyTheme(prevTheme.Replace("STORM ", "").Trim());
+                            desktop.Shutdown(0);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine($"VERIFY_UI_ERR: {ex}");
+                        Environment.Exit(2);
+                    }
+                }, TimeSpan.FromMilliseconds(900));
+            });
+        }
 
         return AuroraGpuBootstrap.ConfigureAuroraGpu(builder);
     }

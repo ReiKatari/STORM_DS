@@ -53,7 +53,7 @@ public class BentoHardwareCard : AuroraGlassCard
             Text = "АППАРАТНЫЙ VULKAN МОНИТОР",
             FontSize = 10.5,
             FontWeight = FontWeight.Bold,
-            Foreground = new SolidColorBrush(Color.Parse("#F59E0B")),
+            Foreground = new SolidColorBrush(Color.Parse("#D97706")),
             VerticalAlignment = VerticalAlignment.Center
         });
 
@@ -65,7 +65,6 @@ public class BentoHardwareCard : AuroraGlassCard
             Text = StormDsUiState.Instance.ProbedGpuName,
             FontSize = 13,
             FontWeight = FontWeight.SemiBold,
-            Foreground = new SolidColorBrush(Color.Parse("#F8FAFC")),
             TextTrimming = TextTrimming.CharacterEllipsis
         };
         stack.Children.Add(gpuText);
@@ -77,10 +76,27 @@ public class BentoHardwareCard : AuroraGlassCard
             Rows = 2
         };
 
-        detailsGrid.Children.Add(CreateStatRow("Профиль:", StormDsUiState.Instance.VulkanTierBadge, "#10B981"));
-        detailsGrid.Children.Add(CreateStatRow("Шейдеры:", "SPIR-V Ready", "#38BDF8"));
-        detailsGrid.Children.Add(CreateStatRow("Память:", "Zero-Copy 4MB VRAM", "#818CF8"));
-        detailsGrid.Children.Add(CreateStatRow("Задержка:", $"{StormDsUiState.Instance.AppConfig.AudioLatency} мс DSP", "#A855F7"));
+        var statLabels = new List<TextBlock>();
+        var profileValText = new TextBlock
+        {
+            Text = StormDsUiState.Instance.VulkanTierBadge,
+            FontSize = 10.5,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = new SolidColorBrush(Color.Parse("#10B981")),
+            TextTrimming = TextTrimming.CharacterEllipsis
+        };
+        var latValText = new TextBlock
+        {
+            Text = $"{StormDsUiState.Instance.AppConfig.AudioLatency} мс DSP",
+            FontSize = 10.5,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = new SolidColorBrush(Color.Parse("#A855F7")),
+            TextTrimming = TextTrimming.CharacterEllipsis
+        };
+        detailsGrid.Children.Add(CreateStatRow("Профиль:", profileValText, statLabels));
+        detailsGrid.Children.Add(CreateStatRow("Шейдеры:", new TextBlock { Text = "SPIR-V Ready", FontSize = 10.5, FontWeight = FontWeight.SemiBold, Foreground = new SolidColorBrush(Color.Parse("#0284C7")) }, statLabels));
+        detailsGrid.Children.Add(CreateStatRow("Память:", new TextBlock { Text = "Zero-Copy 4MB VRAM", FontSize = 10.5, FontWeight = FontWeight.SemiBold, Foreground = new SolidColorBrush(Color.Parse("#6366F1")) }, statLabels));
+        detailsGrid.Children.Add(CreateStatRow("Задержка:", latValText, statLabels));
 
         stack.Children.Add(detailsGrid);
 
@@ -104,14 +120,14 @@ public class BentoHardwareCard : AuroraGlassCard
             Size = 14,
             VerticalAlignment = VerticalAlignment.Center
         });
-        btnStack.Children.Add(new TextBlock
+        var testBtnText = new TextBlock
         {
             Text = "Тест прошивки FreeBIOS",
             FontSize = 11.5,
             FontWeight = FontWeight.SemiBold,
-            Foreground = Brushes.White,
             VerticalAlignment = VerticalAlignment.Center
-        });
+        };
+        btnStack.Children.Add(testBtnText);
         testBtn.Content = btnStack;
         testBtn.Click += (s, e) =>
         {
@@ -120,9 +136,28 @@ public class BentoHardwareCard : AuroraGlassCard
         stack.Children.Add(testBtn);
 
         Content = stack;
+
+        void RefreshStats()
+        {
+            profileValText.Text = StormDsUiState.Instance.VulkanTierBadge;
+            latValText.Text = $"{StormDsUiState.Instance.AppConfig.AudioLatency} мс DSP";
+        }
+
+        StormDsUiState.Instance.SettingsSaved += RefreshStats;
+        StormDsUiState.Instance.DisplayConfigChanged += RefreshStats;
+
+        StormThemeBrushes.BindTheme(this, () =>
+        {
+            gpuText.Foreground = StormThemeBrushes.PrimaryText;
+            testBtnText.Foreground = StormThemeBrushes.PrimaryText;
+            foreach (var lbl in statLabels)
+            {
+                lbl.Foreground = StormThemeBrushes.SecondaryText;
+            }
+        });
     }
 
-    private static StackPanel CreateStatRow(string label, string val, string hexColor)
+    private static StackPanel CreateStatRow(string label, TextBlock valueBlock, List<TextBlock> statLabels)
     {
         var row = new StackPanel
         {
@@ -131,22 +166,15 @@ public class BentoHardwareCard : AuroraGlassCard
             Margin = new Thickness(0, 2)
         };
 
-        row.Children.Add(new TextBlock
+        var lbl = new TextBlock
         {
             Text = label,
             FontSize = 10.5,
-            Foreground = new SolidColorBrush(Color.Parse("#94A3B8"))
-        });
-
-        row.Children.Add(new TextBlock
-        {
-            Text = val,
-            FontSize = 10.5,
-            FontWeight = FontWeight.SemiBold,
-            Foreground = new SolidColorBrush(Color.Parse(hexColor)),
-            TextTrimming = TextTrimming.CharacterEllipsis
-        });
-
+            Foreground = StormThemeBrushes.SecondaryText
+        };
+        statLabels.Add(lbl);
+        row.Children.Add(lbl);
+        row.Children.Add(valueBlock);
         return row;
     }
 }

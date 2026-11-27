@@ -147,7 +147,7 @@ public class StormDsApp : Application
             var trayIcons = new TrayIcons { trayIcon };
             TrayIcon.SetIcons(this, trayIcons);
 
-            // Wire AuroraTrayManager with Close-to-Tray lifecycle and hidden state tracking
+            // Wire AuroraTrayManager with configurable Close-to-Tray lifecycle and hidden state tracking
             AuroraTrayManager.Instance.AttachToWindow(
                 mainWindow,
                 "STORM DS",
@@ -157,12 +157,13 @@ public class StormDsApp : Application
                 {
                     StormDsUiState.Instance.SetHiddenToTray(false);
                     mainWindow.Activate();
-                }
+                },
+                shouldCloseToTray: () => StormDsUiState.Instance.AppConfig.MinimizeToTrayOnClose
             );
 
             mainWindow.Closing += (_, _) =>
             {
-                if (!AuroraTrayManager.Instance.IsExitRequestedFromTray)
+                if (StormDsUiState.Instance.AppConfig.MinimizeToTrayOnClose && !AuroraTrayManager.Instance.IsExitRequestedFromTray)
                 {
                     StormDsUiState.Instance.SetHiddenToTray(true);
                 }

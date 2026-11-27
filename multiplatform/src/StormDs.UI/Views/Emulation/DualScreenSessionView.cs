@@ -2,6 +2,8 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
 using Avalonia;
@@ -47,6 +49,13 @@ public class DualScreenSessionView : Grid
     private readonly TouchControlsOverlay _touchControls;
     private readonly EmulationPauseOverlay _pauseOverlay;
     private readonly DispatcherTimer _frameTimer;
+    private readonly Stopwatch _framePaceWatch = Stopwatch.StartNew();
+    private double _framePaceAccumulatorMs;
+    private readonly Border _fpsHudOverlay;
+    private readonly TextBlock _fpsHudText;
+    private readonly Border _fsExitBanner;
+    private bool _showFpsHud;
+    private int _rotationDegrees;
     private readonly XInputGamepadService _gamepad = new();
 
     private DetachedTouchScreenWindow? _detachedWindow;
@@ -181,7 +190,7 @@ public class DualScreenSessionView : Grid
         {
             if (_screensSwapped) HandleTouchRelease();
         };
-        _topScreenContainer.Child = _topScreenImage;
+        _topScreenContainer.Child = new LayoutTransformControl { Child = _topScreenImage };
 
         _bottomScreenContainer = new Border
         {
@@ -208,7 +217,7 @@ public class DualScreenSessionView : Grid
         {
             if (!_screensSwapped) HandleTouchRelease();
         };
-        _bottomScreenContainer.Child = _bottomScreenImage;
+        _bottomScreenContainer.Child = new LayoutTransformControl { Child = _bottomScreenImage };
 
         _viewportCanvas.Children.Add(_topScreenContainer);
         _viewportCanvas.Children.Add(_bottomScreenContainer);
@@ -224,6 +233,66 @@ public class DualScreenSessionView : Grid
         };
         _touchControls.InputChanged += _ => PushCombinedInput();
         viewportHost.Children.Add(_touchControls);
+
+        // Live FPS HUD Overlay (toggled by F3 / ToggleFps)
+        _fpsHudText = new TextBlock
+        {
+            Text = "59.8 FPS",
+            FontSize = 12,
+            FontWeight = FontWeight.Bold,
+            Foreground = new SolidColorBrush(Color.Parse("#10B981"))
+        };
+        _fpsHudOverlay = new Border
+        {
+            IsVisible = false,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(12),
+            Padding = new Thickness(10, 5),
+            CornerRadius = new CornerRadius(8),
+            Background = new SolidColorBrush(Color.FromArgb(200, 10, 14, 24)),
+            BorderBrush = new SolidColorBrush(Color.Parse("#10B981")),
+            BorderThickness = new Thickness(1),
+            IsHitTestVisible = false,
+            Child = _fpsHudText
+        };
+        viewportHost.Children.Add(_fpsHudOverlay);
+
+        // Fullscreen Mouse-Exit Pill (top center when pointer hovers near top in fullscreen)
+        _fsExitBanner = new Border
+        {
+            IsVisible = false,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, 10, 0, 0),
+            Padding = new Thickness(14, 7),
+            CornerRadius = new CornerRadius(14),
+            Background = new SolidColorBrush(Color.FromArgb(220, 15, 23, 42)),
+            BorderBrush = new SolidColorBrush(Color.Parse("#38BDF8")),
+            BorderThickness = new Thickness(1),
+            Cursor = new Cursor(StandardCursorType.Hand),
+            Child = new TextBlock
+            {
+                Text = "Выйти из полноэкранного режима (F11)",
+                FontSize = 11.5,
+                FontWeight = FontWeight.SemiBold,
+                Foreground = Brushes.White
+            }
+        };
+        _fsExitBanner.PointerPressed += (_, _) => StormDsUiState.Instance.RequestToggleFullscreen();
+        viewportHost.Children.Add(_fsExitBanner);
+
+        viewportHost.PointerMoved += (_, e) =>
+        {
+            if (StormDsUiState.Instance.IsFullscreen)
+            {
+                _fsExitBanner.IsVisible = e.GetPosition(viewportHost).Y <= 54;
+            }
+            else if (_fsExitBanner.IsVisible)
+            {
+                _fsExitBanner.IsVisible = false;
+            }
+        };
 
         Children.Add(viewportHost);
         Grid.SetRow(viewportHost, 1);
@@ -259,7 +328,11 @@ public class DualScreenSessionView : Grid
         _frameTimer.Tick += OnEmulationFrameTick;
 
         StormDsUiState.Instance.DisplayConfigChanged += RefreshDisplayConfig;
-        StormDsUiState.Instance.FullscreenChanged += isFs => _quickBar.IsVisible = !isFs;
+        StormDsUiState.Instance.FullscreenChanged += isFs =>
+        {
+            _quickBar.IsVisible = !isFs;
+            if (!isFs) _fsExitBanner.IsVisible = false;
+        };
         StormDsUiState.Instance.EmulationStarted += UpdateTimerState;
         StormDsUiState.Instance.EmulationStopped += () =>
         {
@@ -296,6 +369,8 @@ public class DualScreenSessionView : Grid
                          !StormDsUiState.Instance.IsHiddenToTray;
         if (shouldRun && !_frameTimer.IsEnabled)
         {
+            _framePaceWatch.Restart();
+            _framePaceAccumulatorMs = 0;
             _frameTimer.Start();
         }
         else if (!shouldRun && _frameTimer.IsEnabled)
@@ -380,6 +455,7 @@ public class DualScreenSessionView : Grid
         {
             ScreenFilter.Nearest => ScreenFilter.Linear,
             ScreenFilter.Linear => ScreenFilter.Bicubic,
+            ScreenFilter.Bicubic => ScreenFilter.SlangShader,
             _ => ScreenFilter.Nearest
         };
         StormDsUiState.Instance.SaveConfig();
@@ -444,16 +520,30 @@ public class DualScreenSessionView : Grid
         {
             ScreenFilter.Nearest => "Фильтр: Пиксель",
             ScreenFilter.Linear => "Фильтр: Linear",
+            ScreenFilter.SlangShader => "Фильтр: Slang",
             _ => "Фильтр: Bicubic"
         };
+
+        if (_topScreenContainer.Child is LayoutTransformControl topLtc)
+        {
+            topLtc.LayoutTransform = _rotationDegrees == 0 ? null : new RotateTransform(_rotationDegrees);
+        }
+        if (_bottomScreenContainer.Child is LayoutTransformControl botLtc)
+        {
+            botLtc.LayoutTransform = _rotationDegrees == 0 ? null : new RotateTransform(_rotationDegrees);
+        }
 
         RecalculateScreenLayout();
     }
 
-    private static Size FitScreenBox(double boxW, double boxH, ScreenScaleMode scaleMode)
+    private Size FitScreenBox(double boxW, double boxH, ScreenScaleMode scaleMode)
     {
         double w = Math.Max(32, boxW);
         double h = Math.Max(32, boxH);
+        bool rotated = (_rotationDegrees % 180) != 0;
+        double baseW = rotated ? 192.0 : 256.0;
+        double baseH = rotated ? 256.0 : 192.0;
+
         if (scaleMode == ScreenScaleMode.StretchFill)
         {
             return new Size(Math.Round(w), Math.Round(h));
@@ -461,15 +551,15 @@ public class DualScreenSessionView : Grid
 
         if (scaleMode == ScreenScaleMode.IntegerPixelPerfect)
         {
-            int k = (int)Math.Floor(Math.Min(w / 256.0, h / 192.0));
+            int k = (int)Math.Floor(Math.Min(w / baseW, h / baseH));
             if (k >= 1)
             {
-                return new Size(256.0 * k, 192.0 * k);
+                return new Size(baseW * k, baseH * k);
             }
         }
 
-        double s = Math.Min(w / 256.0, h / 192.0);
-        return new Size(Math.Round(256.0 * s), Math.Round(192.0 * s));
+        double s = Math.Min(w / baseW, h / baseH);
+        return new Size(Math.Round(baseW * s), Math.Round(baseH * s));
     }
 
     private void RecalculateScreenLayout()
@@ -573,11 +663,32 @@ public class DualScreenSessionView : Grid
             return;
         }
 
+        const double TargetFrameMs = 1000.0 / 59.8261;
+        double elapsed = _framePaceWatch.Elapsed.TotalMilliseconds;
+        _framePaceWatch.Restart();
+        _framePaceAccumulatorMs = Math.Min(_framePaceAccumulatorMs + elapsed, TargetFrameMs * 2.5);
+
+        int steps;
+        if (StormDsUiState.Instance.IsFastForward)
+        {
+            steps = 3;
+            _framePaceAccumulatorMs = 0;
+        }
+        else
+        {
+            steps = 0;
+            while (_framePaceAccumulatorMs >= TargetFrameMs && steps < 2)
+            {
+                _framePaceAccumulatorMs -= TargetFrameMs;
+                steps++;
+            }
+            if (steps == 0) return;
+        }
+
         _gamepadButtonsMask = _gamepad.PollNdsButtonMask();
         PushCombinedInput();
 
         var eng = StormDsUiState.Instance.EngineService;
-        int steps = StormDsUiState.Instance.IsFastForward ? 3 : 1;
         StormDsCoreStatsLoop(eng, steps);
         RefreshRenderedBitmaps();
     }
@@ -602,9 +713,12 @@ public class DualScreenSessionView : Grid
         {
             string resTag = $"{(int)_topScreenContainer.Width}x{(int)_topScreenContainer.Height}";
             string backendTag = stats.ActiveBackend == 1 ? "VK" : "SW";
-            _statsBadgeText.Text = stats.Fps > 0.1
-                ? $"{stats.Fps:0.0} FPS | {backendTag} | {resTag}"
-                : $"60.0 FPS | {backendTag} | {resTag}";
+            double fpsVal = stats.Fps > 0.1 ? stats.Fps : 59.8;
+            _statsBadgeText.Text = $"{fpsVal:0.0} FPS | {backendTag} | {resTag}";
+            if (_showFpsHud)
+            {
+                _fpsHudText.Text = $"{fpsVal:0.0} FPS | {backendTag}";
+            }
         }
     }
 
@@ -614,7 +728,7 @@ public class DualScreenSessionView : Grid
         var topBgra = eng.HasLiveNativeFrame ? eng.TopFrameBgra : BitmapHelper.GenerateTestScreenBgra(256, 192, false, "STORM DS TOP", _frameCounter);
         var botBgra = eng.HasLiveNativeFrame ? eng.BottomFrameBgra : BitmapHelper.GenerateTestScreenBgra(256, 192, true, "STORM DS TOUCH", _frameCounter);
 
-        if (!_screensSwapped)
+        if (!_screensSwapped || _detachedWindow != null)
         {
             BitmapHelper.UpdateBgraBitmap(_topBitmap, topBgra, 256, 192);
             BitmapHelper.UpdateBgraBitmap(_bottomBitmap, botBgra, 256, 192);
@@ -669,7 +783,7 @@ public class DualScreenSessionView : Grid
                     _lastTouchY = ty;
                     PushCombinedInput();
                 },
-                canAcceptTouch: () => !_screensSwapped);
+                canAcceptTouch: () => true);
             _detachedWindow.Show();
             StormDsUiState.Instance.IsDetachedScreenActive = true;
             RefreshDisplayConfig();
@@ -956,6 +1070,71 @@ public class DualScreenSessionView : Grid
             return;
         }
 
+        if (MatchesHotkey(e.Key, "PauseResume"))
+        {
+            TogglePauseMenu();
+            e.Handled = true;
+            return;
+        }
+
+        if (MatchesHotkey(e.Key, "ToggleFps"))
+        {
+            _showFpsHud = !_showFpsHud;
+            _fpsHudOverlay.IsVisible = _showFpsHud;
+            e.Handled = true;
+            return;
+        }
+
+        if (MatchesHotkey(e.Key, "RotateScreens"))
+        {
+            _rotationDegrees = (_rotationDegrees + 90) % 360;
+            RefreshDisplayConfig();
+            StormDsUiState.Instance.NotifyStatus($"Поворот экранов: {_rotationDegrees}°");
+            e.Handled = true;
+            return;
+        }
+
+        if (MatchesHotkey(e.Key, "SolarLuxInc"))
+        {
+            var cfg = StormDsUiState.Instance.AppConfig;
+            cfg.SolarLuxLevel = Math.Clamp(cfg.SolarLuxLevel + 1, 0, 10);
+            StormDsUiState.Instance.SaveConfig();
+            StormDsUiState.Instance.NotifyStatus($"Датчик Boktai: {cfg.SolarLuxLevel}/10 Lux");
+            e.Handled = true;
+            return;
+        }
+
+        if (MatchesHotkey(e.Key, "SolarLuxDec"))
+        {
+            var cfg = StormDsUiState.Instance.AppConfig;
+            cfg.SolarLuxLevel = Math.Clamp(cfg.SolarLuxLevel - 1, 0, 10);
+            StormDsUiState.Instance.SaveConfig();
+            StormDsUiState.Instance.NotifyStatus($"Датчик Boktai: {cfg.SolarLuxLevel}/10 Lux");
+            e.Handled = true;
+            return;
+        }
+
+        if (MatchesHotkey(e.Key, "ToggleHardcore"))
+        {
+            var cfg = StormDsUiState.Instance.AppConfig;
+            cfg.RetroAchievementsHardcoreMode = !cfg.RetroAchievementsHardcoreMode;
+            StormDsUiState.Instance.SaveConfig();
+            StormDsUiState.Instance.NotifyStatus(cfg.RetroAchievementsHardcoreMode ? "Hardcore режим включен" : "Hardcore режим выключен");
+            e.Handled = true;
+            return;
+        }
+
+        if (MatchesHotkey(e.Key, "ToggleCheat"))
+        {
+            var cfg = StormDsUiState.Instance.AppConfig;
+            cfg.CheatsEnabled = !cfg.CheatsEnabled;
+            StormDsUiState.Instance.ApplyLiveCheats();
+            StormDsUiState.Instance.SaveConfig();
+            StormDsUiState.Instance.NotifyStatus(cfg.CheatsEnabled ? "Читы включены" : "Читы выключены");
+            e.Handled = true;
+            return;
+        }
+
         uint bit = MapKeyToBit(e.Key);
         if (bit != 0)
         {
@@ -978,21 +1157,30 @@ public class DualScreenSessionView : Grid
 
     private static uint MapKeyToBit(Key key)
     {
-        return key switch
+        var km = StormDsUiState.Instance.AppConfig.KeyMap;
+        if (MatchesMappedKey(key, km, "A", Key.X)) return 1u << 0;
+        if (MatchesMappedKey(key, km, "B", Key.Z)) return 1u << 1;
+        if (MatchesMappedKey(key, km, "Select", Key.RightShift)) return 1u << 2;
+        if (MatchesMappedKey(key, km, "Start", Key.Return)) return 1u << 3;
+        if (MatchesMappedKey(key, km, "Right", Key.Right)) return 1u << 4;
+        if (MatchesMappedKey(key, km, "Left", Key.Left)) return 1u << 5;
+        if (MatchesMappedKey(key, km, "Up", Key.Up)) return 1u << 6;
+        if (MatchesMappedKey(key, km, "Down", Key.Down)) return 1u << 7;
+        if (MatchesMappedKey(key, km, "R", Key.W)) return 1u << 8;
+        if (MatchesMappedKey(key, km, "L", Key.Q)) return 1u << 9;
+        if (MatchesMappedKey(key, km, "X", Key.S)) return 1u << 10;
+        if (MatchesMappedKey(key, km, "Y", Key.A)) return 1u << 11;
+        return 0u;
+    }
+
+    private static bool MatchesMappedKey(Key pressed, Dictionary<string, string>? keyMap, string action, Key fallback)
+    {
+        if (keyMap != null && keyMap.TryGetValue(action, out string? name) && Enum.TryParse<Key>(name, true, out var mapped))
         {
-            Key.X => 1u << 0,          // A
-            Key.Z => 1u << 1,          // B
-            Key.LeftShift => 1u << 2,  // Select
-            Key.Enter => 1u << 3,      // Start
-            Key.Right => 1u << 4,      // Right
-            Key.Left => 1u << 5,       // Left
-            Key.Up => 1u << 6,         // Up
-            Key.Down => 1u << 7,       // Down
-            Key.E => 1u << 8,          // R
-            Key.Q => 1u << 9,          // L
-            Key.C or Key.K => 1u << 10,// X
-            Key.V or Key.J => 1u << 11,// Y
-            _ => 0u
-        };
+            if (mapped == pressed) return true;
+            if ((mapped == Key.Return || mapped == Key.Enter) && (pressed == Key.Return || pressed == Key.Enter)) return true;
+            return false;
+        }
+        return pressed == fallback;
     }
 }

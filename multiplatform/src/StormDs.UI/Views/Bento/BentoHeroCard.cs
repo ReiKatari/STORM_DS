@@ -8,6 +8,7 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Platform.Storage;
 using Storm.AuroraFluid.Kit.Controls;
 using Storm.AuroraFluid.Kit.Icons;
 using Storm.AuroraFluid.Kit.Services;
@@ -51,8 +52,6 @@ public class BentoHeroCard : AuroraGlassCard
             Width = 128,
             Height = 128,
             CornerRadius = new CornerRadius(12),
-            Background = new SolidColorBrush(Color.FromArgb(40, 0, 0, 0)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(70, 255, 255, 255)),
             BorderThickness = new Thickness(1),
             Margin = new Thickness(12),
             VerticalAlignment = VerticalAlignment.Center,
@@ -175,11 +174,34 @@ public class BentoHeroCard : AuroraGlassCard
             VerticalAlignment = VerticalAlignment.Center
         });
         _launchButton.Content = btnContent;
-        _launchButton.Click += (s, e) =>
+        _launchButton.Click += async (s, e) =>
         {
             if (_currentRom != null)
             {
                 StormDsUiState.Instance.StartEmulation(_currentRom);
+                return;
+            }
+
+            var top = TopLevel.GetTopLevel(this);
+            if (top?.StorageProvider != null)
+            {
+                var files = await top.StorageProvider.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions
+                {
+                    Title = "Выберите ROM-файл (.nds, .dsi, .zip)",
+                    AllowMultiple = false,
+                    FileTypeFilter = new[]
+                    {
+                        new Avalonia.Platform.Storage.FilePickerFileType("Nintendo DS / DSi ROM") { Patterns = new[] { "*.nds", "*.srl", "*.dsi", "*.ids", "*.zip" } }
+                    }
+                });
+                if (files.Count > 0)
+                {
+                    string? localPath = files[0].TryGetLocalPath();
+                    if (!string.IsNullOrWhiteSpace(localPath))
+                    {
+                        StormDsUiState.Instance.StartRomEmulationFromPath(localPath);
+                    }
+                }
             }
         };
         actionStack.Children.Add(_launchButton);
@@ -210,14 +232,14 @@ public class BentoHeroCard : AuroraGlassCard
             Size = 13,
             VerticalAlignment = VerticalAlignment.Center
         });
-        biosContent.Children.Add(new TextBlock
+        var biosBtnText = new TextBlock
         {
             Text = "Меню FreeBIOS",
             FontSize = 11,
             FontWeight = FontWeight.Medium,
-            Foreground = new SolidColorBrush(Color.Parse("#CBD5E1")),
             VerticalAlignment = VerticalAlignment.Center
-        });
+        };
+        biosContent.Children.Add(biosBtnText);
         _biosButton.Content = biosContent;
         _biosButton.Click += (s, e) =>
         {
@@ -230,11 +252,20 @@ public class BentoHeroCard : AuroraGlassCard
             Width = 36,
             Height = 32,
             CornerRadius = new CornerRadius(8),
-            Background = new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(80, 255, 255, 255)),
             BorderThickness = new Thickness(1),
             Cursor = new Cursor(StandardCursorType.Hand)
         };
+
+        StormThemeBrushes.BindTheme(this, () =>
+        {
+            iconBorder.Background = StormThemeBrushes.CardSurface;
+            iconBorder.BorderBrush = StormThemeBrushes.SubtleBorder;
+            _metaText.Foreground = StormThemeBrushes.SecondaryText;
+            _titleText.Foreground = StormThemeBrushes.PrimaryText;
+            _descText.Foreground = StormThemeBrushes.SecondaryText;
+            biosBtnText.Foreground = StormThemeBrushes.PrimaryText;
+            UpdateFavoriteVisual();
+        });
         _favIcon = new AuroraVectorIcon
         {
             Kind = AuroraIconKind.StarFavorite,
@@ -261,12 +292,6 @@ public class BentoHeroCard : AuroraGlassCard
         Content = grid;
 
         StormDsUiState.Instance.RomSelected += UpdateWithRom;
-        StormThemeBrushes.BindTheme(this, () =>
-        {
-            _titleText.Foreground = StormThemeBrushes.PrimaryText;
-            _metaText.Foreground = StormThemeBrushes.SecondaryText;
-            _descText.Foreground = StormThemeBrushes.SecondaryText;
-        });
         UpdateWithRom(StormDsUiState.Instance.SelectedRom);
     }
 
@@ -276,8 +301,8 @@ public class BentoHeroCard : AuroraGlassCard
         if (rom == null)
         {
             _titleText.Text = $"STORM DS {StormDs.Core.Localization.StormDsLoc.AppVersion} - Готов к запуску";
-            _metaText.Text = "FreeBIOS • Vulkan 1.4 • 60 FPS";
-            _descText.Text = "Перетащите любой .nds, .dsi, .srl, .zip или откройте папку для запуска.";
+            _metaText.Text = $"FreeBIOS • {StormDsUiState.Instance.VulkanTierBadge} • 60 FPS";
+            _descText.Text = "Нажмите «Запустить игру» для выбора файла или перетащите .nds, .dsi, .srl, .zip.";
             _iconImage.Source = null;
             UpdateFavoriteVisual();
             return;
@@ -286,7 +311,7 @@ public class BentoHeroCard : AuroraGlassCard
         string lang = StormDsUiState.Instance.AppConfig.Language;
         _titleText.Text = rom.GetDisplayTitle(lang);
         _metaText.Text = $"{rom.UnitCode} • {rom.GameCode} • {rom.FileSizeBytes / (1024.0 * 1024.0):0.1} MB • CRC {rom.Crc32Hex}";
-        _descText.Text = $"Запусков: {rom.PlayCount} | Контрольная сумма заголовка проверена | Сохранение: {rom.GameCode}.dsv";
+        _descText.Text = $"Запусков: {rom.PlayCount} | Контрольная сумма заголовка проверена | Сохранение: {rom.GameCode}.sav";
 
         var bgra = StormDsUiState.Instance.LibraryService.GetIconBgra128(rom.GameCode);
         if (bgra != null)
@@ -306,6 +331,9 @@ public class BentoHeroCard : AuroraGlassCard
         bool isFav = _currentRom?.IsFavorite == true;
         _favButton.Background = isFav
             ? new SolidColorBrush(Color.FromArgb(90, 245, 158, 11))
-            : new SolidColorBrush(Color.FromArgb(40, 255, 255, 255));
+            : StormThemeBrushes.CardSurface;
+        _favButton.BorderBrush = isFav
+            ? new SolidColorBrush(Color.Parse("#F59E0B"))
+            : StormThemeBrushes.StrongBorder;
     }
 }

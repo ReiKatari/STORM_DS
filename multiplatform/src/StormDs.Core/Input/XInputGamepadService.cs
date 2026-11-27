@@ -50,6 +50,13 @@ public sealed unsafe class XInputGamepadService
 
     public bool IsSupported => _xInputGetState != null;
 
+    public bool IsControllerConnected(uint userIndex = 0)
+    {
+        if (_xInputGetState == null) return false;
+        XINPUT_STATE state = default;
+        return _xInputGetState(userIndex, &state) == 0;
+    }
+
     public XInputGamepadService()
     {
         if (!OperatingSystem.IsWindows()) return;

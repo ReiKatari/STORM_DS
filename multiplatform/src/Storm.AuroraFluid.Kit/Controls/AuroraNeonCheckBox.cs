@@ -44,9 +44,18 @@ public class AuroraNeonCheckBox : Control
         AffectsMeasure<AuroraNeonCheckBox>(LabelProperty);
     }
 
+    private void OnThemeChanged(AuroraThemeDefinition _) => InvalidateVisual();
+
     public AuroraNeonCheckBox()
     {
         Cursor = new Cursor(StandardCursorType.Hand);
+        AttachedToVisualTree += (_, _) =>
+        {
+            AuroraThemeManager.Instance.ThemeChanged -= OnThemeChanged;
+            AuroraThemeManager.Instance.ThemeChanged += OnThemeChanged;
+            InvalidateVisual();
+        };
+        DetachedFromVisualTree += (_, _) => AuroraThemeManager.Instance.ThemeChanged -= OnThemeChanged;
     }
 
     protected override void OnPointerEntered(PointerEventArgs e)

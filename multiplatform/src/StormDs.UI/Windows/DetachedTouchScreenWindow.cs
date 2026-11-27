@@ -81,14 +81,14 @@ public class DetachedTouchScreenWindow : Window
             VerticalAlignment = VerticalAlignment.Center
         };
         titleStack.Children.Add(new AuroraVectorIcon { Kind = AuroraIconKind.TouchStylus, Size = 15, VerticalAlignment = VerticalAlignment.Center });
-        titleStack.Children.Add(new TextBlock
+        var titleText = new TextBlock
         {
             Text = "STORM DS - Сенсорный экран",
             FontSize = 11.5,
             FontWeight = FontWeight.Bold,
-            Foreground = new SolidColorBrush(Color.Parse("#38BDF8")),
             VerticalAlignment = VerticalAlignment.Center
-        });
+        };
+        titleStack.Children.Add(titleText);
         titleBar.Children.Add(titleStack);
         Grid.SetColumn(titleStack, 0);
 
@@ -105,8 +105,6 @@ public class DetachedTouchScreenWindow : Window
             Height = 26,
             Padding = new Thickness(8, 2),
             Margin = new Thickness(0, 0, 8, 0),
-            Background = new SolidColorBrush(Color.FromArgb(50, 255, 255, 255)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(80, 255, 255, 255)),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(6),
             Cursor = new Cursor(StandardCursorType.Hand),
@@ -114,10 +112,22 @@ public class DetachedTouchScreenWindow : Window
         };
         var rStack = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
         rStack.Children.Add(new AuroraVectorIcon { Kind = AuroraIconKind.SwapScreens, Size = 12, VerticalAlignment = VerticalAlignment.Center });
-        rStack.Children.Add(new TextBlock { Text = "Прикрепить экран", FontSize = 10, FontWeight = FontWeight.Medium, Foreground = Brushes.White, VerticalAlignment = VerticalAlignment.Center });
+        var reattachLabel = new TextBlock { Text = "Прикрепить экран", FontSize = 10, FontWeight = FontWeight.Medium, VerticalAlignment = VerticalAlignment.Center };
+        rStack.Children.Add(reattachLabel);
         reattachBtn.Content = rStack;
         reattachBtn.Click += (s, e) => Close();
         titleBar.Children.Add(reattachBtn);
+        Grid.SetColumn(reattachBtn, 2);
+
+        StormThemeBrushes.BindTheme(rootGrid, () =>
+        {
+            Background = Storm.AuroraFluid.Kit.Themes.AuroraThemeManager.Instance.CurrentTheme.BackgroundBrush;
+            titleBar.Background = StormThemeBrushes.ChromeSurface;
+            titleText.Foreground = StormThemeBrushes.Accent;
+            reattachBtn.Background = StormThemeBrushes.CardSurface;
+            reattachBtn.BorderBrush = StormThemeBrushes.StrongBorder;
+            reattachLabel.Foreground = StormThemeBrushes.PrimaryText;
+        });
         Grid.SetColumn(reattachBtn, 2);
 
         rootGrid.Children.Add(titleBar);

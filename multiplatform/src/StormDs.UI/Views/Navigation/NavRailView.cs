@@ -21,7 +21,7 @@ namespace StormDs.UI.Views.Navigation;
 /// </summary>
 public class NavRailView : Border
 {
-    private readonly List<(NavSectionKind Kind, AuroraIconKind Icon, string Label, Border Container)> _items = [];
+    private readonly List<(NavSectionKind Kind, AuroraIconKind Icon, string Label, Border Container, TextBlock LabelText)> _items = [];
 
     public NavRailView()
     {
@@ -110,7 +110,7 @@ public class NavRailView : Border
             Text = label,
             FontSize = 9.5,
             FontWeight = FontWeight.Medium,
-            Foreground = new SolidColorBrush(Color.Parse("#94A3B8")),
+            Foreground = StormThemeBrushes.SecondaryText,
             HorizontalAlignment = HorizontalAlignment.Center
         };
 
@@ -122,7 +122,7 @@ public class NavRailView : Border
         {
             if (StormDsUiState.Instance.ActiveNavSection != kind)
             {
-                container.Background = new SolidColorBrush(Color.FromArgb(25, 255, 255, 255));
+                container.Background = StormThemeBrushes.HoverSurface;
                 AuroraTactileFeedbackService.Instance.PlayHoverTick();
             }
         };
@@ -142,7 +142,7 @@ public class NavRailView : Border
         };
 
         panel.Children.Add(container);
-        _items.Add((kind, icon, label, container));
+        _items.Add((kind, icon, label, container, text));
     }
 
     private void UpdateActiveStyles()
@@ -154,6 +154,9 @@ public class NavRailView : Border
         foreach (var item in _items)
         {
             bool isSelected = item.Kind == active;
+            item.LabelText.Foreground = isSelected
+                ? StormThemeBrushes.PrimaryText
+                : StormThemeBrushes.SecondaryText;
             if (isSelected)
             {
                 item.Container.Background = new LinearGradientBrush
@@ -162,8 +165,8 @@ public class NavRailView : Border
                     EndPoint = new RelativePoint(1, 1, RelativeUnit.Relative),
                     GradientStops =
                     {
-                        new GradientStop(Color.FromArgb(70, primary.R, primary.G, primary.B), 0.0),
-                        new GradientStop(Color.FromArgb(30, sec.R, sec.G, sec.B), 1.0)
+                        new GradientStop(Color.FromArgb(theme.IsDark ? (byte)70 : (byte)45, primary.R, primary.G, primary.B), 0.0),
+                        new GradientStop(Color.FromArgb(theme.IsDark ? (byte)30 : (byte)22, sec.R, sec.G, sec.B), 1.0)
                     }
                 };
                 item.Container.BorderBrush = new SolidColorBrush(Color.FromArgb(140, primary.R, primary.G, primary.B));

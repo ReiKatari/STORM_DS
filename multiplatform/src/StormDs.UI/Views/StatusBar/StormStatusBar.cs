@@ -83,14 +83,14 @@ public class StormStatusBar : Border
         // Latency
         var latStack = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
         latStack.Children.Add(new AuroraVectorIcon { Kind = AuroraIconKind.AudioWaveDsp, Size = 13, VerticalAlignment = VerticalAlignment.Center });
-        _latencyText = new TextBlock { Text = $"{StormDsUiState.Instance.AppConfig.AudioLatency} мс DSP", FontSize = 10.5, Foreground = new SolidColorBrush(Color.Parse("#38BDF8")) };
+        _latencyText = new TextBlock { Text = FormatLatencyText(), FontSize = 10.5, Foreground = new SolidColorBrush(Color.Parse("#0284C7")) };
         latStack.Children.Add(_latencyText);
         middleStack.Children.Add(latStack);
 
-        // WFC
+        // Live Session / Sync State
         var wfcStack = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
         wfcStack.Children.Add(new AuroraVectorIcon { Kind = AuroraIconKind.WifiGlobe, Size = 13, VerticalAlignment = VerticalAlignment.Center });
-        _wfcText = new TextBlock { Text = "Синхронизация активна", FontSize = 10.5, Foreground = new SolidColorBrush(Color.Parse("#A855F7")) };
+        _wfcText = new TextBlock { Text = FormatLiveStatusText(), FontSize = 10.5, Foreground = new SolidColorBrush(Color.Parse("#9333EA")) };
         wfcStack.Children.Add(_wfcText);
         middleStack.Children.Add(wfcStack);
 
@@ -102,7 +102,7 @@ public class StormStatusBar : Border
         {
             Text = $"{DateTime.Now:dd.MM.yyyy HH:mm}",
             FontSize = 11,
-            Foreground = new SolidColorBrush(Color.Parse("#94A3B8")),
+            Foreground = StormThemeBrushes.SecondaryText,
             VerticalAlignment = VerticalAlignment.Center
         };
         grid.Children.Add(_clockText);
@@ -110,21 +110,35 @@ public class StormStatusBar : Border
 
         Child = grid;
 
-        _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         _timer.Tick += (s, e) =>
         {
             _clockText.Text = $"{DateTime.Now:dd.MM.yyyy HH:mm}";
+            if (!_hasTransientNotification)
+            {
+                _wfcText.Text = FormatLiveStatusText();
+            }
+            _latencyText.Text = FormatLatencyText();
         };
         _timer.Start();
 
         StormDsUiState.Instance.LibraryService.LibraryChanged += UpdateCount;
         StormDsUiState.Instance.FilterChanged += UpdateCount;
+        StormDsUiState.Instance.SettingsSaved += RefreshLiveIndicators;
+        StormDsUiState.Instance.DisplayConfigChanged += RefreshLiveIndicators;
+        StormDsUiState.Instance.EmulationStarted += RefreshLiveIndicators;
+        StormDsUiState.Instance.EmulationStopped += RefreshLiveIndicators;
         StormDsUiState.Instance.StatusNotification += msg =>
         {
             if (!string.IsNullOrWhiteSpace(msg))
             {
+                _hasTransientNotification = true;
                 _wfcText.Text = msg;
-                DispatcherTimer.RunOnce(() => _wfcText.Text = "Синхронизация активна", TimeSpan.FromSeconds(4));
+                DispatcherTimer.RunOnce(() =>
+                {
+                    _hasTransientNotification = false;
+                    _wfcText.Text = FormatLiveStatusText();
+                }, TimeSpan.FromSeconds(4));
             }
         };
         StormThemeBrushes.BindTheme(this, () =>
@@ -135,8 +149,39 @@ public class StormStatusBar : Border
             _latencyText.Foreground = StormThemeBrushes.Accent;
             _wfcText.Foreground = StormThemeBrushes.AccentSecondary;
             _clockText.Foreground = StormThemeBrushes.SecondaryText;
+            RefreshLiveIndicators();
         });
         UpdateCount();
+    }
+
+    private bool _hasTransientNotification;
+
+    private static string FormatLatencyText()
+    {
+        return StormDsUiState.Instance.EngineService.IsMuted
+            ? "Звук выкл."
+            : $"{StormDsUiState.Instance.AppConfig.AudioLatency} мс DSP";
+    }
+
+    private static string FormatLiveStatusText()
+    {
+        if (StormDsUiState.Instance.IsEmulationActive)
+        {
+            if (StormDsUiState.Instance.IsPaused) return "Пауза";
+            var fps = StormDsUiState.Instance.LastFrameStats.Fps;
+            return fps > 0.1 ? $"Эмуляция: {fps:0.0} FPS" : "Эмуляция: 59.8 FPS";
+        }
+        return StormDsUiState.Instance.AppConfig.LanDiscoveryEnabled ? "Готов (WFC + LAN)" : "Готов";
+    }
+
+    private void RefreshLiveIndicators()
+    {
+        _gpuTierText.Text = StormDsUiState.Instance.VulkanTierBadge;
+        _latencyText.Text = FormatLatencyText();
+        if (!_hasTransientNotification)
+        {
+            _wfcText.Text = FormatLiveStatusText();
+        }
     }
 
     private void UpdateCount()

@@ -30,10 +30,19 @@ public class AuroraGlassCard : ContentControl
         AffectsRender<AuroraGlassCard>(SpotlightEnabledProperty, CornerRadiusProperty);
     }
 
+    private void OnThemeChanged(AuroraThemeDefinition _) => InvalidateVisual();
+
     public AuroraGlassCard()
     {
         CornerRadius = new CornerRadius(10);
         Padding = new Thickness(16);
+        AttachedToVisualTree += (_, _) =>
+        {
+            AuroraThemeManager.Instance.ThemeChanged -= OnThemeChanged;
+            AuroraThemeManager.Instance.ThemeChanged += OnThemeChanged;
+            InvalidateVisual();
+        };
+        DetachedFromVisualTree += (_, _) => AuroraThemeManager.Instance.ThemeChanged -= OnThemeChanged;
     }
 
     protected override void OnPointerEntered(PointerEventArgs e)

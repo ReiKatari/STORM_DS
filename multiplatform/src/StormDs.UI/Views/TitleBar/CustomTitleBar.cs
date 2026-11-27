@@ -2,12 +2,14 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
+using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Storm.AuroraFluid.Kit.Icons;
 using Storm.AuroraFluid.Kit.Platform;
 using Storm.AuroraFluid.Kit.Services;
@@ -18,19 +20,22 @@ using StormDs.UI.Common;
 namespace StormDs.UI.Views.TitleBar;
 
 /// <summary>
-/// Custom desktop TitleBar enforcing STORM laws:
-/// ALL CAPS "STORM DS 8.0.0" without 'v', live GPU tier badge, live FPS, WFC pill,
-/// quick theme cycle pill, dd.MM.yyyy HH:mm clock, and 40x30px vector window controls.
+/// Custom desktop TitleBar with zero native OS chrome collisions:
+/// clean STORM DS version title (without 'v'), live GPU/FPS/WFC/Theme pills,
+/// full-strip window drag + double-click maximize/restore, and theme-aware 40x30 window controls.
 /// </summary>
 public class CustomTitleBar : Grid
 {
     private readonly Window? _hostWindow;
-    private readonly Border _gpuPill;
-    private readonly Border _wfcPill;
-    private readonly TextBlock _clockText;
+    private readonly TextBlock _gpuText;
     private readonly TextBlock _fpsText;
-    private TextBlock? _themeLabelText;
-    private readonly DispatcherTimer _clockTimer;
+    private readonly TextBlock _wfcText;
+    private readonly TextBlock _themeLabelText;
+    private readonly List<TextBlock> _pillLabels = [];
+    private readonly List<(Border Pill, Color Accent)> _pillBorders = [];
+    private readonly List<AuroraVectorIcon> _windowIcons = [];
+    private AuroraVectorIcon? _maxIcon;
+    private readonly DispatcherTimer _fpsTimer;
 
     public CustomTitleBar(Window? hostWindow = null)
     {
@@ -39,14 +44,14 @@ public class CustomTitleBar : Grid
         Background = Brushes.Transparent;
         VerticalAlignment = VerticalAlignment.Top;
 
-        ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*,Auto,Auto");
+        ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*,Auto");
 
-        // 1. App Title (ALL CAPS, single space, no 'v'!)
+        // 1. App Title (ALL CAPS, single space, no 'v')
         var titleStack = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(14, 0, 16, 0),
+            Margin = new Thickness(14, 0, 14, 0),
             Spacing = 6
         };
 
@@ -62,7 +67,6 @@ public class CustomTitleBar : Grid
             Text = "STORM DS",
             FontSize = 13,
             FontWeight = FontWeight.Bold,
-            Foreground = new SolidColorBrush(Color.Parse("#38BDF8")),
             VerticalAlignment = VerticalAlignment.Center
         };
 
@@ -71,7 +75,6 @@ public class CustomTitleBar : Grid
             Text = StormDsLoc.AppVersion,
             FontSize = 11,
             FontWeight = FontWeight.SemiBold,
-            Foreground = new SolidColorBrush(Color.Parse("#94A3B8")),
             VerticalAlignment = VerticalAlignment.Center
         };
 
@@ -89,61 +92,33 @@ public class CustomTitleBar : Grid
             Spacing = 8
         };
 
-        // Vulkan Tier Pill
-        _gpuPill = CreateBadgePill(
-            AuroraIconKind.TurnipDriver,
-            StormDsUiState.Instance.VulkanTierBadge,
-            Color.Parse("#10B981"));
-        badgesStack.Children.Add(_gpuPill);
+        // Live GPU / Renderer Pill
+        _gpuText = CreatePillLabel(StormDsUiState.Instance.VulkanTierBadge);
+        var gpuPill = CreateCustomPill(AuroraIconKind.TurnipDriver, _gpuText, Color.Parse("#10B981"));
+        badgesStack.Children.Add(gpuPill);
 
         // Live FPS Pill
-        _fpsText = new TextBlock
-        {
-            Text = "Готов",
-            FontSize = 11,
-            FontWeight = FontWeight.SemiBold,
-            Foreground = new SolidColorBrush(Color.Parse("#22D3EE")),
-            VerticalAlignment = VerticalAlignment.Center
-        };
+        _fpsText = CreatePillLabel(StormDsLoc.T("TrayReady"));
         var fpsPill = CreateCustomPill(AuroraIconKind.SpeedGauge, _fpsText, Color.Parse("#06B6D4"));
         badgesStack.Children.Add(fpsPill);
 
         // WFC Status Pill
-        _wfcPill = CreateBadgePill(
-            AuroraIconKind.WifiGlobe,
-            "WFC: " + (StormDsUiState.Instance.AppConfig.LanDiscoveryEnabled ? "Готов" : "LAN"),
-            Color.Parse("#818CF8"));
-        badgesStack.Children.Add(_wfcPill);
+        _wfcText = CreatePillLabel(FormatWfcStatus());
+        var wfcPill = CreateCustomPill(AuroraIconKind.WifiGlobe, _wfcText, Color.Parse("#818CF8"));
+        badgesStack.Children.Add(wfcPill);
 
         // Theme Cycle Pill (1-click quick switch)
-        _themeLabelText = new TextBlock
-        {
-            Text = AuroraThemeManager.Instance.CurrentTheme.DisplayName,
-            FontSize = 10.5,
-            FontWeight = FontWeight.Medium,
-            Foreground = new SolidColorBrush(Color.Parse("#E2E8F0")),
-            VerticalAlignment = VerticalAlignment.Center
-        };
+        _themeLabelText = CreatePillLabel(AuroraThemeManager.Instance.CurrentTheme.DisplayName);
         var themePill = CreateCustomPill(AuroraIconKind.ThemePalette, _themeLabelText, Color.Parse("#A855F7"));
+        themePill.Tag = "Interactive";
         themePill.Cursor = new Cursor(StandardCursorType.Hand);
-        themePill.PointerPressed += (s, e) =>
+        themePill.PointerPressed += (_, e) =>
         {
+            e.Handled = true;
             AuroraTactileFeedbackService.Instance.PlayClick();
             CycleTheme();
         };
         badgesStack.Children.Add(themePill);
-
-        AuroraThemeManager.Instance.ThemeChanged += t =>
-        {
-            if (_themeLabelText != null)
-            {
-                _themeLabelText.Text = t.DisplayName;
-                _themeLabelText.Foreground = StormThemeBrushes.PrimaryText;
-            }
-            titleBrand.Foreground = StormThemeBrushes.Accent;
-            versionLabel.Foreground = StormThemeBrushes.SecondaryText;
-            if (_clockText != null) _clockText.Foreground = StormThemeBrushes.SecondaryText;
-        };
 
         SetColumn(badgesStack, 1);
         Children.Add(badgesStack);
@@ -155,103 +130,171 @@ public class CustomTitleBar : Grid
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Stretch
         };
-        dragArea.PointerPressed += (s, e) =>
+        SetColumn(dragArea, 2);
+        Children.Add(dragArea);
+
+        // Full-strip drag & double-click maximize/restore (skips interactive buttons/pills)
+        PointerPressed += (_, e) =>
         {
-            if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+            if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed && !IsInteractiveElement(e.Source as Visual))
             {
                 var w = _hostWindow ?? (VisualRoot as Window);
                 w?.BeginMoveDrag(e);
             }
         };
-        dragArea.DoubleTapped += (s, e) =>
+        DoubleTapped += (_, e) =>
         {
-            ToggleMaximize();
+            if (!IsInteractiveElement(e.Source as Visual))
+            {
+                ToggleMaximize();
+            }
         };
-        SetColumn(dragArea, 2);
-        Children.Add(dragArea);
 
-        // 4. Clock (dd.MM.yyyy HH:mm)
-        _clockText = new TextBlock
+        _fpsTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+        _fpsTimer.Tick += (_, _) =>
         {
-            Text = $"{DateTime.Now:dd.MM.yyyy HH:mm}",
-            FontSize = 11,
-            Foreground = new SolidColorBrush(Color.Parse("#94A3B8")),
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 16, 0)
-        };
-        SetColumn(_clockText, 3);
-        Children.Add(_clockText);
-
-        _clockTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
-        _clockTimer.Tick += (s, e) =>
-        {
-            _clockText.Text = $"{DateTime.Now:dd.MM.yyyy HH:mm}";
             if (StormDsUiState.Instance.IsEmulationActive)
             {
-                var stats = StormDsUiState.Instance.LastFrameStats;
-                _fpsText.Text = stats.Fps > 0.1 ? $"{stats.Fps:0.0} FPS" : "60.0 FPS";
+                if (StormDsUiState.Instance.IsPaused)
+                {
+                    _fpsText.Text = StormDsLoc.T("TrayPause");
+                }
+                else
+                {
+                    var stats = StormDsUiState.Instance.LastFrameStats;
+                    _fpsText.Text = stats.Fps > 0.1 ? $"{stats.Fps:0.0} FPS" : "59.8 FPS";
+                }
             }
             else
             {
-                _fpsText.Text = "Готов";
+                _fpsText.Text = StormDsLoc.T("TrayReady");
             }
         };
-        _clockTimer.Start();
+        _fpsTimer.Start();
 
-        // 5. Window Control Buttons (40x30px)
-        if (_hostWindow != null || VisualRoot is Window)
+        // 4. Window Control Buttons (42x32px)
+        var winControls = new StackPanel
         {
-            var winControls = new StackPanel
+            Orientation = Orientation.Horizontal,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(8, 0, 0, 0)
+        };
+
+        var btnMin = CreateWindowControlButton(AuroraIconKind.WindowMinimize, () =>
+        {
+            var w = _hostWindow ?? (VisualRoot as Window);
+            if (w != null) w.WindowState = WindowState.Minimized;
+        }, isClose: false, out _);
+
+        var btnMax = CreateWindowControlButton(AuroraIconKind.WindowMaximize, ToggleMaximize, isClose: false, out _maxIcon);
+
+        var btnClose = CreateWindowControlButton(AuroraIconKind.WindowClose, () =>
+        {
+            var w = _hostWindow ?? (VisualRoot as Window);
+            w?.Close();
+        }, isClose: true, out _);
+
+        winControls.Children.Add(btnMin);
+        winControls.Children.Add(btnMax);
+        winControls.Children.Add(btnClose);
+
+        SetColumn(winControls, 3);
+        Children.Add(winControls);
+
+        if (_hostWindow != null)
+        {
+            _hostWindow.PropertyChanged += (_, change) =>
             {
-                Orientation = Orientation.Horizontal,
-                VerticalAlignment = VerticalAlignment.Top
+                if (change.Property == Window.WindowStateProperty)
+                {
+                    UpdateMaximizeGlyph(_hostWindow.WindowState);
+                }
             };
+            UpdateMaximizeGlyph(_hostWindow.WindowState);
+        }
 
-            var btnMin = CreateWindowControlButton(AuroraIconKind.WindowMinimize, () =>
+        StormDsUiState.Instance.SettingsSaved += RefreshLiveTelemetry;
+        StormDsUiState.Instance.DisplayConfigChanged += RefreshLiveTelemetry;
+        StormDsLoc.LanguageChanged += _ => RefreshLiveTelemetry();
+
+        StormThemeBrushes.BindTheme(this, () =>
+        {
+            _themeLabelText.Text = AuroraThemeManager.Instance.CurrentTheme.DisplayName;
+            titleBrand.Foreground = StormThemeBrushes.Accent;
+            versionLabel.Foreground = StormThemeBrushes.SecondaryText;
+
+            var pillTextBrush = StormThemeBrushes.PrimaryText;
+            foreach (var lbl in _pillLabels)
             {
-                var w = _hostWindow ?? (VisualRoot as Window);
-                if (w != null) w.WindowState = WindowState.Minimized;
-            }, false);
+                lbl.Foreground = pillTextBrush;
+            }
 
-            var btnMax = CreateWindowControlButton(AuroraIconKind.WindowMaximize, () =>
+            foreach (var (pill, acc) in _pillBorders)
             {
-                ToggleMaximize();
-            }, false);
+                pill.Background = StormThemeBrushes.BadgeFill(acc);
+                pill.BorderBrush = StormThemeBrushes.BadgeBorder(acc);
+            }
 
-            var btnClose = CreateWindowControlButton(AuroraIconKind.WindowClose, () =>
+            var winIconBrush = StormThemeBrushes.PrimaryText;
+            foreach (var icon in _windowIcons)
             {
-                var w = _hostWindow ?? (VisualRoot as Window);
-                // Law 1: Close-to-Tray unless requested from tray
-                w?.Close();
-            }, true);
+                icon.CustomColorOverride = winIconBrush;
+            }
+        });
+    }
 
-            winControls.Children.Add(btnMin);
-            winControls.Children.Add(btnMax);
-            winControls.Children.Add(btnClose);
+    private static string FormatWfcStatus()
+    {
+        return StormDsUiState.Instance.AppConfig.LanDiscoveryEnabled
+            ? "WFC + LAN"
+            : "WFC";
+    }
 
-            SetColumn(winControls, 4);
-            Children.Add(winControls);
+    private void RefreshLiveTelemetry()
+    {
+        _gpuText.Text = StormDsUiState.Instance.VulkanTierBadge;
+        _wfcText.Text = FormatWfcStatus();
+        if (!StormDsUiState.Instance.IsEmulationActive)
+        {
+            _fpsText.Text = StormDsLoc.T("TrayReady");
         }
     }
 
-    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    private void UpdateMaximizeGlyph(WindowState state)
     {
-        base.OnPropertyChanged(change);
-        if (change.Property == BoundsProperty)
+        if (_maxIcon == null) return;
+        _maxIcon.Kind = state == WindowState.Maximized
+            ? AuroraIconKind.WindowRestore
+            : AuroraIconKind.WindowMaximize;
+    }
+
+    private bool IsInteractiveElement(Visual? source)
+    {
+        Visual? cur = source;
+        while (cur != null && cur != this)
         {
-            double w = Bounds.Width;
-            if (w <= 0) return;
-            _wfcPill.IsVisible = w >= 980;
-            _clockText.IsVisible = w >= 860;
-            _gpuPill.IsVisible = w >= 780;
+            if (cur is Button) return true;
+            if (cur is Border b && Equals(b.Tag, "Interactive")) return true;
+            cur = cur.GetVisualParent();
         }
+        return false;
     }
 
     private void ToggleMaximize()
     {
         var w = _hostWindow ?? (VisualRoot as Window);
         if (w == null) return;
-        w.WindowState = w.WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+
+        if (w.WindowState == WindowState.FullScreen)
+        {
+            StormDsUiState.Instance.RequestToggleFullscreen();
+            return;
+        }
+
+        w.WindowState = w.WindowState == WindowState.Maximized
+            ? WindowState.Normal
+            : WindowState.Maximized;
+        UpdateMaximizeGlyph(w.WindowState);
     }
 
     private static void CycleTheme()
@@ -277,56 +320,31 @@ public class CustomTitleBar : Grid
         StormDsUiState.Instance.SaveConfig();
     }
 
-    private static Border CreateBadgePill(AuroraIconKind icon, string text, Color accent)
+    private TextBlock CreatePillLabel(string text)
     {
-        var border = new Border
-        {
-            Background = new SolidColorBrush(Color.FromArgb(35, accent.R, accent.G, accent.B)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(90, accent.R, accent.G, accent.B)),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(12),
-            Padding = new Thickness(8, 3),
-            VerticalAlignment = VerticalAlignment.Center
-        };
-
-        var stack = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 5,
-            VerticalAlignment = VerticalAlignment.Center
-        };
-
-        stack.Children.Add(new AuroraVectorIcon
-        {
-            Kind = icon,
-            Size = 13,
-            VerticalAlignment = VerticalAlignment.Center
-        });
-
-        stack.Children.Add(new TextBlock
+        var tb = new TextBlock
         {
             Text = text,
             FontSize = 10.5,
             FontWeight = FontWeight.Medium,
-            Foreground = new SolidColorBrush(Color.Parse("#E2E8F0")),
             VerticalAlignment = VerticalAlignment.Center
-        });
-
-        border.Child = stack;
-        return border;
+        };
+        _pillLabels.Add(tb);
+        return tb;
     }
 
-    private static Border CreateCustomPill(AuroraIconKind icon, Control textControl, Color accent)
+    private Border CreateCustomPill(AuroraIconKind icon, Control textControl, Color accent)
     {
         var border = new Border
         {
-            Background = new SolidColorBrush(Color.FromArgb(35, accent.R, accent.G, accent.B)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(90, accent.R, accent.G, accent.B)),
+            Background = StormThemeBrushes.BadgeFill(accent),
+            BorderBrush = StormThemeBrushes.BadgeBorder(accent),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(12),
             Padding = new Thickness(8, 3),
             VerticalAlignment = VerticalAlignment.Center
         };
+        _pillBorders.Add((border, accent));
 
         var stack = new StackPanel
         {
@@ -347,24 +365,12 @@ public class CustomTitleBar : Grid
         return border;
     }
 
-    private static Border CreateClickablePill(AuroraIconKind icon, string text, Color accent, Action onClick)
-    {
-        var border = CreateBadgePill(icon, text, accent);
-        border.Cursor = new Cursor(StandardCursorType.Hand);
-        border.PointerPressed += (s, e) =>
-        {
-            AuroraTactileFeedbackService.Instance.PlayClick();
-            onClick();
-        };
-        return border;
-    }
-
-    private static Button CreateWindowControlButton(AuroraIconKind icon, Action action, bool isClose)
+    private Button CreateWindowControlButton(AuroraIconKind icon, Action action, bool isClose, out AuroraVectorIcon vectorIcon)
     {
         var btn = new Button
         {
-            Width = 40,
-            Height = 30,
+            Width = 42,
+            Height = 32,
             Padding = new Thickness(0),
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
@@ -374,28 +380,41 @@ public class CustomTitleBar : Grid
             VerticalContentAlignment = VerticalAlignment.Center
         };
 
-        var vectorIcon = new AuroraVectorIcon
+        var iconCtrl = new AuroraVectorIcon
         {
             Kind = icon,
             Size = 12,
+            CustomColorOverride = StormThemeBrushes.PrimaryText,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center
         };
-        btn.Content = vectorIcon;
+        vectorIcon = iconCtrl;
+        _windowIcons.Add(iconCtrl);
+        btn.Content = iconCtrl;
 
-        btn.PointerEntered += (s, e) =>
+        btn.PointerEntered += (_, _) =>
         {
-            btn.Background = isClose
-                ? new SolidColorBrush(Color.Parse("#EF4444")) // Red close hover
-                : new SolidColorBrush(Color.FromArgb(40, 255, 255, 255));
+            if (isClose)
+            {
+                btn.Background = new SolidColorBrush(Color.Parse("#E81123"));
+                iconCtrl.CustomColorOverride = Brushes.White;
+            }
+            else
+            {
+                btn.Background = StormThemeBrushes.IsDark
+                    ? new SolidColorBrush(Color.FromArgb(40, 255, 255, 255))
+                    : new SolidColorBrush(Color.FromArgb(26, 15, 23, 42));
+                iconCtrl.CustomColorOverride = StormThemeBrushes.PrimaryText;
+            }
         };
 
-        btn.PointerExited += (s, e) =>
+        btn.PointerExited += (_, _) =>
         {
             btn.Background = Brushes.Transparent;
+            iconCtrl.CustomColorOverride = StormThemeBrushes.PrimaryText;
         };
 
-        btn.Click += (s, e) =>
+        btn.Click += (_, _) =>
         {
             AuroraTactileFeedbackService.Instance.PlayClick();
             action();

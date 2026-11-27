@@ -24,18 +24,29 @@ public sealed class AuroraTrayManager
     /// <summary>
     /// Attaches Close-to-Tray lifecycle interception to the main window and builds Law 1 compliant menu.
     /// </summary>
-    public void AttachToWindow(Window window, string appTitle, string appVersion, TrayIcon? trayIcon = null, Action? onShowRequested = null)
+    public void AttachToWindow(
+        Window window,
+        string appTitle,
+        string appVersion,
+        TrayIcon? trayIcon = null,
+        Action? onShowRequested = null,
+        Func<bool>? shouldCloseToTray = null)
     {
         AttachedWindow = window;
         TrayIcon = trayIcon;
 
-        // Law 1 Interception: [X] and Alt+F4 hide to tray unless exit requested from tray
+        // Intercept [X] / Alt+F4 only when Close-to-Tray is explicitly enabled
         window.Closing += (sender, e) =>
         {
-            if (!IsExitRequestedFromTray)
+            bool closeToTray = shouldCloseToTray?.Invoke() ?? true;
+            if (!IsExitRequestedFromTray && closeToTray)
             {
                 e.Cancel = true;
                 window.Hide();
+            }
+            else
+            {
+                IsExitRequestedFromTray = true;
             }
         };
 

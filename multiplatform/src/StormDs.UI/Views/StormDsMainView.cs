@@ -59,12 +59,15 @@ public class StormDsMainView : Grid
     private readonly AuroraModalHost _modalHost;
     private readonly Grid _centerContentGrid;
 
+    public void SelectSettingsTab(int index) => _settingsView.SelectTab(index);
+
     private Button? _fileMenuBtn;
     private Button? _emuMenuBtn;
     private Button? _toolsMenuBtn;
     private Button? _configMenuBtn;
     private Button? _nandMenuBtn;
     private Button? _helpMenuBtn;
+    private AuroraSearchBox? _globalSearchBox;
     private TextBlock? _dsTitleText;
     private TextBlock? _subTitleText;
     private TextBlock? _stormTitleText;
@@ -269,19 +272,22 @@ public class StormDsMainView : Grid
         headerBar.Children.Add(brandStack);
         Grid.SetColumn(brandStack, 0);
 
-        // Global Ctrl+K Search & Command Box
-        var searchBox = new AuroraSearchBox
+        // Global Search & Command Box (live library search + Ctrl+K Command Palette)
+        _globalSearchBox = new AuroraSearchBox
         {
-            PlaceholderText = "Быстрый поиск или команда (Ctrl+K)...",
+            PlaceholderText = "Поиск игр или команды (Ctrl+K)...",
             HotkeyHint = "Ctrl+K",
             MinWidth = 200,
             MaxWidth = 320,
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Center
         };
-        searchBox.PointerPressed += (s, e) => ShowCommandPalette();
-        headerBar.Children.Add(searchBox);
-        Grid.SetColumn(searchBox, 2);
+        _globalSearchBox.TextChanged += (_, _) =>
+        {
+            StormDsUiState.Instance.SetSearchQuery(_globalSearchBox.Text ?? string.Empty);
+        };
+        headerBar.Children.Add(_globalSearchBox);
+        Grid.SetColumn(_globalSearchBox, 2);
 
         headerBar.PropertyChanged += (_, ch) =>
         {
@@ -291,7 +297,7 @@ public class StormDsMainView : Grid
                 if (hw > 0)
                 {
                     _subTitleText.IsVisible = hw >= 880;
-                    searchBox.Width = hw >= 980 ? 320 : Math.Max(200, hw * 0.34);
+                    _globalSearchBox.Width = hw >= 980 ? 320 : Math.Max(200, hw * 0.34);
                 }
             }
         };
@@ -316,6 +322,7 @@ public class StormDsMainView : Grid
         SetMenuButtonText(_emuMenuBtn, StormDsLoc.T("MenuEmulation"));
         SetMenuButtonText(_toolsMenuBtn, StormDsLoc.T("MenuTools"));
         SetMenuButtonText(_configMenuBtn, StormDsLoc.T("MenuSettings"));
+        SetMenuButtonText(_nandMenuBtn, StormDsLoc.T("MenuDsiNand"));
         SetMenuButtonText(_helpMenuBtn, StormDsLoc.T("MenuHelp"));
     }
 
@@ -456,7 +463,7 @@ public class StormDsMainView : Grid
             TextWrapping = TextWrapping.Wrap
         });
         var closeBtn = new AuroraVolumetricButton { Height = 32, Width = 140, HorizontalAlignment = HorizontalAlignment.Right };
-        closeBtn.Content = new TextBlock { Text = StormDsLoc.T("ActionClose"), Foreground = Brushes.White, FontWeight = FontWeight.SemiBold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        closeBtn.Content = new TextBlock { Text = StormDsLoc.T("ActionClose"), FontWeight = FontWeight.SemiBold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         closeBtn.Click += (_, _) => _modalHost.Dismiss();
         sp.Children.Add(closeBtn);
         card.Content = sp;
@@ -627,10 +634,12 @@ public class StormDsMainView : Grid
         {
             StormDsUiState.Instance.SetFilter(RomFilter.Favorites);
         }
-        else if (section == NavSectionKind.Library)
+        else if (section is NavSectionKind.Library or NavSectionKind.Recent)
         {
             StormDsUiState.Instance.SetFilter(RomFilter.All);
         }
+
+        UpdateResponsiveChrome();
     }
 
     private void SwitchToEmulation(bool active)
@@ -673,7 +682,8 @@ public class StormDsMainView : Grid
 
         _navRail.IsVisible = !emulating && isDesktop;
         _navDock.IsVisible = !emulating && !isDesktop;
-        _inspectorPane.IsVisible = !emulating && w >= 1120;
+        bool isLibrarySection = StormDsUiState.Instance.ActiveNavSection is NavSectionKind.Library or NavSectionKind.Favorites or NavSectionKind.Recent;
+        _inspectorPane.IsVisible = !emulating && isDesktop && w >= 1120 && isLibrarySection;
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -692,6 +702,21 @@ public class StormDsMainView : Grid
         if (e.Key == Key.K && (e.KeyModifiers & KeyModifiers.Control) != 0)
         {
             ShowCommandPalette();
+            e.Handled = true;
+            return;
+        }
+
+        // Ctrl+F -> Focus Settings search bar or Library global search bar
+        if (e.Key == Key.F && (e.KeyModifiers & KeyModifiers.Control) != 0)
+        {
+            if (_settingsView.IsVisible)
+            {
+                _settingsView.FocusSearchBox();
+            }
+            else
+            {
+                _globalSearchBox?.Focus();
+            }
             e.Handled = true;
             return;
         }
@@ -735,7 +760,12 @@ public class StormDsMainView : Grid
 
             if (Directory.Exists(localPath))
             {
-                // Dropped a ROM folder
+                // Dropped a ROM folder - persist cleanly and scan
+                if (!StormDsUiState.Instance.AppConfig.RomDirectories.Contains(localPath))
+                {
+                    StormDsUiState.Instance.AppConfig.RomDirectories.Add(localPath);
+                    StormDsUiState.Instance.SaveConfig();
+                }
                 _ = StormDsUiState.Instance.LibraryService.ScanDirectoriesAsync(new[] { localPath });
                 AuroraTactileFeedbackService.Instance.PlayAchievementChime();
             }

@@ -217,7 +217,7 @@ public class RomDetailsModal : AuroraGlassCard
         stack.Children.Add(cheatsCb);
 
         var saveBtn = new AuroraVolumetricButton { Height = 32, Width = 200, HorizontalAlignment = HorizontalAlignment.Left };
-        saveBtn.Content = new TextBlock { Text = "Сохранить профиль игры", FontSize = 11.5, FontWeight = FontWeight.SemiBold, Foreground = Brushes.White, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center };
+        saveBtn.Content = new TextBlock { Text = "Сохранить профиль игры", FontSize = 11.5, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center };
         saveBtn.Click += (_, _) =>
         {
             AuroraTactileFeedbackService.Instance.PlayClick();
@@ -308,7 +308,7 @@ public class RomDetailsModal : AuroraGlassCard
         var statusMsg = new TextBlock { FontSize = 11, Foreground = StormThemeBrushes.AccentSecondary };
 
         var addBtn = new AuroraVolumetricButton { Height = 30, Width = 190, HorizontalAlignment = HorizontalAlignment.Left };
-        addBtn.Content = new TextBlock { Text = "Добавить чит-код", FontSize = 11.5, FontWeight = FontWeight.SemiBold, Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        addBtn.Content = new TextBlock { Text = "Добавить чит-код", FontSize = 11.5, FontWeight = FontWeight.SemiBold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         addBtn.Click += (_, _) =>
         {
             string title = (nameBox.Text ?? string.Empty).Trim();
@@ -344,7 +344,7 @@ public class RomDetailsModal : AuroraGlassCard
         stack.Children.Add(CreateMetaRow("Rich Presence:", ra.IsRichPresenceEnabled ? "Активен" : "Отключен"));
 
         var openSettingsBtn = new AuroraVolumetricButton { Height = 32, Width = 240, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 6, 0, 0) };
-        openSettingsBtn.Content = new TextBlock { Text = "Открыть настройки RetroAchievements", FontSize = 11.5, FontWeight = FontWeight.SemiBold, Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        openSettingsBtn.Content = new TextBlock { Text = "Открыть настройки RetroAchievements", FontSize = 11.5, FontWeight = FontWeight.SemiBold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         openSettingsBtn.Click += (_, _) =>
         {
             CloseRequested?.Invoke();

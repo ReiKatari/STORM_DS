@@ -472,32 +472,32 @@ public static class AuroraIconCatalog
         );
         s_entries[AuroraIconKind.WindowMinimize] = new AuroraIconEntry(
             AuroraIconKind.WindowMinimize,
-            "M 4 18 H 20",
-            "M 4 19 H 20",
+            "M 5 11.2 H 19 V 12.8 H 5 Z",
+            "M 6 11.6 H 18 V 12.4 H 6 Z",
             Color.Parse("#94A3B8"),
             Color.Parse("#CBD5E1"),
             Color.Parse("#F1F5F9")
         );
         s_entries[AuroraIconKind.WindowMaximize] = new AuroraIconEntry(
             AuroraIconKind.WindowMaximize,
-            "M 4 4 H 20 V 20 H 4 Z",
-            "M 6 6 H 18 V 18 H 6 Z",
+            "M 5 5 H 19 V 6.6 H 5 Z M 5 17.4 H 19 V 19 H 5 Z M 5 6.6 H 6.6 V 17.4 H 5 Z M 17.4 6.6 H 19 V 17.4 H 17.4 Z",
+            "M 5.4 5.4 H 18.6 V 6.2 H 5.4 Z",
             Color.Parse("#94A3B8"),
             Color.Parse("#CBD5E1"),
             Color.Parse("#F1F5F9")
         );
         s_entries[AuroraIconKind.WindowRestore] = new AuroraIconEntry(
             AuroraIconKind.WindowRestore,
-            "M 8 4 H 20 V 16 H 8 Z",
-            "M 4 8 H 16 V 20 H 4 Z",
+            "M 5 8.5 H 15.5 V 10 H 5 Z M 5 17.5 H 15.5 V 19 H 5 Z M 5 10 H 6.5 V 17.5 H 5 Z M 14 10 H 15.5 V 17.5 H 14 Z",
+            "M 8.5 5 H 19 V 6.5 H 8.5 Z M 17.5 6.5 H 19 V 15.5 H 17.5 Z M 8.5 6.5 H 10 V 8.5 H 8.5 Z M 15.5 14 H 17.5 V 15.5 H 15.5 Z",
             Color.Parse("#94A3B8"),
             Color.Parse("#CBD5E1"),
             Color.Parse("#F1F5F9")
         );
         s_entries[AuroraIconKind.WindowClose] = new AuroraIconEntry(
             AuroraIconKind.WindowClose,
-            "M 5 5 L 19 19",
-            "M 19 5 L 5 19",
+            "M 6.2 5 L 12 10.8 L 17.8 5 L 19 6.2 L 13.2 12 L 19 17.8 L 17.8 19 L 12 13.2 L 6.2 19 L 5 17.8 L 10.8 12 L 5 6.2 Z",
+            "M 6.5 5.4 L 12 10.9 L 17.5 5.4 L 18.6 6.5 L 13.1 12 L 18.6 17.5 L 17.5 18.6 L 12 13.1 L 6.5 18.6 L 5.4 17.5 L 10.9 12 L 5.4 6.5 Z",
             Color.Parse("#E81123"),
             Color.Parse("#F87171"),
             Color.Parse("#FECACA")

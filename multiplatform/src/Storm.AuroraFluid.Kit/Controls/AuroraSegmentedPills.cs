@@ -34,9 +34,18 @@ public class AuroraSegmentedPills : Control
         AffectsRender<AuroraSegmentedPills>(SelectedIndexProperty);
     }
 
+    private void OnThemeChanged(AuroraThemeDefinition _) => InvalidateVisual();
+
     public AuroraSegmentedPills()
     {
         Cursor = new Cursor(StandardCursorType.Hand);
+        AttachedToVisualTree += (_, _) =>
+        {
+            AuroraThemeManager.Instance.ThemeChanged -= OnThemeChanged;
+            AuroraThemeManager.Instance.ThemeChanged += OnThemeChanged;
+            InvalidateVisual();
+        };
+        DetachedFromVisualTree += (_, _) => AuroraThemeManager.Instance.ThemeChanged -= OnThemeChanged;
     }
 
     protected override Size MeasureOverride(Size availableSize)
@@ -98,7 +107,9 @@ public class AuroraSegmentedPills : Control
         var containerRect = new Rect(0, 0, bounds.Width, bounds.Height);
 
         // 1. Recessed Container Fill
-        var containerBrush = new SolidColorBrush(Color.FromArgb(180, 16, 18, 26));
+        var containerBrush = new SolidColorBrush(theme.IsDark
+            ? Color.FromArgb(190, 16, 18, 28)
+            : Color.FromArgb(235, 226, 232, 240));
         var containerBorderPen = new Pen(new SolidColorBrush(theme.BorderColor), 1.0);
         context.DrawRectangle(containerBrush, containerBorderPen, containerRect, cr, cr);
 

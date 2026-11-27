@@ -10,6 +10,7 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Platform.Storage;
 using Storm.AuroraFluid.Kit.Controls;
 using Storm.AuroraFluid.Kit.Icons;
 using Storm.AuroraFluid.Kit.Services;
@@ -86,7 +87,7 @@ public class RomInspectorPane : Border
             Width = 128,
             Height = 128,
             CornerRadius = new CornerRadius(12),
-            Background = new SolidColorBrush(Color.FromArgb(50, 0, 0, 0)),
+            Background = StormThemeBrushes.CardSurface,
             BorderThickness = new Thickness(1),
             HorizontalAlignment = HorizontalAlignment.Center,
             ClipToBounds = true
@@ -157,9 +158,35 @@ public class RomInspectorPane : Border
         };
         playStack.Children.Add(_playBtnText);
         _playBtn.Content = playStack;
-        _playBtn.Click += (s, e) =>
+        _playBtn.Click += async (s, e) =>
         {
-            if (_currentRom != null) StormDsUiState.Instance.StartEmulation(_currentRom);
+            if (_currentRom != null)
+            {
+                StormDsUiState.Instance.StartEmulation(_currentRom);
+                return;
+            }
+
+            var top = TopLevel.GetTopLevel(this);
+            if (top?.StorageProvider != null)
+            {
+                var files = await top.StorageProvider.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions
+                {
+                    Title = "Выберите ROM-файл (.nds, .dsi, .zip)",
+                    AllowMultiple = false,
+                    FileTypeFilter = new[]
+                    {
+                        new Avalonia.Platform.Storage.FilePickerFileType("Nintendo DS / DSi ROM") { Patterns = new[] { "*.nds", "*.srl", "*.dsi", "*.ids", "*.zip" } }
+                    }
+                });
+                if (files.Count > 0)
+                {
+                    string? localPath = files[0].TryGetLocalPath();
+                    if (!string.IsNullOrWhiteSpace(localPath))
+                    {
+                        StormDsUiState.Instance.StartRomEmulationFromPath(localPath);
+                    }
+                }
+            }
         };
         stack.Children.Add(_playBtn);
 
@@ -182,7 +209,6 @@ public class RomInspectorPane : Border
             Text = StormDs.Core.Localization.StormDsLoc.T("LaunchBios"),
             FontSize = 11.5,
             FontWeight = FontWeight.Medium,
-            Foreground = Brushes.White,
             VerticalAlignment = VerticalAlignment.Center
         };
         biosStack.Children.Add(_biosBtnText);
@@ -248,12 +274,14 @@ public class RomInspectorPane : Border
         BorderBrush = StormThemeBrushes.SubtleBorder;
         _headerLabel.Foreground = StormThemeBrushes.Accent;
         _headerLabel.Text = StormDs.Core.Localization.StormDsLoc.T("CartridgeInspector");
+        _imgBorder.Background = StormThemeBrushes.CardSurface;
         _imgBorder.BorderBrush = StormThemeBrushes.StrongBorder;
         _titleText.Foreground = StormThemeBrushes.PrimaryText;
         _codeText.Foreground = StormThemeBrushes.Accent;
         _sizeText.Foreground = StormThemeBrushes.SecondaryText;
         _crcText.Foreground = StormThemeBrushes.AccentSecondary;
         _playBtnText.Text = StormDs.Core.Localization.StormDsLoc.T("LaunchGame");
+        _biosBtnText.Foreground = StormThemeBrushes.PrimaryText;
         _biosBtnText.Text = StormDs.Core.Localization.StormDsLoc.T("LaunchBios");
         _saveHeaderText.Foreground = StormThemeBrushes.SecondaryText;
         _saveHeaderText.Text = StormDs.Core.Localization.StormDsLoc.T("SaveSlotsHeader");
@@ -331,7 +359,16 @@ public class RomInspectorPane : Border
         border.PointerPressed += (s, e) =>
         {
             AuroraTactileFeedbackService.Instance.PlayClick();
-            if (!StormDsUiState.Instance.IsEmulationActive) return;
+            if (!StormDsUiState.Instance.IsEmulationActive)
+            {
+                if (_currentRom == null) return;
+                StormDsUiState.Instance.StartEmulation(_currentRom);
+                if (hasFile && StormDsUiState.Instance.RetroAchievementsService.IsFeatureAllowedInCurrentMode("loadstate"))
+                {
+                    StormDsUiState.Instance.EngineService.LoadState(slotIdx);
+                }
+                return;
+            }
 
             bool isRight = e.GetCurrentPoint(border).Properties.IsRightButtonPressed;
             if (hasFile && !isRight)
@@ -443,9 +480,9 @@ public class RomInspectorPane : Border
         var cfg = StormDsUiState.Instance.AppConfig;
         var profile = rom != null ? StormDsUiState.Instance.LoadRomProfile(rom.GameCode) : null;
 
-        _rendererValText.Text = cfg.RendererBackend.ToString();
-        _scaleValText.Text = $"{cfg.InternalResolutionScale}x Native";
-        _compositorValText.Text = cfg.VulkanCompositorMode.ToString();
+        _rendererValText.Text = (profile?.RendererBackend ?? cfg.RendererBackend).ToString();
+        _scaleValText.Text = $"{profile?.InternalResolutionScale ?? cfg.InternalResolutionScale}x Native";
+        _compositorValText.Text = (profile?.VulkanCompositorMode ?? cfg.VulkanCompositorMode).ToString();
         _slot2ValText.Text = (profile?.Slot2AddonType ?? cfg.Slot2AddonType).ToString();
 
         _saveSlotsGrid.Children.Clear();

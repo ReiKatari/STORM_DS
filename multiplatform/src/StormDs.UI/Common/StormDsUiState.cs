@@ -69,8 +69,10 @@ public sealed class StormDsUiState
     public string StatusBannerText { get; private set; } = string.Empty;
     public StormDsFrameStats LastFrameStats { get; set; }
     public string ProbedGpuName { get; private set; } = "GPU Probe Pending";
-    public string VulkanTierBadge { get; private set; } = "Vulkan 1.4 Zero-Copy";
+    public string VulkanTierBadge { get; private set; } = "Software 3D";
     public uint VulkanApiVersion { get; private set; } = 0x00401000;
+    private bool _vulkanProbedOk;
+    private bool _vulkanSupportsZeroCopy;
 
     public event Action? StateChanged;
     public event Action<RomMetadataRecord?>? RomSelected;
@@ -184,9 +186,9 @@ public sealed class StormDsUiState
                     string devName = caps.GetDeviceName();
                     ProbedGpuName = !string.IsNullOrWhiteSpace(devName) ? devName : "Vulkan Universal Device";
                     VulkanApiVersion = caps.ApiVersion;
-                    VulkanTierBadge = caps.SupportsZeroCopy == 1
-                        ? "Vulkan 1.4 Zero-Copy"
-                        : (caps.ApiVersion >= 0x00401000 ? "Vulkan 1.1 Compat" : "Vulkan 1.0 Legacy");
+                    _vulkanProbedOk = true;
+                    _vulkanSupportsZeroCopy = caps.SupportsZeroCopy == 1;
+                    RefreshVulkanTierBadge();
                     return;
                 }
             }
@@ -196,8 +198,33 @@ public sealed class StormDsUiState
             Console.Error.WriteLine($"[StormDsUiState] Notice: Vulkan probe: {ex.Message}");
         }
 
-        ProbedGpuName = "Vulkan Hardware Accelerated";
-        VulkanTierBadge = "Vulkan 1.4 Zero-Copy";
+        _vulkanProbedOk = false;
+        _vulkanSupportsZeroCopy = false;
+        ProbedGpuName = "Software Rasterizer (CPU)";
+        RefreshVulkanTierBadge();
+    }
+
+    public void RefreshVulkanTierBadge()
+    {
+        if (AppConfig.RendererBackend == RendererBackend.Software)
+        {
+            VulkanTierBadge = "Software 3D";
+            return;
+        }
+
+        if (_vulkanProbedOk && VulkanApiVersion > 0)
+        {
+            uint maj = (VulkanApiVersion >> 22) & 0x3FF;
+            uint min = (VulkanApiVersion >> 12) & 0x3FF;
+            VulkanTierBadge = _vulkanSupportsZeroCopy
+                ? $"Vulkan {maj}.{min} Zero-Copy"
+                : $"Vulkan {maj}.{min}";
+            return;
+        }
+
+        VulkanTierBadge = AppConfig.RendererBackend == RendererBackend.Vulkan
+            ? "Vulkan 1.1"
+            : "Software 3D";
     }
 
     private static StormDsAppConfig LoadConfig()
@@ -227,6 +254,7 @@ public sealed class StormDsUiState
             string cfgPath = Path.Combine(StormDsPlatformPaths.ConfigDirectory, "config.json");
             string json = JsonSerializer.Serialize(AppConfig, StormDsJsonContext.Default.StormDsAppConfig);
             File.WriteAllText(cfgPath, json);
+            RefreshVulkanTierBadge();
             SyncServicesFromConfig();
             if (IsEmulationActive)
             {

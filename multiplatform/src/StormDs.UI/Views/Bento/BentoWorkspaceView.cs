@@ -29,9 +29,12 @@ public class BentoWorkspaceView : Grid
     private readonly WrapPanel _romsWrapPanel;
     private readonly ScrollViewer _cardsScrollViewer;
     private readonly CollectorTableView _collectorTable;
-    private readonly List<(RomFilter Filter, Border Chip)> _chips = [];
+    private readonly List<(RomFilter Filter, Border Chip, TextBlock LabelText)> _chips = [];
+    private readonly List<TextBlock> _actionLabels = [];
     private readonly Border _viewModeToggle;
+    private readonly Border _scanFolderBtn;
     private readonly AuroraVectorIcon _viewModeIcon;
+    private string _lastRenderKey = string.Empty;
 
     public BentoWorkspaceView()
     {
@@ -74,8 +77,6 @@ public class BentoWorkspaceView : Grid
             Height = 32,
             Padding = new Thickness(10, 4),
             CornerRadius = new CornerRadius(8),
-            Background = new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(70, 255, 255, 255)),
             BorderThickness = new Thickness(1),
             Cursor = new Cursor(StandardCursorType.Hand)
         };
@@ -92,14 +93,15 @@ public class BentoWorkspaceView : Grid
             VerticalAlignment = VerticalAlignment.Center
         };
         vmStack.Children.Add(_viewModeIcon);
-        vmStack.Children.Add(new TextBlock
+        var vmLabel = new TextBlock
         {
             Text = "Вид",
             FontSize = 11.5,
             FontWeight = FontWeight.Medium,
-            Foreground = new SolidColorBrush(Color.Parse("#E2E8F0")),
             VerticalAlignment = VerticalAlignment.Center
-        });
+        };
+        _actionLabels.Add(vmLabel);
+        vmStack.Children.Add(vmLabel);
         _viewModeToggle.Child = vmStack;
         _viewModeToggle.PointerPressed += (s, e) =>
         {
@@ -113,13 +115,11 @@ public class BentoWorkspaceView : Grid
         rightStack.Children.Add(_viewModeToggle);
 
         // Scan Folder Button
-        var scanFolderBtn = new Border
+        _scanFolderBtn = new Border
         {
             Height = 32,
             Padding = new Thickness(10, 4),
             CornerRadius = new CornerRadius(8),
-            Background = new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(70, 255, 255, 255)),
             BorderThickness = new Thickness(1),
             Cursor = new Cursor(StandardCursorType.Hand)
         };
@@ -135,16 +135,17 @@ public class BentoWorkspaceView : Grid
             Size = 14,
             VerticalAlignment = VerticalAlignment.Center
         });
-        sfStack.Children.Add(new TextBlock
+        var sfLabel = new TextBlock
         {
             Text = "Папка ROM",
             FontSize = 11.5,
             FontWeight = FontWeight.Medium,
-            Foreground = new SolidColorBrush(Color.Parse("#E2E8F0")),
             VerticalAlignment = VerticalAlignment.Center
-        });
-        scanFolderBtn.Child = sfStack;
-        scanFolderBtn.PointerPressed += async (s, e) =>
+        };
+        _actionLabels.Add(sfLabel);
+        sfStack.Children.Add(sfLabel);
+        _scanFolderBtn.Child = sfStack;
+        _scanFolderBtn.PointerPressed += async (s, e) =>
         {
             AuroraTactileFeedbackService.Instance.PlayClick();
             var top = TopLevel.GetTopLevel(this);
@@ -170,7 +171,7 @@ public class BentoWorkspaceView : Grid
             }
             await StormDsUiState.Instance.LibraryService.ScanDirectoriesAsync();
         };
-        rightStack.Children.Add(scanFolderBtn);
+        rightStack.Children.Add(_scanFolderBtn);
 
         controlsBar.Children.Add(rightStack);
         Grid.SetColumn(rightStack, 1);
@@ -258,6 +259,7 @@ public class BentoWorkspaceView : Grid
 
         StormDsUiState.Instance.FilterChanged += RefreshGrid;
         StormDsUiState.Instance.StateChanged += RefreshGrid;
+        StormThemeBrushes.BindTheme(this, UpdateChipStyles);
 
         UpdateChipStyles();
         RefreshGrid();
@@ -272,7 +274,7 @@ public class BentoWorkspaceView : Grid
             Margin = new Thickness(0, 0, 8, 6),
             CornerRadius = new CornerRadius(16),
             Background = Brushes.Transparent,
-            BorderBrush = new SolidColorBrush(Color.FromArgb(70, 255, 255, 255)),
+            BorderBrush = StormThemeBrushes.SubtleBorder,
             BorderThickness = new Thickness(1),
             Cursor = new Cursor(StandardCursorType.Hand)
         };
@@ -291,14 +293,15 @@ public class BentoWorkspaceView : Grid
             VerticalAlignment = VerticalAlignment.Center
         });
 
-        stack.Children.Add(new TextBlock
+        var labelText = new TextBlock
         {
             Text = label,
             FontSize = 11.5,
             FontWeight = FontWeight.Medium,
-            Foreground = new SolidColorBrush(Color.Parse("#E2E8F0")),
+            Foreground = StormThemeBrushes.BodyText,
             VerticalAlignment = VerticalAlignment.Center
-        });
+        };
+        stack.Children.Add(labelText);
 
         chip.Child = stack;
 
@@ -310,7 +313,7 @@ public class BentoWorkspaceView : Grid
         };
 
         _chipsPanel.Children.Add(chip);
-        _chips.Add((filter, chip));
+        _chips.Add((filter, chip, labelText));
     }
 
     private void UpdateChipStyles()
@@ -319,18 +322,30 @@ public class BentoWorkspaceView : Grid
         var theme = AuroraThemeManager.Instance.CurrentTheme;
         var (primary, _) = AuroraThemeManager.ResolveAccentColors(theme, AuroraThemeManager.Instance.CurrentAccentOverride);
 
+        _viewModeToggle.Background = StormThemeBrushes.CardSurface;
+        _viewModeToggle.BorderBrush = StormThemeBrushes.StrongBorder;
+        _scanFolderBtn.Background = StormThemeBrushes.CardSurface;
+        _scanFolderBtn.BorderBrush = StormThemeBrushes.StrongBorder;
+        foreach (var al in _actionLabels)
+        {
+            al.Foreground = StormThemeBrushes.PrimaryText;
+        }
+
         foreach (var item in _chips)
         {
             bool isSelected = item.Filter == active;
+            item.LabelText.Foreground = isSelected
+                ? StormThemeBrushes.PrimaryText
+                : StormThemeBrushes.BodyText;
             if (isSelected)
             {
-                item.Chip.Background = new SolidColorBrush(Color.FromArgb(80, primary.R, primary.G, primary.B));
+                item.Chip.Background = new SolidColorBrush(Color.FromArgb(theme.IsDark ? (byte)80 : (byte)42, primary.R, primary.G, primary.B));
                 item.Chip.BorderBrush = new SolidColorBrush(primary);
             }
             else
             {
-                item.Chip.Background = Brushes.Transparent;
-                item.Chip.BorderBrush = new SolidColorBrush(Color.FromArgb(50, 255, 255, 255));
+                item.Chip.Background = StormThemeBrushes.CardSurface;
+                item.Chip.BorderBrush = StormThemeBrushes.SubtleBorder;
             }
         }
     }
@@ -345,12 +360,19 @@ public class BentoWorkspaceView : Grid
 
     private void RefreshGrid()
     {
+        UpdateChipStyles();
         UpdateViewModeVisual();
 
         if (StormDsUiState.Instance.ActiveViewMode == BentoViewMode.BentoCards)
         {
-            _romsWrapPanel.Children.Clear();
             var roms = StormDsUiState.Instance.GetFilteredRoms();
+            string renderKey = string.Join("|", roms.Select(r => $"{r.FilePath}:{r.IsFavorite}"));
+            if (renderKey == _lastRenderKey && _romsWrapPanel.Children.Count == roms.Count)
+            {
+                return;
+            }
+            _lastRenderKey = renderKey;
+            _romsWrapPanel.Children.Clear();
 
             foreach (var rom in roms)
             {

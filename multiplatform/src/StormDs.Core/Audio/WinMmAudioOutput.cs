@@ -15,7 +15,6 @@ public sealed unsafe partial class WinMmAudioOutput : IDisposable
     private const int SampleRate = 48000;
     private const int Channels = 2;
     private const int BitsPerSample = 16;
-    private const int PoolCount = 6;
     private const int MaxFramesPerBuffer = 2048;
     private const uint WHDR_DONE = 0x00000001;
     private const uint WHDR_PREPARED = 0x00000002;
@@ -72,9 +71,10 @@ public sealed unsafe partial class WinMmAudioOutput : IDisposable
 
     private readonly object _lock = new();
     private nint _hWaveOut;
-    private readonly nint[] _headers = new nint[PoolCount];
-    private readonly nint[] _pcmBuffers = new nint[PoolCount];
-    private readonly bool[] _inFlight = new bool[PoolCount];
+    private readonly int _poolCount;
+    private readonly nint[] _headers;
+    private readonly nint[] _pcmBuffers;
+    private readonly bool[] _inFlight;
     private int _nextSlot;
     private bool _disposed;
 
@@ -82,8 +82,13 @@ public sealed unsafe partial class WinMmAudioOutput : IDisposable
     public float Volume { get; set; } = 1.0f;
     public bool IsOpened => _hWaveOut != nint.Zero;
 
-    public WinMmAudioOutput()
+    public WinMmAudioOutput(int targetLatencyMs = 30)
     {
+        _poolCount = Math.Clamp((int)Math.Ceiling(targetLatencyMs / 16.0) + 4, 6, 20);
+        _headers = new nint[_poolCount];
+        _pcmBuffers = new nint[_poolCount];
+        _inFlight = new bool[_poolCount];
+
         if (!OperatingSystem.IsWindows()) return;
 
         try
@@ -107,7 +112,7 @@ public sealed unsafe partial class WinMmAudioOutput : IDisposable
             }
 
             nuint bufBytes = (nuint)(MaxFramesPerBuffer * Channels * sizeof(short));
-            for (int i = 0; i < PoolCount; i++)
+            for (int i = 0; i < _poolCount; i++)
             {
                 _pcmBuffers[i] = (nint)NativeMemory.Alloc(bufBytes);
                 var hdr = (WAVEHDR*)NativeMemory.AllocZeroed((nuint)sizeof(WAVEHDR));
@@ -135,7 +140,7 @@ public sealed unsafe partial class WinMmAudioOutput : IDisposable
             if (_hWaveOut == nint.Zero || _disposed) return;
 
             // Reclaim finished buffers
-            for (int i = 0; i < PoolCount; i++)
+            for (int i = 0; i < _poolCount; i++)
             {
                 if (_inFlight[i] && _headers[i] != nint.Zero)
                 {
@@ -150,13 +155,13 @@ public sealed unsafe partial class WinMmAudioOutput : IDisposable
 
             // Find an idle slot
             int chosen = -1;
-            for (int step = 0; step < PoolCount; step++)
+            for (int step = 0; step < _poolCount; step++)
             {
-                int idx = (_nextSlot + step) % PoolCount;
+                int idx = (_nextSlot + step) % _poolCount;
                 if (!_inFlight[idx])
                 {
                     chosen = idx;
-                    _nextSlot = (idx + 1) % PoolCount;
+                    _nextSlot = (idx + 1) % _poolCount;
                     break;
                 }
             }
@@ -207,7 +212,7 @@ public sealed unsafe partial class WinMmAudioOutput : IDisposable
         {
             if (_hWaveOut == nint.Zero) return;
             waveOutReset(_hWaveOut);
-            for (int i = 0; i < PoolCount; i++)
+            for (int i = 0; i < _poolCount; i++)
             {
                 if (_inFlight[i] && _headers[i] != nint.Zero)
                 {
@@ -231,7 +236,7 @@ public sealed unsafe partial class WinMmAudioOutput : IDisposable
                 try
                 {
                     waveOutReset(_hWaveOut);
-                    for (int i = 0; i < PoolCount; i++)
+                    for (int i = 0; i < _poolCount; i++)
                     {
                         if (_headers[i] != nint.Zero)
                         {
@@ -250,7 +255,7 @@ public sealed unsafe partial class WinMmAudioOutput : IDisposable
                 _hWaveOut = nint.Zero;
             }
 
-            for (int i = 0; i < PoolCount; i++)
+            for (int i = 0; i < _poolCount; i++)
             {
                 _inFlight[i] = false;
                 if (_headers[i] != nint.Zero)

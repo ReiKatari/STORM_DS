@@ -51,9 +51,18 @@ public class AuroraVolumetricSlider : Control
         AffectsRender<AuroraVolumetricSlider>(MinimumProperty, MaximumProperty, ValueProperty);
     }
 
+    private void OnThemeChanged(AuroraThemeDefinition _) => InvalidateVisual();
+
     public AuroraVolumetricSlider()
     {
         Cursor = new Cursor(StandardCursorType.Hand);
+        AttachedToVisualTree += (_, _) =>
+        {
+            AuroraThemeManager.Instance.ThemeChanged -= OnThemeChanged;
+            AuroraThemeManager.Instance.ThemeChanged += OnThemeChanged;
+            InvalidateVisual();
+        };
+        DetachedFromVisualTree += (_, _) => AuroraThemeManager.Instance.ThemeChanged -= OnThemeChanged;
     }
 
     protected override Size MeasureOverride(Size availableSize)
@@ -128,7 +137,9 @@ public class AuroraVolumetricSlider : Control
 
         // 1. Recessed Track Background
         var trackRect = new Rect(thumbRadius, trackY, usableWidth, trackHeight);
-        var trackBg = new SolidColorBrush(Color.FromArgb(160, 20, 22, 32));
+        var trackBg = new SolidColorBrush(theme.IsDark
+            ? Color.FromArgb(170, 20, 22, 36)
+            : Color.FromArgb(255, 203, 213, 225));
         var trackBorderPen = new Pen(new SolidColorBrush(theme.BorderColor), 1.0);
         context.DrawRectangle(trackBg, trackBorderPen, trackRect, 3.0f, 3.0f);
 
@@ -150,20 +161,16 @@ public class AuroraVolumetricSlider : Control
         }
 
         // 3. Thumb Drop Shadow
-        var shadowBrush = new SolidColorBrush(Color.FromArgb(90, 0, 0, 0));
-        context.DrawEllipse(shadowBrush, null, new Point(thumbX, thumbY + 2.0), thumbRadius, thumbRadius);
+        var shadowBrush = new SolidColorBrush(Color.FromArgb(theme.IsDark ? (byte)95 : (byte)45, 0, 0, 0));
+        context.DrawEllipse(shadowBrush, null, new Point(thumbX, thumbY + 1.8), thumbRadius, thumbRadius);
 
-        // 4. Thumb Outer Neon Ring
+        // 4. Thumb Outer Accent Ring & Clean Disc
         var thumbOuterPen = new Pen(new SolidColorBrush(accentPrimary), 2.2);
-        var thumbFill = new SolidColorBrush(theme.IsDark ? Color.Parse("#1A1630") : Color.Parse("#FFFFFF"));
+        var thumbFill = new SolidColorBrush(theme.IsDark ? theme.CardColor : Colors.White);
         context.DrawEllipse(thumbFill, thumbOuterPen, new Point(thumbX, thumbY), thumbRadius, thumbRadius);
 
-        // 5. Thumb Inner Specular Core
+        // 5. Centered Accent Core Dot
         var innerCoreBrush = new SolidColorBrush(accentSec);
-        context.DrawEllipse(innerCoreBrush, null, new Point(thumbX, thumbY), 3.5, 3.5);
-
-        // 6. Thumb Specular Rim Highlight
-        var specPen = new Pen(new SolidColorBrush(Color.FromArgb(160, 255, 255, 255)), 0.8);
-        context.DrawEllipse(null, specPen, new Point(thumbX, thumbY - 1.0), 5.5, 3.0);
+        context.DrawEllipse(innerCoreBrush, null, new Point(thumbX, thumbY), 3.2, 3.2);
     }
 }

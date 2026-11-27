@@ -21,7 +21,7 @@ namespace StormDs.UI.Views.Navigation;
 /// </summary>
 public class NavDockView : Border
 {
-    private readonly List<(NavSectionKind Kind, Border Container)> _items = [];
+    private readonly List<(NavSectionKind Kind, Border Container, TextBlock LabelText)> _items = [];
 
     public NavDockView()
     {
@@ -97,7 +97,7 @@ public class NavDockView : Border
             Text = label,
             FontSize = 8.5,
             FontWeight = FontWeight.Medium,
-            Foreground = new SolidColorBrush(Color.Parse("#94A3B8")),
+            Foreground = StormThemeBrushes.SecondaryText,
             HorizontalAlignment = HorizontalAlignment.Center
         };
 
@@ -112,7 +112,7 @@ public class NavDockView : Border
         };
 
         panel.Children.Add(container);
-        _items.Add((kind, container));
+        _items.Add((kind, container, text));
     }
 
     private void UpdateActiveStyles()
@@ -124,6 +124,9 @@ public class NavDockView : Border
         foreach (var item in _items)
         {
             bool isSelected = item.Kind == active;
+            item.LabelText.Foreground = isSelected
+                ? StormThemeBrushes.PrimaryText
+                : StormThemeBrushes.SecondaryText;
             if (isSelected)
             {
                 item.Container.Background = new LinearGradientBrush
@@ -132,8 +135,8 @@ public class NavDockView : Border
                     EndPoint = new RelativePoint(1, 1, RelativeUnit.Relative),
                     GradientStops =
                     {
-                        new GradientStop(Color.FromArgb(80, primary.R, primary.G, primary.B), 0.0),
-                        new GradientStop(Color.FromArgb(40, sec.R, sec.G, sec.B), 1.0)
+                        new GradientStop(Color.FromArgb(theme.IsDark ? (byte)80 : (byte)45, primary.R, primary.G, primary.B), 0.0),
+                        new GradientStop(Color.FromArgb(theme.IsDark ? (byte)40 : (byte)22, sec.R, sec.G, sec.B), 1.0)
                     }
                 };
                 item.Container.BorderBrush = new SolidColorBrush(Color.FromArgb(140, primary.R, primary.G, primary.B));

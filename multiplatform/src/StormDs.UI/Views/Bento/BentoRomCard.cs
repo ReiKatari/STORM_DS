@@ -54,8 +54,6 @@ public class BentoRomCard : AuroraGlassCard
             Width = 112,
             Height = 112,
             CornerRadius = new CornerRadius(10),
-            Background = new SolidColorBrush(Color.FromArgb(50, 0, 0, 0)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(70, 255, 255, 255)),
             BorderThickness = new Thickness(1),
             Margin = new Thickness(0, 10, 0, 0),
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -201,10 +199,15 @@ public class BentoRomCard : AuroraGlassCard
         StormDsUiState.Instance.RomSelected += (r) => UpdateSelectionVisual();
         StormThemeBrushes.BindTheme(this, () =>
         {
+            iconContainer.Background = StormThemeBrushes.CardSurface;
+            iconContainer.BorderBrush = StormThemeBrushes.SubtleBorder;
             _titleText.Foreground = StormThemeBrushes.PrimaryText;
             _sizeText.Foreground = StormThemeBrushes.SecondaryText;
             _codeText.Foreground = StormThemeBrushes.Accent;
             unitBadge.BorderBrush = StormThemeBrushes.Accent;
+            unitBadge.Background = StormThemeBrushes.BadgeFill(StormThemeBrushes.AccentPrimaryColor);
+            UpdateFavoriteVisual();
+            UpdateSelectionVisual();
         });
     }
 
@@ -212,7 +215,7 @@ public class BentoRomCard : AuroraGlassCard
     {
         _starButton.Background = _rom.IsFavorite
             ? new SolidColorBrush(Color.Parse("#F59E0B"))
-            : new SolidColorBrush(Color.FromArgb(80, 0, 0, 0));
+            : StormThemeBrushes.CardSurface;
     }
 
     private void UpdateSelectionVisual()

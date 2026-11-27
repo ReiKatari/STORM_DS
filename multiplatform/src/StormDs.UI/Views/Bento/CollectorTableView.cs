@@ -53,11 +53,23 @@ public class CollectorTableView : Border
 
         mainStack.Children.Add(header);
 
-        // 2. Rows Stack
+        // 2. Scrollable Rows Stack
         _rowsStack = new StackPanel();
-        mainStack.Children.Add(_rowsStack);
+        var rowsScroll = new ScrollViewer
+        {
+            Content = _rowsStack,
+            VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto
+        };
+        mainStack.Children.Add(rowsScroll);
 
-        Child = mainStack;
+        var rootGrid = new Grid { RowDefinitions = new RowDefinitions("Auto,*") };
+        mainStack.Children.Clear();
+        rootGrid.Children.Add(header);
+        Grid.SetRow(header, 0);
+        rootGrid.Children.Add(rowsScroll);
+        Grid.SetRow(rowsScroll, 1);
+
+        Child = rootGrid;
 
         StormDsUiState.Instance.FilterChanged += RefreshRows;
         StormDsUiState.Instance.StateChanged += RefreshRows;
@@ -75,7 +87,7 @@ public class CollectorTableView : Border
     {
         var border = new Border
         {
-            BorderBrush = new SolidColorBrush(Color.Parse("#25FFFFFF")),
+            BorderBrush = StormThemeBrushes.SubtleBorder,
             BorderThickness = new Thickness(col > 0 ? 1 : 0, 0, 0, 1),
             Padding = new Thickness(8, 0),
             VerticalAlignment = VerticalAlignment.Stretch
@@ -86,7 +98,7 @@ public class CollectorTableView : Border
             Text = title,
             FontSize = 10,
             FontWeight = FontWeight.Bold,
-            Foreground = new SolidColorBrush(Color.Parse("#94A3B8")),
+            Foreground = StormThemeBrushes.SecondaryText,
             VerticalAlignment = VerticalAlignment.Center
         };
 
@@ -118,7 +130,7 @@ public class CollectorTableView : Border
             // Col 0: 32x32 -> 48x48 icon (Nearest-Neighbor)
             var iconCell = new Border
             {
-                BorderBrush = new SolidColorBrush(Color.Parse("#25FFFFFF")),
+                BorderBrush = StormThemeBrushes.SubtleBorder,
                 BorderThickness = new Thickness(0, 0, 0, 1),
                 VerticalAlignment = VerticalAlignment.Stretch,
                 HorizontalAlignment = HorizontalAlignment.Stretch
@@ -166,7 +178,7 @@ public class CollectorTableView : Border
             {
                 if (StormDsUiState.Instance.SelectedRom?.FilePath != rom.FilePath)
                 {
-                    row.Background = new SolidColorBrush(Color.FromArgb(25, 255, 255, 255));
+                    row.Background = StormThemeBrushes.HoverSurface;
                 }
             };
             row.PointerExited += (s, e) =>
@@ -196,7 +208,7 @@ public class CollectorTableView : Border
     {
         var border = new Border
         {
-            BorderBrush = new SolidColorBrush(Color.Parse("#25FFFFFF")),
+            BorderBrush = StormThemeBrushes.SubtleBorder,
             BorderThickness = new Thickness(col > 0 ? 1 : 0, 0, 0, 1),
             Padding = new Thickness(8, 0),
             VerticalAlignment = VerticalAlignment.Stretch

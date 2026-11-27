@@ -48,6 +48,15 @@ public class AuroraVolumetricButton : Button
         AffectsRender<AuroraVolumetricButton>(IsHeroProperty, CornerRadiusProperty, GlowColorProperty);
     }
 
+    private void OnThemeChanged(AuroraThemeDefinition _)
+    {
+        if (!IsHero)
+        {
+            Foreground = AuroraThemeManager.Instance.CurrentTheme.TextPrimaryBrush;
+        }
+        InvalidateVisual();
+    }
+
     public AuroraVolumetricButton()
     {
         CornerRadius = new CornerRadius(8);
@@ -57,6 +66,18 @@ public class AuroraVolumetricButton : Button
         VerticalContentAlignment = Avalonia.Layout.VerticalAlignment.Center;
         ClipToBounds = true;
         UpdateTransform();
+
+        AttachedToVisualTree += (_, _) =>
+        {
+            AuroraThemeManager.Instance.ThemeChanged -= OnThemeChanged;
+            AuroraThemeManager.Instance.ThemeChanged += OnThemeChanged;
+            if (!IsHero)
+            {
+                Foreground = AuroraThemeManager.Instance.CurrentTheme.TextPrimaryBrush;
+            }
+            InvalidateVisual();
+        };
+        DetachedFromVisualTree += (_, _) => AuroraThemeManager.Instance.ThemeChanged -= OnThemeChanged;
     }
 
     private void UpdateTransform()
@@ -160,7 +181,7 @@ public class AuroraVolumetricButton : Button
 
         // 1. Outer Volumetric Drop Shadow
         var shadowRect = new Rect(0, 2.5, bounds.Width, bounds.Height);
-        var shadowBrush = new SolidColorBrush(Color.FromArgb(50, 0, 0, 0));
+        var shadowBrush = new SolidColorBrush(Color.FromArgb(theme.IsDark ? (byte)55 : (byte)22, 0, 0, 0));
         context.DrawRectangle(shadowBrush, null, shadowRect, (float)cr, (float)cr);
 
         // 2. Base Fill & Hero Glow
@@ -175,6 +196,21 @@ public class AuroraVolumetricButton : Button
                 {
                     new GradientStop(accentPrimary, 0.0),
                     new GradientStop(accentSec, 1.0)
+                }
+            };
+        }
+        else if (!theme.IsDark)
+        {
+            var topCol = _isPointerOver ? Color.Parse("#F1F5F9") : Colors.White;
+            var botCol = _isPointerOver ? Color.Parse("#E2E8F0") : Color.Parse("#F8FAFC");
+            baseBrush = new LinearGradientBrush
+            {
+                StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+                EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
+                GradientStops =
+                {
+                    new GradientStop(topCol, 0.0),
+                    new GradientStop(botCol, 1.0)
                 }
             };
         }
@@ -232,12 +268,12 @@ public class AuroraVolumetricButton : Button
             context.DrawRectangle(rippleBrush, null, rect, (float)cr, (float)cr);
         }
 
-        // 5. Specular Top Rim Highlight (35% white)
-        var topRimPen = new Pen(new SolidColorBrush(Color.FromArgb(90, 255, 255, 255)), 1.2);
+        // 5. Specular Top Rim Highlight
+        var topRimPen = new Pen(new SolidColorBrush(Color.FromArgb(theme.IsDark ? (byte)90 : (byte)160, 255, 255, 255)), 1.2);
         context.DrawLine(topRimPen, new Point(cr, 1), new Point(bounds.Width - cr, 1));
 
-        // 6. Bottom Bevel Edge (40% black)
-        var bottomBevelPen = new Pen(new SolidColorBrush(Color.FromArgb(100, 0, 0, 0)), 1.5);
+        // 6. Bottom Bevel Edge
+        var bottomBevelPen = new Pen(new SolidColorBrush(Color.FromArgb(theme.IsDark ? (byte)100 : (byte)32, 0, 0, 0)), 1.2);
         context.DrawLine(bottomBevelPen, new Point(cr, bounds.Height - 1), new Point(bounds.Width - cr, bounds.Height - 1));
 
         // 7. Crisp Perimeter Border (1px)

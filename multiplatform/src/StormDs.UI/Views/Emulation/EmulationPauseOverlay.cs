@@ -52,19 +52,21 @@ public class EmulationPauseOverlay : Border
 
         var headerRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
         var titleStack = new StackPanel { Spacing = 2 };
-        titleStack.Children.Add(new TextBlock
+        var titleBlock = new TextBlock
         {
             Text = "ПАУЗА ЭМУЛЯЦИИ",
             FontSize = 16,
             FontWeight = FontWeight.Bold,
-            Foreground = new SolidColorBrush(Color.Parse("#38BDF8"))
-        });
-        titleStack.Children.Add(new TextBlock
+            Foreground = StormThemeBrushes.Accent
+        };
+        var subBlock = new TextBlock
         {
             Text = "Нажмите ESC для быстрого возврата в игру",
             FontSize = 11,
-            Foreground = new SolidColorBrush(Color.Parse("#94A3B8"))
-        });
+            Foreground = StormThemeBrushes.SecondaryText
+        };
+        titleStack.Children.Add(titleBlock);
+        titleStack.Children.Add(subBlock);
         headerRow.Children.Add(titleStack);
 
         var resumeBtn = new AuroraVolumetricButton
@@ -88,14 +90,14 @@ public class EmulationPauseOverlay : Border
         Grid.SetColumn(resumeBtn, 1);
 
         stack.Children.Add(headerRow);
-        stack.Children.Add(new Border { Height = 1, Background = new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)) });
+        stack.Children.Add(new Border { Height = 1, Background = StormThemeBrushes.SubtleBorder });
 
         var slotsLabel = new TextBlock
         {
             Text = "БЫСТРЫЕ СОХРАНЕНИЯ И ЗАГРУЗКА (СЛОТЫ 1..4)",
             FontSize = 10,
             FontWeight = FontWeight.Bold,
-            Foreground = new SolidColorBrush(Color.Parse("#CBD5E1"))
+            Foreground = StormThemeBrushes.BodyText
         };
         stack.Children.Add(slotsLabel);
 
@@ -107,8 +109,8 @@ public class EmulationPauseOverlay : Border
             {
                 Margin = new Thickness(3),
                 Padding = new Thickness(6),
-                Background = new SolidColorBrush(Color.FromArgb(42, 255, 255, 255)),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(75, 255, 255, 255)),
+                Background = StormThemeBrushes.RowSurface,
+                BorderBrush = StormThemeBrushes.SubtleBorder,
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(8)
             };
@@ -119,7 +121,7 @@ public class EmulationPauseOverlay : Border
                 Text = $"Слот {slot + 1}",
                 FontSize = 11,
                 FontWeight = FontWeight.Bold,
-                Foreground = Brushes.White,
+                Foreground = StormThemeBrushes.PrimaryText,
                 HorizontalAlignment = HorizontalAlignment.Center
             });
 
@@ -234,7 +236,7 @@ public class EmulationPauseOverlay : Border
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Center,
             VerticalContentAlignment = VerticalAlignment.Center,
-            Content = new TextBlock { Text = text, FontSize = 9.5, FontWeight = FontWeight.Bold, Foreground = Brushes.White }
+            Content = new TextBlock { Text = text, FontSize = 9.5, FontWeight = FontWeight.Bold, Foreground = StormThemeBrushes.PrimaryText }
         };
         btn.Click += (s, e) =>
         {
@@ -251,8 +253,8 @@ public class EmulationPauseOverlay : Border
             Margin = new Thickness(4),
             Padding = new Thickness(8, 6),
             CornerRadius = new CornerRadius(8),
-            Background = new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(60, 255, 255, 255)),
+            Background = StormThemeBrushes.RowSurface,
+            BorderBrush = StormThemeBrushes.SubtleBorder,
             BorderThickness = new Thickness(1),
             Cursor = new Cursor(StandardCursorType.Hand)
         };
@@ -267,8 +269,8 @@ public class EmulationPauseOverlay : Border
         });
 
         var textStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        textStack.Children.Add(new TextBlock { Text = title, FontSize = 11, FontWeight = FontWeight.Bold, Foreground = Brushes.White });
-        textStack.Children.Add(new TextBlock { Text = sub, FontSize = 9.5, Foreground = new SolidColorBrush(Color.Parse("#94A3B8")), TextTrimming = TextTrimming.CharacterEllipsis });
+        textStack.Children.Add(new TextBlock { Text = title, FontSize = 11, FontWeight = FontWeight.Bold, Foreground = StormThemeBrushes.PrimaryText });
+        textStack.Children.Add(new TextBlock { Text = sub, FontSize = 9.5, Foreground = StormThemeBrushes.SecondaryText, TextTrimming = TextTrimming.CharacterEllipsis });
         row.Children.Add(textStack);
         Grid.SetColumn(textStack, 1);
 
