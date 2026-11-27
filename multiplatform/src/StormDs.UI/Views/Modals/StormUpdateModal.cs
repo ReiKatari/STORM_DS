@@ -204,13 +204,13 @@ public partial class StormUpdateModal : AuroraGlassCard
 
         if (mode == UpdateModalMode.Checking)
         {
-            _titleText.Text = "Проверка обновлений...";
+            _titleText.Text = StormDsLoc.T("UpdateModalCheckingTitle");
             _headerIcon.Kind = AuroraIconKind.UpdateRocket;
             SetHeaderTint(accent);
 
             _bodyHost.Children.Add(new TextBlock
             {
-                Text = "Опрашиваем GitHub Releases API и зеркало STORM GAMES WORLD...",
+                Text = StormDsLoc.T("UpdateModalCheckingDesc"),
                 FontSize = 13,
                 Foreground = theme.TextSecondaryBrush,
                 TextWrapping = TextWrapping.Wrap
@@ -227,7 +227,7 @@ public partial class StormUpdateModal : AuroraGlassCard
 
         if (mode == UpdateModalMode.UpdateAvailable && result != null)
         {
-            _titleText.Text = "Доступно обновление";
+            _titleText.Text = StormDsLoc.T("UpdateModalAvailableTitle");
             _headerIcon.Kind = AuroraIconKind.UpdateRocket;
             SetHeaderTint(accent);
 
@@ -247,7 +247,7 @@ public partial class StormUpdateModal : AuroraGlassCard
             {
                 ColumnDefinitions = new ColumnDefinitions("*,Auto,*")
             };
-            transitionGrid.Children.Add(BuildVersionPill("Текущая", cleanCur, false, theme));
+            transitionGrid.Children.Add(BuildVersionPill(StormDsLoc.T("UpdateModalCurrentVer"), cleanCur, false, theme));
 
             var arrowBox = new Border
             {
@@ -270,7 +270,7 @@ public partial class StormUpdateModal : AuroraGlassCard
             transitionGrid.Children.Add(arrowBox);
             Grid.SetColumn(arrowBox, 1);
 
-            var newPill = BuildVersionPill("Новая", cleanNew, true, theme);
+            var newPill = BuildVersionPill(StormDsLoc.T("UpdateModalNewVer"), cleanNew, true, theme);
             transitionGrid.Children.Add(newPill);
             Grid.SetColumn(newPill, 2);
 
@@ -283,7 +283,7 @@ public partial class StormUpdateModal : AuroraGlassCard
             if (result.AssetSizeBytes > 0)
             {
                 double mb = result.AssetSizeBytes / (1024.0 * 1024.0);
-                metaRow.Children.Add(BuildMetaChip(AuroraIconKind.MemoryRam, $"{mb.ToString("F1", CultureInfo.InvariantCulture)} МБ", theme, false));
+                metaRow.Children.Add(BuildMetaChip(AuroraIconKind.MemoryRam, $"{mb.ToString("F1", CultureInfo.InvariantCulture)} {StormDsLoc.T("UpdateModalUnitMb")}", theme, false));
             }
             if (result.PublishedAtUtc.HasValue)
             {
@@ -294,7 +294,7 @@ public partial class StormUpdateModal : AuroraGlassCard
             // 3. Changelog Label
             _bodyHost.Children.Add(new TextBlock
             {
-                Text = "ЧТО НОВОГО:",
+                Text = StormDsLoc.T("UpdateModalWhatsNew"),
                 FontSize = 11,
                 FontWeight = FontWeight.Bold,
                 FontFamily = new FontFamily("Consolas, Cascadia Mono, monospace"),
@@ -346,7 +346,7 @@ public partial class StormUpdateModal : AuroraGlassCard
             var progStats = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto") };
             _progressLeftText = new TextBlock
             {
-                Text = "Подготовка загрузки...",
+                Text = StormDsLoc.T("UpdateModalPreparing"),
                 FontSize = 11.5,
                 FontFamily = new FontFamily("Consolas, Cascadia Mono, monospace"),
                 Foreground = theme.TextSecondaryBrush
@@ -374,7 +374,7 @@ public partial class StormUpdateModal : AuroraGlassCard
             Grid.SetColumn(_progressPercentText, 2);
             progStack.Children.Add(progStats);
 
-            var cancelDlBtn = CreateSecondaryButton("Отмена", theme, () => _downloadCts?.Cancel());
+            var cancelDlBtn = CreateSecondaryButton(StormDsLoc.T("ActionCancel"), theme, () => _downloadCts?.Cancel());
             progStack.Children.Add(cancelDlBtn);
 
             _progressCard.Child = progStack;
@@ -397,7 +397,7 @@ public partial class StormUpdateModal : AuroraGlassCard
                 VerticalAlignment = VerticalAlignment.Center
             };
             updContent.Children.Add(new AuroraVectorIcon { Kind = AuroraIconKind.UpdateRocket, Size = 16, CustomColorOverride = Brushes.White });
-            updContent.Children.Add(new TextBlock { Text = "Обновить сейчас", FontSize = 13.5, FontWeight = FontWeight.Bold, Foreground = Brushes.White });
+            updContent.Children.Add(new TextBlock { Text = StormDsLoc.T("UpdateModalUpdateNow"), FontSize = 13.5, FontWeight = FontWeight.Bold, Foreground = Brushes.White });
             updateNowBtn.Content = updContent;
             updateNowBtn.Click += async (s, e) => await StartDownloadAsync(result);
             _actionsPanel.Children.Add(updateNowBtn);
@@ -407,11 +407,11 @@ public partial class StormUpdateModal : AuroraGlassCard
                 ColumnDefinitions = new ColumnDefinitions("*,*"),
                 ColumnSpacing = 8
             };
-            var laterBtn = CreateSecondaryButton("Напомнить позже", theme, () =>
+            var laterBtn = CreateSecondaryButton(StormDsLoc.T("UpdateModalRemindLater"), theme, () =>
             {
                 CloseRequested?.Invoke();
             });
-            var skipBtn = CreateSecondaryButton("Пропустить версию", theme, () =>
+            var skipBtn = CreateSecondaryButton(StormDsLoc.T("UpdateModalSkipVersion"), theme, () =>
             {
                 StormDsUiState.Instance.AppConfig.SkippedUpdateVersion = cleanNew;
                 StormDsUiState.Instance.SaveConfig();
@@ -426,7 +426,7 @@ public partial class StormUpdateModal : AuroraGlassCard
             {
                 var linkText = new TextBlock
                 {
-                    Text = "Открыть страницу релиза",
+                    Text = StormDsLoc.T("UpdateModalOpenReleasePage"),
                     FontSize = 12,
                     FontWeight = FontWeight.SemiBold,
                     Foreground = new SolidColorBrush(accent),
@@ -444,7 +444,7 @@ public partial class StormUpdateModal : AuroraGlassCard
 
         // UpToDate or Error mode
         bool isError = mode == UpdateModalMode.Error;
-        _titleText.Text = isError ? "Ошибка проверки обновлений" : "Установлена актуальная версия";
+        _titleText.Text = isError ? StormDsLoc.T("UpdateModalErrorTitle") : StormDsLoc.T("UpdateModalUpToDateTitle");
         _headerIcon.Kind = isError ? AuroraIconKind.WarningAmber : AuroraIconKind.CheckSuccess;
         SetHeaderTint(isError ? errorColor : accent);
 
@@ -471,8 +471,8 @@ public partial class StormUpdateModal : AuroraGlassCard
         }
 
         string msg = isError
-            ? (result?.ErrorMessage ?? "Не удалось получить информацию об обновлениях. Проверьте подключение к сети.")
-            : $"Вы используете самую свежую версию STORM DS {badgeVer} (источник: {result?.SourceMirror ?? "GitHub"}).";
+            ? (result?.ErrorMessage ?? StormDsLoc.T("UpdateModalErrorDefault"))
+            : string.Format(StormDsLoc.T("UpdateModalUpToDateFormat"), badgeVer, result?.SourceMirror ?? "GitHub");
 
         _bodyHost.Children.Add(new TextBlock
         {
@@ -495,7 +495,7 @@ public partial class StormUpdateModal : AuroraGlassCard
         int okCol = 0;
         if (isError && _onRetryCallback != null)
         {
-            var retryBtn = CreateSecondaryButton("Повторить", theme, () => _onRetryCallback());
+            var retryBtn = CreateSecondaryButton(StormDsLoc.T("UpdateModalRetry"), theme, () => _onRetryCallback());
             infoBtnRow.Children.Add(retryBtn);
             okCol = 1;
         }
@@ -507,7 +507,7 @@ public partial class StormUpdateModal : AuroraGlassCard
             HorizontalAlignment = HorizontalAlignment.Stretch,
             Content = new TextBlock
             {
-                Text = "ОК",
+                Text = StormDsLoc.T("UpdateModalOk"),
                 FontSize = 13,
                 FontWeight = FontWeight.Bold,
                 Foreground = Brushes.White,
@@ -551,20 +551,20 @@ public partial class StormUpdateModal : AuroraGlassCard
                     double pct = Math.Clamp((double)p.DownloadedBytes * 100.0 / effectiveTotal, 0.0, 100.0);
                     _progressBar.IsIndeterminate = false;
                     _progressBar.Value = pct;
-                    _progressLeftText.Text = $"{dlMb.ToString("F1", CultureInfo.InvariantCulture)} / {totMb.ToString("F1", CultureInfo.InvariantCulture)} МБ";
+                    _progressLeftText.Text = $"{dlMb.ToString("F1", CultureInfo.InvariantCulture)} / {totMb.ToString("F1", CultureInfo.InvariantCulture)} {StormDsLoc.T("UpdateModalUnitMb")}";
                     _progressPercentText.Text = $"{(int)pct}%";
                 }
                 else
                 {
                     _progressBar.IsIndeterminate = true;
                     _progressLeftText.Text = dlMb > 0.05
-                        ? $"{dlMb.ToString("F1", CultureInfo.InvariantCulture)} МБ"
-                        : "Подготовка загрузки...";
+                        ? $"{dlMb.ToString("F1", CultureInfo.InvariantCulture)} {StormDsLoc.T("UpdateModalUnitMb")}"
+                        : StormDsLoc.T("UpdateModalPreparing");
                     _progressPercentText.Text = string.Empty;
                 }
 
                 _progressSpeedText.Text = p.SpeedMbPerSec > 0.05
-                    ? $"{p.SpeedMbPerSec.ToString("F1", CultureInfo.InvariantCulture)} МБ/с"
+                    ? $"{p.SpeedMbPerSec.ToString("F1", CultureInfo.InvariantCulture)} {StormDsLoc.T("UpdateModalUnitMbPerSec")}"
                     : string.Empty;
             });
         });
@@ -586,7 +586,7 @@ public partial class StormUpdateModal : AuroraGlassCard
             {
                 UpdateState(UpdateModalMode.Error, result with
                 {
-                    ErrorMessage = "Не удалось скачать или проверить целостность пакета обновления."
+                    ErrorMessage = StormDsLoc.T("UpdateModalDownloadIntegrityError")
                 });
                 return;
             }
@@ -613,7 +613,7 @@ public partial class StormUpdateModal : AuroraGlassCard
             _isDownloading = false;
             UpdateState(UpdateModalMode.Error, result with
             {
-                ErrorMessage = $"Ошибка загрузки обновления: {ex.Message}"
+                ErrorMessage = string.Format(StormDsLoc.T("UpdateModalDownloadErrorFormat"), ex.Message)
             });
         }
     }
@@ -736,8 +736,192 @@ public partial class StormUpdateModal : AuroraGlassCard
         return btn;
     }
 
+    private static readonly Regex s_langStartTagRegex = new(
+        @"<!--\s*lang\s*:\s*([a-zA-Z_-]+)\s*-->",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex s_langEndTagRegex = new(
+        @"<!--\s*/lang\s*-->",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    public static string NormalizeReleaseLocaleCode(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
+        string clean = raw.Trim().ToLowerInvariant().Replace('_', '-');
+        if (clean == "in") return "id";
+        if (clean.StartsWith("in-", StringComparison.Ordinal)) return "id-" + clean[3..];
+        if (clean == "iw") return "he";
+        if (clean.StartsWith("iw-", StringComparison.Ordinal)) return "he-" + clean[3..];
+        return clean;
+    }
+
+    public static string? MatchReleaseLanguageHeading(string? rawHeading)
+    {
+        if (string.IsNullOrWhiteSpace(rawHeading)) return null;
+        string cleaned = rawHeading.Trim().TrimStart('#').Trim().TrimEnd(':', '：').Trim();
+        if (cleaned.StartsWith('[') && cleaned.EndsWith(']') && cleaned.Length >= 2)
+        {
+            cleaned = cleaned[1..^1].Trim();
+        }
+        return NormalizeReleaseLocaleCode(cleaned) switch
+        {
+            "ru" or "русский" or "russian" => "ru",
+            "en" or "english" or "английский" => "en",
+            "de" or "deutsch" or "german" or "немецкий" => "de",
+            "es" or "español" or "espanol" or "spanish" or "испанский" => "es",
+            "fr" or "français" or "francais" or "french" or "французский" => "fr",
+            "id" or "in" or "indonesian" or "bahasa indonesia" or "индонезийский" => "id",
+            "it" or "italiano" or "italian" or "итальянский" => "it",
+            "ja" or "jp" or "日本語" or "japanese" or "японский" => "ja",
+            "pt-br" or "pt" or "português" or "portugues" or "português (brasil)" or "portugues (brasil)" or "portuguese" or "португальский" => "pt-br",
+            "zh-hans" or "zh-cn" or "zh" or "简体中文" or "中文" or "chinese" or "chinese (simplified)" or "китайский" => "zh-hans",
+            "ko" or "kr" or "한국어" or "korean" or "корейский" => "ko",
+            "hi" or "हिन्दी" or "हिंदी" or "hindi" or "хинди" => "hi",
+            _ => null
+        };
+    }
+
+    public static string SelectLocalizedReleaseNotes(string? raw, string? languageCode = null)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
+        string normalizedRaw = raw.Replace("\r\n", "\n");
+        string[] lines = normalizedRaw.Split('\n');
+
+        // Pass 1: explicit <!-- lang:XX --> ... <!-- /lang --> blocks
+        var markerSections = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        var markerOrder = new List<string>();
+        string? activeMarkerLang = null;
+        foreach (string line in lines)
+        {
+            var startMatch = s_langStartTagRegex.Match(line);
+            if (startMatch.Success)
+            {
+                activeMarkerLang = NormalizeReleaseLocaleCode(startMatch.Groups[1].Value);
+                if (!markerSections.ContainsKey(activeMarkerLang))
+                {
+                    markerSections[activeMarkerLang] = new List<string>();
+                    markerOrder.Add(activeMarkerLang);
+                }
+                continue;
+            }
+            if (s_langEndTagRegex.IsMatch(line))
+            {
+                activeMarkerLang = null;
+                continue;
+            }
+            if (activeMarkerLang != null)
+            {
+                markerSections[activeMarkerLang].Add(line);
+            }
+        }
+
+        var sections = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var order = new List<string>();
+        if (markerSections.Count >= 2)
+        {
+            foreach (string key in markerOrder)
+            {
+                string val = string.Join("\n", markerSections[key]).Trim();
+                if (!string.IsNullOrWhiteSpace(val))
+                {
+                    sections[key] = val;
+                    order.Add(key);
+                }
+            }
+        }
+        else
+        {
+            // Pass 2: Markdown headings like ## Русский / ## English / ### Deutsch
+            var headingSections = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+            var headingOrder = new List<string>();
+            string? currentHeadingLang = null;
+            foreach (string line in lines)
+            {
+                string trimmed = line.Trim();
+                if (s_langStartTagRegex.IsMatch(trimmed) || s_langEndTagRegex.IsMatch(trimmed))
+                {
+                    continue;
+                }
+                if (trimmed.StartsWith("## ", StringComparison.Ordinal) || trimmed.StartsWith("### ", StringComparison.Ordinal))
+                {
+                    string? detected = MatchReleaseLanguageHeading(trimmed);
+                    if (detected != null)
+                    {
+                        currentHeadingLang = detected;
+                        if (!headingSections.ContainsKey(detected))
+                        {
+                            headingSections[detected] = new List<string>();
+                            headingOrder.Add(detected);
+                        }
+                        continue;
+                    }
+                }
+                if (currentHeadingLang != null)
+                {
+                    headingSections[currentHeadingLang].Add(line);
+                }
+            }
+            foreach (string key in headingOrder)
+            {
+                string val = string.Join("\n", headingSections[key]).Trim();
+                if (!string.IsNullOrWhiteSpace(val))
+                {
+                    sections[key] = val;
+                    order.Add(key);
+                }
+            }
+        }
+
+        if (sections.Count < 2)
+        {
+            return string.Join("\n", lines.Where(l => !s_langStartTagRegex.IsMatch(l) && !s_langEndTagRegex.IsMatch(l))).Trim();
+        }
+
+        string rawLocale = !string.IsNullOrWhiteSpace(languageCode)
+            ? languageCode
+            : (!string.IsNullOrWhiteSpace(StormDsLoc.CurrentLanguage)
+                ? StormDsLoc.CurrentLanguage
+                : CultureInfo.CurrentUICulture.Name);
+        string fullNorm = NormalizeReleaseLocaleCode(rawLocale);
+        string baseLang = fullNorm.Split('-')[0];
+
+        var candidates = new List<string>();
+        if (!string.IsNullOrEmpty(fullNorm)) candidates.Add(fullNorm);
+        if (baseLang == "zh") candidates.Add("zh-hans");
+        if (baseLang == "pt") candidates.Add("pt-br");
+        if (!string.IsNullOrEmpty(baseLang) && !candidates.Contains(baseLang, StringComparer.OrdinalIgnoreCase))
+        {
+            candidates.Add(baseLang);
+        }
+        candidates.Add("en");
+        candidates.Add("ru");
+
+        foreach (string candidate in candidates)
+        {
+            if (sections.TryGetValue(candidate, out string? exact) && !string.IsNullOrWhiteSpace(exact))
+            {
+                return exact;
+            }
+            string candBase = candidate.Split('-')[0];
+            foreach (string key in order)
+            {
+                if (key.Split('-')[0].Equals(candBase, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(sections[key]))
+                {
+                    return sections[key];
+                }
+            }
+        }
+
+        foreach (string key in order)
+        {
+            if (!string.IsNullOrWhiteSpace(sections[key])) return sections[key];
+        }
+        return raw.Trim();
+    }
+
     private static void PopulateReleaseNotes(StackPanel host, string rawMd, AuroraThemeDefinition theme)
     {
+        rawMd = SelectLocalizedReleaseNotes(rawMd);
         var accentBrush = new SolidColorBrush(theme.DefaultAccentColor);
         var lines = rawMd.Replace("\r\n", "\n").Split('\n');
 

@@ -5,6 +5,7 @@ import me.magnum.melonds.github.StormUpdateMirrorClient
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.Locale
 
 class StormUpdateDialogsTest {
 
@@ -88,5 +89,116 @@ class StormUpdateDialogsTest {
     fun installPermissionRequired_carriesApkPath() {
         val progress = DownloadProgress.InstallPermissionRequired("/data/user/0/com.stormds.emulator/cache/updates/update.apk")
         assertEquals("/data/user/0/com.stormds.emulator/cache/updates/update.apk", progress.apkPath)
+    }
+
+    @Test
+    fun selectLocalizedReleaseNotes_selectsAllSupportedLanguagesFromHeadings() {
+        val notes = """
+            ## Русский
+            - Русское изменение
+
+            ## English
+            - English change
+
+            ## Deutsch
+            - Deutsche Änderung
+
+            ## Español
+            - Cambio en español
+
+            ## Français
+            - Modification française
+
+            ## Bahasa Indonesia
+            - Perubahan Indonesia
+
+            ## Italiano
+            - Modifica italiana
+
+            ## 日本語
+            - 日本語の変更
+
+            ## Português
+            - Alteração em português
+
+            ## 简体中文
+            - 简体中文更改
+
+            ## 한국어
+            - 한국어 변경 사항
+
+            ## हिन्दी
+            - हिन्दी बदलाव
+        """.trimIndent()
+
+        assertEquals("- Русское изменение", selectLocalizedReleaseNotes(notes, Locale("ru", "RU")))
+        assertEquals("- English change", selectLocalizedReleaseNotes(notes, Locale.US))
+        assertEquals("- Deutsche Änderung", selectLocalizedReleaseNotes(notes, Locale.GERMAN))
+        assertEquals("- Cambio en español", selectLocalizedReleaseNotes(notes, Locale("es", "ES")))
+        assertEquals("- Modification française", selectLocalizedReleaseNotes(notes, Locale.FRENCH))
+        assertEquals("- Perubahan Indonesia", selectLocalizedReleaseNotes(notes, Locale("id", "ID")))
+        assertEquals("- Modifica italiana", selectLocalizedReleaseNotes(notes, Locale.ITALIAN))
+        assertEquals("- 日本語の変更", selectLocalizedReleaseNotes(notes, Locale.JAPANESE))
+        assertEquals("- Alteração em português", selectLocalizedReleaseNotes(notes, Locale("pt", "BR")))
+        assertEquals("- 简体中文更改", selectLocalizedReleaseNotes(notes, Locale.SIMPLIFIED_CHINESE))
+        assertEquals("- 한국어 변경 사항", selectLocalizedReleaseNotes(notes, Locale.KOREAN))
+        assertEquals("- हिन्दी बदलाव", selectLocalizedReleaseNotes(notes, Locale("hi", "IN")))
+    }
+
+    @Test
+    fun selectLocalizedReleaseNotes_normalizesLegacyIndonesianLocaleInToId() {
+        val notes = """
+            ## English
+            - English note
+
+            ## Bahasa Indonesia
+            - Catatan rilis
+        """.trimIndent()
+
+        assertEquals("- Catatan rilis", selectLocalizedReleaseNotes(notes, Locale("in", "ID")))
+    }
+
+    @Test
+    fun selectLocalizedReleaseNotes_supportsHtmlLangMarkers() {
+        val notes = """
+            <!-- lang:ru -->
+            - Только русский
+            <!-- /lang -->
+            <!-- lang:ja -->
+            - 日本語のみ
+            <!-- /lang -->
+        """.trimIndent()
+
+        assertEquals("- 日本語のみ", selectLocalizedReleaseNotes(notes, Locale.JAPAN))
+        assertEquals("- Только русский", selectLocalizedReleaseNotes(notes, Locale("ru", "RU")))
+    }
+
+    @Test
+    fun selectLocalizedReleaseNotes_fallsBackToEnglishThenRussian() {
+        val withEnglish = """
+            ## Русский
+            - Русский
+            ## English
+            - English
+        """.trimIndent()
+        assertEquals("- English", selectLocalizedReleaseNotes(withEnglish, Locale("sv", "SE")))
+
+        val withoutEnglish = """
+            ## Русский
+            - Русский
+            ## Deutsch
+            - Deutsch
+        """.trimIndent()
+        assertEquals("- Русский", selectLocalizedReleaseNotes(withoutEnglish, Locale("sv", "SE")))
+    }
+
+    @Test
+    fun selectLocalizedReleaseNotes_keepsSingleLanguageChangelogIntact() {
+        val single = """
+            ### Что нового
+            - Оптимизация рендера
+        """.trimIndent()
+
+        assertEquals(single, selectLocalizedReleaseNotes(single, Locale.US))
     }
 }

@@ -83,6 +83,128 @@ internal sealed interface ReleaseNoteBlock {
     object Divider : ReleaseNoteBlock
 }
 
+private val LANG_START_TAG_REGEX = Regex("""<!--\s*lang\s*:\s*([a-zA-Z_-]+)\s*-->""", RegexOption.IGNORE_CASE)
+private val LANG_END_TAG_REGEX = Regex("""<!--\s*/lang\s*-->""", RegexOption.IGNORE_CASE)
+
+internal fun normalizeReleaseLocaleCode(raw: String): String {
+    val clean = raw.trim().lowercase(Locale.ROOT).replace('_', '-')
+    return when {
+        clean == "in" -> "id"
+        clean.startsWith("in-") -> "id-" + clean.removePrefix("in-")
+        clean == "iw" -> "he"
+        clean.startsWith("iw-") -> "he-" + clean.removePrefix("iw-")
+        else -> clean
+    }
+}
+
+internal fun matchReleaseLanguageHeading(rawHeading: String): String? {
+    var cleaned = rawHeading.trim().trimStart('#').trim()
+    cleaned = cleaned.trimEnd(':', '：').trim()
+    cleaned = cleaned.removePrefix("[").removeSuffix("]").trim()
+    val norm = normalizeReleaseLocaleCode(cleaned)
+    return when (norm) {
+        "ru", "русский", "russian" -> "ru"
+        "en", "english", "английский" -> "en"
+        "de", "deutsch", "german", "немецкий" -> "de"
+        "es", "español", "espanol", "spanish", "испанский" -> "es"
+        "fr", "français", "francais", "french", "французский" -> "fr"
+        "id", "in", "indonesian", "bahasa indonesia", "индонезийский" -> "id"
+        "it", "italiano", "italian", "итальянский" -> "it"
+        "ja", "jp", "日本語", "japanese", "японский" -> "ja"
+        "pt-br", "pt", "português", "portugues", "português (brasil)", "portugues (brasil)", "portuguese", "португальский" -> "pt-br"
+        "zh-hans", "zh-cn", "zh", "简体中文", "中文", "chinese", "chinese (simplified)", "китайский" -> "zh-hans"
+        "ko", "kr", "한국어", "korean", "корейский" -> "ko"
+        "hi", "हिन्दी", "हिंदी", "hindi", "хинди" -> "hi"
+        else -> null
+    }
+}
+
+internal fun selectLocalizedReleaseNotes(raw: String, locale: Locale = Locale.getDefault()): String {
+    if (raw.isBlank()) return ""
+    val normalizedRaw = raw.replace("\r\n", "\n")
+    val lines = normalizedRaw.lines()
+
+    // Pass 1: explicit <!-- lang:XX --> ... <!-- /lang --> blocks
+    val markerSections = LinkedHashMap<String, StringBuilder>()
+    var activeMarkerLang: String? = null
+    for (line in lines) {
+        val startMatch = LANG_START_TAG_REGEX.find(line)
+        if (startMatch != null) {
+            activeMarkerLang = normalizeReleaseLocaleCode(startMatch.groupValues[1])
+            markerSections.getOrPut(activeMarkerLang) { StringBuilder() }
+            continue
+        }
+        if (LANG_END_TAG_REGEX.containsMatchIn(line)) {
+            activeMarkerLang = null
+            continue
+        }
+        val current = activeMarkerLang
+        if (current != null) {
+            markerSections[current]?.appendLine(line)
+        }
+    }
+
+    val sections: Map<String, String> = if (markerSections.size >= 2) {
+        markerSections.mapValues { it.value.toString().trim() }.filterValues { it.isNotBlank() }
+    } else {
+        // Pass 2: Markdown headings like ## Русский / ## English / ### Deutsch
+        val headingSections = LinkedHashMap<String, StringBuilder>()
+        var currentHeadingLang: String? = null
+        for (line in lines) {
+            val trimmed = line.trim()
+            if (LANG_START_TAG_REGEX.containsMatchIn(trimmed) || LANG_END_TAG_REGEX.containsMatchIn(trimmed)) {
+                continue
+            }
+            if (trimmed.startsWith("## ") || trimmed.startsWith("### ")) {
+                val detected = matchReleaseLanguageHeading(trimmed)
+                if (detected != null) {
+                    currentHeadingLang = detected
+                    headingSections.getOrPut(detected) { StringBuilder() }
+                    continue
+                }
+            }
+            val current = currentHeadingLang
+            if (current != null) {
+                headingSections[current]?.appendLine(line)
+            }
+        }
+        headingSections.mapValues { it.value.toString().trim() }.filterValues { it.isNotBlank() }
+    }
+
+    if (sections.size < 2) {
+        return lines
+            .filterNot { LANG_START_TAG_REGEX.containsMatchIn(it) || LANG_END_TAG_REGEX.containsMatchIn(it) }
+            .joinToString("\n")
+            .trim()
+    }
+
+    val lang = normalizeReleaseLocaleCode(locale.language)
+    val country = locale.country.lowercase(Locale.ROOT)
+    val script = locale.script.lowercase(Locale.ROOT)
+
+    val candidates = buildList {
+        if (lang.isNotEmpty() && script.isNotEmpty()) add("$lang-$script")
+        if (lang.isNotEmpty() && country.isNotEmpty()) add("$lang-$country")
+        if (lang == "zh") add("zh-hans")
+        if (lang == "pt") add("pt-br")
+        if (lang.isNotEmpty()) add(lang)
+        add("en")
+        add("ru")
+    }
+
+    for (code in candidates) {
+        val exact = sections[code]
+        if (!exact.isNullOrBlank()) return exact
+        val base = code.substringBefore('-')
+        val prefixMatch = sections.entries.firstOrNull { (k, v) ->
+            v.isNotBlank() && k.substringBefore('-') == base
+        }?.value
+        if (!prefixMatch.isNullOrBlank()) return prefixMatch
+    }
+
+    return sections.values.firstOrNull { it.isNotBlank() } ?: raw.trim()
+}
+
 private val HTML_TAG_REGEX = Regex("</?(?:details|summary|b|i|br\\s*/?)>", RegexOption.IGNORE_CASE)
 
 internal fun parseReleaseNotes(raw: String): List<ReleaseNoteBlock> {
@@ -214,8 +336,15 @@ fun showStormUpdateAvailableDialog(
     val cleanNew = newVersion.trim().removePrefix("v").removePrefix("V")
     val mirrorLabel = detectMirrorLabel(sourceReleaseUrl, downloadUrl)
     val dateLabel = formatEpochMillisDate(publishedEpochMillis)
+    val activeLocale = context.resources.configuration.locales.let { list ->
+        if (!list.isEmpty) list[0] else Locale.getDefault()
+    }
+    val localizedChangelog = selectLocalizedReleaseNotes(
+        changelogMd.ifBlank { "STORM DS $cleanNew" },
+        activeLocale,
+    )
     val parsedBlocks = parseReleaseNotes(
-        changelogMd.ifBlank { "STORM DS $cleanNew" }
+        localizedChangelog.ifBlank { "STORM DS $cleanNew" }
     )
 
     return showSettingsComposeDialog(
