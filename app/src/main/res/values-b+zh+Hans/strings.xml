@@ -763,6 +763,8 @@
         <item>Scale2x</item>
         <item>AI-Upscale (Anime4K)</item>
         <item>RetroArch (.slangp)</item>
+            <item>AMD FSR 1 (EASU + RCAS)</item>
+        <item>AMD FSR 3 (Temporal + RCAS)</item>
     </string-array>
     <string name="video_retroarch_shader_root_title">RetroArch 着色器根目录</string>
     <string name="video_retroarch_shader_root_summary">选择顶层 slang-shaders 文件夹，以便预设能够解析同级的 shader、include 和 LUT 文件夹。</string>
@@ -1720,4 +1722,44 @@
     <string name="about_privacy_policy_summary">数据保留期限、第三方服务与 GDPR 说明</string>
     <string name="about_foss_licenses_title">开源核心与许可证</string>
     <string name="about_foss_licenses_summary">GPL-3.0 声明、开源组件与上游仓库链接</string>
+    <string name="update_download_source_title">默认更新下载源</string>
+    <string name="update_download_source_ask">每次询问</string>
+    <string name="update_download_source_github">GitHub</string>
+    <string name="update_download_source_sgw">STORM GAMES WORLD</string>
+    <string name="update_download_source_picker_label">下载源</string>
+    <string-array name="video_fsr_quality_mode_options">
+        <item>超级画质 (3.0x)</item>
+        <item>质量 (2.5x)</item>
+        <item>平衡 (2.0x)</item>
+        <item>性能 (1.5x)</item>
+    </string-array>
+    <string name="video_fsr_quality_mode_title">FSR 画质预设</string>
+    <string name="video_fsr_sharpness_title">FSR RCAS 锐度</string>
+    <string name="video_fsr_sharpness_summary">锐化强度: %1$d%%</string>
+    <string name="video_frame_gen_enabled_title">帧生成 (60 -&gt; 120 FPS)</string>
+    <string name="video_frame_gen_enabled_summary">120 Hz 屏幕光学插帧（会增加约 ~16.7 ms 输入延迟）</string>
+    <string name="video_frame_gen_warning_title">启用帧生成 (60 -&gt; 120 FPS)?</string>
+    <string name="video_frame_gen_warning_message">光学插帧可在 120 Hz 屏幕上实现双倍流畅度，但会增加约 ~16.7 ms 的输入延迟。</string>
+    <string name="video_frame_gen_enable_confirm">启用</string>
+    <string name="sgw_store_title">STORM GAMES WORLD</string>
+    <string name="sgw_store_subtitle">DS 与 DSi 游戏目录及汉/俄化</string>
+    <string name="sgw_search_hint">搜索目录或更新...</string>
+    <string name="sgw_tab_translations">翻译</string>
+    <string name="sgw_tab_updates">更新 (%1$d)</string>
+    <string name="sgw_downloading_status">正在下载 ROM</string>
+    <string name="sgw_updating_migrating_status">正在更新 ROM 并迁移存档</string>
+    <string name="sgw_operation_success">已保存 %1$s (迁移 %2$d 个存档, %3$d 个即时存档)</string>
+    <string name="sgw_operation_failed">下载失败: %1$s (原 ROM 已安全保留)</string>
+    <string name="sgw_http_404_error">服务器镜像上暂时找不到该文件 (HTTP 404)</string>
+    <string name="sgw_no_updates_found">所有已安装游戏均已是最新版本</string>
+    <string name="sgw_empty_catalog">目录为空或未联网</string>
+    <string name="sgw_download_action">下载</string>
+    <string name="sgw_update_replace_action">更新</string>
+    <string name="sgw_reason_rus_available">提供俄语本地化版本</string>
+    <string name="sgw_reason_trans_update">有新的翻译更新</string>
+    <string name="sgw_reason_new_version">有更新的 ROM 版本</string>
+    <string name="sgw_banner_updates_available">STORM GAMES WORLD 上有 %1$d 个游戏更新</string>
+    <string name="sgw_banner_open_updates">查看</string>
+    <string name="sgw_badge_update">更新</string>
+    <string name="sgw_badge_rus">译本</string>
 </resources>

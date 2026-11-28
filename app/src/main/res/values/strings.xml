@@ -1148,6 +1148,8 @@
         <item>Scale2x</item>
         <item>AI-Upscale (Anime4K)</item>
         <item>RetroArch (.slangp)</item>
+            <item>AMD FSR 1 (EASU + RCAS)</item>
+        <item>AMD FSR 3 (Temporal + RCAS)</item>
     </string-array>
 
     <string-array name="video_vulkan_driver_mode_options">
@@ -1869,4 +1871,44 @@
     <string name="about_privacy_policy_summary">Data storage, third-party services and GDPR notice</string>
     <string name="about_foss_licenses_title">Open-source cores and licenses</string>
     <string name="about_foss_licenses_summary">GPL-3.0 notice, FOSS components and upstream links</string>
+    <string name="update_download_source_title">Default update download source</string>
+    <string name="update_download_source_ask">Ask each time</string>
+    <string name="update_download_source_github">GitHub</string>
+    <string name="update_download_source_sgw">STORM GAMES WORLD</string>
+    <string name="update_download_source_picker_label">Download source</string>
+    <string-array name="video_fsr_quality_mode_options">
+        <item>Ultra Quality (3.0x)</item>
+        <item>Quality (2.5x)</item>
+        <item>Balanced (2.0x)</item>
+        <item>Performance (1.5x)</item>
+    </string-array>
+    <string name="video_fsr_quality_mode_title">FSR quality preset</string>
+    <string name="video_fsr_sharpness_title">FSR RCAS sharpness</string>
+    <string name="video_fsr_sharpness_summary">Sharpening intensity: %1$d%%</string>
+    <string name="video_frame_gen_enabled_title">Frame Generation (60 -&gt; 120 FPS)</string>
+    <string name="video_frame_gen_enabled_summary">Optical intermediate frame interpolation on 120 Hz screens (adds ~16.7 ms input latency)</string>
+    <string name="video_frame_gen_warning_title">Enable Frame Generation (60 -&gt; 120 FPS)?</string>
+    <string name="video_frame_gen_warning_message">Optical frame interpolation doubles smoothness on 120 Hz displays, but adds about ~16.7 ms of input latency. Recommended for casual play, not rhythm games.</string>
+    <string name="video_frame_gen_enable_confirm">Enable</string>
+    <string name="sgw_store_title">STORM GAMES WORLD</string>
+    <string name="sgw_store_subtitle">DS and DSi catalog and Russian translations</string>
+    <string name="sgw_search_hint">Search catalog or updates...</string>
+    <string name="sgw_tab_translations">Translations</string>
+    <string name="sgw_tab_updates">Updates (%1$d)</string>
+    <string name="sgw_downloading_status">Downloading ROM</string>
+    <string name="sgw_updating_migrating_status">Updating ROM and migrating saves</string>
+    <string name="sgw_operation_success">Saved %1$s (migrated %2$d saves, %3$d states)</string>
+    <string name="sgw_operation_failed">Download failed: %1$s (original ROM kept safe)</string>
+    <string name="sgw_http_404_error">File is temporarily unavailable on server mirror (HTTP 404)</string>
+    <string name="sgw_no_updates_found">All installed games are up to date</string>
+    <string name="sgw_empty_catalog">Catalog list is empty or offline</string>
+    <string name="sgw_download_action">Download</string>
+    <string name="sgw_update_replace_action">Update</string>
+    <string name="sgw_reason_rus_available">Russian translation available</string>
+    <string name="sgw_reason_trans_update">Translation update available</string>
+    <string name="sgw_reason_new_version">Newer ROM version available</string>
+    <string name="sgw_banner_updates_available">%1$d game updates available on STORM GAMES WORLD</string>
+    <string name="sgw_banner_open_updates">Review</string>
+    <string name="sgw_badge_update">UPD</string>
+    <string name="sgw_badge_rus">RUS</string>
 </resources>

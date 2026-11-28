@@ -364,6 +364,8 @@
         <item>Scale2x</item>
         <item>AI-Upscale (Anime4K)</item>
         <item>RetroArch (.slangp)</item>
+            <item>AMD FSR 1 (EASU + RCAS)</item>
+        <item>AMD FSR 3 (Temporal + RCAS)</item>
     </string-array>
     <string-array name="dsi_camera_source_options">
         <item>Écran noir</item>
@@ -1670,4 +1672,44 @@ Les importer dans STORM DS ?</string>
     <string name="about_privacy_policy_summary">Conservation des données, services tiers et RGPD</string>
     <string name="about_foss_licenses_title">Cœurs et licences open source</string>
     <string name="about_foss_licenses_summary">Notice GPL-3.0, composants FOSS et dépôts upstream</string>
+    <string name="update_download_source_title">Source de téléchargement des mises à jour par défaut</string>
+    <string name="update_download_source_ask">Demander à chaque fois</string>
+    <string name="update_download_source_github">GitHub</string>
+    <string name="update_download_source_sgw">STORM GAMES WORLD</string>
+    <string name="update_download_source_picker_label">Source de téléchargement</string>
+    <string-array name="video_fsr_quality_mode_options">
+        <item>Qualité ultra (3.0x)</item>
+        <item>Qualité (2.5x)</item>
+        <item>Équilibré (2.0x)</item>
+        <item>Performance (1.5x)</item>
+    </string-array>
+    <string name="video_fsr_quality_mode_title">Préréglage de qualité FSR</string>
+    <string name="video_fsr_sharpness_title">Netteté FSR RCAS</string>
+    <string name="video_fsr_sharpness_summary">Intensité de netteté : %1$d%%</string>
+    <string name="video_frame_gen_enabled_title">Génération d\'images (60 -&gt; 120 FPS)</string>
+    <string name="video_frame_gen_enabled_summary">Interpolation optique sur écrans 120 Hz (ajoute ~16.7 ms de latence)</string>
+    <string name="video_frame_gen_warning_title">Activer la génération d\'images ?</string>
+    <string name="video_frame_gen_warning_message">L\'interpolation optique double la fluidité sur écrans 120 Hz mais ajoute environ ~16.7 ms de latence d\'entrée.</string>
+    <string name="video_frame_gen_enable_confirm">Activer</string>
+    <string name="sgw_store_title">STORM GAMES WORLD</string>
+    <string name="sgw_store_subtitle">Catalogue DS et DSi et traductions</string>
+    <string name="sgw_search_hint">Rechercher dans le catalogue...</string>
+    <string name="sgw_tab_translations">Traductions</string>
+    <string name="sgw_tab_updates">Mises à jour (%1$d)</string>
+    <string name="sgw_downloading_status">Téléchargement ROM</string>
+    <string name="sgw_updating_migrating_status">Mise à jour ROM et migration des sauvegardes</string>
+    <string name="sgw_operation_success">%1$s enregistré (%2$d sauvegardes, %3$d états migrés)</string>
+    <string name="sgw_operation_failed">Échec : %1$s (ROM d\'origine conservée)</string>
+    <string name="sgw_http_404_error">Fichier temporairement indisponible sur le serveur (HTTP 404)</string>
+    <string name="sgw_no_updates_found">Tous vos jeux sont à jour</string>
+    <string name="sgw_empty_catalog">Catalogue vide ou hors ligne</string>
+    <string name="sgw_download_action">Télécharger</string>
+    <string name="sgw_update_replace_action">Mettre à jour</string>
+    <string name="sgw_reason_rus_available">Traduction russe disponible</string>
+    <string name="sgw_reason_trans_update">Mise à jour de traduction disponible</string>
+    <string name="sgw_reason_new_version">Nouvelle version de ROM disponible</string>
+    <string name="sgw_banner_updates_available">%1$d mises à jour de jeux disponibles sur STORM GAMES WORLD</string>
+    <string name="sgw_banner_open_updates">Ouvrir</string>
+    <string name="sgw_badge_update">MAJ</string>
+    <string name="sgw_badge_rus">RUS</string>
 </resources>

@@ -245,6 +245,11 @@
             android:label="@string/feature_stats_title"
             android:parentActivityName=".ui.romlist.RomListActivity"
             android:exported="false" />
+        <activity
+            android:name=".ui.sgw.StormGamesWorldActivity"
+            android:label="@string/sgw_store_title"
+            android:parentActivityName=".ui.romlist.RomListActivity"
+            android:exported="false" />
 
         <service
             android:name=".ui.quickresume.QuickResumeTileService"

@@ -529,6 +529,8 @@
         <item>Scale2x</item>
         <item>AI-Upscale (Anime4K)</item>
         <item>RetroArch (.slangp)</item>
+            <item>AMD FSR 1 (EASU + RCAS)</item>
+        <item>AMD FSR 3 (Temporal + RCAS)</item>
     </string-array>
     <string-array name="dsi_camera_source_options">
         <item>Layar hitam</item>
@@ -1703,4 +1705,44 @@ Impor ke STORM DS?</string>
     <string name="about_privacy_policy_summary">Penyimpanan data, layanan pihak ketiga dan GDPR</string>
     <string name="about_foss_licenses_title">Inti &amp; lisensi sumber terbuka</string>
     <string name="about_foss_licenses_summary">Pemberitahuan GPL-3.0, komponen FOSS dan tautan upstream</string>
+    <string name="update_download_source_title">Sumber unduhan pembaruan default</string>
+    <string name="update_download_source_ask">Tanyakan setiap kali</string>
+    <string name="update_download_source_github">GitHub</string>
+    <string name="update_download_source_sgw">STORM GAMES WORLD</string>
+    <string name="update_download_source_picker_label">Sumber unduhan</string>
+    <string-array name="video_fsr_quality_mode_options">
+        <item>Kualitas ultra (3.0x)</item>
+        <item>Kualitas (2.5x)</item>
+        <item>Seimbang (2.0x)</item>
+        <item>Performa (1.5x)</item>
+    </string-array>
+    <string name="video_fsr_quality_mode_title">Preset kualitas FSR</string>
+    <string name="video_fsr_sharpness_title">Ketajaman FSR RCAS</string>
+    <string name="video_fsr_sharpness_summary">Intensitas ketajaman: %1$d%%</string>
+    <string name="video_frame_gen_enabled_title">Frame Generation (60 -&gt; 120 FPS)</string>
+    <string name="video_frame_gen_enabled_summary">Interpolasi frame optik pada layar 120 Hz (menambah latensi input ~16.7 ms)</string>
+    <string name="video_frame_gen_warning_title">Aktifkan Frame Generation?</string>
+    <string name="video_frame_gen_warning_message">Interpolasi frame optik menggandakan kehalusan pada layar 120 Hz, tetapi menambah sekitar ~16.7 ms latensi input.</string>
+    <string name="video_frame_gen_enable_confirm">Aktifkan</string>
+    <string name="sgw_store_title">STORM GAMES WORLD</string>
+    <string name="sgw_store_subtitle">Katalog DS dan DSi serta terjemahan</string>
+    <string name="sgw_search_hint">Cari di katalog...</string>
+    <string name="sgw_tab_translations">Terjemahan</string>
+    <string name="sgw_tab_updates">Pembaruan (%1$d)</string>
+    <string name="sgw_downloading_status">Mengunduh ROM</string>
+    <string name="sgw_updating_migrating_status">Memperbarui ROM dan memindahkan simpanan</string>
+    <string name="sgw_operation_success">Tersimpan %1$s (%2$d simpanan, %3$d state dipindah)</string>
+    <string name="sgw_operation_failed">Gagal mengunduh: %1$s (ROM asli aman)</string>
+    <string name="sgw_http_404_error">File sementara tidak tersedia di server (HTTP 404)</string>
+    <string name="sgw_no_updates_found">Semua game sudah versi terbaru</string>
+    <string name="sgw_empty_catalog">Katalog kosong atau offline</string>
+    <string name="sgw_download_action">Unduh</string>
+    <string name="sgw_update_replace_action">Perbarui</string>
+    <string name="sgw_reason_rus_available">Terjemahan bahasa Rusia tersedia</string>
+    <string name="sgw_reason_trans_update">Pembaruan terjemahan tersedia</string>
+    <string name="sgw_reason_new_version">Versi ROM lebih baru tersedia</string>
+    <string name="sgw_banner_updates_available">%1$d pembaruan game tersedia di STORM GAMES WORLD</string>
+    <string name="sgw_banner_open_updates">Buka</string>
+    <string name="sgw_badge_update">UPD</string>
+    <string name="sgw_badge_rus">RUS</string>
 </resources>

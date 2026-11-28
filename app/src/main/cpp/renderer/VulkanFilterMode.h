@@ -19,6 +19,8 @@ enum class VulkanFilterMode : melonDS::u32
     Scale2x = 8,
     RetroArch = 9,
     AiUpscale = 10,
+    Fsr1 = 11,
+    Fsr3 = 12,
 };
 
 inline bool IsVulkanPostProcessFilter(VulkanFilterMode filter)
@@ -31,7 +33,9 @@ inline bool IsVulkanPostProcessFilter(VulkanFilterMode filter)
         || filter == VulkanFilterMode::Scanlines
         || filter == VulkanFilterMode::Scale2x
         || filter == VulkanFilterMode::RetroArch
-        || filter == VulkanFilterMode::AiUpscale;
+        || filter == VulkanFilterMode::AiUpscale
+        || filter == VulkanFilterMode::Fsr1
+        || filter == VulkanFilterMode::Fsr3;
 }
 
 }

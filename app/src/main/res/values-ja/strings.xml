@@ -1391,6 +1391,8 @@
         <item>Scale2x</item>
         <item>AI-Upscale (Anime4K)</item>
         <item>RetroArch (.slangp)</item>
+            <item>AMD FSR 1 (EASU + RCAS)</item>
+        <item>AMD FSR 3 (Temporal + RCAS)</item>
     </string-array>
 
     <string-array name="video_vulkan_driver_mode_options">
@@ -1791,4 +1793,44 @@
     <string name="about_privacy_policy_summary">データ保持期間・外部サービス・GDPR対応について</string>
     <string name="about_foss_licenses_title">オープンソースコアとライセンス</string>
     <string name="about_foss_licenses_summary">GPL-3.0・使用FOSSライブラリと開発元リポジトリ一覧</string>
+    <string name="update_download_source_title">アップデートの既定ダウンロード元</string>
+    <string name="update_download_source_ask">毎回確認する</string>
+    <string name="update_download_source_github">GitHub</string>
+    <string name="update_download_source_sgw">STORM GAMES WORLD</string>
+    <string name="update_download_source_picker_label">ダウンロード元</string>
+    <string-array name="video_fsr_quality_mode_options">
+        <item>ウルトラ品質 (3.0x)</item>
+        <item>品質 (2.5x)</item>
+        <item>バランス (2.0x)</item>
+        <item>パフォーマンス (1.5x)</item>
+    </string-array>
+    <string name="video_fsr_quality_mode_title">FSR 品質プリセット</string>
+    <string name="video_fsr_sharpness_title">FSR RCAS シャープネス</string>
+    <string name="video_fsr_sharpness_summary">シャープネス強度: %1$d%%</string>
+    <string name="video_frame_gen_enabled_title">フレーム生成 (60 -&gt; 120 FPS)</string>
+    <string name="video_frame_gen_enabled_summary">120 Hz 画面向けの光学フレーム補間 (約 ~16.7 ms の入力遅延が追加されます)</string>
+    <string name="video_frame_gen_warning_title">フレーム生成を有効にしますか?</string>
+    <string name="video_frame_gen_warning_message">光学フレーム補間により 120 Hz ディスプレイで滑らかさが倍増しますが、約 ~16.7 ms の入力遅延が追加されます。</string>
+    <string name="video_frame_gen_enable_confirm">有効にする</string>
+    <string name="sgw_store_title">STORM GAMES WORLD</string>
+    <string name="sgw_store_subtitle">DS・DSi カタログおよび翻訳</string>
+    <string name="sgw_search_hint">カタログを検索...</string>
+    <string name="sgw_tab_translations">翻訳</string>
+    <string name="sgw_tab_updates">更新 (%1$d)</string>
+    <string name="sgw_downloading_status">ROM ダウンロード中</string>
+    <string name="sgw_updating_migrating_status">ROM 更新とセーブ移行中</string>
+    <string name="sgw_operation_success">%1$s を保存しました (セーブ %2$d件、ステート %3$d件を移行)</string>
+    <string name="sgw_operation_failed">失敗: %1$s (元の ROM は保持されています)</string>
+    <string name="sgw_http_404_error">サーバー上にファイルが一時的に見つかりません (HTTP 404)</string>
+    <string name="sgw_no_updates_found">すべてのゲームは最新です</string>
+    <string name="sgw_empty_catalog">カタログが空またはオフラインです</string>
+    <string name="sgw_download_action">取得</string>
+    <string name="sgw_update_replace_action">更新</string>
+    <string name="sgw_reason_rus_available">ロシア語翻訳が利用可能</string>
+    <string name="sgw_reason_trans_update">翻訳の更新が利用可能</string>
+    <string name="sgw_reason_new_version">新しい ROM バージョンが利用可能</string>
+    <string name="sgw_banner_updates_available">STORM GAMES WORLD に %1$d 件のゲーム更新があります</string>
+    <string name="sgw_banner_open_updates">開く</string>
+    <string name="sgw_badge_update">更新</string>
+    <string name="sgw_badge_rus">翻訳</string>
 </resources>

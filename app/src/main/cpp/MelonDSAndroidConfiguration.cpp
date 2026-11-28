@@ -311,6 +311,8 @@ MelonDSAndroid::VulkanFilterMode mapVulkanFilterMode(jint ordinal)
         case 8: return MelonDSAndroid::VulkanFilterMode::Scale2x;
         case 9: return MelonDSAndroid::VulkanFilterMode::AiUpscale;
         case 10: return MelonDSAndroid::VulkanFilterMode::RetroArch;
+        case 11: return MelonDSAndroid::VulkanFilterMode::Fsr1;
+        case 12: return MelonDSAndroid::VulkanFilterMode::Fsr3;
         case 0:
         default: return MelonDSAndroid::VulkanFilterMode::Nearest;
     }

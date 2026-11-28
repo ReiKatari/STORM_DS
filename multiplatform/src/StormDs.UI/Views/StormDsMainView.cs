@@ -556,7 +556,11 @@ public class StormDsMainView : Grid
                 : new Version(8, 9, 0);
 
             var updater = new AuroraDualMirrorUpdater();
-            var res = await updater.CheckForUpdateAsync("ReiKatari", "STORM_DS", curVer);
+            var res = await updater.CheckForUpdateAsync(
+                "ReiKatari",
+                "STORM_DS",
+                curVer,
+                preferredSource: (AuroraUpdateDownloadSource)Math.Clamp(StormDsUiState.Instance.AppConfig.UpdateDownloadSource, 0, 2));
 
             await Dispatcher.UIThread.InvokeAsync(() =>
             {

@@ -179,10 +179,21 @@ class GitHubUpdateInstallManager(private val context: Context) : UpdateInstallMa
         val primary = update.downloadUri.toString()
         val fileName = primary.substringAfterLast('/').substringBefore('?')
         val urls = linkedSetOf(primary)
+        // Preserve user's selected mirror first; add opposite mirror URLs only as fallback
+        update.mirrorSources.values.forEach { option ->
+            val altUrl = option.downloadUri.toString()
+            if (altUrl != primary) {
+                urls.add(altUrl)
+            }
+        }
         if (fileName.endsWith(".apk", ignoreCase = true)) {
-            urls.add("$STORM_GAMES_WORLD_DOWNLOAD_URL_PREFIX$fileName")
-            urls.add("$STORM_GAMES_WORLD_ALT_DOWNLOAD_URL_PREFIX$fileName")
-            if (update.releaseTag.isNotBlank()) {
+            if (!primary.contains("stormgamesworld.ru", ignoreCase = true)) {
+                urls.add("$STORM_GAMES_WORLD_DOWNLOAD_URL_PREFIX$fileName")
+            }
+            if (!primary.contains("storm-games.world", ignoreCase = true)) {
+                urls.add("$STORM_GAMES_WORLD_ALT_DOWNLOAD_URL_PREFIX$fileName")
+            }
+            if (update.releaseTag.isNotBlank() && !primary.contains("github.com", ignoreCase = true)) {
                 urls.add("${GITHUB_RELEASE_URL_PREFIX}download/${update.releaseTag}/$fileName")
             }
         }

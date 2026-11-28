@@ -35,7 +35,9 @@ public enum ScreenFilter
     Nearest = 0,
     Linear = 1,
     Bicubic = 2,
-    SlangShader = 3
+    SlangShader = 3,
+    Fsr1 = 4,
+    Fsr3 = 5
 }
 
 public enum AudioInterpolation
@@ -140,6 +142,9 @@ public sealed class StormDsAppConfig
     public bool ThickEdges { get; set; }
     public bool ConservativeCoverage { get; set; }
     public ScreenFilter ScreenFilter { get; set; } = ScreenFilter.Bicubic;
+    public int FsrQualityMode { get; set; } = 0;
+    public int FsrRcasSharpness { get; set; } = 50;
+    public bool FrameGenEnabled { get; set; } = false;
     public string ActiveSlangPreset { get; set; } = string.Empty;
     public string CustomTurnipDriverPath { get; set; } = string.Empty;
 
@@ -223,6 +228,7 @@ public sealed class StormDsAppConfig
     public string AccentName { get; set; } = "DefaultThemeAccent";
     public string TypographyName { get; set; } = "Inter";
     public bool AutoCheckUpdates { get; set; } = true;
+    public int UpdateDownloadSource { get; set; } = 0; // 0 = Ask, 1 = GitHub, 2 = STORM GAMES WORLD
     public string SkippedUpdateVersion { get; set; } = string.Empty;
     public bool FirstRomAutoSelect { get; set; } = true;
     public bool MinimizeToTrayOnClose { get; set; } = false;

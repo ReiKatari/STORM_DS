@@ -256,6 +256,12 @@ interface SettingsRepository {
     fun getActiveAiUpscalePresetName(): String?
     fun getHingeGapPixels(): Int
     fun setHingeGapPixels(pixels: Int)
+    fun getVulkanFsrQualityMode(): Int
+    fun setVulkanFsrQualityMode(mode: Int)
+    fun getVulkanFsrSharpness(): Int
+    fun setVulkanFsrSharpness(sharpness: Int)
+    fun isVulkanFrameGenEnabled(): Boolean
+    fun setVulkanFrameGenEnabled(enabled: Boolean)
     fun isExtendedPauseMenuEnabled(): Boolean
     fun setExtendedPauseMenuEnabled(enabled: Boolean)
     fun getSlowMotionSpeed(): Float

@@ -5169,6 +5169,19 @@ VulkanPresentationResult MelonInstance::presentVulkanFrame(
     return lastResult;
 }
 
+VulkanPresentationResult MelonInstance::presentVulkanInterpolatedFrame()
+{
+    auto presentationOperationLock = acquireVulkanPresentationOperation();
+    if (currentRenderer != Renderer::Vulkan
+        || !vulkanSurfacePresenter
+        || !VulkanRuntime::GetFrameGenEnabled()
+        || isFastForwardActive())
+    {
+        return VulkanPresentationResult::NoProduct;
+    }
+    return vulkanSurfacePresenter->presentInterpolatedFrame();
+}
+
 u64 MelonInstance::captureVulkanPresentationWaitEpoch() const noexcept
 {
     return frameQueue.capturePresentationWaitEpoch();

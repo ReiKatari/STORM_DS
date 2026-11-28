@@ -58,6 +58,8 @@ class ChoreographerVSyncFrameRenderer(
 
         if (shouldRender) {
             frameRenderCoordinator.renderFrame(frameDeadline)
+        } else if (isHighRefresh && me.magnum.melonds.MelonEmulator.isVulkanFrameGenEnabled()) {
+            frameRenderCoordinator.renderInterpolatedFrame(rawDeadline)
         }
         if (isRendering) {
             Choreographer.getInstance().postVsyncCallback(this)

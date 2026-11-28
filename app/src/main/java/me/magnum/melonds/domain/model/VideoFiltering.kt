@@ -14,7 +14,9 @@ enum class VideoFiltering {
     SCANLINES,
     SCALE2X,
     AI_UPSCALE,
-    RETROARCH;
+    RETROARCH,
+    FSR1,
+    FSR3;
 
     fun isSupportedByVulkan(): Boolean {
         return true

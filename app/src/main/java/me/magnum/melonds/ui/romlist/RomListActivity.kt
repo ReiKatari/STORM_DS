@@ -206,7 +206,7 @@ class RomListActivity : AppCompatActivity() {
                         is ManualUpdateResult.UpToDate -> {
                             val curVer = (runCatching {
                                 packageManager.getPackageInfo(packageName, 0).versionName
-                            }.getOrNull() ?: "8.9.5").removePrefix("v").removePrefix("V")
+                            }.getOrNull() ?: "8.9.6").removePrefix("v").removePrefix("V")
                             activeUpdateDialog?.dismiss()
                             activeUpdateDialog = showStormUpdateInfoDialog(
                                 context = this@RomListActivity,
@@ -513,13 +513,21 @@ class RomListActivity : AppCompatActivity() {
         if (isFinishing || isDestroyed) return
         val currentVersionStr = runCatching {
             val pInfo = packageManager.getPackageInfo(packageName, 0)
-            pInfo.versionName ?: "8.9.5"
-        }.getOrDefault("8.9.5")
+            pInfo.versionName ?: "8.9.6"
+        }.getOrDefault("8.9.6")
 
         val newVersionStr = getReadableVersionString(update.newVersion)
         val rawDescription = update.description.ifBlank {
             "STORM DS ${newVersionStr.removePrefix("v").removePrefix("V")}"
         }
+
+        val defaultPrefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
+        val defaultSource = me.magnum.melonds.github.UpdateDownloadSource.fromPreference(
+            defaultPrefs.getString(
+                me.magnum.melonds.github.PREF_KEY_UPDATE_DOWNLOAD_SOURCE,
+                me.magnum.melonds.github.UpdateDownloadSource.ASK.preferenceValue,
+            )
+        )
 
         activeUpdateDialog?.dismiss()
         activeUpdateDialog = showStormUpdateAvailableDialog(
@@ -531,7 +539,9 @@ class RomListActivity : AppCompatActivity() {
             publishedEpochMillis = update.updateDate.toEpochMilliseconds(),
             sourceReleaseUrl = update.sourceReleaseUrl,
             downloadUrl = update.downloadUri.toString(),
-            onUpdateNow = { startUpdateDownload(update) },
+            mirrorSources = update.mirrorSources,
+            defaultSource = defaultSource,
+            onUpdateNow = { chosenSource -> startUpdateDownload(update.withSelectedSource(chosenSource)) },
             onRemindLater = {},
             onSkipVersion = { updatesViewModel.skipUpdate(update) },
         )
@@ -541,8 +551,8 @@ class RomListActivity : AppCompatActivity() {
         if (isFinishing || isDestroyed) return
         val currentVersionStr = runCatching {
             val pInfo = packageManager.getPackageInfo(packageName, 0)
-            pInfo.versionName ?: "8.9.5"
-        }.getOrDefault("8.9.5")
+            pInfo.versionName ?: "8.9.6"
+        }.getOrDefault("8.9.6")
 
         activeUpdateDialog?.dismiss()
         activeUpdateDialog = showStormUpdateAvailableDialog(
@@ -554,8 +564,10 @@ class RomListActivity : AppCompatActivity() {
             publishedEpochMillis = update.updateDate.toEpochMilliseconds(),
             sourceReleaseUrl = update.sourceReleaseUrl,
             downloadUrl = update.downloadUri.toString(),
+            mirrorSources = update.mirrorSources,
+            defaultSource = me.magnum.melonds.github.UpdateDownloadSource.GITHUB,
             titleOverride = getString(R.string.nightly_update_available),
-            onUpdateNow = { startUpdateDownload(update) },
+            onUpdateNow = { chosenSource -> startUpdateDownload(update.withSelectedSource(chosenSource)) },
             onRemindLater = {},
             onSkipVersion = { updatesViewModel.skipUpdate(update) },
         )

@@ -63,6 +63,8 @@ fun RomListRow(
     boxArtLoading: Boolean = false,
     allowConfiguration: Boolean,
     showAchievementBadge: Boolean,
+    sgwUpdateReason: me.magnum.melonds.sgw.SgwUpdateReason? = null,
+    onSgwUpdateClick: (() -> Unit)? = null,
     onClick: () -> Unit,
     onLongPress: () -> Unit,
     onConfigClick: () -> Unit,
@@ -252,6 +254,30 @@ fun RomListRow(
                     fontSize = 9.sp,
                     lineHeight = 11.sp,
                     modifier = Modifier.padding(top = 1.dp),
+                )
+            }
+        }
+
+        if (sgwUpdateReason != null) {
+            val badgeText = stringResource(
+                if (sgwUpdateReason == me.magnum.melonds.sgw.SgwUpdateReason.RUSSIAN_TRANSLATION_AVAILABLE)
+                    me.magnum.melonds.R.string.sgw_badge_rus
+                else
+                    me.magnum.melonds.R.string.sgw_badge_update
+            )
+            Box(
+                modifier = Modifier
+                    .padding(end = 6.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(colors.green)
+                    .clickable(enabled = onSgwUpdateClick != null) { onSgwUpdateClick?.invoke() }
+                    .padding(horizontal = 7.dp, vertical = 3.dp),
+            ) {
+                Text(
+                    text = badgeText,
+                    color = Color.Black,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 10.sp,
                 )
             }
         }

@@ -14,7 +14,7 @@ $filesDir = Join-Path $repoRoot "Files"
 if (-not (Test-Path $filesDir)) { New-Item -ItemType Directory -Path $filesDir | Out-Null }
 if (-not (Test-Path (Join-Path $installerDir "Payload"))) { New-Item -ItemType Directory -Path (Join-Path $installerDir "Payload") | Out-Null }
 
-$appVersion = "8.9.5"
+$appVersion = "8.9.6"
 try {
     [xml]$projXml = Get-Content $desktopProj
     $verNode = ($projXml.Project.PropertyGroup | ForEach-Object { $_.Version } | Where-Object { $_ } | Select-Object -First 1)

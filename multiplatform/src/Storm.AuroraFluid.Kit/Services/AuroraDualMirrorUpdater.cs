@@ -133,6 +133,23 @@ internal partial class AuroraUpdateJsonContext : JsonSerializerContext
 {
 }
 
+public enum AuroraUpdateDownloadSource
+{
+    AskEachTime = 0,
+    GitHub = 1,
+    StormGamesWorld = 2
+}
+
+public sealed record AuroraUpdateSourceOption(
+    AuroraUpdateDownloadSource Source,
+    string SourceLabel,
+    string DownloadUrl,
+    string ReleasePageUrl,
+    string AssetName,
+    long AssetSizeBytes,
+    string? ExpectedSha256 = null
+);
+
 public sealed record AuroraDownloadProgress(
     long DownloadedBytes,
     long TotalBytes,
@@ -152,8 +169,31 @@ public sealed record AuroraUpdateCheckResult(
     long AssetSizeBytes = 0,
     DateTimeOffset? PublishedAtUtc = null,
     bool CheckSucceeded = false,
-    string? ErrorMessage = null
-);
+    string? ErrorMessage = null,
+    AuroraUpdateSourceOption? GitHubSource = null,
+    AuroraUpdateSourceOption? StormMirrorSource = null
+)
+{
+    public AuroraUpdateCheckResult WithSelectedSource(AuroraUpdateDownloadSource source)
+    {
+        var opt = source switch
+        {
+            AuroraUpdateDownloadSource.GitHub => GitHubSource,
+            AuroraUpdateDownloadSource.StormGamesWorld => StormMirrorSource,
+            _ => null
+        };
+        if (opt == null) return this;
+        return this with
+        {
+            DownloadUrl = opt.DownloadUrl,
+            SourceMirror = opt.SourceLabel,
+            ReleasePageUrl = opt.ReleasePageUrl,
+            AssetName = opt.AssetName,
+            AssetSizeBytes = opt.AssetSizeBytes,
+            ExpectedSha256 = opt.ExpectedSha256 ?? ExpectedSha256
+        };
+    }
+}
 
 /// <summary>
 /// Dual-mirror resilient auto-updater engine (GitHub Releases API + STORM GAMES WORLD mirror).
@@ -168,7 +208,7 @@ public sealed class AuroraDualMirrorUpdater
 
     static AuroraDualMirrorUpdater()
     {
-        s_httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("STORM-AuroraFluid-Updater/8.9.5 (Windows; Android; Linux)");
+        s_httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("STORM-AuroraFluid-Updater/8.9.6 (Windows; Android; Linux)");
     }
 
     public static bool TryParseSemanticVersion(string? raw, out Version version)
@@ -219,7 +259,8 @@ public sealed class AuroraDualMirrorUpdater
         string githubOwner,
         string githubRepo,
         Version currentVersion,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        AuroraUpdateDownloadSource preferredSource = AuroraUpdateDownloadSource.AskEachTime)
     {
         var ghTask = TryCheckGitHubAsync(githubOwner, githubRepo, currentVersion, cancellationToken);
         var mirrorTask = TryCheckStormMirrorAsync(githubRepo, currentVersion, cancellationToken);
@@ -234,11 +275,75 @@ public sealed class AuroraDualMirrorUpdater
         AuroraUpdateCheckResult? bestCandidate = null;
         if (ghBest != null && mirrorBest != null)
         {
-            bestCandidate = mirrorBest.LatestVersion > ghBest.LatestVersion ? mirrorBest : ghBest;
+            if (mirrorBest.LatestVersion > ghBest.LatestVersion)
+            {
+                bestCandidate = mirrorBest;
+            }
+            else if (ghBest.LatestVersion > mirrorBest.LatestVersion)
+            {
+                bestCandidate = ghBest;
+            }
+            else
+            {
+                var ghOpt = new AuroraUpdateSourceOption(
+                    AuroraUpdateDownloadSource.GitHub,
+                    "GitHub",
+                    ghBest.DownloadUrl,
+                    ghBest.ReleasePageUrl,
+                    ghBest.AssetName,
+                    ghBest.AssetSizeBytes,
+                    ghBest.ExpectedSha256);
+                var sgwOpt = new AuroraUpdateSourceOption(
+                    AuroraUpdateDownloadSource.StormGamesWorld,
+                    "STORM GAMES WORLD",
+                    mirrorBest.DownloadUrl,
+                    mirrorBest.ReleasePageUrl,
+                    mirrorBest.AssetName,
+                    mirrorBest.AssetSizeBytes,
+                    mirrorBest.ExpectedSha256);
+                var primary = preferredSource == AuroraUpdateDownloadSource.StormGamesWorld ? mirrorBest : ghBest;
+                bestCandidate = primary with
+                {
+                    GitHubSource = ghOpt,
+                    StormMirrorSource = sgwOpt,
+                    Changelog = !string.IsNullOrWhiteSpace(ghBest.Changelog) ? ghBest.Changelog : mirrorBest.Changelog
+                };
+            }
         }
         else
         {
             bestCandidate = ghBest ?? mirrorBest;
+            if (bestCandidate != null)
+            {
+                if (ghBest != null)
+                {
+                    bestCandidate = bestCandidate with
+                    {
+                        GitHubSource = new AuroraUpdateSourceOption(
+                            AuroraUpdateDownloadSource.GitHub,
+                            "GitHub",
+                            bestCandidate.DownloadUrl,
+                            bestCandidate.ReleasePageUrl,
+                            bestCandidate.AssetName,
+                            bestCandidate.AssetSizeBytes,
+                            bestCandidate.ExpectedSha256)
+                    };
+                }
+                else
+                {
+                    bestCandidate = bestCandidate with
+                    {
+                        StormMirrorSource = new AuroraUpdateSourceOption(
+                            AuroraUpdateDownloadSource.StormGamesWorld,
+                            "STORM GAMES WORLD",
+                            bestCandidate.DownloadUrl,
+                            bestCandidate.ReleasePageUrl,
+                            bestCandidate.AssetName,
+                            bestCandidate.AssetSizeBytes,
+                            bestCandidate.ExpectedSha256)
+                    };
+                }
+            }
         }
 
         if (bestCandidate != null && bestCandidate.LatestVersion > currentVersion)
@@ -568,10 +673,26 @@ public sealed class AuroraDualMirrorUpdater
         string fileName = Path.GetFileName(destinationFilePath);
         if (!string.IsNullOrWhiteSpace(githubRepo) && !string.IsNullOrWhiteSpace(fileName))
         {
-            string sgw1 = $"https://stormgamesworld.ru/uploads/programs/{githubRepo}/{fileName}";
-            string sgw2 = $"https://storm-games.world/uploads/programs/{githubRepo}/{fileName}";
-            if (!candidateUrls.Any(u => string.Equals(u, sgw1, StringComparison.OrdinalIgnoreCase))) candidateUrls.Add(sgw1);
-            if (!candidateUrls.Any(u => string.Equals(u, sgw2, StringComparison.OrdinalIgnoreCase))) candidateUrls.Add(sgw2);
+            if (!downloadUrl.Contains("stormgamesworld.ru", StringComparison.OrdinalIgnoreCase))
+            {
+                string sgw1 = $"https://stormgamesworld.ru/uploads/programs/{githubRepo}/{fileName}";
+                if (!candidateUrls.Any(u => string.Equals(u, sgw1, StringComparison.OrdinalIgnoreCase))) candidateUrls.Add(sgw1);
+            }
+            if (!downloadUrl.Contains("storm-games.world", StringComparison.OrdinalIgnoreCase))
+            {
+                string sgw2 = $"https://storm-games.world/uploads/programs/{githubRepo}/{fileName}";
+                if (!candidateUrls.Any(u => string.Equals(u, sgw2, StringComparison.OrdinalIgnoreCase))) candidateUrls.Add(sgw2);
+            }
+            if (!downloadUrl.Contains("github.com", StringComparison.OrdinalIgnoreCase))
+            {
+                var verMatch = System.Text.RegularExpressions.Regex.Match(fileName, @"(\d+\.\d+\.\d+)");
+                if (verMatch.Success)
+                {
+                    string verTag = verMatch.Groups[1].Value;
+                    string ghFallback = $"https://github.com/ReiKatari/{githubRepo}/releases/download/{verTag}/{fileName}";
+                    if (!candidateUrls.Any(u => string.Equals(u, ghFallback, StringComparison.OrdinalIgnoreCase))) candidateUrls.Add(ghFallback);
+                }
+            }
         }
 
         var tempPath = destinationFilePath + ".tmp";

@@ -4261,6 +4261,29 @@ open class EmulatorActivity : AppCompatActivity() {
                 showRomMicSourceDialog(rom.config.runtimeMicSource)
             })
             if (renderer == VideoRenderer.VULKAN) {
+                add(romSettingsMenuLabel(getString(R.string.video_fsr_quality_mode_title), vulkanFsrQualityLabel(settingsRepository.getVulkanFsrQualityMode())) to {
+                    showVulkanFsrQualityChoiceOverlay()
+                })
+                add(romSettingsMenuLabel(getString(R.string.video_fsr_sharpness_title), "${settingsRepository.getVulkanFsrSharpness()}%") to {
+                    showVulkanFsrSharpnessChoiceOverlay()
+                })
+                val fgEnabled = settingsRepository.isVulkanFrameGenEnabled()
+                add(romSettingsMenuLabel(getString(R.string.video_frame_gen_enabled_title), if (fgEnabled) getString(R.string.on) else getString(R.string.off)) to {
+                    if (fgEnabled) {
+                        settingsRepository.setVulkanFrameGenEnabled(false)
+                        handler.post { refreshRomSettingsMenuIfOpen() }
+                    } else {
+                        androidx.appcompat.app.AlertDialog.Builder(this@EmulatorActivity)
+                            .setTitle(R.string.video_frame_gen_warning_title)
+                            .setMessage(R.string.video_frame_gen_warning_message)
+                            .setPositiveButton(R.string.video_frame_gen_enable_confirm) { _, _ ->
+                                settingsRepository.setVulkanFrameGenEnabled(true)
+                                handler.post { refreshRomSettingsMenuIfOpen() }
+                            }
+                            .setNegativeButton(R.string.cancel, null)
+                            .show()
+                    }
+                })
                 add(romSettingsMenuLabel(getString(R.string.video_vulkan_3d_depth_mode_title), vulkan3dDepthModeLabel(settingsRepository.getVulkan3dDepthMode())) to {
                     showVulkan3dDepthModeChoiceOverlay()
                 })
@@ -4680,6 +4703,11 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
             MelonEmulator.setVulkanSsaoEnabled(settingsRepository.isVulkanSsaoEnabled())
             MelonEmulator.setDisplayColorProfile(settingsRepository.getDisplayColorProfile())
             MelonEmulator.setHingeGapPixels(settingsRepository.getHingeGapPixels())
+            MelonEmulator.setVulkanFsrConfig(
+                settingsRepository.getVulkanFsrQualityMode(),
+                settingsRepository.getVulkanFsrSharpness(),
+            )
+            MelonEmulator.setVulkanFrameGenEnabled(settingsRepository.isVulkanFrameGenEnabled())
         }
         val titleUpper = (rom.config.customName ?: rom.name).uppercase()
         val codeUpper = rom.gameCode.uppercase()
@@ -4712,6 +4740,46 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
     private fun vulkan3dDepthModeLabel(mode: Int): String {
         val labels = vulkan3dDepthModeLabels()
         return labels.getOrElse(mode.coerceIn(0, labels.lastIndex)) { labels.first() }
+    }
+
+    private fun vulkanFsrQualityLabel(mode: Int): String {
+        val labels = resources.getStringArray(R.array.video_fsr_quality_mode_options)
+        return labels.getOrElse(mode.coerceIn(0, (labels.size - 1).coerceAtLeast(0))) { "Ultra" }
+    }
+
+    private fun showVulkanFsrQualityChoiceOverlay() {
+        val labels = resources.getStringArray(R.array.video_fsr_quality_mode_options).toList()
+        if (labels.isEmpty()) return
+        val current = settingsRepository.getVulkanFsrQualityMode().coerceIn(0, labels.lastIndex)
+        pushConsoleOverlay(
+            ConsoleOverlayNode.Choice(
+                title = getString(R.string.video_fsr_quality_mode_title),
+                labels = labels,
+                selectedIndex = current,
+                onSelect = { which ->
+                    settingsRepository.setVulkanFsrQualityMode(which.coerceIn(0, 3))
+                    handler.post { refreshRomSettingsMenuIfOpen() }
+                },
+            ),
+        )
+    }
+
+    private fun showVulkanFsrSharpnessChoiceOverlay() {
+        val options = listOf(0, 25, 50, 75, 100)
+        val labels = options.map { "$it%" }
+        val current = settingsRepository.getVulkanFsrSharpness()
+        val selectedIdx = options.indexOfFirst { it >= current }.let { if (it < 0) 2 else it }
+        pushConsoleOverlay(
+            ConsoleOverlayNode.Choice(
+                title = getString(R.string.video_fsr_sharpness_title),
+                labels = labels,
+                selectedIndex = selectedIdx,
+                onSelect = { which ->
+                    settingsRepository.setVulkanFsrSharpness(options.getOrElse(which) { 50 })
+                    handler.post { refreshRomSettingsMenuIfOpen() }
+                },
+            ),
+        )
     }
 
     private fun showVulkan3dDepthModeChoiceOverlay() {

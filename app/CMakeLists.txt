@@ -65,6 +65,11 @@ set(VULKAN_SHADER_SOURCES
         "${ANDROID_CPP_DIR}/renderer/VulkanRenderer3dNativeProjectionShader.comp"
         "${ANDROID_CPP_DIR}/renderer/VulkanSurfacePresenter.vert"
         "${ANDROID_CPP_DIR}/renderer/VulkanSurfacePresenter.frag"
+        "${ANDROID_CPP_DIR}/renderer/VulkanFullscreenQuad.vert"
+        "${ANDROID_CPP_DIR}/renderer/VulkanFsr1Easu.frag"
+        "${ANDROID_CPP_DIR}/renderer/VulkanFsr3Temporal.frag"
+        "${ANDROID_CPP_DIR}/renderer/VulkanFsrRcas.frag"
+        "${ANDROID_CPP_DIR}/renderer/VulkanFrameGenInterp.frag"
 )
 
 set(VULKAN_SHADER_HEADERS
@@ -91,6 +96,11 @@ set(VULKAN_SHADER_HEADERS
         "${ANDROID_CPP_DIR}/renderer/VulkanRenderer3dNativeProjectionShaderData.h"
         "${ANDROID_CPP_DIR}/renderer/VulkanSurfacePresenterVertexShaderData.h"
         "${ANDROID_CPP_DIR}/renderer/VulkanSurfacePresenterFragmentShaderData.h"
+        "${ANDROID_CPP_DIR}/renderer/VulkanFullscreenQuadVertexShaderData.h"
+        "${ANDROID_CPP_DIR}/renderer/VulkanFsr1EasuFragmentShaderData.h"
+        "${ANDROID_CPP_DIR}/renderer/VulkanFsr3TemporalFragmentShaderData.h"
+        "${ANDROID_CPP_DIR}/renderer/VulkanFsrRcasFragmentShaderData.h"
+        "${ANDROID_CPP_DIR}/renderer/VulkanFrameGenInterpFragmentShaderData.h"
 )
 
 if (CMAKE_HOST_WIN32)
@@ -202,6 +212,7 @@ add_library(
         "${ANDROID_CPP_DIR}/renderer/OpenGlRetroArchFilter.cpp"
         "${ANDROID_CPP_DIR}/renderer/OpenGlRetroArchFilterChain.cpp"
         "${ANDROID_CPP_DIR}/renderer/VulkanRetroArchFilterChain.cpp"
+        "${ANDROID_CPP_DIR}/renderer/VulkanFsrPipeline.cpp"
         "${ANDROID_CPP_DIR}/renderer/VulkanSurfacePresenter.cpp"
         "${ANDROID_CPP_DIR}/retroachievements/RetroAchievementsManager.cpp"
 )

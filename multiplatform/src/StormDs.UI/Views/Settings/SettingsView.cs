@@ -354,11 +354,50 @@ public class SettingsView : Grid
 
         p.Children.Add(CreateComboBoxRow(
             "Текстурный фильтр:",
-            new[] { "Чёткий пиксель (Nearest)", "Плавное сглаживание (Linear)", "Высокое качество (Bicubic)", "Шейдер Slang" },
+            new[]
+            {
+                "Чёткий пиксель (Nearest)",
+                "Плавное сглаживание (Linear)",
+                "Высокое качество (Bicubic)",
+                "Шейдер Slang",
+                "AMD FSR 1 (EASU + RCAS)",
+                "AMD FSR 3 (Temporal + RCAS)"
+            },
             (int)cfg.ScreenFilter,
             (idx) =>
             {
                 cfg.ScreenFilter = (ScreenFilter)idx;
+                StormDsUiState.Instance.NotifyDisplayConfigChanged();
+            }));
+
+        p.Children.Add(CreateComboBoxRow(
+            "Пресет качества FSR:",
+            new[]
+            {
+                "Ультра качество (3.0x)",
+                "Качество (2.5x)",
+                "Баланс (2.0x)",
+                "Производительность (1.5x)"
+            },
+            Math.Clamp(cfg.FsrQualityMode, 0, 3),
+            (idx) =>
+            {
+                cfg.FsrQualityMode = Math.Clamp(idx, 0, 3);
+                StormDsUiState.Instance.NotifyDisplayConfigChanged();
+            }));
+
+        p.Children.Add(CreateSliderRow("Резкость FSR RCAS (0-100%):", 0, 100, cfg.FsrRcasSharpness, "%", (v) =>
+        {
+            cfg.FsrRcasSharpness = Math.Clamp((int)v, 0, 100);
+            StormDsUiState.Instance.NotifyDisplayConfigChanged();
+        }));
+
+        p.Children.Add(CreateCheckBoxRow(
+            "Генерация кадров (60 -> 120 FPS, добавляет ~16.7 мс задержки ввода)",
+            cfg.FrameGenEnabled,
+            (v) =>
+            {
+                cfg.FrameGenEnabled = v;
                 StormDsUiState.Instance.NotifyDisplayConfigChanged();
             }));
 
@@ -639,7 +678,15 @@ public class SettingsView : Grid
 
         p.Children.Add(CreateComboBoxRow(
             "Фильтрация изображения DS:",
-            new[] { "Чёткий пиксель (Nearest)", "Плавное сглаживание (Linear)", "Высокое качество (Bicubic)", "Шейдер Slang" },
+            new[]
+            {
+                "Чёткий пиксель (Nearest)",
+                "Плавное сглаживание (Linear)",
+                "Высокое качество (Bicubic)",
+                "Шейдер Slang",
+                "AMD FSR 1 (EASU + RCAS)",
+                "AMD FSR 3 (Temporal + RCAS)"
+            },
             (int)cfg.ScreenFilter,
             (idx) =>
             {
@@ -941,6 +988,16 @@ public class SettingsView : Grid
             v =>
             {
                 StormDsUiState.Instance.AppConfig.AutoCheckUpdates = v;
+                CommitSave();
+            }));
+
+        uStack.Children.Add(CreateComboBoxRow(
+            "Источник загрузки обновлений:",
+            new[] { "Спрашивать каждый раз", "GitHub", "STORM GAMES WORLD" },
+            Math.Clamp(StormDsUiState.Instance.AppConfig.UpdateDownloadSource, 0, 2),
+            idx =>
+            {
+                StormDsUiState.Instance.AppConfig.UpdateDownloadSource = Math.Clamp(idx, 0, 2);
                 CommitSave();
             }));
 

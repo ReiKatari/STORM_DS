@@ -111,6 +111,32 @@ class BoxArtRepository @Inject constructor(
         return base.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim()
     }
 
+    suspend fun migrateCover(oldRom: Rom, newUri: Uri, newFileName: String) = withContext(Dispatchers.IO) {
+        runCatching {
+            loadMatches()
+            val oldKey = oldRom.uri.toString()
+            val newKey = newUri.toString()
+            val oldCover = getCustomCoverFile(oldRom)
+            if (oldCover != null && oldCover.isFile && oldCover.length() > 0) {
+                val newSanitized = newFileName.substringBeforeLast('.').ifBlank { oldRom.name }
+                    .replace(Regex("[\\\\/:*?\"<>|]"), "_").trim()
+                val ext = oldCover.extension.ifBlank { "png" }
+                val dest = File(oldCover.parentFile, "$newSanitized.$ext")
+                if (dest.absolutePath != oldCover.absolutePath) {
+                    oldCover.copyTo(dest, overwrite = true)
+                    memoryCache[newKey] = "file://${dest.absolutePath}?t=${dest.lastModified()}"
+                    _coverUpdates.emit(newKey to memoryCache[newKey])
+                }
+            } else {
+                memoryCache[oldKey]?.let { existingUrl ->
+                    memoryCache[newKey] = existingUrl
+                    _coverUpdates.emit(newKey to existingUrl)
+                }
+            }
+            schedulePersistMatches()
+        }
+    }
+
     fun getCustomCoverFile(rom: Rom): File? {
         val key = getSanitizedCoverKey(rom)
         val primaryDir = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS/covers")

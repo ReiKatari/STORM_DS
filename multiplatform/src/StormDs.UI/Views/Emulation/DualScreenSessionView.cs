@@ -67,6 +67,17 @@ public class DualScreenSessionView : Grid
     private uint _gamepadButtonsMask;
     private int _activeSaveSlot;
     private long _frameCounter;
+    private byte[]? _prevTopBgra;
+    private byte[]? _prevBotBgra;
+    private byte[]? _currTopBgra;
+    private byte[]? _currBotBgra;
+    private byte[]? _histTopBgra;
+    private byte[]? _histBotBgra;
+    private readonly byte[] _postTopBgra = new byte[256 * 192 * 4];
+    private readonly byte[] _postBotBgra = new byte[256 * 192 * 4];
+    private readonly byte[] _interpTopBgra = new byte[256 * 192 * 4];
+    private readonly byte[] _interpBotBgra = new byte[256 * 192 * 4];
+    private bool _hasPrevFrame;
 
     public DualScreenSessionView()
     {
@@ -456,6 +467,8 @@ public class DualScreenSessionView : Grid
             ScreenFilter.Nearest => ScreenFilter.Linear,
             ScreenFilter.Linear => ScreenFilter.Bicubic,
             ScreenFilter.Bicubic => ScreenFilter.SlangShader,
+            ScreenFilter.SlangShader => ScreenFilter.Fsr1,
+            ScreenFilter.Fsr1 => ScreenFilter.Fsr3,
             _ => ScreenFilter.Nearest
         };
         StormDsUiState.Instance.SaveConfig();
@@ -484,6 +497,7 @@ public class DualScreenSessionView : Grid
         var cfg = StormDsUiState.Instance.AppConfig;
         _touchControls.IsVisible = OperatingSystem.IsAndroid() || cfg.ShowTouchOverlayOnDesktop;
         _touchControls.ApplyConfig(cfg);
+        _frameTimer.Interval = cfg.FrameGenEnabled ? TimeSpan.FromMilliseconds(8) : TimeSpan.FromMilliseconds(16);
 
         var interp = cfg.ScreenFilter switch
         {
@@ -521,6 +535,8 @@ public class DualScreenSessionView : Grid
             ScreenFilter.Nearest => "Фильтр: Пиксель",
             ScreenFilter.Linear => "Фильтр: Linear",
             ScreenFilter.SlangShader => "Фильтр: Slang",
+            ScreenFilter.Fsr1 => "Фильтр: FSR 1",
+            ScreenFilter.Fsr3 => "Фильтр: FSR 3",
             _ => "Фильтр: Bicubic"
         };
 
@@ -682,7 +698,14 @@ public class DualScreenSessionView : Grid
                 _framePaceAccumulatorMs -= TargetFrameMs;
                 steps++;
             }
-            if (steps == 0) return;
+            if (steps == 0)
+            {
+                if (StormDsUiState.Instance.AppConfig.FrameGenEnabled && _hasPrevFrame)
+                {
+                    PresentInterpolatedDesktopFrame();
+                }
+                return;
+            }
         }
 
         _gamepadButtonsMask = _gamepad.PollNdsButtonMask();
@@ -725,9 +748,38 @@ public class DualScreenSessionView : Grid
     private void RefreshRenderedBitmaps()
     {
         var eng = StormDsUiState.Instance.EngineService;
-        var topBgra = eng.HasLiveNativeFrame ? eng.TopFrameBgra : BitmapHelper.GenerateTestScreenBgra(256, 192, false, "STORM DS TOP", _frameCounter);
-        var botBgra = eng.HasLiveNativeFrame ? eng.BottomFrameBgra : BitmapHelper.GenerateTestScreenBgra(256, 192, true, "STORM DS TOUCH", _frameCounter);
+        var cfg = StormDsUiState.Instance.AppConfig;
+        var rawTop = eng.HasLiveNativeFrame ? eng.TopFrameBgra : BitmapHelper.GenerateTestScreenBgra(256, 192, false, "STORM DS TOP", _frameCounter);
+        var rawBot = eng.HasLiveNativeFrame ? eng.BottomFrameBgra : BitmapHelper.GenerateTestScreenBgra(256, 192, true, "STORM DS TOUCH", _frameCounter);
 
+        var topBgra = ApplyDesktopFsrFilter(rawTop, _postTopBgra, ref _histTopBgra, cfg);
+        var botBgra = ApplyDesktopFsrFilter(rawBot, _postBotBgra, ref _histBotBgra, cfg);
+
+        if (cfg.FrameGenEnabled && topBgra.Length >= 256 * 192 * 4 && botBgra.Length >= 256 * 192 * 4)
+        {
+            if (_currTopBgra != null && _currBotBgra != null)
+            {
+                _prevTopBgra ??= new byte[256 * 192 * 4];
+                _prevBotBgra ??= new byte[256 * 192 * 4];
+                Buffer.BlockCopy(_currTopBgra, 0, _prevTopBgra, 0, 256 * 192 * 4);
+                Buffer.BlockCopy(_currBotBgra, 0, _prevBotBgra, 0, 256 * 192 * 4);
+                _hasPrevFrame = true;
+            }
+            _currTopBgra ??= new byte[256 * 192 * 4];
+            _currBotBgra ??= new byte[256 * 192 * 4];
+            Buffer.BlockCopy(topBgra, 0, _currTopBgra, 0, 256 * 192 * 4);
+            Buffer.BlockCopy(botBgra, 0, _currBotBgra, 0, 256 * 192 * 4);
+        }
+        else
+        {
+            _hasPrevFrame = false;
+        }
+
+        PresentBgraPair(topBgra, botBgra);
+    }
+
+    private void PresentBgraPair(byte[] topBgra, byte[] botBgra)
+    {
         if (!_screensSwapped || _detachedWindow != null)
         {
             BitmapHelper.UpdateBgraBitmap(_topBitmap, topBgra, 256, 192);
@@ -751,6 +803,114 @@ public class DualScreenSessionView : Grid
         {
             _bottomScreenImage.Source = _bottomBitmap;
             _bottomScreenImage.InvalidateVisual();
+        }
+    }
+
+    private void PresentInterpolatedDesktopFrame()
+    {
+        if (!_hasPrevFrame || _prevTopBgra == null || _currTopBgra == null || _prevBotBgra == null || _currBotBgra == null)
+        {
+            return;
+        }
+        InterpolateFrameBgra(_prevTopBgra, _currTopBgra, _interpTopBgra);
+        InterpolateFrameBgra(_prevBotBgra, _currBotBgra, _interpBotBgra);
+        PresentBgraPair(_interpTopBgra, _interpBotBgra);
+    }
+
+    private static byte[] ApplyDesktopFsrFilter(byte[] src, byte[] dst, ref byte[]? history, Core.Configuration.StormDsAppConfig cfg)
+    {
+        const int w = 256;
+        const int h = 192;
+        const int expectedBytes = w * h * 4;
+        if (src.Length < expectedBytes || (cfg.ScreenFilter != ScreenFilter.Fsr1 && cfg.ScreenFilter != ScreenFilter.Fsr3))
+        {
+            return src;
+        }
+
+        bool temporal = cfg.ScreenFilter == ScreenFilter.Fsr3;
+        float sharpness = Math.Clamp(cfg.FsrRcasSharpness, 0, 100) / 100.0f;
+        float sharpenGain = sharpness * 0.45f;
+        float temporalWeight = cfg.FsrQualityMode switch
+        {
+            0 => 0.35f,
+            1 => 0.30f,
+            2 => 0.24f,
+            _ => 0.18f
+        };
+
+        if (temporal && history == null)
+        {
+            history = new byte[expectedBytes];
+            Buffer.BlockCopy(src, 0, history, 0, expectedBytes);
+        }
+
+        for (int y = 0; y < h; y++)
+        {
+            int yU = Math.Max(0, y - 1);
+            int yD = Math.Min(h - 1, y + 1);
+            int rowOff = y * w * 4;
+            int uOff = yU * w * 4;
+            int dOff = yD * w * 4;
+            for (int x = 0; x < w; x++)
+            {
+                int i = rowOff + x * 4;
+                int xL = Math.Max(0, x - 1) * 4;
+                int xR = Math.Min(w - 1, x + 1) * 4;
+                int lOff = rowOff + xL;
+                int rOff = rowOff + xR;
+
+                for (int c = 0; c < 3; c++)
+                {
+                    int center = src[i + c];
+                    int n = src[uOff + x * 4 + c];
+                    int s = src[dOff + x * 4 + c];
+                    int wl = src[lOff + c];
+                    int er = src[rOff + c];
+                    int mn = Math.Min(center, Math.Min(Math.Min(n, s), Math.Min(wl, er)));
+                    int mx = Math.Max(center, Math.Max(Math.Max(n, s), Math.Max(wl, er)));
+
+                    float avg = (n + s + wl + er) * 0.25f;
+                    float sharpened = center + (center - avg) * sharpenGain;
+                    int clamped = Math.Clamp((int)MathF.Round(sharpened), mn, mx);
+
+                    if (temporal && history != null)
+                    {
+                        int hVal = Math.Clamp((int)history[i + c], mn, mx);
+                        int diff = Math.Abs(clamped - hVal);
+                        float disocc = Math.Clamp(diff / 48.0f, 0.0f, 1.0f);
+                        float wHist = temporalWeight * (1.0f - disocc);
+                        clamped = Math.Clamp((int)MathF.Round(clamped * (1.0f - wHist) + hVal * wHist), 0, 255);
+                        history[i + c] = (byte)clamped;
+                    }
+                    dst[i + c] = (byte)clamped;
+                }
+                dst[i + 3] = 255;
+            }
+        }
+        return dst;
+    }
+
+    private static void InterpolateFrameBgra(byte[] prev, byte[] curr, byte[] dst)
+    {
+        const int total = 256 * 192 * 4;
+        for (int i = 0; i < total; i += 4)
+        {
+            int db = Math.Abs(curr[i] - prev[i]);
+            int dg = Math.Abs(curr[i + 1] - prev[i + 1]);
+            int dr = Math.Abs(curr[i + 2] - prev[i + 2]);
+            if (db + dg + dr > 220)
+            {
+                dst[i] = curr[i];
+                dst[i + 1] = curr[i + 1];
+                dst[i + 2] = curr[i + 2];
+            }
+            else
+            {
+                dst[i] = (byte)((prev[i] + curr[i]) >> 1);
+                dst[i + 1] = (byte)((prev[i + 1] + curr[i + 1]) >> 1);
+                dst[i + 2] = (byte)((prev[i + 2] + curr[i + 2]) >> 1);
+            }
+            dst[i + 3] = 255;
         }
     }
 

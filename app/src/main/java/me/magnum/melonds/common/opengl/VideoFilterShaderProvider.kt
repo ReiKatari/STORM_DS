@@ -15,6 +15,8 @@ object VideoFilterShaderProvider {
         VideoFiltering.SCALE2X to ShaderProgramSource.Scale2xShader,
         VideoFiltering.AI_UPSCALE to ShaderProgramSource.AiAnime4kShader,
         VideoFiltering.RETROARCH to ShaderProgramSource.RetroArchPassthroughShader,
+        VideoFiltering.FSR1 to ShaderProgramSource.Fsr1EasuRcasShader,
+        VideoFiltering.FSR3 to ShaderProgramSource.Fsr3QualityShader,
     )
 
     fun getShaderSource(filtering: VideoFiltering, resolutionScaling: Int = 1): ShaderProgramSource {

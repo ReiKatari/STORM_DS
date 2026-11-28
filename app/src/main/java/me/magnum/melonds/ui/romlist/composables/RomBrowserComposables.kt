@@ -43,6 +43,7 @@ import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -111,6 +112,8 @@ fun WatermelonLibraryHeader(
     onOpenSettings: () -> Unit,
     onOpenPlayerStats: () -> Unit = {},
     onReportProblem: () -> Unit = {},
+    sgwUpdateCount: Int = 0,
+    onOpenSgwStore: (openUpdatesTab: Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val colors = watermelon
@@ -222,6 +225,33 @@ fun WatermelonLibraryHeader(
 
                 Spacer(Modifier.weight(1f))
 
+                Box(modifier = Modifier.size(36.dp), contentAlignment = Alignment.Center) {
+                    IconButton(onClick = { onOpenSgwStore(sgwUpdateCount > 0) }, modifier = Modifier.size(36.dp)) {
+                        Icon(
+                            imageVector = Icons.Filled.CloudDownload,
+                            contentDescription = stringResource(R.string.sgw_store_title),
+                            tint = if (sgwUpdateCount > 0) colors.green else colors.text2,
+                            modifier = Modifier.size(19.dp),
+                        )
+                    }
+                    if (sgwUpdateCount > 0) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(top = 3.dp, end = 2.dp)
+                                .clip(CircleShape)
+                                .background(colors.red)
+                                .padding(horizontal = 4.dp, vertical = 0.5.dp),
+                        ) {
+                            Text(
+                                text = sgwUpdateCount.coerceAtMost(99).toString(),
+                                color = Color.White,
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
+                }
                 IconButton(onClick = { searchOpen = true; onSearchQueryChanged("") }, modifier = Modifier.size(36.dp)) {
                     Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.action_search_roms), tint = colors.text2, modifier = Modifier.size(19.dp))
                 }
@@ -255,6 +285,9 @@ fun WatermelonLibraryHeader(
                         }
                         DropdownMenuItem(onClick = { overflowOpen = false; onCheckUpdates() }) {
                             Text(stringResource(R.string.rom_list_check_updates))
+                        }
+                        DropdownMenuItem(onClick = { overflowOpen = false; onOpenSgwStore(false) }) {
+                            Text(stringResource(R.string.sgw_store_title))
                         }
                         DropdownMenuItem(onClick = { overflowOpen = false; onOpenPlayerStats() }) {
                             Text(stringResource(R.string.feature_stats_menu_title))

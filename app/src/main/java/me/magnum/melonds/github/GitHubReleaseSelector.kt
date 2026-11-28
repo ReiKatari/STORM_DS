@@ -5,22 +5,42 @@ import me.magnum.melonds.github.dtos.AssetDto
 import me.magnum.melonds.github.dtos.ReleaseDto
 import kotlin.time.Instant
 
+data class ReleaseMirrorCandidate(
+    val source: UpdateDownloadSource,
+    val release: ReleaseDto,
+    val asset: AssetDto,
+    val publishedAt: Instant,
+)
+
 data class GitHubReleaseCandidate(
     val release: ReleaseDto,
     val asset: AssetDto,
     val version: Version,
     val publishedAt: Instant,
+    val mirrorSources: Map<UpdateDownloadSource, ReleaseMirrorCandidate> = emptyMap(),
 )
 
 object GitHubReleaseSelector {
+    fun detectSource(htmlUrl: String, downloadUrl: String): UpdateDownloadSource {
+        val combined = "$htmlUrl $downloadUrl"
+        return if (combined.contains("stormgamesworld.ru", ignoreCase = true) ||
+            combined.contains("storm-games.world", ignoreCase = true)
+        ) {
+            UpdateDownloadSource.STORM_GAMES_WORLD
+        } else {
+            UpdateDownloadSource.GITHUB
+        }
+    }
+
     fun selectProduction(
         releases: List<ReleaseDto>,
         currentVersion: Version,
         channel: GitHubUpdateChannel,
         skippedVersion: Version?,
         preferLegacyApk: Boolean = false,
+        preferredSource: UpdateDownloadSource = UpdateDownloadSource.GITHUB,
     ): GitHubReleaseCandidate? {
-        return releases.asSequence()
+        val eligible = releases.asSequence()
             .filter(::belongsToConfiguredRepository)
             .filterNot { it.draft }
             .filter { channel == GitHubUpdateChannel.STABLE_AND_PRERELEASE || !it.prerelease }
@@ -40,7 +60,34 @@ object GitHubReleaseSelector {
                 val published = parsePublishedAt(release) ?: Instant.fromEpochMilliseconds(0L)
                 GitHubReleaseCandidate(release, asset, version, published)
             }
-            .maxWithOrNull(compareBy<GitHubReleaseCandidate> { it.version }.thenBy { it.publishedAt })
+            .toList()
+
+        val winningVersion = eligible.maxOfOrNull { it.version } ?: return null
+        val sameVersion = eligible.filter { it.version == winningVersion }
+        val sourcesMap = linkedMapOf<UpdateDownloadSource, ReleaseMirrorCandidate>()
+        sameVersion
+            .sortedByDescending { it.publishedAt }
+            .forEach { cand ->
+                val src = detectSource(cand.release.htmlUrl, cand.asset.url)
+                sourcesMap.putIfAbsent(src, ReleaseMirrorCandidate(src, cand.release, cand.asset, cand.publishedAt))
+            }
+
+        val primary = when (preferredSource) {
+            UpdateDownloadSource.STORM_GAMES_WORLD -> sourcesMap[UpdateDownloadSource.STORM_GAMES_WORLD] ?: sourcesMap[UpdateDownloadSource.GITHUB]
+            UpdateDownloadSource.GITHUB -> sourcesMap[UpdateDownloadSource.GITHUB] ?: sourcesMap[UpdateDownloadSource.STORM_GAMES_WORLD]
+            UpdateDownloadSource.ASK -> sourcesMap[UpdateDownloadSource.GITHUB] ?: sourcesMap[UpdateDownloadSource.STORM_GAMES_WORLD]
+        } ?: sameVersion.maxByOrNull { it.publishedAt }?.let {
+            val src = detectSource(it.release.htmlUrl, it.asset.url)
+            ReleaseMirrorCandidate(src, it.release, it.asset, it.publishedAt)
+        } ?: return null
+
+        return GitHubReleaseCandidate(
+            release = primary.release,
+            asset = primary.asset,
+            version = winningVersion,
+            publishedAt = primary.publishedAt,
+            mirrorSources = sourcesMap.toMap(),
+        )
     }
 
     fun selectNightly(releases: List<ReleaseDto>): GitHubReleaseCandidate? {

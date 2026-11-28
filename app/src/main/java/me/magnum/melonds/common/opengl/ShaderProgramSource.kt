@@ -575,6 +575,85 @@ class ShaderProgramSource private constructor(val textureFiltering: TextureFilte
                     "}"
         )
 
+        // AMD FSR 1 (Edge-Adaptive Directional Upsampling + RCAS Sharpening) OpenGL ES fallback
+        val Fsr1EasuRcasShader = ShaderProgramSource(
+            TextureFiltering.LINEAR,
+            DEFAULT_VERT_SHADER,
+            "#ifdef GL_FRAGMENT_PRECISION_HIGH\n" +
+                    "precision highp float;\n" +
+                    "#else\n" +
+                    "precision mediump float;\n" +
+                    "#endif\n" +
+                    "uniform sampler2D tex;\n" +
+                    "varying float alpha;\n" +
+                    "varying vec2 uv;\n" +
+                    "float fsrLuma(vec3 c) { return c.g + 0.5 * (c.r + c.b); }\n" +
+                    "void main() {\n" +
+                    "    vec2 texSize = vec2(float($TEXTURE_WIDTH), float($TEXTURE_HEIGHT));\n" +
+                    "    vec2 dx = vec2(1.0 / texSize.x, 0.0);\n" +
+                    "    vec2 dy = vec2(0.0, 1.0 / texSize.y);\n" +
+                    "    vec3 c  = texture2D(tex, uv).bgr;\n" +
+                    "    vec3 n  = texture2D(tex, uv - dy).bgr;\n" +
+                    "    vec3 s  = texture2D(tex, uv + dy).bgr;\n" +
+                    "    vec3 w  = texture2D(tex, uv - dx).bgr;\n" +
+                    "    vec3 e  = texture2D(tex, uv + dx).bgr;\n" +
+                    "    float lC = fsrLuma(c); float lN = fsrLuma(n); float lS = fsrLuma(s); float lW = fsrLuma(w); float lE = fsrLuma(e);\n" +
+                    "    float gx = lE - lW;\n" +
+                    "    float gy = lS - lN;\n" +
+                    "    float edgeLen = sqrt(gx * gx + gy * gy);\n" +
+                    "    vec2 dir = (edgeLen > 1e-4) ? (vec2(gx, gy) / edgeLen) : vec2(1.0, 0.0);\n" +
+                    "    vec3 t1 = texture2D(tex, uv + dir * vec2(dx.x, dy.y) * 0.35).bgr;\n" +
+                    "    vec3 t2 = texture2D(tex, uv - dir * vec2(dx.x, dy.y) * 0.35).bgr;\n" +
+                    "    vec3 min4 = min(min(n, s), min(w, e));\n" +
+                    "    vec3 max4 = max(max(n, s), max(w, e));\n" +
+                    "    vec3 upscaled = clamp((c * 0.5 + (t1 + t2) * 0.25), min4, max4);\n" +
+                    "    vec3 rcas = clamp(upscaled + (upscaled - 0.25 * (n + s + w + e)) * 0.45, min(min4, upscaled), max(max4, upscaled));\n" +
+                    "    gl_FragColor = vec4(clamp(rcas, 0.0, 1.0), alpha);\n" +
+                    "}"
+        )
+
+        // AMD FSR 3 (Catmull-Rom 5-Tap + RCAS Crisp Upscaling) OpenGL ES fallback
+        val Fsr3QualityShader = ShaderProgramSource(
+            TextureFiltering.LINEAR,
+            DEFAULT_VERT_SHADER,
+            "#ifdef GL_FRAGMENT_PRECISION_HIGH\n" +
+                    "precision highp float;\n" +
+                    "#else\n" +
+                    "precision mediump float;\n" +
+                    "#endif\n" +
+                    "uniform sampler2D tex;\n" +
+                    "varying float alpha;\n" +
+                    "varying vec2 uv;\n" +
+                    "void main() {\n" +
+                    "    vec2 texSize = vec2(float($TEXTURE_WIDTH), float($TEXTURE_HEIGHT));\n" +
+                    "    vec2 invSize = 1.0 / texSize;\n" +
+                    "    vec2 pos = uv * texSize - 0.5;\n" +
+                    "    vec2 f = fract(pos);\n" +
+                    "    vec2 base = (floor(pos) + 0.5) * invSize;\n" +
+                    "    vec2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));\n" +
+                    "    vec2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);\n" +
+                    "    vec2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));\n" +
+                    "    vec2 w3 = f * f * (-0.5 + 0.5 * f);\n" +
+                    "    vec2 w12 = w1 + w2;\n" +
+                    "    vec2 tc12 = base + (w2 / max(abs(w12), vec2(1e-5))) * invSize;\n" +
+                    "    vec2 tc0 = base - invSize;\n" +
+                    "    vec2 tc3 = base + 2.0 * invSize;\n" +
+                    "    vec3 cr = texture2D(tex, vec2(tc12.x, tc12.y)).bgr * (w12.x * w12.y)\n" +
+                    "            + texture2D(tex, vec2(tc0.x,  tc12.y)).bgr * (w0.x  * w12.y)\n" +
+                    "            + texture2D(tex, vec2(tc3.x,  tc12.y)).bgr * (w3.x  * w12.y)\n" +
+                    "            + texture2D(tex, vec2(tc12.x, tc0.y )).bgr * (w12.x * w0.y)\n" +
+                    "            + texture2D(tex, vec2(tc12.x, tc3.y )).bgr * (w12.x * w3.y);\n" +
+                    "    vec3 n = texture2D(tex, uv - vec2(0.0, invSize.y)).bgr;\n" +
+                    "    vec3 s = texture2D(tex, uv + vec2(0.0, invSize.y)).bgr;\n" +
+                    "    vec3 w = texture2D(tex, uv - vec2(invSize.x, 0.0)).bgr;\n" +
+                    "    vec3 e = texture2D(tex, uv + vec2(invSize.x, 0.0)).bgr;\n" +
+                    "    vec3 mn = min(cr, min(min(n, s), min(w, e)));\n" +
+                    "    vec3 mx = max(cr, max(max(n, s), max(w, e)));\n" +
+                    "    vec3 rcas = clamp(cr + (cr - 0.25 * (n + s + w + e)) * 0.55, mn, mx);\n" +
+                    "    gl_FragColor = vec4(clamp(rcas, 0.0, 1.0), alpha);\n" +
+                    "}"
+        )
+
         fun withResolutionScale(base: ShaderProgramSource, scale: Int, scalePixelGrid: Boolean = true): ShaderProgramSource {
             val safeScale = scale.coerceIn(1, 16)
             if (safeScale <= 1 || !scalePixelGrid) {

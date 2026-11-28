@@ -161,6 +161,8 @@ fun RomBrowserScreen(
     onOpenSettings: () -> Unit,
     onOpenPlayerStats: () -> Unit = {},
     onReportProblem: () -> Unit = {},
+    sgwUpdatesByUri: Map<String, me.magnum.melonds.sgw.SgwUpdateCandidate> = emptyMap(),
+    onOpenSgwStore: (openUpdatesTab: Boolean) -> Unit = {},
     onOpenMultiplayer: (() -> Unit)? = null,
     onJoinNearby: ((String) -> Unit)? = null,
     onRomVisible: (Rom) -> Unit = {},
@@ -496,7 +498,46 @@ fun RomBrowserScreen(
                         onOpenSettings = onOpenSettings,
                         onOpenPlayerStats = onOpenPlayerStats,
                         onReportProblem = onReportProblem,
+                        sgwUpdateCount = sgwUpdatesByUri.size,
+                        onOpenSgwStore = onOpenSgwStore,
                     )
+                    if (!state.isSearchActive && sgwUpdatesByUri.isNotEmpty() && !isShortcutPickerMode) {
+                        var bannerDismissed by remember(sgwUpdatesByUri.size) { mutableStateOf(false) }
+                        if (!bannerDismissed) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(colors.greenDim)
+                                    .border(1.dp, colors.green, RoundedCornerShape(10.dp))
+                                    .clickable { onOpenSgwStore(true) }
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.sgw_banner_updates_available, sgwUpdatesByUri.size),
+                                    color = colors.text,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Text(
+                                    text = stringResource(R.string.sgw_banner_open_updates),
+                                    color = colors.green,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 8.dp),
+                                )
+                                Icon(
+                                    imageVector = Icons.Filled.Close,
+                                    contentDescription = null,
+                                    tint = colors.text2,
+                                    modifier = Modifier.size(16.dp).clickable { bannerDismissed = true },
+                                )
+                            }
+                        }
+                    }
                     if (!state.isSearchActive) {
                         MultiplayerNearbyWatch()
                         Row(
@@ -645,6 +686,8 @@ fun RomBrowserScreen(
                                                     boxArtByUri = boxArtByUri,
                                                     confirmedAchievementHashes = confirmedAchievementHashes,
                                                     isRaAuthenticated = isRaAuthenticated,
+                                                    sgwUpdatesByUri = sgwUpdatesByUri,
+                                                    onSgwUpdateClick = { onOpenSgwStore(true) },
                                                     showAlphabetBar = showAlphabetBar,
                                                     showContinueShelf = false,
                                                     showSectionHeader = false,
@@ -671,6 +714,8 @@ fun RomBrowserScreen(
                                                     allowConfiguration = allowConfiguration,
                                                     confirmedAchievementHashes = confirmedAchievementHashes,
                                                     isRaAuthenticated = isRaAuthenticated,
+                                                    sgwUpdatesByUri = sgwUpdatesByUri,
+                                                    onSgwUpdateClick = { onOpenSgwStore(true) },
                                                     showAlphabetBar = showAlphabetBar,
                                                     showContinueShelf = false,
                                                     showSectionHeader = false,
@@ -780,6 +825,8 @@ fun RomBrowserScreen(
                                             boxArtByUri = boxArtByUri,
                                             confirmedAchievementHashes = confirmedAchievementHashes,
                                             isRaAuthenticated = isRaAuthenticated,
+                                            sgwUpdatesByUri = sgwUpdatesByUri,
+                                            onSgwUpdateClick = { onOpenSgwStore(true) },
                                             showAlphabetBar = showAlphabetBar,
                                             showContinueShelf = false,
                                             showSectionHeader = false,
@@ -806,6 +853,8 @@ fun RomBrowserScreen(
                                             allowConfiguration = allowConfiguration,
                                             confirmedAchievementHashes = confirmedAchievementHashes,
                                             isRaAuthenticated = isRaAuthenticated,
+                                            sgwUpdatesByUri = sgwUpdatesByUri,
+                                            onSgwUpdateClick = { onOpenSgwStore(true) },
                                             showAlphabetBar = showAlphabetBar,
                                             showContinueShelf = false,
                                             showSectionHeader = false,
@@ -988,6 +1037,8 @@ private fun GridContent(
     boxArtByUri: Map<String, String>,
     confirmedAchievementHashes: Set<String>,
     isRaAuthenticated: Boolean,
+    sgwUpdatesByUri: Map<String, me.magnum.melonds.sgw.SgwUpdateCandidate> = emptyMap(),
+    onSgwUpdateClick: () -> Unit = {},
     showAlphabetBar: Boolean,
     showContinueShelf: Boolean,
     showSectionHeader: Boolean,
@@ -1091,6 +1142,8 @@ private fun GridContent(
                     boxArtUrl = boxArtByUri[entry.rom.uri.toString()]?.takeIf { it.isNotEmpty() },
                     boxArtLoading = anyCoversEnabled && (boxArtByUri[entry.rom.uri.toString()] == null),
                     showAchievementBadge = isRaAuthenticated && ((entry.rom.retroAchievementsHash in confirmedAchievementHashes) || entry.rom.retroAchievementsHash.isNotBlank()),
+                    sgwUpdateReason = sgwUpdatesByUri[entry.rom.uri.toString()]?.updateReason,
+                    onSgwUpdateClick = onSgwUpdateClick,
                     onClick = { onRomClick(entry.rom) },
                     onLongPress = {
                         onRomLongPress(entry.rom)
@@ -1118,6 +1171,8 @@ private fun ListContent(
     allowConfiguration: Boolean,
     confirmedAchievementHashes: Set<String>,
     isRaAuthenticated: Boolean,
+    sgwUpdatesByUri: Map<String, me.magnum.melonds.sgw.SgwUpdateCandidate> = emptyMap(),
+    onSgwUpdateClick: () -> Unit = {},
     showAlphabetBar: Boolean,
     showContinueShelf: Boolean,
     showSectionHeader: Boolean,
@@ -1215,6 +1270,8 @@ private fun ListContent(
                             boxArtLoading = anyCoversEnabled && (boxArtByUri[entry.rom.uri.toString()] == null),
                             allowConfiguration = allowConfiguration,
                             showAchievementBadge = isRaAuthenticated && ((entry.rom.retroAchievementsHash in confirmedAchievementHashes) || entry.rom.retroAchievementsHash.isNotBlank()),
+                            sgwUpdateReason = sgwUpdatesByUri[entry.rom.uri.toString()]?.updateReason,
+                            onSgwUpdateClick = onSgwUpdateClick,
                             onClick = { onRomClick(entry.rom) },
                             onLongPress = {
                                 onRomLongPress(entry.rom)

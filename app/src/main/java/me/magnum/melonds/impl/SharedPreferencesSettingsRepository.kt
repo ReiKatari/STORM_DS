@@ -2644,6 +2644,18 @@ class SharedPreferencesSettingsRepository(
             "video_ds_hinge_gap" -> {
                 runCatching { MelonEmulator.setHingeGapPixels(getHingeGapPixels()) }
             }
+            "video_fsr_quality_mode",
+            "video_fsr_sharpness" -> {
+                runCatching {
+                    MelonEmulator.setVulkanFsrConfig(
+                        getVulkanFsrQualityMode(),
+                        getVulkanFsrSharpness(),
+                    )
+                }
+            }
+            "video_frame_gen_enabled" -> {
+                runCatching { MelonEmulator.setVulkanFrameGenEnabled(isVulkanFrameGenEnabled()) }
+            }
         }
     }
 
@@ -3038,6 +3050,45 @@ class SharedPreferencesSettingsRepository(
         runCatching { MelonEmulator.setHingeGapPixels(clamped) }
     }
 
+    override fun getVulkanFsrQualityMode(): Int {
+        return when (preferences.getString("video_fsr_quality_mode", "ultra_quality")?.lowercase()) {
+            "quality" -> 1
+            "balanced" -> 2
+            "performance" -> 3
+            else -> 0
+        }
+    }
+
+    override fun setVulkanFsrQualityMode(mode: Int) {
+        val str = when (mode.coerceIn(0, 3)) {
+            1 -> "quality"
+            2 -> "balanced"
+            3 -> "performance"
+            else -> "ultra_quality"
+        }
+        preferences.edit { putString("video_fsr_quality_mode", str) }
+        runCatching { MelonEmulator.setVulkanFsrConfig(mode.coerceIn(0, 3), getVulkanFsrSharpness()) }
+    }
+
+    override fun getVulkanFsrSharpness(): Int {
+        return preferences.getInt("video_fsr_sharpness", 50).coerceIn(0, 100)
+    }
+
+    override fun setVulkanFsrSharpness(sharpness: Int) {
+        val clamped = sharpness.coerceIn(0, 100)
+        preferences.edit { putInt("video_fsr_sharpness", clamped) }
+        runCatching { MelonEmulator.setVulkanFsrConfig(getVulkanFsrQualityMode(), clamped) }
+    }
+
+    override fun isVulkanFrameGenEnabled(): Boolean {
+        return preferences.getBoolean("video_frame_gen_enabled", false)
+    }
+
+    override fun setVulkanFrameGenEnabled(enabled: Boolean) {
+        preferences.edit { putBoolean("video_frame_gen_enabled", enabled) }
+        runCatching { MelonEmulator.setVulkanFrameGenEnabled(enabled) }
+    }
+
     override fun setActiveRomContext(gameCode: String?, romName: String?, fileName: String?) {
         val nextCode = gameCode?.takeIf { it.isNotBlank() }
         val nextName = romName?.takeIf { it.isNotBlank() }
@@ -3076,6 +3127,8 @@ class SharedPreferencesSettingsRepository(
             MelonEmulator.setDisplayColorProfile(getDisplayColorProfile())
             MelonEmulator.setDisplayLcdGridMode(getDisplayLcdGridMode())
             MelonEmulator.setHingeGapPixels(getHingeGapPixels())
+            MelonEmulator.setVulkanFsrConfig(getVulkanFsrQualityMode(), getVulkanFsrSharpness())
+            MelonEmulator.setVulkanFrameGenEnabled(isVulkanFrameGenEnabled())
         }
     }
     override fun isExtendedPauseMenuEnabled(): Boolean {

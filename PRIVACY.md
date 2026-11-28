@@ -35,7 +35,7 @@ Network requests are initiated **only** when you actively use the corresponding 
    - **Purpose**: checking app updates and downloading optional shader packs, Adreno Vulkan drivers, cheat database mirrors, or open-source FreeBIOS definitions when requested by the user.
    - **Infrastructure / Location**: United States (GitHub, Inc. / Microsoft Azure).
 3. **STORM GAMES WORLD Mirror (`stormgamesworld.ru`)**
-   - **Purpose**: optional secondary update check mirror and optional cloud save backup (`STORM SAVE SYNC` when explicitly triggered by the user).
+   - **Purpose**: optional secondary app update mirror, optional Nintendo DS / DSi game & Russian translation catalog (`platformId=184, 185` and `/translations`) when opened or checked by the user, and optional cloud save backup (`STORM SAVE SYNC`).
    - **Infrastructure / Location**: Russian Federation.
 4. **Libretro Thumbnails (`thumbnails.libretro.com`) & GameTDB**
    - **Purpose**: fetching optional box art covers when cover Art download is enabled.
@@ -62,5 +62,5 @@ For users in the EEA / UK / Switzerland (and globally):
 
 1. **Отсутствие монетизации и рекламы**: STORM DS полностью бесплатен и распространяется по лицензии **GPL-3.0** без подписок, встроенных покупок, платных функций, рекламы и сторонней аналитики.
 2. **Локальное хранение и сроки**: настройки, сохранения, чит-коды, токены входа (`ra_username` и `ra_token`, без сохранения пароля) и кэш оффлайн-достижений хранятся исключительно локально на устройстве пользователя (Android internal/SAF storage или `%APPDATA%\STORM DS\` на Windows) до выхода из аккаунта, ручной очистки или удаления программы.
-3. **Сетевые сервисы и расположение серверов**: сетевые обращения выполняются только по запросу пользователя к **RetroAchievements** (США / Cloudflare), **GitHub** (США), **STORM GAMES WORLD** (РФ, резервное зеркало обновлений и ручная синхронизация сохранений), **Libretro Thumbnails / GameTDB** (CDN ЕС/США), выбранным движкам перевода (**Google ML Kit** локально / **MyMemory** / **LibreTranslate** / локальный **Ollama**) и выбранным серверам **Nintendo WFC** (Wiimmfi / Kaeru / AltWFC, ЕС).
+3. **Сетевые сервисы и расположение серверов**: сетевые обращения выполняются только по запросу пользователя к **RetroAchievements** (США / Cloudflare), **GitHub** (США), **STORM GAMES WORLD** (РФ, резервное зеркало обновлений, опциональный каталог DS / DSi и русификаций и ручная синхронизация сохранений), **Libretro Thumbnails / GameTDB** (CDN ЕС/США), выбранным движкам перевода (**Google ML Kit** локально / **MyMemory** / **LibreTranslate** / локальный **Ollama**) и выбранным серверам **Nintendo WFC** (Wiimmfi / Kaeru / AltWFC, ЕС).
 4. **GDPR и права пользователя**: пользователь вправе в любой момент выйти из учётных записей, отключить любые сетевые функции в настройках и полностью удалить локальные данные с устройства. Контакт для обращений: `https://github.com/ReiKatari/STORM_DS/issues`.

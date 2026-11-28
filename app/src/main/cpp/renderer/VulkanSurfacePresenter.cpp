@@ -983,6 +983,8 @@ bool VulkanSurfacePresenter::createCommonResources()
         return false;
     if (!createSampler(VK_FILTER_LINEAR, &linearSampler))
         return false;
+    if (!fsrPipeline.init(physicalDevice, device, queue, queueFamilyIndex, surfacePipelineCache))
+        return false;
 
     return true;
 }
@@ -1050,6 +1052,7 @@ void VulkanSurfacePresenter::destroyCommonResources()
     useMinimalPresenterLayout = false;
     fallbackPresenterShaderForced = false;
     surfacePipelineCacheHasValidPipeline = false;
+    fsrPipeline.destroy();
 }
 
 bool VulkanSurfacePresenter::createTimestampQueryPool(VkQueryPool& queryPool)
@@ -1137,6 +1140,7 @@ bool VulkanSurfacePresenter::resizeSurface(int surfaceId, u32 width, u32 height)
     surfaceState.requestedHeight = height;
     surfaceState.swapchainDirty = true;
     markAllFrameSlotsVertexDirty(surfaceState);
+    fsrPipeline.resetFrameGenHistory(surfaceState.fsr);
     surfaceState.bottomComp2OneShotCarryValid = false;
     surfaceState.bottomComp2OneShotCarryClass4Valid = false;
     surfaceState.bottomComp2OneShotCarryClass4Phase =
@@ -1183,6 +1187,8 @@ bool VulkanSurfacePresenter::configureSurface(int surfaceId, const VulkanSurface
 
     if (config.retroShaderClearHistory)
         surfaceState.retroArch.pendingClearHistory = true;
+    if (surfaceState.configured && surfaceState.config.filtering != config.filtering)
+        fsrPipeline.resetFsrHistory(surfaceState.fsr);
 
     surfaceState.config = config;
     surfaceState.configured = true;
@@ -1294,7 +1300,8 @@ VulkanPresentationResult VulkanSurfacePresenter::presentFrame(
         [](const auto& entry) {
             const SurfaceState& surfaceState = entry.second;
             return surfaceState.configured
-                && IsVulkanPostProcessFilter(surfaceState.config.filtering);
+                && (IsVulkanPostProcessFilter(surfaceState.config.filtering)
+                    || VulkanRuntime::GetFrameGenEnabled());
         });
 
     VkSemaphore sourceReadySemaphore = VK_NULL_HANDLE;
@@ -1683,7 +1690,17 @@ VulkanPresentationResult VulkanSurfacePresenter::presentFrame(
         }
 
         bool retroArchApplied = false;
+        u32 sampledWidth = frame->width;
+        u32 sampledHeight = frame->height;
         VulkanFilterMode effectiveFiltering = surfaceState.config.filtering;
+        auto ensureFilterSignalSemaphore = [&](SurfaceState& st) -> bool {
+            if (st.retroArch.filterFinishedSemaphore != VK_NULL_HANDLE)
+                return true;
+            VkSemaphoreCreateInfo semInfo{};
+            semInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+            return vkCreateSemaphore(device, &semInfo, nullptr, &st.retroArch.filterFinishedSemaphore) == VK_SUCCESS;
+        };
+
         if (surfaceState.config.filtering == VulkanFilterMode::RetroArch && !directPresent)
         {
             VkImage retroImage = VK_NULL_HANDLE;
@@ -1699,6 +1716,8 @@ VulkanPresentationResult VulkanSurfacePresenter::presentFrame(
             {
                 sampledImage = retroImage;
                 sampledImageView = retroImageView;
+                sampledWidth = surfaceState.retroArch.atlasOutput.width;
+                sampledHeight = surfaceState.retroArch.atlasOutput.height;
                 retroArchApplied = true;
             }
             else
@@ -1706,6 +1725,68 @@ VulkanPresentationResult VulkanSurfacePresenter::presentFrame(
                 sampledImage = frameImage;
                 sampledImageView = frameImageView;
                 effectiveFiltering = VulkanFilterMode::Nearest;
+            }
+        }
+        else if ((surfaceState.config.filtering == VulkanFilterMode::Fsr1
+                    || surfaceState.config.filtering == VulkanFilterMode::Fsr3)
+                && !directPresent
+                && ensureFilterSignalSemaphore(surfaceState))
+        {
+            VkImage fsrImage = VK_NULL_HANDLE;
+            VkImageView fsrImageView = VK_NULL_HANDLE;
+            const VkSemaphore waitSem = surfaceState.retroArch.filterSignalPending
+                ? surfaceState.retroArch.filterFinishedSemaphore
+                : VK_NULL_HANDLE;
+            if (fsrPipeline.runFsr(
+                    surfaceState.fsr,
+                    surfaceState.config.filtering,
+                    sampledImage,
+                    sampledImageView,
+                    frame->width,
+                    frame->height,
+                    true,
+                    VulkanRuntime::GetFsrQualityMode(),
+                    VulkanRuntime::GetFsrRcasSharpness(),
+                    waitSem,
+                    surfaceState.retroArch.filterFinishedSemaphore,
+                    fsrImage,
+                    fsrImageView))
+            {
+                sampledImage = fsrImage;
+                sampledImageView = fsrImageView;
+                sampledWidth = surfaceState.fsr.rcasOutput.width;
+                sampledHeight = surfaceState.fsr.rcasOutput.height;
+                retroArchApplied = true;
+                surfaceState.retroArch.filterSignalPending = true;
+            }
+            else
+            {
+                sampledImage = frameImage;
+                sampledImageView = frameImageView;
+                effectiveFiltering = VulkanFilterMode::Nearest;
+            }
+        }
+
+        if (!directPresent
+            && !fastForwardActive
+            && VulkanRuntime::GetFrameGenEnabled()
+            && ensureFilterSignalSemaphore(surfaceState))
+        {
+            const VkSemaphore waitSem = surfaceState.retroArch.filterSignalPending
+                ? surfaceState.retroArch.filterFinishedSemaphore
+                : VK_NULL_HANDLE;
+            if (fsrPipeline.captureFrameGenHistory(
+                    surfaceState.fsr,
+                    frame->frameId,
+                    sampledImage,
+                    sampledImageView,
+                    sampledWidth,
+                    sampledHeight,
+                    !retroArchApplied,
+                    waitSem,
+                    surfaceState.retroArch.filterFinishedSemaphore))
+            {
+                surfaceState.retroArch.filterSignalPending = true;
             }
         }
 
@@ -2195,6 +2276,145 @@ VulkanPresentationResult VulkanSurfacePresenter::presentFrame(
     if (!sawConfiguredSurface)
         return VulkanPresentationResult::NoSurface;
     return deferredResult;
+}
+
+VulkanPresentationResult VulkanSurfacePresenter::presentInterpolatedFrame()
+{
+    if (!initialized || !VulkanRuntime::GetFrameGenEnabled() || isFastForwardActive())
+        return VulkanPresentationResult::NoProduct;
+
+    if (useMinimalPresenterLayout)
+        return VulkanPresentationResult::NoProduct;
+
+    bool presentedAny = false;
+    u64 presentCpuNs = 0;
+
+    for (auto& [surfaceId, surfaceState] : surfaces)
+    {
+        (void)surfaceId;
+        if (!surfaceState.configured || !surfaceState.fsr.canInterpolate())
+            continue;
+        if (surfaceState.retroArch.filterSignalPending
+            || surfaceState.retroArch.filterFinishedSemaphore == VK_NULL_HANDLE)
+            continue;
+        if (!ensureSwapchain(surfaceState))
+            continue;
+
+        const u32 slotIndex = surfaceState.currentFrameSlot % kSurfaceFramesInFlight;
+        SurfaceState::FrameSlot& slot = surfaceState.frameSlots[slotIndex];
+        if (waitForSurfaceSlotIdle(surfaceState, slotIndex, 0) != VK_SUCCESS)
+            continue;
+
+        VkImage interpImage = VK_NULL_HANDLE;
+        VkImageView interpImageView = VK_NULL_HANDLE;
+        if (!fsrPipeline.runFrameGen(
+                surfaceState.fsr,
+                surfaceState.retroArch.filterFinishedSemaphore,
+                interpImage,
+                interpImageView))
+        {
+            continue;
+        }
+        surfaceState.retroArch.filterSignalPending = true;
+
+        if (slot.screenDescriptorSet == VK_NULL_HANDLE)
+            continue;
+
+        VkDescriptorImageInfo screenImageInfo{};
+        screenImageInfo.sampler = linearSampler;
+        screenImageInfo.imageView = interpImageView;
+        screenImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+        VkWriteDescriptorSet screenWrite{};
+        screenWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        screenWrite.dstSet = slot.screenDescriptorSet;
+        screenWrite.dstBinding = 0;
+        screenWrite.descriptorCount = 1;
+        screenWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        screenWrite.pImageInfo = &screenImageInfo;
+        vkUpdateDescriptorSets(device, 1, &screenWrite, 0, nullptr);
+        slot.screenDescriptorCache.ready = false;
+
+        VulkanCompositionInputs emptyInputs{};
+        std::vector<DrawCall> drawCalls;
+        if (!updateVertexBuffer(
+                surfaceState,
+                slotIndex,
+                surfaceState.config,
+                surfaceState.background.imageView != VK_NULL_HANDLE ? &surfaceState.background : nullptr,
+                emptyInputs,
+                false,
+                true,
+                drawCalls))
+        {
+            continue;
+        }
+
+        u32 imageIndex = 0;
+        const VkResult acquireResult = vkAcquireNextImageKHR(
+            device,
+            surfaceState.swapchain,
+            0,
+            slot.imageAvailableSemaphore,
+            VK_NULL_HANDLE,
+            &imageIndex);
+        if (acquireResult != VK_SUCCESS && acquireResult != VK_SUBOPTIMAL_KHR)
+        {
+            if (acquireResult == VK_ERROR_OUT_OF_DATE_KHR)
+            {
+                surfaceState.swapchainDirty = true;
+                recoverSwapchain(surfaceState, "presentInterpolatedFrame.acquire");
+            }
+            continue;
+        }
+        if (imageIndex >= surfaceState.framebuffers.size())
+            continue;
+
+        if (!recordSurfaceCommands(
+                surfaceState,
+                slotIndex,
+                surfaceState.framebuffers[imageIndex],
+                emptyInputs,
+                interpImage,
+                VulkanFilterMode::Nearest,
+                false,
+                drawCalls,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false))
+        {
+            continue;
+        }
+
+        u64 unusedTimeline = 0;
+        bool submitSucceeded = false;
+        bool presentAccepted = false;
+        if (submitSurfaceCommands(
+                surfaceState,
+                slotIndex,
+                imageIndex,
+                VK_NULL_HANDLE,
+                0,
+                presentCpuNs,
+                unusedTimeline,
+                submitSucceeded,
+                presentAccepted))
+        {
+            surfaceState.currentFrameSlot = (slotIndex + 1u) % kSurfaceFramesInFlight;
+            if (presentAccepted)
+                presentedAny = true;
+        }
+        else if (submitSucceeded)
+        {
+            surfaceState.currentFrameSlot = (slotIndex + 1u) % kSurfaceFramesInFlight;
+        }
+    }
+
+    return presentedAny ? VulkanPresentationResult::Presented : VulkanPresentationResult::NoProduct;
 }
 
 bool VulkanSurfacePresenter::submitPresentFenceMarker(
@@ -2706,6 +2926,7 @@ bool VulkanSurfacePresenter::createSurfaceStateResources(SurfaceState& surfaceSt
 void VulkanSurfacePresenter::destroySurfaceStateResources(SurfaceState& surfaceState)
 {
     destroyRetroArchResources(surfaceState);
+    fsrPipeline.destroySurfaceResources(surfaceState.fsr);
     destroyBackgroundTexture(surfaceState);
     destroyDirectCarryResources(surfaceState);
     destroySwapchain(surfaceState);

@@ -16,6 +16,7 @@
 #include "VulkanPerfStats.h"
 #include "renderer/FrameQueue.h"
 #include "renderer/VulkanRetroArchFilterChain.h"
+#include "renderer/VulkanFsrPipeline.h"
 #include "renderer/VulkanFilterMode.h"
 #include "types.h"
 
@@ -179,6 +180,7 @@ public:
         u64 timeoutNs,
         const VulkanCausalWaitRunner& waitRunner,
         const VulkanSurfaceSubmitRunner& submitRunner);
+    VulkanPresentationResult presentInterpolatedFrame();
     bool waitForFrameConsumption(Frame* frame, u64 timeoutNs = UINT64_MAX,
         void (*hostService)(void*) = nullptr, void* hostContext = nullptr);
     bool getFrameConsumptionDependency(const Frame* frame, VkSemaphore& semaphore, u64& value);
@@ -379,6 +381,7 @@ private:
         bool timestampRecordedInCommandBuffer = false;
         BackgroundResource background{};
         RetroArchResources retroArch{};
+        VulkanFsrPipeline::SurfaceResources fsr{};
         RetroArchImageResource topComposedCarry{};
         RetroArchImageResource bottomComposedCarry{};
         RetroArchImageResource bottomComp2OneShotCarry{};
@@ -565,6 +568,7 @@ private:
     VkShaderModule fallbackFragmentShaderModule = VK_NULL_HANDLE;
     VkSampler nearestSampler = VK_NULL_HANDLE;
     VkSampler linearSampler = VK_NULL_HANDLE;
+    VulkanFsrPipeline fsrPipeline{};
 
     VkBuffer placeholderBuffer = VK_NULL_HANDLE;
     VkDeviceMemory placeholderMemory = VK_NULL_HANDLE;

@@ -511,6 +511,41 @@ generate_header \
   "$ROOT_DIR/app/src/main/cpp/renderer/VulkanSurfacePresenterFallbackFragmentShaderData.h" \
   "-O"
 
+generate_header \
+  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanFullscreenQuad.vert" \
+  "vert" \
+  "melonDS_android_vulkan_fullscreen_quad_vert_spv" \
+  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanFullscreenQuadVertexShaderData.h" \
+  "-O"
+
+generate_header \
+  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanFsr1Easu.frag" \
+  "frag" \
+  "melonDS_android_vulkan_fsr1_easu_frag_spv" \
+  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanFsr1EasuFragmentShaderData.h" \
+  "-O"
+
+generate_header \
+  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanFsr3Temporal.frag" \
+  "frag" \
+  "melonDS_android_vulkan_fsr3_temporal_frag_spv" \
+  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanFsr3TemporalFragmentShaderData.h" \
+  "-O"
+
+generate_header \
+  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanFsrRcas.frag" \
+  "frag" \
+  "melonDS_android_vulkan_fsr_rcas_frag_spv" \
+  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanFsrRcasFragmentShaderData.h" \
+  "-O"
+
+generate_header \
+  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanFrameGenInterp.frag" \
+  "frag" \
+  "melonDS_android_vulkan_frame_gen_interp_frag_spv" \
+  "$ROOT_DIR/app/src/main/cpp/renderer/VulkanFrameGenInterpFragmentShaderData.h" \
+  "-O"
+
 if [[ "$MODE" == "check" ]]; then
   echo "Vulkan SPIR-V headers are up to date."
 fi

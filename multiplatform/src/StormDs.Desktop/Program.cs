@@ -169,7 +169,7 @@ internal static class Program
 
     private static unsafe int RunHeadlessSmokeTest()
     {
-        Console.WriteLine("=== STORM DS 8.9.5 MULTIPLATFORM SMOKE TEST ===");
+        Console.WriteLine("=== STORM DS 8.9.6 MULTIPLATFORM SMOKE TEST ===");
         AuroraIconCatalog.VerifyZeroDuplicates();
         Console.WriteLine($"[OK] Colored Vector Icon Catalog: {Enum.GetValues<AuroraIconKind>().Length} unique icons (0% duplicates)");
         Console.WriteLine($"[OK] Dynamic Themes Registered: {AuroraThemeManager.Instance.GetAvailableThemes().Count} themes, {Enum.GetValues<AuroraAccentKind>().Length} accents, {Enum.GetValues<AuroraTypographyPreset>().Length} fonts");

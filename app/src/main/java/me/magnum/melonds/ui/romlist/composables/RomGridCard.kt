@@ -71,6 +71,8 @@ fun RomGridCard(
     boxArtUrl: String? = null,
     boxArtLoading: Boolean = false,
     showAchievementBadge: Boolean,
+    sgwUpdateReason: me.magnum.melonds.sgw.SgwUpdateReason? = null,
+    onSgwUpdateClick: (() -> Unit)? = null,
     onClick: () -> Unit,
     onLongPress: () -> Unit,
     modifier: Modifier = Modifier,
@@ -280,6 +282,31 @@ fun RomGridCard(
                 raCoverUrl = coverUrl,
                 modifier = Modifier.align(Alignment.BottomStart).padding(7.dp),
             )
+        }
+
+        if (sgwUpdateReason != null) {
+            val badgeText = androidx.compose.ui.res.stringResource(
+                if (sgwUpdateReason == me.magnum.melonds.sgw.SgwUpdateReason.RUSSIAN_TRANSLATION_AVAILABLE)
+                    me.magnum.melonds.R.string.sgw_badge_rus
+                else
+                    me.magnum.melonds.R.string.sgw_badge_update
+            )
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(7.dp)
+                    .clip(RoundedCornerShape(5.dp))
+                    .background(colors.green)
+                    .clickable(enabled = onSgwUpdateClick != null) { onSgwUpdateClick?.invoke() }
+                    .padding(horizontal = 5.dp, vertical = 2.dp),
+            ) {
+                Text(
+                    text = badgeText,
+                    color = Color.Black,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 9.sp,
+                )
+            }
         }
 
         if (isFocused) {

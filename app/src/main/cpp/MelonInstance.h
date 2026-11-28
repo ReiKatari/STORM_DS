@@ -154,6 +154,7 @@ public:
         std::optional<std::chrono::time_point<std::chrono::steady_clock>> deadline,
         std::optional<std::chrono::time_point<std::chrono::steady_clock>> budgetDeadline,
         u64 expectedWaitEpoch);
+    VulkanPresentationResult presentVulkanInterpolatedFrame();
     u64 captureVulkanPresentationWaitEpoch() const noexcept;
     VulkanPresentationWaitResult waitForVulkanPresentationProduct(
         u64 expectedWaitEpoch,

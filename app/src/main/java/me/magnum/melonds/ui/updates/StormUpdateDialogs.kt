@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -327,14 +328,27 @@ fun showStormUpdateAvailableDialog(
     publishedEpochMillis: Long,
     sourceReleaseUrl: String,
     downloadUrl: String,
+    mirrorSources: Map<me.magnum.melonds.github.UpdateDownloadSource, me.magnum.melonds.domain.model.appupdate.UpdateSourceOption> = emptyMap(),
+    defaultSource: me.magnum.melonds.github.UpdateDownloadSource = me.magnum.melonds.github.UpdateDownloadSource.ASK,
     titleOverride: String? = null,
-    onUpdateNow: () -> Unit,
+    onUpdateNow: (me.magnum.melonds.github.UpdateDownloadSource) -> Unit,
     onRemindLater: () -> Unit,
     onSkipVersion: () -> Unit,
 ): Dialog {
     val cleanCur = currentVersion.trim().removePrefix("v").removePrefix("V")
     val cleanNew = newVersion.trim().removePrefix("v").removePrefix("V")
-    val mirrorLabel = detectMirrorLabel(sourceReleaseUrl, downloadUrl)
+    val detectedDefault = if (detectMirrorLabel(sourceReleaseUrl, downloadUrl) == "STORM GAMES WORLD") {
+        me.magnum.melonds.github.UpdateDownloadSource.STORM_GAMES_WORLD
+    } else {
+        me.magnum.melonds.github.UpdateDownloadSource.GITHUB
+    }
+    val initialSource = when (defaultSource) {
+        me.magnum.melonds.github.UpdateDownloadSource.GITHUB,
+        me.magnum.melonds.github.UpdateDownloadSource.STORM_GAMES_WORLD -> {
+            if (mirrorSources.isEmpty() || mirrorSources.containsKey(defaultSource)) defaultSource else detectedDefault
+        }
+        me.magnum.melonds.github.UpdateDownloadSource.ASK -> detectedDefault
+    }
     val dateLabel = formatEpochMillisDate(publishedEpochMillis)
     val activeLocale = context.resources.configuration.locales.let { list ->
         if (!list.isEmpty) list[0] else Locale.getDefault()
@@ -353,7 +367,17 @@ fun showStormUpdateAvailableDialog(
     ) { dismiss ->
         val colors = LocalWatermelonColors.current
         val ctx = LocalContext.current
-        val sizeMb = if (binarySizeBytes > 0L) binarySizeBytes.toDouble() / (1024.0 * 1024.0) else 0.0
+        var selectedSource by remember { mutableStateOf(initialSource) }
+        val activeOption = mirrorSources[selectedSource]
+        val activeSizeBytes = activeOption?.binarySize ?: binarySizeBytes
+        val activeDownloadUrl = activeOption?.downloadUri?.toString() ?: downloadUrl
+        val activeReleaseUrl = activeOption?.sourceReleaseUrl ?: sourceReleaseUrl
+        val mirrorLabel = if (selectedSource == me.magnum.melonds.github.UpdateDownloadSource.STORM_GAMES_WORLD) {
+            "STORM GAMES WORLD"
+        } else {
+            detectMirrorLabel(activeReleaseUrl, activeDownloadUrl)
+        }
+        val sizeMb = if (activeSizeBytes > 0L) activeSizeBytes.toDouble() / (1024.0 * 1024.0) else 0.0
         val sizeLabel = if (sizeMb > 0.0) stringResource(R.string.update_dialog_size_mb_fmt, sizeMb) else ""
 
         UpdateDialogCardShell(
@@ -604,6 +628,71 @@ fun showStormUpdateAvailableDialog(
                     }
                 }
 
+                // Download Source Selector (GitHub vs STORM GAMES WORLD)
+                val ghAvailable = mirrorSources.isEmpty() && detectedDefault == me.magnum.melonds.github.UpdateDownloadSource.GITHUB ||
+                    mirrorSources.containsKey(me.magnum.melonds.github.UpdateDownloadSource.GITHUB)
+                val sgwAvailable = mirrorSources.isEmpty() && detectedDefault == me.magnum.melonds.github.UpdateDownloadSource.STORM_GAMES_WORLD ||
+                    mirrorSources.containsKey(me.magnum.melonds.github.UpdateDownloadSource.STORM_GAMES_WORLD)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = stringResource(R.string.update_download_source_picker_label).uppercase(Locale.getDefault()),
+                        color = colors.text2,
+                        fontFamily = WatermelonMono,
+                        fontSize = 10.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.6.sp,
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        val sourceChoices = listOf(
+                            Triple(me.magnum.melonds.github.UpdateDownloadSource.GITHUB, "GitHub", ghAvailable),
+                            Triple(me.magnum.melonds.github.UpdateDownloadSource.STORM_GAMES_WORLD, "STORM GAMES WORLD", sgwAvailable),
+                        )
+                        sourceChoices.forEach { (src, label, available) ->
+                            val isSelected = selectedSource == src
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(11.dp))
+                                    .background(
+                                        when {
+                                            isSelected -> colors.green.copy(alpha = 0.16f)
+                                            else -> colors.surface2
+                                        }
+                                    )
+                                    .border(
+                                        1.dp,
+                                        when {
+                                            isSelected -> colors.green
+                                            else -> colors.line
+                                        },
+                                        RoundedCornerShape(11.dp),
+                                    )
+                                    .then(
+                                        if (available) Modifier.clickable { selectedSource = src } else Modifier
+                                    )
+                                    .padding(horizontal = 8.dp, vertical = 9.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = label,
+                                    color = when {
+                                        isSelected -> colors.green
+                                        available -> colors.text
+                                        else -> colors.text3
+                                    },
+                                    fontFamily = SpaceGrotesk,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    maxLines = 1,
+                                )
+                            }
+                        }
+                    }
+                }
+
                 // Primary Update CTA
                 Box(
                     modifier = Modifier
@@ -612,7 +701,7 @@ fun showStormUpdateAvailableDialog(
                         .background(colors.green)
                         .clickable {
                             dismiss()
-                            onUpdateNow()
+                            onUpdateNow(selectedSource)
                         }
                         .padding(vertical = 13.dp),
                     contentAlignment = Alignment.Center,
@@ -661,7 +750,7 @@ fun showStormUpdateAvailableDialog(
                 }
 
                 // Footer Link to Open Release Page
-                if (sourceReleaseUrl.isNotBlank()) {
+                if (activeReleaseUrl.isNotBlank()) {
                     Row(
                         modifier = Modifier
                             .align(Alignment.CenterHorizontally)
@@ -669,7 +758,7 @@ fun showStormUpdateAvailableDialog(
                             .clickable {
                                 runCatching {
                                     ctx.startActivity(
-                                        Intent(Intent.ACTION_VIEW, Uri.parse(sourceReleaseUrl))
+                                        Intent(Intent.ACTION_VIEW, Uri.parse(activeReleaseUrl))
                                             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                     )
                                 }

@@ -43,4 +43,10 @@ interface PlayStatsDao {
 
     @Query("SELECT DISTINCT dayKey FROM play_sessions ORDER BY startedAtMs DESC")
     suspend fun getDistinctDays(): List<String>
+
+    @Query("UPDATE OR REPLACE play_stats SET romUri = :newUri, romName = :newName WHERE romUri = :oldUri")
+    suspend fun migrateRomUri(oldUri: String, newUri: String, newName: String)
+
+    @Query("UPDATE play_sessions SET romUri = :newUri, romName = :newName WHERE romUri = :oldUri")
+    suspend fun migrateSessionsRomUri(oldUri: String, newUri: String, newName: String)
 }

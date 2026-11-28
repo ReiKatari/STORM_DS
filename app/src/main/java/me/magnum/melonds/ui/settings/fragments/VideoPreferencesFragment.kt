@@ -282,6 +282,9 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
                 "video_vulkan_ssao",
                 "video_ds_color_profile",
                 "video_ds_lcd_grid",
+                "video_fsr_quality_mode",
+                "video_fsr_sharpness",
+                "video_frame_gen_enabled",
             ).forEach { key -> findPreference<Preference>(key)?.let { add(it) } }
         }
 
@@ -545,6 +548,39 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             true
         }
         updateAiUpscaleSummary()
+
+        findPreference<ListPreference>("video_fsr_quality_mode")?.let { fsrQualPref ->
+            if (fsrQualPref.value.isNullOrBlank()) {
+                fsrQualPref.value = "ultra_quality"
+            }
+            helper.bindPreferenceSummaryToValue(fsrQualPref)
+        }
+        findPreference<androidx.preference.SeekBarPreference>("video_fsr_sharpness")?.let { sharpPref ->
+            sharpPref.summary = getString(R.string.video_fsr_sharpness_summary, sharpPref.value)
+            sharpPref.setOnPreferenceChangeListener { pref, newValue ->
+                val pct = (newValue as? Int)?.coerceIn(0, 100) ?: 50
+                pref.summary = getString(R.string.video_fsr_sharpness_summary, pct)
+                true
+            }
+        }
+        findPreference<androidx.preference.SwitchPreferenceCompat>("video_frame_gen_enabled")?.let { fgPref ->
+            fgPref.setOnPreferenceChangeListener { _, newValue ->
+                val enable = newValue as? Boolean ?: false
+                if (!enable) {
+                    return@setOnPreferenceChangeListener true
+                }
+                AlertDialog.Builder(requireContext())
+                    .setTitle(R.string.video_frame_gen_warning_title)
+                    .setMessage(R.string.video_frame_gen_warning_message)
+                    .setPositiveButton(R.string.video_frame_gen_enable_confirm) { _, _ ->
+                        fgPref.isChecked = true
+                        preferenceManager.sharedPreferences?.edit()?.putBoolean("video_frame_gen_enabled", true)?.apply()
+                    }
+                    .setNegativeButton(R.string.cancel, null)
+                    .show()
+                false
+            }
+        }
 
         videoFilteringPreference.setOnPreferenceChangeListener { _, newValue ->
             pendingDsLitePreset = null
@@ -1577,6 +1613,12 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         retroArchShaderParametersPreference?.isVisible = retroArchEnabled && hasLibrary
         retroArchShaderClearHistoryPreference?.isVisible = retroArchEnabled && hasLibrary
         shaderSettingsPreference?.isVisible = retroArchEnabled
+
+        val isVulkan = renderer == VideoRenderer.VULKAN
+        val isFsr = filtering == VideoFiltering.FSR1 || filtering == VideoFiltering.FSR3
+        findPreference<Preference>("video_fsr_quality_mode")?.isVisible = isVulkan && isFsr
+        findPreference<Preference>("video_fsr_sharpness")?.isVisible = isVulkan && isFsr
+        findPreference<Preference>("video_frame_gen_enabled")?.isVisible = isVulkan
     }
 
     private fun resolveShaderSource(): RetroArchShaderSource? {
@@ -2253,6 +2295,9 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             "video_vulkan_3d_depth_strength",
             "video_vulkan_ssao",
             "video_vulkan_thick_edges",
+            "video_fsr_quality_mode",
+            "video_fsr_sharpness",
+            "video_frame_gen_enabled",
             "video_low_latency",
             "video_vulkan_drs",
             "video_widescreen_3d",
@@ -2736,6 +2781,9 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             putString("video_ds_color_profile", "standard")
             putString("video_ds_lcd_grid", "off")
             putString("video_ds_hinge_gap", "0")
+            putString("video_fsr_quality_mode", "ultra_quality")
+            putInt("video_fsr_sharpness", 50)
+            putBoolean("video_frame_gen_enabled", false)
             putBoolean("video_vulkan_fastpath_enabled", false)
             putBoolean("video_renderer_debug_tools_enabled", false)
             putBoolean("video_renderer_debug_bgobj_enabled", false)
@@ -2797,6 +2845,15 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             it.value = "0"
             updateListPreferenceSummary(it)
         }
+        findPreference<ListPreference>("video_fsr_quality_mode")?.let {
+            it.value = "ultra_quality"
+            updateListPreferenceSummary(it)
+        }
+        findPreference<androidx.preference.SeekBarPreference>("video_fsr_sharpness")?.let {
+            it.value = 50
+            it.summary = getString(R.string.video_fsr_sharpness_summary, 50)
+        }
+        findPreference<androidx.preference.TwoStatePreference>("video_frame_gen_enabled")?.isChecked = false
         findPreference<InGameLockedSwitchPreference>("video_vulkan_fastpath_enabled")?.isChecked = false
         findPreference<androidx.preference.TwoStatePreference>("video_renderer_debug_tools_enabled")?.isChecked = false
         findPreference<androidx.preference.TwoStatePreference>("video_renderer_debug_bgobj_enabled")?.isChecked = false

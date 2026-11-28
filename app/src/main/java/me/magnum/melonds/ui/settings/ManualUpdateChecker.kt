@@ -30,12 +30,15 @@ import me.magnum.melonds.R
 import me.magnum.melonds.domain.model.DownloadProgress
 import me.magnum.melonds.domain.model.Version
 import me.magnum.melonds.domain.model.appupdate.AppUpdate
+import me.magnum.melonds.domain.model.appupdate.UpdateSourceOption
 import me.magnum.melonds.domain.services.UpdateInstallManager
 import me.magnum.melonds.github.GitHubReleaseCandidate
 import me.magnum.melonds.github.GitHubReleaseSelector
 import me.magnum.melonds.github.GitHubUpdateChannel
 import me.magnum.melonds.github.PREF_KEY_GITHUB_UPDATE_CHANNEL
+import me.magnum.melonds.github.PREF_KEY_UPDATE_DOWNLOAD_SOURCE
 import me.magnum.melonds.github.StormUpdateMirrorClient
+import me.magnum.melonds.github.UpdateDownloadSource
 import me.magnum.melonds.github.services.GitHubUpdateInstallManager
 import me.magnum.melonds.ui.updates.showStormUpdateAvailableDialog
 import me.magnum.melonds.ui.updates.showStormUpdateInfoDialog
@@ -51,7 +54,7 @@ object ManualUpdateChecker {
         fun markwon(): Markwon
     }
 
-    private const val FALLBACK_VERSION = "8.9.5"
+    private const val FALLBACK_VERSION = "8.9.6"
 
     private val backgroundScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var activeCheckJob: Job? = null
@@ -142,16 +145,21 @@ object ManualUpdateChecker {
                     appContext.resources.getBoolean(R.bool.adrenotools_enabled)
                 }.getOrDefault(true)
 
+                val preferredSource = UpdateDownloadSource.fromPreference(
+                    defaultPrefs.getString(PREF_KEY_UPDATE_DOWNLOAD_SOURCE, UpdateDownloadSource.ASK.preferenceValue)
+                )
+
                 val candidate = GitHubReleaseSelector.selectProduction(
                     releases = fetchResult.releases,
                     currentVersion = currentVersion,
                     channel = channel,
                     skippedVersion = null,
                     preferLegacyApk = preferLegacyApk,
+                    preferredSource = preferredSource,
                 )
 
                 if (candidate != null) {
-                    showStyledUpdateDialog(activity, owner, candidate, currentVersionStr)
+                    showStyledUpdateDialog(activity, owner, candidate, currentVersionStr, preferredSource)
                 } else {
                     activeUpdateDialog?.dismiss()
                     activeUpdateDialog = showStormUpdateInfoDialog(
@@ -184,9 +192,20 @@ object ManualUpdateChecker {
         owner: LifecycleOwner?,
         candidate: GitHubReleaseCandidate,
         currentVersionStr: String,
+        preferredSource: UpdateDownloadSource,
     ) {
         val remoteVersion = candidate.release.tagName.removePrefix("v").removePrefix("V")
         val rawBody = candidate.release.body.ifBlank { candidate.release.name }
+        val options = candidate.mirrorSources.mapValues { (src, item) ->
+            UpdateSourceOption(
+                source = src,
+                id = item.asset.id,
+                downloadUri = Uri.parse(item.asset.url),
+                binarySize = item.asset.size,
+                sourceReleaseUrl = item.release.htmlUrl,
+                releaseTag = item.release.tagName,
+            )
+        }
 
         activeUpdateDialog?.dismiss()
         activeUpdateDialog = showStormUpdateAvailableDialog(
@@ -198,7 +217,9 @@ object ManualUpdateChecker {
             publishedEpochMillis = candidate.publishedAt.toEpochMilliseconds(),
             sourceReleaseUrl = candidate.release.htmlUrl,
             downloadUrl = candidate.asset.url,
-            onUpdateNow = { startVerifiedUpdateDownload(activity, owner, candidate) },
+            mirrorSources = options,
+            defaultSource = preferredSource,
+            onUpdateNow = { selectedSource -> startVerifiedUpdateDownload(activity, owner, candidate, options, selectedSource) },
             onRemindLater = {},
             onSkipVersion = {
                 sessionSkippedVersion = candidate.version
@@ -216,6 +237,8 @@ object ManualUpdateChecker {
         activity: Activity,
         owner: LifecycleOwner?,
         candidate: GitHubReleaseCandidate,
+        mirrorSources: Map<UpdateDownloadSource, UpdateSourceOption>,
+        selectedSource: UpdateDownloadSource,
     ) {
         if (activity.isFinishing || activity.isDestroyed) return
         if (activeDownloadJob?.isActive == true) return
@@ -231,7 +254,8 @@ object ManualUpdateChecker {
             updateDate = candidate.publishedAt,
             releaseTag = candidate.release.tagName,
             sourceReleaseUrl = candidate.release.htmlUrl,
-        )
+            mirrorSources = mirrorSources,
+        ).withSelectedSource(selectedSource)
 
         val installManager = runCatching {
             EntryPointAccessors.fromApplication(appContext, UpdateEntryPoint::class.java).updateInstallManager()

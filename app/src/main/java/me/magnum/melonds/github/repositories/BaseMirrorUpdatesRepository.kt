@@ -9,13 +9,16 @@ import me.magnum.melonds.common.suspendMapCatching
 import me.magnum.melonds.common.suspendRunCatching
 import me.magnum.melonds.domain.model.Version
 import me.magnum.melonds.domain.model.appupdate.AppUpdate
+import me.magnum.melonds.domain.model.appupdate.UpdateSourceOption
 import me.magnum.melonds.domain.repositories.UpdatesRepository
 import me.magnum.melonds.github.GitHubReleaseSelector
 import me.magnum.melonds.github.GitHubUpdateChannel
 import me.magnum.melonds.github.GitHubUpdateCheckPolicy
 import me.magnum.melonds.github.PREF_KEY_GITHUB_CHECK_FOR_UPDATES
 import me.magnum.melonds.github.PREF_KEY_GITHUB_UPDATE_CHANNEL
+import me.magnum.melonds.github.PREF_KEY_UPDATE_DOWNLOAD_SOURCE
 import me.magnum.melonds.github.StormUpdateMirrorClient
+import me.magnum.melonds.github.UpdateDownloadSource
 import me.magnum.melonds.github.dtos.ReleaseDto
 import me.magnum.melonds.utils.PackageManagerCompat
 
@@ -79,6 +82,12 @@ open class BaseMirrorUpdatesRepository(
             val preferLegacyApk = !runCatching {
                 context.resources.getBoolean(R.bool.adrenotools_enabled)
             }.getOrDefault(defaultAdrenotoolsEnabled)
+            val preferredSource = UpdateDownloadSource.fromPreference(
+                settingsPreferences.getString(
+                    PREF_KEY_UPDATE_DOWNLOAD_SOURCE,
+                    UpdateDownloadSource.ASK.preferenceValue,
+                ),
+            )
 
             GitHubReleaseSelector.selectProduction(
                 releases = releases,
@@ -86,7 +95,18 @@ open class BaseMirrorUpdatesRepository(
                 channel = channel,
                 skippedVersion = effectiveSkip,
                 preferLegacyApk = preferLegacyApk,
+                preferredSource = preferredSource,
             )?.let { candidate ->
+                val options = candidate.mirrorSources.mapValues { (src, item) ->
+                    UpdateSourceOption(
+                        source = src,
+                        id = item.asset.id,
+                        downloadUri = item.asset.url.toUri(),
+                        binarySize = item.asset.size,
+                        sourceReleaseUrl = item.release.htmlUrl,
+                        releaseTag = item.release.tagName,
+                    )
+                }
                 AppUpdate(
                     type = AppUpdate.Type.PRODUCTION,
                     id = candidate.asset.id,
@@ -97,6 +117,7 @@ open class BaseMirrorUpdatesRepository(
                     updateDate = candidate.publishedAt,
                     releaseTag = candidate.release.tagName,
                     sourceReleaseUrl = candidate.release.htmlUrl,
+                    mirrorSources = options,
                 )
             }
         }

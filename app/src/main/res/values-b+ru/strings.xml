@@ -621,7 +621,9 @@
     <item>Scale2x</item>
     <item>AI-Upscale (Anime4K)</item>
     <item>RetroArch (.slangp)</item>
-  </string-array>
+          <item>AMD FSR 1 (EASU + RCAS)</item>
+        <item>AMD FSR 3 (Temporal + RCAS)</item>
+    </string-array>
   <string-array name="video_vulkan_driver_mode_options">
     <item>Системный</item>
     <item>Пользовательский (AdrenoTools)</item>
@@ -1792,4 +1794,44 @@
     <string name="about_privacy_policy_summary">Хранение данных, внешние сервисы и соответствие GDPR</string>
     <string name="about_foss_licenses_title">Открытые ядра и лицензии</string>
     <string name="about_foss_licenses_summary">Лицензия GPL-3.0, список открытых компонентов и исходники</string>
+    <string name="update_download_source_title">Источник загрузки обновлений по умолчанию</string>
+    <string name="update_download_source_ask">Спрашивать каждый раз</string>
+    <string name="update_download_source_github">GitHub</string>
+    <string name="update_download_source_sgw">STORM GAMES WORLD</string>
+    <string name="update_download_source_picker_label">Источник скачивания</string>
+    <string-array name="video_fsr_quality_mode_options">
+        <item>Ультра качество (3.0x)</item>
+        <item>Качество (2.5x)</item>
+        <item>Баланс (2.0x)</item>
+        <item>Производительность (1.5x)</item>
+    </string-array>
+    <string name="video_fsr_quality_mode_title">Пресет качества FSR</string>
+    <string name="video_fsr_sharpness_title">Резкость FSR RCAS</string>
+    <string name="video_fsr_sharpness_summary">Интенсивность резкости: %1$d%%</string>
+    <string name="video_frame_gen_enabled_title">Генерация кадров (60 -&gt; 120 FPS)</string>
+    <string name="video_frame_gen_enabled_summary">Оптическая интерполяция кадров для экранов 120 Гц (добавляет ~16.7 мс задержки ввода)</string>
+    <string name="video_frame_gen_warning_title">Включить генерацию кадров (60 -&gt; 120 FPS)?</string>
+    <string name="video_frame_gen_warning_message">Оптическая интерполяция удваивает плавность на экранах 120 Гц, но добавляет около ~16.7 мс задержки ввода. Не рекомендуется для ритм-игр.</string>
+    <string name="video_frame_gen_enable_confirm">Включить</string>
+    <string name="sgw_store_title">STORM GAMES WORLD</string>
+    <string name="sgw_store_subtitle">Каталог игр DS / DSi и русификации</string>
+    <string name="sgw_search_hint">Поиск игр и обновлений...</string>
+    <string name="sgw_tab_translations">Переводы</string>
+    <string name="sgw_tab_updates">Обновления (%1$d)</string>
+    <string name="sgw_downloading_status">Скачивание ROM</string>
+    <string name="sgw_updating_migrating_status">Обновление ROM и перенос сохранений</string>
+    <string name="sgw_operation_success">Установлен %1$s (перенесено сохранений: %2$d, быстрых: %3$d)</string>
+    <string name="sgw_operation_failed">Ошибка скачивания: %1$s (старый файл сохранён)</string>
+    <string name="sgw_http_404_error">Файл временно недоступен на сервере (HTTP 404)</string>
+    <string name="sgw_no_updates_found">Обновлений для ваших игр не найдено</string>
+    <string name="sgw_empty_catalog">Каталог пуст или нет подключения к сети</string>
+    <string name="sgw_download_action">Скачать</string>
+    <string name="sgw_update_replace_action">Обновить</string>
+    <string name="sgw_reason_rus_available">Доступна русская локализация</string>
+    <string name="sgw_reason_trans_update">Доступна новая версия перевода</string>
+    <string name="sgw_reason_new_version">Доступна новая версия игры</string>
+    <string name="sgw_banner_updates_available">Доступно обновлений игр с STORM GAMES WORLD: %1$d</string>
+    <string name="sgw_banner_open_updates">Открыть</string>
+    <string name="sgw_badge_update">ОБН</string>
+    <string name="sgw_badge_rus">РУС</string>
 </resources>

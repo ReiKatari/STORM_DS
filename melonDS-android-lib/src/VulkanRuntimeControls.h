@@ -71,6 +71,9 @@ inline std::atomic<int> gLcdGridMode{static_cast<int>(LcdGridMode::Off)};
 inline std::atomic<int> gHingeGapPixels{0};
 inline std::atomic<int> gGyroTiltXQuantized{0};
 inline std::atomic<int> gGyroTiltYQuantized{0};
+inline std::atomic<int> gFsrQualityMode{0};
+inline std::atomic<int> gFsrRcasSharpness{50};
+inline std::atomic<bool> gFrameGenEnabled{false};
 
 // Authentic Slot-2 & Slot-1 Hardware Peripherals state
 inline std::atomic<int> gSolarSensorLuxLevel{-1};
@@ -281,6 +284,36 @@ inline void SetIrPedometerStepCount(uint32_t steps) noexcept
 inline uint32_t AddIrPedometerSteps(uint32_t delta) noexcept
 {
     return gIrPedometerStepCount.fetch_add(delta, std::memory_order_relaxed) + delta;
+}
+
+inline int GetFsrQualityMode() noexcept
+{
+    return std::clamp(gFsrQualityMode.load(std::memory_order_relaxed), 0, 3);
+}
+
+inline void SetFsrQualityMode(int mode) noexcept
+{
+    gFsrQualityMode.store(std::clamp(mode, 0, 3), std::memory_order_relaxed);
+}
+
+inline int GetFsrRcasSharpness() noexcept
+{
+    return std::clamp(gFsrRcasSharpness.load(std::memory_order_relaxed), 0, 100);
+}
+
+inline void SetFsrRcasSharpness(int sharpness) noexcept
+{
+    gFsrRcasSharpness.store(std::clamp(sharpness, 0, 100), std::memory_order_relaxed);
+}
+
+inline bool GetFrameGenEnabled() noexcept
+{
+    return gFrameGenEnabled.load(std::memory_order_relaxed);
+}
+
+inline void SetFrameGenEnabled(bool enabled) noexcept
+{
+    gFrameGenEnabled.store(enabled, std::memory_order_relaxed);
 }
 
 }

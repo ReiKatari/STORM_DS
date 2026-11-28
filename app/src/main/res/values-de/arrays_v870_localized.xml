@@ -147,6 +147,8 @@
         <item>Scale2x</item>
         <item>AI-Upscale (Anime4K)</item>
         <item>RetroArch (.slangp)</item>
+            <item>AMD FSR 1 (EASU + RCAS)</item>
+        <item>AMD FSR 3 (Temporal + RCAS)</item>
     </string-array>
     <string-array name="audio_interpolation_options" tools:ignore="InconsistentArrays">
         <item>Keine</item>
@@ -240,5 +242,11 @@
         <item>STORM Royal Gold (Gold and Obsidian)</item>
         <item>STORM Sakura Blossom (Cherry Blossom / Light)</item>
         <item>STORM Solar Fusion (Solar Spectrum / Light)</item>
+    </string-array>
+    <string-array name="video_fsr_quality_mode_options" tools:ignore="InconsistentArrays">
+        <item>Ultra-Qualität (3.0x)</item>
+        <item>Qualität (2.5x)</item>
+        <item>Ausgewogen (2.0x)</item>
+        <item>Leistung (1.5x)</item>
     </string-array>
 </resources>

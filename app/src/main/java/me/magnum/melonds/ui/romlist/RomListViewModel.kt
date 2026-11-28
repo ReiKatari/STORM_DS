@@ -61,7 +61,13 @@ class RomListViewModel @Inject constructor(
     private val dsiStorageTitlesScanner: me.magnum.melonds.impl.dsinand.DsiStorageTitlesScanner,
     private val saveStatesRepository: me.magnum.melonds.domain.repositories.SaveStatesRepository,
     private val romSaveFileManager: me.magnum.melonds.impl.RomSaveFileManager,
+    private val sgwCatalogRepository: me.magnum.melonds.sgw.SgwCatalogRepository,
 ) : ViewModel() {
+
+    val sgwUpdatesByUri: StateFlow<Map<String, me.magnum.melonds.sgw.SgwUpdateCandidate>> =
+        sgwCatalogRepository.snapshot
+            .map { snap -> snap.updates.associateBy { it.localRom.uri.toString() } }
+            .stateIn(viewModelScope, SharingStarted.Lazily, emptyMap())
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
@@ -311,6 +317,11 @@ class RomListViewModel @Inject constructor(
                     }
                 }
                 romsWithParents.value = romsWithDocIds
+                if (romList.isNotEmpty()) {
+                    viewModelScope.launch(Dispatchers.IO) {
+                        sgwCatalogRepository.refreshCatalog(romList, forceRefresh = false)
+                    }
+                }
             }
         }
 

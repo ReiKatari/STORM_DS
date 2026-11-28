@@ -14,6 +14,16 @@
     <string-array name="update_channel_values">
         <item>stable</item>
     </string-array>
+    <string-array name="update_download_source_options">
+        <item>@string/update_download_source_ask</item>
+        <item>@string/update_download_source_github</item>
+        <item>@string/update_download_source_sgw</item>
+    </string-array>
+    <string-array name="update_download_source_values">
+        <item>ask</item>
+        <item>github</item>
+        <item>storm_games_world</item>
+    </string-array>
 
     <!-- Auto-Translator Arrays -->
     <string-array name="translator_engine_options">
@@ -168,6 +178,15 @@
         <item>scale2x</item>
         <item>ai_upscale</item>
         <item>retroarch</item>
+        <item>fsr1</item>
+        <item>fsr3</item>
+    </string-array>
+
+    <string-array name="video_fsr_quality_mode_values">
+        <item>ultra_quality</item>
+        <item>quality</item>
+        <item>balanced</item>
+        <item>performance</item>
     </string-array>
 
     <string-array name="video_vulkan_driver_mode_values">

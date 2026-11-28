@@ -32,5 +32,14 @@
             android:dependency="github_check_for_updates"
             app:iconSpaceReserved="false"
             app:dependency="github_check_for_updates" />
+
+        <ListPreference
+            android:key="github_update_download_source"
+            android:title="@string/update_download_source_title"
+            android:summary="%s"
+            android:entries="@array/update_download_source_options"
+            android:entryValues="@array/update_download_source_values"
+            android:defaultValue="ask"
+            app:iconSpaceReserved="false" />
     </PreferenceCategory>
 </PreferenceScreen>

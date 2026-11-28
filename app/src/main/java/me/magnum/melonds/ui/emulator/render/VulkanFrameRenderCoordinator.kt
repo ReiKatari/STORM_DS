@@ -142,6 +142,13 @@ class VulkanFrameRenderCoordinator(
         frameRenderThread.requestFrameRender(frameDeadlineNanos)
     }
 
+    override fun renderInterpolatedFrame(frameDeadlineNanos: Long?) {
+        if (stopped) {
+            return
+        }
+        frameRenderThread.requestInterpolatedFrameRender()
+    }
+
     override fun cancelPendingFrameRender() {
         frameRenderThread.cancelPendingFrameRender()
     }
@@ -332,6 +339,7 @@ class VulkanFrameRenderCoordinator(
                         )
                         MSG_DETACH_SURFACE -> detachSurface(msg.arg1)
                         MSG_RENDER_FRAME -> pumpPresentation()
+                        MSG_RENDER_INTERPOLATED_FRAME -> pumpInterpolatedPresentation()
                         MSG_STOP -> stopThread()
                     }
                 }
@@ -371,6 +379,7 @@ class VulkanFrameRenderCoordinator(
                 advanceControlEpochLocked()
             }
             currentHandler?.removeMessages(MSG_RENDER_FRAME)
+            currentHandler?.removeMessages(MSG_RENDER_INTERPOLATED_FRAME)
 
             MelonEmulator.cancelVulkanPresentationWaits()
         }
@@ -381,6 +390,7 @@ class VulkanFrameRenderCoordinator(
                 advanceControlEpochLocked()
             }
             currentHandler.removeMessages(MSG_RENDER_FRAME)
+            currentHandler.removeMessages(MSG_RENDER_INTERPOLATED_FRAME)
             MelonEmulator.cancelVulkanPresentationWaits()
         }
 
@@ -592,6 +602,43 @@ class VulkanFrameRenderCoordinator(
                     it.recycle()
                 }
             }
+        }
+
+        fun requestInterpolatedFrameRender() {
+            if (!running) {
+                return
+            }
+            val currentHandler = getActiveHandler() ?: return
+            val shouldQueue = synchronized(pacingLock) {
+                running && pacingTransitionCount == 0 && !renderMessageQueued && pendingPacingPermit == null
+            }
+            if (!shouldQueue) {
+                return
+            }
+            if (currentHandler.hasMessages(MSG_RENDER_INTERPOLATED_FRAME)) {
+                return
+            }
+            try {
+                currentHandler.sendEmptyMessage(MSG_RENDER_INTERPOLATED_FRAME)
+            } catch (_: IllegalStateException) {
+                if (handler === currentHandler) {
+                    currentHandler.removeCallbacksAndMessages(null)
+                    handler = null
+                }
+            }
+        }
+
+        private fun pumpInterpolatedPresentation() {
+            if (!running) {
+                return
+            }
+            val busy = synchronized(pacingLock) {
+                pacingTransitionCount != 0 || renderMessageQueued || pendingPacingPermit != null
+            }
+            if (busy) {
+                return
+            }
+            MelonEmulator.presentVulkanInterpolatedFrame()
         }
 
         fun requestStop() {
@@ -1013,6 +1060,7 @@ class VulkanFrameRenderCoordinator(
         const val MSG_DETACH_SURFACE = 4
         const val MSG_RENDER_FRAME = 5
         const val MSG_STOP = 6
+        const val MSG_RENDER_INTERPOLATED_FRAME = 7
 
         const val MSG_SURFACE = "surface"
         const val MSG_WIDTH = "width"

@@ -174,7 +174,11 @@ MelonDSAndroid::VulkanFilterMode mapVulkanFilterMode(jint ordinal)
         case 5: return MelonDSAndroid::VulkanFilterMode::Quilez;
         case 6: return MelonDSAndroid::VulkanFilterMode::Lcd;
         case 7: return MelonDSAndroid::VulkanFilterMode::Scanlines;
-        case 8: return MelonDSAndroid::VulkanFilterMode::RetroArch;
+        case 8: return MelonDSAndroid::VulkanFilterMode::Scale2x;
+        case 9: return MelonDSAndroid::VulkanFilterMode::AiUpscale;
+        case 10: return MelonDSAndroid::VulkanFilterMode::RetroArch;
+        case 11: return MelonDSAndroid::VulkanFilterMode::Fsr1;
+        case 12: return MelonDSAndroid::VulkanFilterMode::Fsr3;
         case 0:
         default: return MelonDSAndroid::VulkanFilterMode::Nearest;
     }
@@ -2020,6 +2024,12 @@ Java_me_magnum_melonds_MelonEmulator_presentVulkanFrameNative(
             static_cast<u64>(expectedWaitEpoch)));
 }
 
+JNIEXPORT jint JNICALL
+Java_me_magnum_melonds_MelonEmulator_presentVulkanInterpolatedFrameNative(JNIEnv*, jobject)
+{
+    return static_cast<jint>(MelonDSAndroid::presentVulkanInterpolatedFrame());
+}
+
 JNIEXPORT jboolean JNICALL
 Java_me_magnum_melonds_MelonEmulator_isFastForwardEnabled(JNIEnv*, jobject)
 {
@@ -3551,6 +3561,25 @@ JNIEXPORT jint JNICALL
 Java_me_magnum_melonds_MelonEmulator_getIrPedometerStepCount(JNIEnv*, jclass)
 {
     return static_cast<jint>(MelonDSAndroid::VulkanRuntime::GetIrPedometerStepCount());
+}
+
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_setVulkanFsrConfig(JNIEnv*, jclass, jint qualityMode, jint sharpness)
+{
+    MelonDSAndroid::VulkanRuntime::SetFsrQualityMode(static_cast<int>(qualityMode));
+    MelonDSAndroid::VulkanRuntime::SetFsrRcasSharpness(static_cast<int>(sharpness));
+}
+
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_setVulkanFrameGenEnabled(JNIEnv*, jclass, jboolean enabled)
+{
+    MelonDSAndroid::VulkanRuntime::SetFrameGenEnabled(enabled == JNI_TRUE);
+}
+
+JNIEXPORT jboolean JNICALL
+Java_me_magnum_melonds_MelonEmulator_isVulkanFrameGenEnabled(JNIEnv*, jclass)
+{
+    return MelonDSAndroid::VulkanRuntime::GetFrameGenEnabled() ? JNI_TRUE : JNI_FALSE;
 }
 
 JNIEXPORT void JNICALL

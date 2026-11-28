@@ -166,6 +166,17 @@ class RomListFragment : Fragment() {
                         coverByHash = raCoverByHash,
                         boxArtByUri = boxArtByUri,
                         searchQuery = searchQuery,
+                        sgwUpdatesByUri = romListViewModel.sgwUpdatesByUri.collectAsState().value,
+                        onOpenSgwStore = { openUpdatesTab ->
+                            val intent = android.content.Intent(requireContext(), me.magnum.melonds.ui.sgw.StormGamesWorldActivity::class.java)
+                            if (openUpdatesTab) {
+                                intent.putExtra(
+                                    me.magnum.melonds.ui.sgw.StormGamesWorldActivity.EXTRA_INITIAL_TAB,
+                                    me.magnum.melonds.ui.sgw.SgwStoreTab.UPDATES.name,
+                                )
+                            }
+                            startActivity(intent)
+                        },
                         allowConfiguration = allowRomConfiguration && !isShortcutPickerMode,
                         isShortcutPickerMode = isShortcutPickerMode,
                         scanningStatus = scanningStatus,

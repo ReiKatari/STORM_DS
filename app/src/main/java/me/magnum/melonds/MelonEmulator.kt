@@ -214,6 +214,10 @@ object MelonEmulator {
         budgetDeadlineNs: Long,
         expectedWaitEpoch: Long,
     ): Int
+    private external fun presentVulkanInterpolatedFrameNative(): Int
+    external fun setVulkanFsrConfig(qualityMode: Int, sharpness: Int)
+    external fun setVulkanFrameGenEnabled(enabled: Boolean)
+    external fun isVulkanFrameGenEnabled(): Boolean
     private external fun captureVulkanPresentationWaitEpochNative(): Long
     private external fun waitForVulkanPresentationProductNative(
         expectedWaitEpoch: Long,
@@ -231,6 +235,10 @@ object MelonEmulator {
             budgetDeadlineNs,
             expectedWaitEpoch,
         ),
+    )
+
+    fun presentVulkanInterpolatedFrame(): VulkanPresentationResult = VulkanPresentationResult.fromNative(
+        presentVulkanInterpolatedFrameNative(),
     )
 
     fun captureVulkanPresentationWaitEpoch(): Long =
