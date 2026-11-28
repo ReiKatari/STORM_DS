@@ -50,8 +50,8 @@ object StormDeviceSystemInfoReporter {
     fun isLoggingEnabled(context: Context): Boolean {
         return runCatching {
             val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
-            prefs.getBoolean("system_app_log_file_enabled", true)
-        }.getOrDefault(true)
+            prefs.getBoolean("system_app_log_file_enabled", false)
+        }.getOrDefault(false)
     }
 
     fun saveUnifiedReport(
@@ -76,7 +76,7 @@ object StormDeviceSystemInfoReporter {
 
         val versionName = runCatching {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName
-        }.getOrNull() ?: "3.1.2"
+        }.getOrNull() ?: "8.9.4"
 
         val versionCode = runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -85,7 +85,7 @@ object StormDeviceSystemInfoReporter {
                 @Suppress("DEPRECATION")
                 context.packageManager.getPackageInfo(context.packageName, 0).versionCode.toLong()
             }
-        }.getOrNull() ?: 306L
+        }.getOrNull() ?: 894L
 
         val report = buildString {
             appendLine("================================================================================")

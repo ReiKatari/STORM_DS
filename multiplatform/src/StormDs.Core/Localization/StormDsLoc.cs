@@ -9,12 +9,12 @@ public sealed record LanguageInfo(string Code, string NativeName, string English
 
 /// <summary>
 /// 11-Language localization dictionary for STORM DS adhering to Sentence case, 0% '&' (always 'и' / 'and'),
-/// and version '8.9.3' without 'v' per ecosystem laws.
+/// and version '8.9.4' without 'v' per ecosystem laws.
 /// Supported languages: ru, en, de, fr, zh, ko, ja, es, it, pt, hi.
 /// </summary>
 public static class StormDsLoc
 {
-    public const string AppVersion = "8.9.3";
+    public const string AppVersion = "8.9.4";
 
     public static event Action<string>? LanguageChanged;
 
@@ -181,7 +181,7 @@ public static class StormDsLoc
             ["StateSaved"] = "Состояние успешно сохранено",
             ["StateLoaded"] = "Состояние успешно восстановлено",
             ["AchievementUnlocked"] = "Достижение разблокировано!",
-            ["VersionLabel"] = "Версия 8.9.3",
+            ["VersionLabel"] = "Версия 8.9.4",
             ["GpuProbePending"] = "Определение ГПУ...",
             ["GpuDeviceLabel"] = "ГПУ",
             ["SoftwareRendererCpu"] = "Программный растеризатор (ЦП)",
@@ -355,7 +355,7 @@ public static class StormDsLoc
             ["StateSaved"] = "State saved successfully",
             ["StateLoaded"] = "State restored successfully",
             ["AchievementUnlocked"] = "Achievement unlocked!",
-            ["VersionLabel"] = "Version 8.9.3",
+            ["VersionLabel"] = "Version 8.9.4",
             ["OverclockArm9"] = "ARM9 CPU frequency",
             ["GpuProbePending"] = "Probing GPU...",
             ["GpuDeviceLabel"] = "GPU",
@@ -457,7 +457,7 @@ public static class StormDsLoc
             ["AudioSettings"] = "Ton- und Mikrofoneinstellungen",
             ["InputSettings"] = "Steuerung und Bildschirme",
             ["SystemSettings"] = "System und BIOS",
-            ["VersionLabel"] = "Version 8.9.3",
+            ["VersionLabel"] = "Version 8.9.4",
             ["OverclockArm9"] = "ARM9-CPU-Taktfrequenz",
             ["GpuProbePending"] = "GPU wird erkannt...",
             ["GpuDeviceLabel"] = "GPU",
@@ -503,7 +503,7 @@ public static class StormDsLoc
             ["AudioSettings"] = "Paramètres audio et microphone",
             ["InputSettings"] = "Contrôles et affichage",
             ["SystemSettings"] = "Système et BIOS",
-            ["VersionLabel"] = "Version 8.9.3",
+            ["VersionLabel"] = "Version 8.9.4",
             ["OverclockArm9"] = "Fréquence CPU ARM9",
             ["GpuProbePending"] = "Détection du GPU...",
             ["GpuDeviceLabel"] = "GPU",
@@ -549,7 +549,7 @@ public static class StormDsLoc
             ["AudioSettings"] = "音频和麦克风设置",
             ["InputSettings"] = "控制和双屏布局",
             ["SystemSettings"] = "系统和 BIOS",
-            ["VersionLabel"] = "版本 8.9.3",
+            ["VersionLabel"] = "版本 8.9.4",
             ["OverclockArm9"] = "ARM9 CPU 频率",
             ["GpuProbePending"] = "正在检测 GPU...",
             ["GpuDeviceLabel"] = "GPU",
@@ -595,7 +595,7 @@ public static class StormDsLoc
             ["AudioSettings"] = "오디오 및 마이크 설정",
             ["InputSettings"] = "입력 및 듀얼 스크린",
             ["SystemSettings"] = "시스템 및 BIOS",
-            ["VersionLabel"] = "버전 8.9.3",
+            ["VersionLabel"] = "버전 8.9.4",
             ["OverclockArm9"] = "ARM9 CPU 주파수",
             ["GpuProbePending"] = "GPU 감지 중...",
             ["GpuDeviceLabel"] = "GPU",
@@ -641,7 +641,7 @@ public static class StormDsLoc
             ["AudioSettings"] = "サウンドとマイク設定",
             ["InputSettings"] = "操作とデュアル画面",
             ["SystemSettings"] = "システムとBIOS",
-            ["VersionLabel"] = "バージョン 8.9.3",
+            ["VersionLabel"] = "バージョン 8.9.4",
             ["OverclockArm9"] = "ARM9 CPU周波数",
             ["GpuProbePending"] = "GPUを検出中...",
             ["GpuDeviceLabel"] = "GPU",
@@ -687,7 +687,7 @@ public static class StormDsLoc
             ["AudioSettings"] = "Ajustes de audio y micrófono",
             ["InputSettings"] = "Controles y pantallas",
             ["SystemSettings"] = "Sistema y BIOS",
-            ["VersionLabel"] = "Versión 8.9.3",
+            ["VersionLabel"] = "Versión 8.9.4",
             ["OverclockArm9"] = "Frecuencia de CPU ARM9",
             ["GpuProbePending"] = "Detectando GPU...",
             ["GpuDeviceLabel"] = "GPU",
@@ -733,7 +733,7 @@ public static class StormDsLoc
             ["AudioSettings"] = "Impostazioni audio e microfono",
             ["InputSettings"] = "Controlli e schermi",
             ["SystemSettings"] = "Sistema e BIOS",
-            ["VersionLabel"] = "Versione 8.9.3",
+            ["VersionLabel"] = "Versione 8.9.4",
             ["OverclockArm9"] = "Frequenza CPU ARM9",
             ["GpuProbePending"] = "Rilevamento GPU...",
             ["GpuDeviceLabel"] = "GPU",
@@ -779,7 +779,7 @@ public static class StormDsLoc
             ["AudioSettings"] = "Configurações de áudio e microfone",
             ["InputSettings"] = "Controles e telas",
             ["SystemSettings"] = "Sistema e BIOS",
-            ["VersionLabel"] = "Versão 8.9.3",
+            ["VersionLabel"] = "Versão 8.9.4",
             ["OverclockArm9"] = "Frequência da CPU ARM9",
             ["GpuProbePending"] = "Detectando GPU...",
             ["GpuDeviceLabel"] = "GPU",
@@ -825,7 +825,7 @@ public static class StormDsLoc
             ["AudioSettings"] = "ऑडियो और माइक्रोफ़ोन सेटिंग्स",
             ["InputSettings"] = "नियंत्रण और स्क्रीन लेआउट",
             ["SystemSettings"] = "सिस्टम और BIOS",
-            ["VersionLabel"] = "संस्करण 8.9.3",
+            ["VersionLabel"] = "संस्करण 8.9.4",
             ["OverclockArm9"] = "ARM9 CPU आवृत्ति",
             ["GpuProbePending"] = "GPU का पता लगाया जा रहा है...",
             ["GpuDeviceLabel"] = "GPU",

@@ -51,7 +51,7 @@ object ManualUpdateChecker {
         fun markwon(): Markwon
     }
 
-    private const val FALLBACK_VERSION = "8.9.3"
+    private const val FALLBACK_VERSION = "8.9.4"
 
     private val backgroundScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var activeCheckJob: Job? = null

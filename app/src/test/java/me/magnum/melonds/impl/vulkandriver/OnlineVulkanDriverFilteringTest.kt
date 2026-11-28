@@ -213,7 +213,7 @@ class OnlineVulkanDriverFilteringTest {
     }
 
     @Test
-    fun appLogPreferenceDefaultsToTrueInPrefSystemXml() {
+    fun appLogPreferenceDefaultsToFalseInPrefSystemXml() {
         val candidates = listOf(
             File("src/main/res/xml/pref_system.xml"),
             File("app/src/main/res/xml/pref_system.xml"),
@@ -223,7 +223,7 @@ class OnlineVulkanDriverFilteringTest {
         val content = xmlFile!!.readText(Charsets.UTF_8)
         assertTrue(content.contains("android:key=\"system_app_log_file_enabled\""))
         assertTrue(
-            Regex("""android:key="system_app_log_file_enabled"[\s\S]{0,400}?android:defaultValue="true"""")
+            Regex("""android:key="system_app_log_file_enabled"[\s\S]{0,400}?android:defaultValue="false"""")
                 .containsMatchIn(content)
         )
     }

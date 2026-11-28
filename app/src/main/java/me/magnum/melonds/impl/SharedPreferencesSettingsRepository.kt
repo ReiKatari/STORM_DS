@@ -757,7 +757,7 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun isAppLogFileEnabled(): Boolean {
-        return preferences.getBoolean("system_app_log_file_enabled", true)
+        return preferences.getBoolean("system_app_log_file_enabled", false)
     }
 
     override fun observeAppLogFileEnabled(): Flow<Boolean> {
