@@ -1865,4 +1865,8 @@
     <string name="v870_rom_header_saves_label">Saves</string>
     <string name="rom_info_unit_code_label">Unit code</string>
     <string name="rom_info_crc32_label">CRC32 / Hash</string>
+    <string name="about_privacy_policy_title">Privacy policy</string>
+    <string name="about_privacy_policy_summary">Data storage, third-party services and GDPR notice</string>
+    <string name="about_foss_licenses_title">Open-source cores and licenses</string>
+    <string name="about_foss_licenses_summary">GPL-3.0 notice, FOSS components and upstream links</string>
 </resources>

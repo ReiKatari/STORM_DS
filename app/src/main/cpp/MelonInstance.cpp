@@ -4627,6 +4627,12 @@ std::vector<u32> MelonInstance::getScreenshotPixels()
 
 void MelonInstance::loadCheats(std::list<Cheat> cheats)
 {
+    if (isRetroAchievementsHardcoreActive())
+    {
+        nds->AREngine.Cheats.clear();
+        return;
+    }
+
     std::vector<ARCode> codeList;
 
     for (auto cheat : cheats)
@@ -7337,10 +7343,11 @@ void MelonInstance::updateConfiguration(std::shared_ptr<EmulatorConfiguration> n
     if (!newConfiguration)
         return;
 
+    const bool hardcoreActive = isRetroAchievementsHardcoreActive();
     melonDS::Net_Slirp::SetCustomDNS(newConfiguration->wfcDnsIp);
     if (nds)
     {
-        nds->SetARM9OverclockMultiplier(std::max(1, newConfiguration->arm9OverclockMultiplier));
+        nds->SetARM9OverclockMultiplier(hardcoreActive ? 1 : std::max(1, newConfiguration->arm9OverclockMultiplier));
     }
     if (nds)
     {
@@ -7348,13 +7355,19 @@ void MelonInstance::updateConfiguration(std::shared_ptr<EmulatorConfiguration> n
         nds->SPU.SetDegrade10Bit(static_cast<AudioBitDepth>(newConfiguration->audioSettings.audioBitrate));
     }
 
-    rewindManager.UpdateRewindSettings(newConfiguration->rewindEnabled && !Multiplayer::Active(), newConfiguration->rewindLengthSeconds, newConfiguration->rewindCaptureSpacingSeconds);
+    rewindManager.UpdateRewindSettings(!hardcoreActive && newConfiguration->rewindEnabled && !Multiplayer::Active(), newConfiguration->rewindLengthSeconds, newConfiguration->rewindCaptureSpacingSeconds);
 
     const bool rtcOffsetChanged = currentConfiguration->rtcOffsetMinutes != newConfiguration->rtcOffsetMinutes;
     currentConfiguration = newConfiguration;
     if (rtcOffsetChanged)
         requestRtcSync();
     isRenderConfigurationDirty = true;
+}
+
+bool MelonInstance::isRetroAchievementsHardcoreActive()
+{
+    std::lock_guard lock(retroAchievementsManagerLifetimeMutex);
+    return retroAchievementsManager && retroAchievementsManager->IsHardcoreModeEnabled();
 }
 
 void MelonInstance::requestNdsSaveWrite(const u8* saveData, u32 saveLength, u32 writeOffset, u32 writeLength)
@@ -7911,7 +7924,7 @@ void MelonInstance::setBatteryLevels()
 
 void MelonInstance::setDateTime()
 {
-
+    if (!isRetroAchievementsHardcoreActive())
     {
         char valor[PROP_VALUE_MAX] = {0};
         if (__system_property_get("debug.melonds.arnes.rtcfijo", valor) > 0
@@ -7922,7 +7935,8 @@ void MelonInstance::setDateTime()
         }
     }
 
-    std::time_t t = std::time(0) + static_cast<std::time_t>(currentConfiguration->rtcOffsetMinutes) * 60;
+    const int effectiveRtcOffset = isRetroAchievementsHardcoreActive() ? 0 : currentConfiguration->rtcOffsetMinutes;
+    std::time_t t = std::time(0) + static_cast<std::time_t>(effectiveRtcOffset) * 60;
     std::tm now{};
     if (localtime_r(&t, &now) != nullptr)
         nds->RTC.SetDateTime(now.tm_year + 1900, now.tm_mon + 1, now.tm_mday, now.tm_hour, now.tm_min, now.tm_sec);

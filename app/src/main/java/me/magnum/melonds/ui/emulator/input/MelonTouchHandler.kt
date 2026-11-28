@@ -11,11 +11,14 @@ class MelonTouchHandler(
     var onLidStateChanged: ((Boolean) -> Unit)? = null,
     var onStartPressed: (() -> Unit)? = null,
     var onShoulderButtonStateChanged: ((Input, Boolean) -> Unit)? = null,
+    var isHardcoreModeActiveProvider: () -> Boolean = { false },
 ) : IInputListener {
     var isLidClosed = false
         private set
     var turboMacrosEnabled = false
     var turboFrequencyHz = 15
+
+    fun isTurboAllowed(): Boolean = !isHardcoreModeActiveProvider()
 
     private val handler = Handler(Looper.getMainLooper())
     private val lastPressTimeMs = mutableMapOf<Input, Long>()
@@ -33,7 +36,7 @@ class MelonTouchHandler(
             }
             stopTurboFor(key)
             MelonEmulator.onInputDown(key)
-            if (turboMacrosEnabled && key in TURBO_ELIGIBLE_INPUTS) {
+            if (turboMacrosEnabled && isTurboAllowed() && key in TURBO_ELIGIBLE_INPUTS) {
                 val now = SystemClock.uptimeMillis()
                 val prev = lastPressTimeMs[key] ?: 0L
                 lastPressTimeMs[key] = now

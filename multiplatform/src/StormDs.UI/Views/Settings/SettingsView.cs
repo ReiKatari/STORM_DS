@@ -728,7 +728,10 @@ public class SettingsView : Grid
         p.Children.Add(CreateSectionTitle("RetroAchievements"));
         p.Children.Add(CreateTextSettingRow("Имя пользователя RetroAchievements:", cfg.RetroAchievementsUsername, (t) => cfg.RetroAchievementsUsername = t));
         p.Children.Add(CreateTextSettingRow("Web API Token:", cfg.RetroAchievementsToken, (t) => cfg.RetroAchievementsToken = t));
-        p.Children.Add(CreateCheckBoxRow("Хардкорный режим (без сохранений и читов)", cfg.RetroAchievementsHardcoreMode, (v) => cfg.RetroAchievementsHardcoreMode = v));
+        p.Children.Add(CreateCheckBoxRow("Хардкорный режим (без сохранений и читов)", cfg.RetroAchievementsHardcoreMode, (v) =>
+        {
+            StormDsUiState.Instance.SetHardcoreModeEnabled(v);
+        }));
         p.Children.Add(CreateCheckBoxRow("Rich Presence статус активности в профиле", cfg.RetroAchievementsRichPresence, (v) => cfg.RetroAchievementsRichPresence = v));
     }
 

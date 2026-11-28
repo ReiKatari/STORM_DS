@@ -282,6 +282,7 @@ public:
     void requestFirmwareSaveWrite(const u8* saveData, u32 saveLength, u32 writeOffset, u32 writeLength);
     void flushSramSaves();
     void setRetroAchievementsHardcoreEnabled(bool enabled);
+    bool isRetroAchievementsHardcoreActive();
     std::string getDetailedEmulationDiagnostic();
     bool areSaveStatesAllowed();
     bool saveState(Savestate* state, bool refreshScreenshot);

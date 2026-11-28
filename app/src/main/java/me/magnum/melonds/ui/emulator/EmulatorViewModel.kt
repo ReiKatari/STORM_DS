@@ -69,7 +69,7 @@ import me.magnum.melonds.MelonEmulator
 import me.magnum.melonds.R
 import me.magnum.melonds.common.romprocessors.RomFileProcessorFactory
 import me.magnum.melonds.common.runtime.ScreenshotFrameBufferProvider
-import me.magnum.melonds.common.network.RETROACHIEVEMENTS_USER_AGENT
+import me.magnum.melonds.common.network.buildStormDsRetroAchievementsUserAgent
 import me.magnum.melonds.common.retroachievements.RetroAchievementsEndpointProvider
 import me.magnum.melonds.common.retroachievements.RetroAchievementsEndpointSnapshot
 import me.magnum.melonds.common.retroachievements.RetroAchievementsEndpointStorage
@@ -528,7 +528,9 @@ class EmulatorViewModel @Inject constructor(
         }.getOrNull().orEmpty().ifBlank { "unknown" }
     }
 
-    private val retroAchievementsUserAgent = RETROACHIEVEMENTS_USER_AGENT
+    private val retroAchievementsUserAgent: String by lazy {
+        buildStormDsRetroAchievementsUserAgent(context)
+    }
 
     private val _raIntegrationEvent = EventSharedFlow<RAIntegrationEvent>()
     val integrationEvent = _raIntegrationEvent.asSharedFlow()
@@ -1975,6 +1977,9 @@ class EmulatorViewModel @Inject constructor(
     }
 
     fun debugStepFrame() {
+        if (emulatorSession.isRetroAchievementsHardcoreModeEnabled) {
+            return
+        }
         sessionCoroutineScope.launch {
             emulatorManager.debugStepFrame()
         }
@@ -3574,11 +3579,7 @@ class EmulatorViewModel @Inject constructor(
             return emptyList()
         }
         if (emulatorSession.isRetroAchievementsHardcoreModeEnabled) {
-            if (isNativeEmulationActive) {
-                runCatching { MelonEmulator.setRetroAchievementsHardcoreEnabled(false) }
-            }
-            emulatorSession.switchToSoftcore()
-            retroAchievementsSessionMode = RetroAchievementsSessionMode.SOFTCORE
+            switchToSoftcore()
         }
 
         return cheatsRepository.getRomEnabledCheats(romInfo)
@@ -6459,7 +6460,7 @@ class EmulatorViewModel @Inject constructor(
                                     continue
                                 }
 
-                                if (!isRetroAchievementsOnlineSessionStarted) {
+                                if (activeRuntimePath == RetroAchievementsRuntimePath.LEGACY && !isRetroAchievementsOnlineSessionStarted) {
                                     val isHardcoreModeEnabled =
                                         effectiveLaunchDecision.sessionMode == RetroAchievementsSessionMode.HARDCORE
                                     val startResult = withContext(Dispatchers.IO) {
@@ -6489,13 +6490,15 @@ class EmulatorViewModel @Inject constructor(
                                     retroAchievementsSubmissionHandler.retrySubmissionsImmediately()
                                 }
 
-                                val richPresenceDescription = MelonEmulator.getRichPresenceStatus()
-                                withContext(Dispatchers.IO) {
-                                    retroAchievementsRepository.sendSessionHeartbeat(
-                                        rom.retroAchievementsHash,
-                                        isHardcoreModeEnabled,
-                                        richPresenceDescription,
-                                    )
+                                if (activeRuntimePath == RetroAchievementsRuntimePath.LEGACY) {
+                                    val richPresenceDescription = MelonEmulator.getRichPresenceStatus()
+                                    withContext(Dispatchers.IO) {
+                                        retroAchievementsRepository.sendSessionHeartbeat(
+                                            rom.retroAchievementsHash,
+                                            isHardcoreModeEnabled,
+                                            richPresenceDescription,
+                                        )
+                                    }
                                 }
                             }
                         }

@@ -41,6 +41,18 @@
                 android:title="@string/about_github_title"
                 android:summary="@string/about_github_summary"
                 app:iconSpaceReserved="false" />
+
+        <Preference
+                android:key="about_privacy_policy"
+                android:title="@string/about_privacy_policy_title"
+                android:summary="@string/about_privacy_policy_summary"
+                app:iconSpaceReserved="false" />
+
+        <Preference
+                android:key="about_foss_licenses"
+                android:title="@string/about_foss_licenses_title"
+                android:summary="@string/about_foss_licenses_summary"
+                app:iconSpaceReserved="false" />
     </PreferenceCategory>
 
     <PreferenceCategory

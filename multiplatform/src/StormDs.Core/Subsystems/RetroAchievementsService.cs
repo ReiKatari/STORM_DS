@@ -3,6 +3,7 @@
 
 using System.Text.Json;
 using StormDs.Core.Configuration;
+using StormDs.Core.Localization;
 using StormDs.Core.Paths;
 
 namespace StormDs.Core.Subsystems;
@@ -35,11 +36,16 @@ public sealed class RetroAchievementsService
     public RetroAchievementsService(HttpClient? httpClient = null)
     {
         _httpClient = httpClient ?? new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+        string userAgent = $"STORM_DS/{StormDsLoc.AppVersion} (Windows {Environment.OSVersion.Version}) melonDS/1.0";
+        if (!_httpClient.DefaultRequestHeaders.UserAgent.Any())
+        {
+            _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", userAgent);
+        }
         LoadOfflineQueue();
     }
 
     /// <summary>
-    /// Validates whether hardcore mode allows save states, rewind, or cheats.
+    /// Validates whether hardcore mode allows save states, rewind, cheats, slowdown, frame advance, overclock, or memory editing.
     /// </summary>
     public bool IsFeatureAllowedInCurrentMode(string featureName)
     {
@@ -51,6 +57,10 @@ public sealed class RetroAchievementsService
             "rewind" => false,
             "cheat" or "cheats" => false,
             "slowdown" => false,
+            "frame_advance" => false,
+            "overclock" or "arm9_overclock" => false,
+            "patch_60fps" => false,
+            "memory_editor" => false,
             _ => true
         };
     }
@@ -118,7 +128,8 @@ public sealed class RetroAchievementsService
             if (ct.IsCancellationRequested) break;
             try
             {
-                string url = $"https://retroachievements.org/dorequest.php?r=awardachievement&u={Uri.EscapeDataString(item.Username)}&t={Uri.EscapeDataString(Token)}&a={item.AchievementId}&h={(IsHardcoreMode ? 1 : 0)}";
+                // Offline queued unlocks must never submit as Hardcore (Casual h=0 only)
+                string url = $"https://retroachievements.org/dorequest.php?r=awardachievement&u={Uri.EscapeDataString(item.Username)}&t={Uri.EscapeDataString(Token)}&a={item.AchievementId}&h=0";
                 using var response = await _httpClient.GetAsync(url, ct);
                 if (response.IsSuccessStatusCode)
                 {

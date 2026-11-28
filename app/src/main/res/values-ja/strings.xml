@@ -1787,4 +1787,8 @@
     <string name="v870_rom_header_saves_label">セーブ</string>
     <string name="rom_info_unit_code_label">ユニットコード</string>
     <string name="rom_info_crc32_label">CRC32 / ハッシュ</string>
+    <string name="about_privacy_policy_title">プライバシーポリシー</string>
+    <string name="about_privacy_policy_summary">データ保持期間・外部サービス・GDPR対応について</string>
+    <string name="about_foss_licenses_title">オープンソースコアとライセンス</string>
+    <string name="about_foss_licenses_summary">GPL-3.0・使用FOSSライブラリと開発元リポジトリ一覧</string>
 </resources>

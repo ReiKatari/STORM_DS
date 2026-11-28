@@ -1660,4 +1660,8 @@ Importá-los para o STORM DS?</string>
     <string name="v870_rom_header_saves_label">Saves</string>
     <string name="rom_info_unit_code_label">Código da unidade</string>
     <string name="rom_info_crc32_label">CRC32 / Hash</string>
+    <string name="about_privacy_policy_title">Política de privacidade</string>
+    <string name="about_privacy_policy_summary">Retenção de dados, serviços externos e conformidade LGPD/GDPR</string>
+    <string name="about_foss_licenses_title">Núcleos e licenças de código aberto</string>
+    <string name="about_foss_licenses_summary">Aviso GPL-3.0, componentes FOSS e links upstream</string>
 </resources>

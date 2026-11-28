@@ -158,7 +158,7 @@ fun RamCheatFinderTab(
     }
 
     fun startNewSearch() {
-        if (isScanning) return
+        if (isScanning || isHardcoreActive) return
         val targetValue = parseInputTarget()
         if (searchMode == RamSearchMode.EXACT && targetValue == null) {
             Toast.makeText(context, context.getString(R.string.v790_ram_value_required), Toast.LENGTH_SHORT).show()
@@ -227,7 +227,7 @@ fun RamCheatFinderTab(
     }
 
     fun filterSearch() {
-        if (isScanning) return
+        if (isScanning || isHardcoreActive) return
         val currentCandidates = candidateOffsets
         val prevSnap = currentSnapshot
         if (currentCandidates == null || prevSnap == null) {

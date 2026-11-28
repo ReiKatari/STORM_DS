@@ -55,7 +55,8 @@ class SingleButtonInputHandler(
                     handler.postDelayed(runnable, 500L)
                 } else {
                     setPressed(v, if (mode == VirtualButtonMode.TOGGLE) !pressed else true)
-                    if (mode == VirtualButtonMode.TURBO) v.postDelayed(turboPulse, 50L)
+                    val turboAllowed = (inputListener as? MelonTouchHandler)?.isTurboAllowed() ?: true
+                    if (mode == VirtualButtonMode.TURBO && turboAllowed) v.postDelayed(turboPulse, 50L)
                     performHapticFeedback(v, HapticFeedbackType.KEY_PRESS)
                 }
             }

@@ -25,6 +25,7 @@ class InputProcessor(
     private val frontendInputListener: IInputListener,
     private val context: Context? = null,
     private val slot2AnalogInput: Slot2AnalogInput = Slot2AnalogInput { x, y -> MelonEmulator.setSlot2AnalogInput(x, y) },
+    private val isHardcoreModeActiveProvider: () -> Boolean = { false },
 ) : INativeInputListener {
 
     companion object {
@@ -438,7 +439,7 @@ class InputProcessor(
         updateSlot2DigitalFallback(input, pressed = true, fromController = fromController)
 
         if (input.isSystemInput) {
-            if (isHardwareTurboActive && fromController && input in turboEligibleButtons) {
+            if (isHardwareTurboActive && !isHardcoreModeActiveProvider() && fromController && input in turboEligibleButtons) {
                 startTurboForButton(input)
             } else {
                 systemInputListener.onKeyPress(input)
@@ -471,6 +472,11 @@ class InputProcessor(
     }
 
     private fun toggleHardwareTurbo() {
+        if (isHardcoreModeActiveProvider()) {
+            isHardwareTurboActive = false
+            stopAllTurboPulses()
+            return
+        }
         isHardwareTurboActive = !isHardwareTurboActive
         if (!isHardwareTurboActive) {
             stopAllTurboPulses()
@@ -499,7 +505,7 @@ class InputProcessor(
 
         val runnable = object : Runnable {
             override fun run() {
-                if (!isHardwareTurboActive || input !in activeTurboRunnables) {
+                if (!isHardwareTurboActive || isHardcoreModeActiveProvider() || input !in activeTurboRunnables) {
                     return
                 }
                 if (isPressedState) {

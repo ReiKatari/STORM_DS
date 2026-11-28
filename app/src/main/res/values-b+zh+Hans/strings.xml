@@ -1716,4 +1716,8 @@
     <string name="v870_rom_header_saves_label">存档</string>
     <string name="rom_info_unit_code_label">设备代码</string>
     <string name="rom_info_crc32_label">CRC32 / 哈希</string>
+    <string name="about_privacy_policy_title">隐私政策</string>
+    <string name="about_privacy_policy_summary">数据保留期限、第三方服务与 GDPR 说明</string>
+    <string name="about_foss_licenses_title">开源核心与许可证</string>
+    <string name="about_foss_licenses_summary">GPL-3.0 声明、开源组件与上游仓库链接</string>
 </resources>

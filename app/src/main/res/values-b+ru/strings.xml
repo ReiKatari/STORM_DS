@@ -1788,4 +1788,8 @@
     <string name="v870_rom_header_saves_label">Сохранения</string>
     <string name="rom_info_unit_code_label">Код устройства</string>
     <string name="rom_info_crc32_label">CRC32 / Хеш</string>
+    <string name="about_privacy_policy_title">Политика конфиденциальности</string>
+    <string name="about_privacy_policy_summary">Хранение данных, внешние сервисы и соответствие GDPR</string>
+    <string name="about_foss_licenses_title">Открытые ядра и лицензии</string>
+    <string name="about_foss_licenses_summary">Лицензия GPL-3.0, список открытых компонентов и исходники</string>
 </resources>

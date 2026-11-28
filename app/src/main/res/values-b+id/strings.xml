@@ -1699,4 +1699,8 @@ Impor ke STORM DS?</string>
     <string name="v870_rom_header_saves_label">Simpanan</string>
     <string name="rom_info_unit_code_label">Kode unit</string>
     <string name="rom_info_crc32_label">CRC32 / Hash</string>
+    <string name="about_privacy_policy_title">Kebijakan privasi</string>
+    <string name="about_privacy_policy_summary">Penyimpanan data, layanan pihak ketiga dan GDPR</string>
+    <string name="about_foss_licenses_title">Inti &amp; lisensi sumber terbuka</string>
+    <string name="about_foss_licenses_summary">Pemberitahuan GPL-3.0, komponen FOSS dan tautan upstream</string>
 </resources>

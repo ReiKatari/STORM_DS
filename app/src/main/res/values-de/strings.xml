@@ -1543,4 +1543,8 @@
     <string name="v870_rom_header_saves_label">Spielstände</string>
     <string name="rom_info_unit_code_label">Gerätecode</string>
     <string name="rom_info_crc32_label">CRC32 / Hash</string>
+    <string name="about_privacy_policy_title">Datenschutzerklärung</string>
+    <string name="about_privacy_policy_summary">Datenspeicherung, Drittanbieter und DSGVO-Hinweise</string>
+    <string name="about_foss_licenses_title">Open-Source-Kerne und Lizenzen</string>
+    <string name="about_foss_licenses_summary">GPL-3.0-Hinweis, FOSS-Komponenten und Upstream-Links</string>
 </resources>

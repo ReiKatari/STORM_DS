@@ -89,6 +89,7 @@ public:
     std::vector<RARuntimeAchievement> GetRuntimeAchievements();
     std::vector<RARuntimeAchievementBucketEntry> GetRuntimeAchievementBuckets();
     std::vector<long> GetRuntimeSubsetIds();
+    bool IsHardcoreModeEnabled();
     bool AreSaveStatesAllowed();
     bool DoSavestate(melonDS::Savestate* savestate);
     void Reset();

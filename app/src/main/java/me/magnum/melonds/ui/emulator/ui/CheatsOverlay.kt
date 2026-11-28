@@ -713,20 +713,78 @@ fun CheatsOverlay(
                             }
 
                             2 -> {
-                                // Tab 2: RAM Cheat Finder
-                                RamCheatFinderTab(
-                                    romInfo = romInfo,
-                                    cheatsRepository = cheatsRepository,
-                                    onCheatCreated = {
-                                        reloadCurrentCheats()
-                                        onCheatsUpdated()
-                                    },
-                                    isHardcoreActive = isHardcoreActive,
-                                    onSwitchToSoftcore = {
-                                        onSwitchToSoftcore?.invoke()
-                                        hardcoreDismissed = true
-                                    },
-                                )
+                                // Tab 2: RAM Cheat Finder (Strictly prohibited in Hardcore mode)
+                                if (isHardcoreActive && !hardcoreDismissed) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(20.dp),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(14.dp))
+                                                .background(colors.surface2)
+                                                .border(1.dp, Color(0xFFE53935).copy(alpha = 0.55f), RoundedCornerShape(14.dp))
+                                                .padding(16.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Filled.Warning,
+                                                contentDescription = null,
+                                                tint = Color(0xFFE53935),
+                                                modifier = Modifier.size(28.dp),
+                                            )
+                                            Text(
+                                                text = stringResource(R.string.v870_cheats_hardcore_blocked_title),
+                                                color = colors.text,
+                                                fontFamily = SpaceGrotesk,
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.Bold,
+                                            )
+                                            Text(
+                                                text = stringResource(R.string.v870_cheats_hardcore_blocked_hint),
+                                                color = colors.text2,
+                                                fontFamily = SpaceGrotesk,
+                                                fontSize = 12.sp,
+                                            )
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .background(Color(0xFFE53935))
+                                                    .clickable {
+                                                        onSwitchToSoftcore?.invoke()
+                                                        hardcoreDismissed = true
+                                                    }
+                                                    .padding(horizontal = 16.dp, vertical = 9.dp),
+                                            ) {
+                                                Text(
+                                                    text = stringResource(R.string.v870_cheats_hardcore_blocked_title),
+                                                    color = Color.White,
+                                                    fontFamily = SpaceGrotesk,
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                )
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    RamCheatFinderTab(
+                                        romInfo = romInfo,
+                                        cheatsRepository = cheatsRepository,
+                                        onCheatCreated = {
+                                            reloadCurrentCheats()
+                                            onCheatsUpdated()
+                                        },
+                                        isHardcoreActive = isHardcoreActive,
+                                        onSwitchToSoftcore = {
+                                            onSwitchToSoftcore?.invoke()
+                                            hardcoreDismissed = true
+                                        },
+                                    )
+                                }
                             }
                         }
                     }

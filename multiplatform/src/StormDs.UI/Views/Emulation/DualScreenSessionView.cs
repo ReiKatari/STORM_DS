@@ -1116,10 +1116,8 @@ public class DualScreenSessionView : Grid
 
         if (MatchesHotkey(e.Key, "ToggleHardcore"))
         {
-            var cfg = StormDsUiState.Instance.AppConfig;
-            cfg.RetroAchievementsHardcoreMode = !cfg.RetroAchievementsHardcoreMode;
-            StormDsUiState.Instance.SaveConfig();
-            StormDsUiState.Instance.NotifyStatus(cfg.RetroAchievementsHardcoreMode ? "Hardcore режим включен" : "Hardcore режим выключен");
+            var uiState = StormDsUiState.Instance;
+            uiState.SetHardcoreModeEnabled(!uiState.AppConfig.RetroAchievementsHardcoreMode);
             e.Handled = true;
             return;
         }

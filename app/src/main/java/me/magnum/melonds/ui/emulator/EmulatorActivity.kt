@@ -976,7 +976,8 @@ open class EmulatorActivity : AppCompatActivity() {
                     frameAdvanceCounterState.intValue = 0
                     viewModel.resumeEmulator()
                 }
-            }
+            },
+            isHardcoreModeActiveProvider = { viewModel.isRetroAchievementsHardcoreActive() },
         )
         mainScreenRenderer = DSRenderer(this)
         binding.surfaceMain.apply {
@@ -4121,6 +4122,7 @@ open class EmulatorActivity : AppCompatActivity() {
             frontendInputHandler,
             applicationContext,
             slot2AnalogInput,
+            isHardcoreModeActiveProvider = { viewModel.isRetroAchievementsHardcoreActive() },
         )
     }
 

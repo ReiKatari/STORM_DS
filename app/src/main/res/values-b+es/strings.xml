@@ -1678,4 +1678,8 @@ Rechazos permanentes del servidor: %7$d.</string>
     <string name="v870_rom_header_saves_label">Partidas</string>
     <string name="rom_info_unit_code_label">Código de unidad</string>
     <string name="rom_info_crc32_label">CRC32 / Hash</string>
+    <string name="about_privacy_policy_title">Política de privacidad</string>
+    <string name="about_privacy_policy_summary">Retención de datos, servicios externos y cumplimiento RGPD</string>
+    <string name="about_foss_licenses_title">Núcleos y licencias de código abierto</string>
+    <string name="about_foss_licenses_summary">Aviso GPL-3.0, componentes FOSS y enlaces upstream</string>
 </resources>

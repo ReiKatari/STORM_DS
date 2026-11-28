@@ -1858,18 +1858,25 @@ class AndroidEmulatorManager(
         }
         val mustUseCustomBios = shouldUseCustomBios(baseConfiguration.useCustomBios, consoleType)
 
+        val hardcoreActive = emulatorSession.isRetroAchievementsHardcoreModeEnabled
+        val rawFf = (rom.config.fastForwardSpeedMultiplier ?: baseConfiguration.fastForwardSpeedMultiplier)
+            .let { if (it == 0f || it.isNaN()) 1.0f else it }
+        val compliantFf = if (hardcoreActive && rawFf > 0f && rawFf < 1.0f) 1.0f else rawFf
+
         return baseConfiguration.copy(
             useCustomBios = mustUseCustomBios,
             showBootScreen = if (consoleType == ConsoleType.DSi) false else baseConfiguration.showBootScreen && mustUseCustomBios,
-            fastForwardSpeedMultiplier = (rom.config.fastForwardSpeedMultiplier ?: baseConfiguration.fastForwardSpeedMultiplier).let { if (it == 0f || it.isNaN()) 1.0f else it },
+            fastForwardSpeedMultiplier = compliantFf,
             frameLimitSpeedMultiplier = (
-                if (emulatorSession.isRetroAchievementsHardcoreModeEnabled) {
+                if (hardcoreActive) {
                     1.0f
                 } else {
                     activeSlowMotionMultiplier ?: baseConfiguration.frameLimitSpeedMultiplier
                 }
             ).let { if (it <= 0f) 1.0f else it },
-            arm9OverclockMultiplier = (rom.config.arm9Overclock ?: baseConfiguration.arm9OverclockMultiplier).coerceAtLeast(1),
+            arm9OverclockMultiplier = if (hardcoreActive) 1 else (rom.config.arm9Overclock ?: baseConfiguration.arm9OverclockMultiplier).coerceAtLeast(1),
+            rewindEnabled = if (hardcoreActive) false else baseConfiguration.rewindEnabled,
+            rtcOffsetMinutes = if (hardcoreActive) 0 else baseConfiguration.rtcOffsetMinutes,
             hgEngineFixEnabled = rom.config.useHgEngineFix,
             consoleType = consoleType,
             micSource = getRomOptionOrDefault(rom.config.runtimeMicSource, baseConfiguration.micSource),

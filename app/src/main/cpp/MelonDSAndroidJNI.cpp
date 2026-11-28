@@ -2671,13 +2671,18 @@ static jboolean requestExactDebugFrames(jint frames, bool allowReleaseDiagnostic
 JNIEXPORT jboolean JNICALL
 Java_me_magnum_melonds_MelonEmulator_debugStepFrame(JNIEnv*, jobject)
 {
+    auto currentInstance = MelonDSAndroid::GetInstanceSnapshot();
+    if (currentInstance && currentInstance->isRetroAchievementsHardcoreActive())
+        return JNI_FALSE;
     return requestExactDebugFrames(1, false);
 }
 
 JNIEXPORT jboolean JNICALL
 Java_me_magnum_melonds_MelonEmulator_debugStepFrames(JNIEnv*, jobject, jint frames)
 {
-
+    auto currentInstance = MelonDSAndroid::GetInstanceSnapshot();
+    if (currentInstance && currentInstance->isRetroAchievementsHardcoreActive())
+        return JNI_FALSE;
     return requestExactDebugFrames(frames, true);
 }
 
@@ -3057,7 +3062,10 @@ Java_me_magnum_melonds_MelonEmulator_setFastForwardEnabled(JNIEnv* env, jobject 
         std::memory_order_acq_rel);
     MelonDSAndroid::setFastForwardActive(fastForwardEnabled);
     if (fastForwardEnabled) {
-        const float multiplier = fastForwardSpeedMultiplier.load(std::memory_order_acquire);
+        float multiplier = fastForwardSpeedMultiplier.load(std::memory_order_acquire);
+        auto currentInstance = MelonDSAndroid::GetInstanceSnapshot();
+        if (currentInstance && currentInstance->isRetroAchievementsHardcoreActive() && multiplier > 0.0f && multiplier < 1.0f)
+            multiplier = 1.0f;
         limitFps = multiplier > 0;
         targetFps = static_cast<int>(60.0f * multiplier);
     } else {
@@ -3074,7 +3082,10 @@ Java_me_magnum_melonds_MelonEmulator_setFastForwardEnabled(JNIEnv* env, jobject 
 JNIEXPORT void JNICALL
 Java_me_magnum_melonds_MelonEmulator_setFrameLimitSpeedMultiplier(JNIEnv* env, jobject thiz, jfloat multiplier)
 {
-    const float sanitized = sanitizeFrameLimitSpeedMultiplier(multiplier);
+    float sanitized = sanitizeFrameLimitSpeedMultiplier(multiplier);
+    auto currentInstance = MelonDSAndroid::GetInstanceSnapshot();
+    if (currentInstance && currentInstance->isRetroAchievementsHardcoreActive())
+        sanitized = 1.0f;
     frameLimitSpeedMultiplier.store(sanitized, std::memory_order_release);
     if (sanitized < 1.0f && isFastForwardEnabled.load(std::memory_order_acquire)) {
         isFastForwardEnabled.store(false, std::memory_order_release);
@@ -3680,7 +3691,7 @@ Java_me_magnum_melonds_MelonEmulator_readMainRamSnapshot(JNIEnv* env, jclass)
         return nullptr;
 
     auto currentInstance = MelonDSAndroid::GetInstanceSnapshot();
-    if (!currentInstance)
+    if (!currentInstance || currentInstance->isRetroAchievementsHardcoreActive())
         return nullptr;
 
     melonDS::NDS* nds = currentInstance->getNDS();
@@ -3713,7 +3724,7 @@ Java_me_magnum_melonds_MelonEmulator_writeMainRamValue(JNIEnv*, jclass, jint off
         return JNI_FALSE;
 
     auto currentInstance = MelonDSAndroid::GetInstanceSnapshot();
-    if (!currentInstance)
+    if (!currentInstance || currentInstance->isRetroAchievementsHardcoreActive())
         return JNI_FALSE;
 
     melonDS::NDS* nds = currentInstance->getNDS();

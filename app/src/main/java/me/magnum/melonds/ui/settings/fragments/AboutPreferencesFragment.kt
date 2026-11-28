@@ -95,6 +95,16 @@ class AboutPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             true
         }
 
+        findPreference<Preference>("about_privacy_policy")?.setOnPreferenceClickListener {
+            openExternalUrl("https://github.com/ReiKatari/STORM_DS/blob/main/PRIVACY.md")
+            true
+        }
+
+        findPreference<Preference>("about_foss_licenses")?.setOnPreferenceClickListener {
+            openExternalUrl("https://github.com/ReiKatari/STORM_DS/blob/main/LICENSES.md")
+            true
+        }
+
         findPreference<Preference>("credits_jpeacekeeper")?.setOnPreferenceClickListener {
             openExternalUrl("https://4pda.to/forum/index.php?showuser=5768740")
             true

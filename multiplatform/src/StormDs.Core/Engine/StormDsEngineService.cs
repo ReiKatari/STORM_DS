@@ -32,6 +32,7 @@ public sealed class StormDsEngineService : IDisposable
     public byte[] BottomFrameBgra { get; } = new byte[256 * 192 * 4];
     public bool HasLiveNativeFrame { get; private set; }
     public bool IsLidClosed { get; private set; }
+    public Func<bool>? IsHardcoreModeProvider { get; set; }
     private bool _isMuted;
     public bool IsMuted
     {
@@ -354,6 +355,7 @@ public sealed class StormDsEngineService : IDisposable
     /// </summary>
     public unsafe bool LoadState(int slotIndex)
     {
+        if (IsHardcoreModeProvider?.Invoke() == true) return false;
         string key = _activeRom?.GameCode ?? "FREEBIOS";
         string statePath = StormDsPlatformPaths.GetSaveStateFilePath(key, slotIndex);
         if (!File.Exists(statePath)) return false;
@@ -378,6 +380,7 @@ public sealed class StormDsEngineService : IDisposable
 
     public bool PushRewind()
     {
+        if (IsHardcoreModeProvider?.Invoke() == true) return false;
         lock (_engineLock)
         {
             if (StormDsNative.IsAvailable && _nativeHandle != nint.Zero)
@@ -390,6 +393,7 @@ public sealed class StormDsEngineService : IDisposable
 
     public bool PopRewind()
     {
+        if (IsHardcoreModeProvider?.Invoke() == true) return false;
         lock (_engineLock)
         {
             if (StormDsNative.IsAvailable && _nativeHandle != nint.Zero)

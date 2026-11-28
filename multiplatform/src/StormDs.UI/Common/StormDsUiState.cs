@@ -104,6 +104,7 @@ public sealed class StormDsUiState
         Slot2Service = new Slot2PeripheralService();
 
         SyncServicesFromConfig();
+        EngineService.IsHardcoreModeProvider = () => RetroAchievementsService.IsHardcoreMode;
         ProbeVulkanHardware();
 
         LibraryService.LibraryChanged += () =>
@@ -244,6 +245,29 @@ public sealed class StormDsUiState
             }
         }
         return new StormDsAppConfig();
+    }
+
+    public void SetHardcoreModeEnabled(bool enabled)
+    {
+        bool enabling = !AppConfig.RetroAchievementsHardcoreMode && enabled;
+        AppConfig.RetroAchievementsHardcoreMode = enabled;
+        RetroAchievementsService.IsHardcoreMode = enabled;
+        ApplyLiveCheats();
+        if (IsEmulationActive && enabling)
+        {
+            EngineService.Reset();
+        }
+        SaveConfig();
+        if (enabling)
+        {
+            NotifyStatus(IsEmulationActive
+                ? "Hardcore включён: консоль перезапущена, читы и оверклок отключены"
+                : "Hardcore режим включён");
+        }
+        else
+        {
+            NotifyStatus("Hardcore режим выключен (Casual)");
+        }
     }
 
     public void SaveConfig(bool notifyUser = false)

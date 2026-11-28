@@ -362,7 +362,7 @@ constexpr long long RC_CLIENT_PERF_WINDOW_ISOLATED_SPIKE_LOG_US_LIMIT = 50000;
 constexpr int RC_CLIENT_PERF_WINDOW_SLOW_FRAME_COUNT_LIMIT = 12;
 constexpr int RC_CLIENT_PERF_CONSECUTIVE_SLOW_WINDOWS_FOR_WARNING = 2;
 constexpr const char* RC_CLIENT_DEFAULT_IMAGE = "https://media.retroachievements.org/Images/000001.png";
-constexpr const char* RC_CLIENT_DEFAULT_USER_AGENT = "melonDualDS-android/0.7.0";
+constexpr const char* RC_CLIENT_DEFAULT_USER_AGENT = "STORM_DS/8.9.3 (Android) melonDS/1.0";
 constexpr int RC_CLIENT_HTTP_CONNECT_TIMEOUT_MS = 10000;
 constexpr int RC_CLIENT_HTTP_READ_TIMEOUT_MS = 15000;
 constexpr int RC_CLIENT_HTTP_QUEUE_CAPACITY = 16;
@@ -1881,17 +1881,17 @@ std::vector<long> RetroAchievementsManager::GetRuntimeSubsetIds()
     return subsetIds;
 }
 
-bool RetroAchievementsManager::AreSaveStatesAllowed()
+bool RetroAchievementsManager::IsHardcoreModeEnabled()
 {
     std::unique_lock lock(runtimeLock);
+    return runtimeBridgeConfig.has_value()
+        && runtimeBridgeConfig->hardcoreEnabled
+        && runtimeMode == RuntimeMode::RcClientOnline;
+}
 
-    if (!runtimeBridgeConfig.has_value() || !runtimeBridgeConfig->hardcoreEnabled)
-        return true;
-
-    if (runtimeMode != RuntimeMode::RcClientOnline)
-        return true;
-
-    return !IsRcClientRuntimeActiveLocked();
+bool RetroAchievementsManager::AreSaveStatesAllowed()
+{
+    return !IsHardcoreModeEnabled();
 }
 
 bool RetroAchievementsManager::DoSavestate(Savestate* savestate)
