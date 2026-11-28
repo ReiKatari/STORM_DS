@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -14,6 +15,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Storm.AuroraFluid.Kit.Icons;
 using Storm.AuroraFluid.Kit.Services;
 using StormDs.Core.Configuration;
@@ -48,15 +50,36 @@ public class DualScreenSessionView : Grid
 
     private readonly TouchControlsOverlay _touchControls;
     private readonly EmulationPauseOverlay _pauseOverlay;
-    private readonly DispatcherTimer _frameTimer;
-    private readonly Stopwatch _framePaceWatch = Stopwatch.StartNew();
-    private double _framePaceAccumulatorMs;
     private readonly Border _fpsHudOverlay;
     private readonly TextBlock _fpsHudText;
     private readonly Border _fsExitBanner;
     private bool _showFpsHud;
     private int _rotationDegrees;
     private readonly XInputGamepadService _gamepad = new();
+
+    private CancellationTokenSource? _workerCts;
+    private Task? _workerTask;
+    private readonly object _workerLifecycleLock = new();
+    private readonly SemaphoreSlim _workerRunGate = new(1, 1);
+    private readonly object _frameBufferLock = new();
+    private readonly object _postProcessLock = new();
+    private readonly object _inputLock = new();
+    private int _uiFramePending;
+    private bool _hasUiFrame;
+    private ScreenFilter _lastScreenFilter = StormDsUiState.Instance.AppConfig.ScreenFilter;
+    private bool _lastFrameGenEnabled = StormDsUiState.Instance.AppConfig.FrameGenEnabled;
+
+    private byte[] _workerOutTop = new byte[256 * 192 * 4];
+    private byte[] _workerOutBot = new byte[256 * 192 * 4];
+    private byte[] _sharedReadyTop = new byte[256 * 192 * 4];
+    private byte[] _sharedReadyBot = new byte[256 * 192 * 4];
+    private byte[] _uiReadTop = new byte[256 * 192 * 4];
+    private byte[] _uiReadBot = new byte[256 * 192 * 4];
+
+    private long _latestStatsFrame;
+    private double _latestStatsFps = 59.8;
+    private int _latestStatsBackend;
+    private long _lastHudUpdateFrame = -15;
 
     private DetachedTouchScreenWindow? _detachedWindow;
     private bool _screensSwapped;
@@ -187,17 +210,31 @@ public class DualScreenSessionView : Grid
         _topScreenImage = new Image { Stretch = Stretch.Uniform, Source = _topBitmap };
         _topScreenImage.PointerPressed += (s, e) =>
         {
+            if (StormDsUiState.Instance.IsPaused) return;
             if (_screensSwapped)
             {
-                _isTouchDown = true;
+                if (!e.GetCurrentPoint(_topScreenImage).Properties.IsLeftButtonPressed) return;
+                e.Pointer.Capture(_topScreenImage);
+                lock (_inputLock)
+                {
+                    _isTouchDown = true;
+                }
                 SendTouch(e.GetPosition(_topScreenImage), _topScreenImage);
             }
         };
         _topScreenImage.PointerMoved += (s, e) =>
         {
-            if (_isTouchDown && _screensSwapped) SendTouch(e.GetPosition(_topScreenImage), _topScreenImage);
+            if (StormDsUiState.Instance.IsPaused) return;
+            bool touchDown;
+            lock (_inputLock) { touchDown = _isTouchDown; }
+            if (touchDown && _screensSwapped) SendTouch(e.GetPosition(_topScreenImage), _topScreenImage);
         };
         _topScreenImage.PointerReleased += (s, e) =>
+        {
+            if (e.Pointer.Captured == _topScreenImage) e.Pointer.Capture(null);
+            if (_screensSwapped) HandleTouchRelease();
+        };
+        _topScreenImage.PointerCaptureLost += (s, e) =>
         {
             if (_screensSwapped) HandleTouchRelease();
         };
@@ -214,17 +251,31 @@ public class DualScreenSessionView : Grid
         _bottomScreenImage = new Image { Stretch = Stretch.Uniform, Source = _bottomBitmap };
         _bottomScreenImage.PointerPressed += (s, e) =>
         {
+            if (StormDsUiState.Instance.IsPaused) return;
             if (!_screensSwapped)
             {
-                _isTouchDown = true;
+                if (!e.GetCurrentPoint(_bottomScreenImage).Properties.IsLeftButtonPressed) return;
+                e.Pointer.Capture(_bottomScreenImage);
+                lock (_inputLock)
+                {
+                    _isTouchDown = true;
+                }
                 SendTouch(e.GetPosition(_bottomScreenImage), _bottomScreenImage);
             }
         };
         _bottomScreenImage.PointerMoved += (s, e) =>
         {
-            if (_isTouchDown && !_screensSwapped) SendTouch(e.GetPosition(_bottomScreenImage), _bottomScreenImage);
+            if (StormDsUiState.Instance.IsPaused) return;
+            bool touchDown;
+            lock (_inputLock) { touchDown = _isTouchDown; }
+            if (touchDown && !_screensSwapped) SendTouch(e.GetPosition(_bottomScreenImage), _bottomScreenImage);
         };
         _bottomScreenImage.PointerReleased += (s, e) =>
+        {
+            if (e.Pointer.Captured == _bottomScreenImage) e.Pointer.Capture(null);
+            if (!_screensSwapped) HandleTouchRelease();
+        };
+        _bottomScreenImage.PointerCaptureLost += (s, e) =>
         {
             if (!_screensSwapped) HandleTouchRelease();
         };
@@ -335,21 +386,29 @@ public class DualScreenSessionView : Grid
         Grid.SetRow(_pauseOverlay, 0);
         Grid.SetRowSpan(_pauseOverlay, 2);
 
-        _frameTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
-        _frameTimer.Tick += OnEmulationFrameTick;
-
         StormDsUiState.Instance.DisplayConfigChanged += RefreshDisplayConfig;
         StormDsUiState.Instance.FullscreenChanged += isFs =>
         {
             _quickBar.IsVisible = !isFs;
             if (!isFs) _fsExitBanner.IsVisible = false;
         };
-        StormDsUiState.Instance.EmulationStarted += UpdateTimerState;
+        StormDsUiState.Instance.EmulationStarted += () =>
+        {
+            ResetPostProcessBuffers();
+            Interlocked.Exchange(ref _frameCounter, 0);
+            Interlocked.Exchange(ref _latestStatsFrame, 0);
+            _lastHudUpdateFrame = -15;
+            lock (_frameBufferLock)
+            {
+                _hasUiFrame = false;
+            }
+            UpdateTimerState();
+        };
         StormDsUiState.Instance.EmulationStopped += () =>
         {
             UpdateTimerState();
-            _keyboardButtonsMask = 0;
-            _isTouchDown = false;
+            ResetPostProcessBuffers();
+            ClearActiveInputsAndPush();
             if (_detachedWindow != null)
             {
                 _detachedWindow.Close();
@@ -360,33 +419,101 @@ public class DualScreenSessionView : Grid
         StormDsUiState.Instance.HiddenToTrayChanged += _ => UpdateTimerState();
         StormDsUiState.Instance.StateChanged += UpdateTimerState;
 
+        DetachedFromVisualTree += (_, _) => StopWorkerLoop();
+
         KeyDown += HandleKeyDown;
         KeyUp += HandleKeyUp;
-        LostFocus += (_, _) =>
-        {
-            _keyboardButtonsMask = 0;
-            _isTouchDown = false;
-            PushCombinedInput();
-        };
+        LostFocus += (_, _) => ClearActiveInputsAndPush();
 
         RefreshDisplayConfig();
         UpdateTimerState();
     }
 
+    public void ResetPostProcessBuffers()
+    {
+        lock (_postProcessLock)
+        {
+            _hasPrevFrame = false;
+            _prevTopBgra = null;
+            _prevBotBgra = null;
+            _currTopBgra = null;
+            _currBotBgra = null;
+            _histTopBgra = null;
+            _histBotBgra = null;
+            Array.Clear(_postTopBgra);
+            Array.Clear(_postBotBgra);
+            Array.Clear(_interpTopBgra);
+            Array.Clear(_interpBotBgra);
+        }
+    }
+
+    private void ClearActiveInputsAndPush()
+    {
+        lock (_inputLock)
+        {
+            _keyboardButtonsMask = 0;
+            _isTouchDown = false;
+            _lastTouchX = 0;
+            _lastTouchY = 0;
+        }
+        PushCombinedInput();
+    }
+
     private void UpdateTimerState()
     {
-        bool shouldRun = StormDsUiState.Instance.IsEmulationActive &&
-                         !StormDsUiState.Instance.IsPaused &&
-                         !StormDsUiState.Instance.IsHiddenToTray;
-        if (shouldRun && !_frameTimer.IsEnabled)
+        if (!Dispatcher.UIThread.CheckAccess())
         {
-            _framePaceWatch.Restart();
-            _framePaceAccumulatorMs = 0;
-            _frameTimer.Start();
+            Dispatcher.UIThread.Post(UpdateTimerState);
+            return;
         }
-        else if (!shouldRun && _frameTimer.IsEnabled)
+
+        bool active = StormDsUiState.Instance.IsEmulationActive;
+        bool paused = StormDsUiState.Instance.IsPaused;
+        bool hidden = StormDsUiState.Instance.IsHiddenToTray;
+
+        _pauseOverlay.IsVisible = active && paused;
+
+        if (paused || !active)
         {
-            _frameTimer.Stop();
+            ClearActiveInputsAndPush();
+        }
+
+        bool shouldRun = active && !paused && !hidden;
+        if (shouldRun)
+        {
+            StartWorkerLoop();
+        }
+        else
+        {
+            StopWorkerLoop();
+        }
+    }
+
+    private void StartWorkerLoop()
+    {
+        lock (_workerLifecycleLock)
+        {
+            if (_workerTask != null && !_workerTask.IsCompleted) return;
+            _workerCts?.Dispose();
+            _workerCts = new CancellationTokenSource();
+            var ct = _workerCts.Token;
+            _workerTask = Task.Run(() => EmulationWorkerLoop(ct), ct);
+        }
+    }
+
+    private void StopWorkerLoop()
+    {
+        CancellationTokenSource? cts;
+        lock (_workerLifecycleLock)
+        {
+            cts = _workerCts;
+            _workerCts = null;
+            _workerTask = null;
+        }
+        if (cts != null)
+        {
+            try { cts.Cancel(); } catch (ObjectDisposedException) { }
+            cts.Dispose();
         }
     }
 
@@ -484,9 +611,8 @@ public class DualScreenSessionView : Grid
 
     private void TogglePauseMenu()
     {
-        _pauseOverlay.IsVisible = !_pauseOverlay.IsVisible;
         StormDsUiState.Instance.TogglePause();
-        if (!_pauseOverlay.IsVisible)
+        if (!StormDsUiState.Instance.IsPaused)
         {
             Focus();
         }
@@ -495,9 +621,15 @@ public class DualScreenSessionView : Grid
     private void RefreshDisplayConfig()
     {
         var cfg = StormDsUiState.Instance.AppConfig;
+        if (cfg.ScreenFilter != _lastScreenFilter || cfg.FrameGenEnabled != _lastFrameGenEnabled)
+        {
+            _lastScreenFilter = cfg.ScreenFilter;
+            _lastFrameGenEnabled = cfg.FrameGenEnabled;
+            ResetPostProcessBuffers();
+        }
+
         _touchControls.IsVisible = OperatingSystem.IsAndroid() || cfg.ShowTouchOverlayOnDesktop;
         _touchControls.ApplyConfig(cfg);
-        _frameTimer.Interval = cfg.FrameGenEnabled ? TimeSpan.FromMilliseconds(8) : TimeSpan.FromMilliseconds(16);
 
         var interp = cfg.ScreenFilter switch
         {
@@ -670,73 +802,202 @@ public class DualScreenSessionView : Grid
         Canvas.SetTop(container, top);
     }
 
-    private void OnEmulationFrameTick(object? sender, EventArgs e)
+    private async Task EmulationWorkerLoop(CancellationToken ct)
     {
-        if (!StormDsUiState.Instance.IsEmulationActive ||
-            StormDsUiState.Instance.IsPaused ||
-            StormDsUiState.Instance.IsHiddenToTray)
+        await _workerRunGate.WaitAsync(ct).ConfigureAwait(false);
+        try
         {
-            return;
-        }
+            const double TargetFrameMs = 1000.0 / 59.8261;
+            var paceWatch = Stopwatch.StartNew();
+            var workWatch = new Stopwatch();
+            double accumulatorMs = 0;
 
-        const double TargetFrameMs = 1000.0 / 59.8261;
-        double elapsed = _framePaceWatch.Elapsed.TotalMilliseconds;
-        _framePaceWatch.Restart();
-        _framePaceAccumulatorMs = Math.Min(_framePaceAccumulatorMs + elapsed, TargetFrameMs * 2.5);
-
-        int steps;
-        if (StormDsUiState.Instance.IsFastForward)
-        {
-            steps = 3;
-            _framePaceAccumulatorMs = 0;
-        }
-        else
-        {
-            steps = 0;
-            while (_framePaceAccumulatorMs >= TargetFrameMs && steps < 2)
+            while (!ct.IsCancellationRequested)
             {
-                _framePaceAccumulatorMs -= TargetFrameMs;
-                steps++;
-            }
-            if (steps == 0)
-            {
-                if (StormDsUiState.Instance.AppConfig.FrameGenEnabled && _hasPrevFrame)
+                if (!StormDsUiState.Instance.IsEmulationActive ||
+                    StormDsUiState.Instance.IsPaused ||
+                    StormDsUiState.Instance.IsHiddenToTray)
                 {
-                    PresentInterpolatedDesktopFrame();
+                    break;
                 }
-                return;
+
+                var cfg = StormDsUiState.Instance.AppConfig;
+                int paceMs = cfg.FrameGenEnabled ? 8 : 16;
+
+                workWatch.Restart();
+                double elapsed = paceWatch.Elapsed.TotalMilliseconds;
+                paceWatch.Restart();
+                accumulatorMs = Math.Min(accumulatorMs + elapsed, TargetFrameMs * 2.5);
+
+                int steps;
+                if (StormDsUiState.Instance.IsFastForward)
+                {
+                    steps = 3;
+                    accumulatorMs = 0;
+                }
+                else
+                {
+                    steps = 0;
+                    while (accumulatorMs >= TargetFrameMs && steps < 2)
+                    {
+                        accumulatorMs -= TargetFrameMs;
+                        steps++;
+                    }
+                }
+
+                if (steps == 0)
+                {
+                    bool didInterp = false;
+                    if (cfg.FrameGenEnabled)
+                    {
+                        lock (_postProcessLock)
+                        {
+                            if (_hasPrevFrame && _prevTopBgra != null && _currTopBgra != null && _prevBotBgra != null && _currBotBgra != null)
+                            {
+                                InterpolateFrameBgra(_prevTopBgra, _currTopBgra, _workerOutTop);
+                                InterpolateFrameBgra(_prevBotBgra, _currBotBgra, _workerOutBot);
+                                didInterp = true;
+                            }
+                        }
+                    }
+
+                    if (didInterp)
+                    {
+                        PublishWorkerFrameToUi();
+                    }
+                }
+                else
+                {
+                    uint padMask = _gamepad.PollNdsButtonMask();
+                    lock (_inputLock)
+                    {
+                        _gamepadButtonsMask = padMask;
+                    }
+                    PushCombinedInput();
+
+                    var eng = StormDsUiState.Instance.EngineService;
+                    StormDsCoreStatsLoop(eng, steps);
+                    ProcessAndPublishEngineFrame(eng, cfg);
+                }
+
+                int delayMs = Math.Max(1, paceMs - (int)workWatch.ElapsedMilliseconds);
+                try
+                {
+                    await Task.Delay(delayMs, ct).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
             }
         }
-
-        _gamepadButtonsMask = _gamepad.PollNdsButtonMask();
-        PushCombinedInput();
-
-        var eng = StormDsUiState.Instance.EngineService;
-        StormDsCoreStatsLoop(eng, steps);
-        RefreshRenderedBitmaps();
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            _workerRunGate.Release();
+        }
     }
 
     private void StormDsCoreStatsLoop(Core.Engine.StormDsEngineService eng, int steps)
     {
         Core.Native.StormDsFrameStats stats = default;
+        long frame = 0;
         for (int i = 0; i < steps; i++)
         {
-            _frameCounter++;
+            frame = Interlocked.Increment(ref _frameCounter);
             bool playAudio = (i == steps - 1);
             stats = eng.RunFrame(playAudio);
-            if (_frameCounter % 30 == 0 &&
+            if (frame % 30 == 0 &&
                 StormDsUiState.Instance.RetroAchievementsService.IsFeatureAllowedInCurrentMode("rewind"))
             {
                 eng.PushRewind();
             }
         }
         StormDsUiState.Instance.LastFrameStats = stats;
+        _latestStatsFps = stats.Fps;
+        _latestStatsBackend = stats.ActiveBackend;
+        Interlocked.Exchange(ref _latestStatsFrame, frame);
+    }
 
-        if (_frameCounter % 15 == 0)
+    private void ProcessAndPublishEngineFrame(Core.Engine.StormDsEngineService eng, StormDsAppConfig cfg)
+    {
+        const int expectedBytes = 256 * 192 * 4;
+        long frame = Interlocked.Read(ref _frameCounter);
+        var rawTop = eng.HasLiveNativeFrame ? eng.TopFrameBgra : BitmapHelper.GenerateTestScreenBgra(256, 192, false, "STORM DS TOP", frame);
+        var rawBot = eng.HasLiveNativeFrame ? eng.BottomFrameBgra : BitmapHelper.GenerateTestScreenBgra(256, 192, true, "STORM DS TOUCH", frame);
+
+        lock (_postProcessLock)
         {
+            var topBgra = ApplyDesktopFsrFilter(rawTop, _postTopBgra, ref _histTopBgra, cfg);
+            var botBgra = ApplyDesktopFsrFilter(rawBot, _postBotBgra, ref _histBotBgra, cfg);
+
+            if (cfg.FrameGenEnabled && topBgra.Length >= expectedBytes && botBgra.Length >= expectedBytes)
+            {
+                if (_currTopBgra != null && _currBotBgra != null)
+                {
+                    _prevTopBgra ??= new byte[expectedBytes];
+                    _prevBotBgra ??= new byte[expectedBytes];
+                    Buffer.BlockCopy(_currTopBgra, 0, _prevTopBgra, 0, expectedBytes);
+                    Buffer.BlockCopy(_currBotBgra, 0, _prevBotBgra, 0, expectedBytes);
+                    _hasPrevFrame = true;
+                }
+                _currTopBgra ??= new byte[expectedBytes];
+                _currBotBgra ??= new byte[expectedBytes];
+                Buffer.BlockCopy(topBgra, 0, _currTopBgra, 0, expectedBytes);
+                Buffer.BlockCopy(botBgra, 0, _currBotBgra, 0, expectedBytes);
+            }
+            else
+            {
+                _hasPrevFrame = false;
+            }
+
+            Buffer.BlockCopy(topBgra, 0, _workerOutTop, 0, expectedBytes);
+            Buffer.BlockCopy(botBgra, 0, _workerOutBot, 0, expectedBytes);
+        }
+
+        PublishWorkerFrameToUi();
+    }
+
+    private void PublishWorkerFrameToUi()
+    {
+        lock (_frameBufferLock)
+        {
+            (_workerOutTop, _sharedReadyTop) = (_sharedReadyTop, _workerOutTop);
+            (_workerOutBot, _sharedReadyBot) = (_sharedReadyBot, _workerOutBot);
+        }
+
+        if (Interlocked.CompareExchange(ref _uiFramePending, 1, 0) == 0)
+        {
+            Dispatcher.UIThread.Post(PresentReadyFrameOnUiThread, DispatcherPriority.Render);
+        }
+    }
+
+    private void PresentReadyFrameOnUiThread()
+    {
+        Interlocked.Exchange(ref _uiFramePending, 0);
+        if (!StormDsUiState.Instance.IsEmulationActive || StormDsUiState.Instance.IsHiddenToTray)
+        {
+            return;
+        }
+
+        lock (_frameBufferLock)
+        {
+            (_sharedReadyTop, _uiReadTop) = (_uiReadTop, _sharedReadyTop);
+            (_sharedReadyBot, _uiReadBot) = (_uiReadBot, _sharedReadyBot);
+            _hasUiFrame = true;
+        }
+
+        PresentBgraPair(_uiReadTop, _uiReadBot);
+
+        long frameNow = Interlocked.Read(ref _latestStatsFrame);
+        if (frameNow - _lastHudUpdateFrame >= 15)
+        {
+            _lastHudUpdateFrame = frameNow;
             string resTag = $"{(int)_topScreenContainer.Width}x{(int)_topScreenContainer.Height}";
-            string backendTag = stats.ActiveBackend == 1 ? "VK" : "SW";
-            double fpsVal = stats.Fps > 0.1 ? stats.Fps : 59.8;
+            string backendTag = _latestStatsBackend == 1 ? "VK" : "SW";
+            double fpsVal = _latestStatsFps > 0.1 ? _latestStatsFps : 59.8;
             _statsBadgeText.Text = $"{fpsVal:0.0} FPS | {backendTag} | {resTag}";
             if (_showFpsHud)
             {
@@ -749,33 +1010,54 @@ public class DualScreenSessionView : Grid
     {
         var eng = StormDsUiState.Instance.EngineService;
         var cfg = StormDsUiState.Instance.AppConfig;
-        var rawTop = eng.HasLiveNativeFrame ? eng.TopFrameBgra : BitmapHelper.GenerateTestScreenBgra(256, 192, false, "STORM DS TOP", _frameCounter);
-        var rawBot = eng.HasLiveNativeFrame ? eng.BottomFrameBgra : BitmapHelper.GenerateTestScreenBgra(256, 192, true, "STORM DS TOUCH", _frameCounter);
+        const int expectedBytes = 256 * 192 * 4;
+        long frame = Interlocked.Read(ref _frameCounter);
+        var rawTop = eng.HasLiveNativeFrame ? eng.TopFrameBgra : BitmapHelper.GenerateTestScreenBgra(256, 192, false, "STORM DS TOP", frame);
+        var rawBot = eng.HasLiveNativeFrame ? eng.BottomFrameBgra : BitmapHelper.GenerateTestScreenBgra(256, 192, true, "STORM DS TOUCH", frame);
 
-        var topBgra = ApplyDesktopFsrFilter(rawTop, _postTopBgra, ref _histTopBgra, cfg);
-        var botBgra = ApplyDesktopFsrFilter(rawBot, _postBotBgra, ref _histBotBgra, cfg);
-
-        if (cfg.FrameGenEnabled && topBgra.Length >= 256 * 192 * 4 && botBgra.Length >= 256 * 192 * 4)
+        lock (_postProcessLock)
         {
-            if (_currTopBgra != null && _currBotBgra != null)
+            var topBgra = ApplyDesktopFsrFilter(rawTop, _postTopBgra, ref _histTopBgra, cfg);
+            var botBgra = ApplyDesktopFsrFilter(rawBot, _postBotBgra, ref _histBotBgra, cfg);
+
+            lock (_frameBufferLock)
             {
-                _prevTopBgra ??= new byte[256 * 192 * 4];
-                _prevBotBgra ??= new byte[256 * 192 * 4];
-                Buffer.BlockCopy(_currTopBgra, 0, _prevTopBgra, 0, 256 * 192 * 4);
-                Buffer.BlockCopy(_currBotBgra, 0, _prevBotBgra, 0, 256 * 192 * 4);
-                _hasPrevFrame = true;
+                Buffer.BlockCopy(topBgra, 0, _uiReadTop, 0, expectedBytes);
+                Buffer.BlockCopy(botBgra, 0, _uiReadBot, 0, expectedBytes);
+                _hasUiFrame = true;
             }
-            _currTopBgra ??= new byte[256 * 192 * 4];
-            _currBotBgra ??= new byte[256 * 192 * 4];
-            Buffer.BlockCopy(topBgra, 0, _currTopBgra, 0, 256 * 192 * 4);
-            Buffer.BlockCopy(botBgra, 0, _currBotBgra, 0, 256 * 192 * 4);
-        }
-        else
-        {
-            _hasPrevFrame = false;
         }
 
-        PresentBgraPair(topBgra, botBgra);
+        PresentBgraPair(_uiReadTop, _uiReadBot);
+    }
+
+    private void PresentCachedFrameWithoutHistoryMutation()
+    {
+        bool hasCached;
+        lock (_frameBufferLock)
+        {
+            hasCached = _hasUiFrame;
+        }
+        if (hasCached)
+        {
+            PresentBgraPair(_uiReadTop, _uiReadBot);
+            return;
+        }
+
+        var eng = StormDsUiState.Instance.EngineService;
+        const int expectedBytes = 256 * 192 * 4;
+        long frame = Interlocked.Read(ref _frameCounter);
+        var rawTop = eng.HasLiveNativeFrame ? eng.TopFrameBgra : BitmapHelper.GenerateTestScreenBgra(256, 192, false, "STORM DS TOP", frame);
+        var rawBot = eng.HasLiveNativeFrame ? eng.BottomFrameBgra : BitmapHelper.GenerateTestScreenBgra(256, 192, true, "STORM DS TOUCH", frame);
+
+        lock (_frameBufferLock)
+        {
+            Buffer.BlockCopy(rawTop, 0, _uiReadTop, 0, Math.Min(rawTop.Length, expectedBytes));
+            Buffer.BlockCopy(rawBot, 0, _uiReadBot, 0, Math.Min(rawBot.Length, expectedBytes));
+            _hasUiFrame = true;
+        }
+
+        PresentBgraPair(_uiReadTop, _uiReadBot);
     }
 
     private void PresentBgraPair(byte[] topBgra, byte[] botBgra)
@@ -791,30 +1073,28 @@ public class DualScreenSessionView : Grid
             BitmapHelper.UpdateBgraBitmap(_bottomBitmap, topBgra, 256, 192);
         }
 
-        _topScreenImage.Source = _topBitmap;
+        if (!ReferenceEquals(_topScreenImage.Source, _topBitmap))
+        {
+            _topScreenImage.Source = _topBitmap;
+        }
         _topScreenImage.InvalidateVisual();
 
         if (_detachedWindow != null)
         {
-            _detachedWindow.ScreenImage.Source = _bottomBitmap;
+            if (!ReferenceEquals(_detachedWindow.ScreenImage.Source, _bottomBitmap))
+            {
+                _detachedWindow.ScreenImage.Source = _bottomBitmap;
+            }
             _detachedWindow.ScreenImage.InvalidateVisual();
         }
         else
         {
-            _bottomScreenImage.Source = _bottomBitmap;
+            if (!ReferenceEquals(_bottomScreenImage.Source, _bottomBitmap))
+            {
+                _bottomScreenImage.Source = _bottomBitmap;
+            }
             _bottomScreenImage.InvalidateVisual();
         }
-    }
-
-    private void PresentInterpolatedDesktopFrame()
-    {
-        if (!_hasPrevFrame || _prevTopBgra == null || _currTopBgra == null || _prevBotBgra == null || _currBotBgra == null)
-        {
-            return;
-        }
-        InterpolateFrameBgra(_prevTopBgra, _currTopBgra, _interpTopBgra);
-        InterpolateFrameBgra(_prevBotBgra, _currBotBgra, _interpBotBgra);
-        PresentBgraPair(_interpTopBgra, _interpBotBgra);
     }
 
     private static byte[] ApplyDesktopFsrFilter(byte[] src, byte[] dst, ref byte[]? history, Core.Configuration.StormDsAppConfig cfg)
@@ -918,7 +1198,7 @@ public class DualScreenSessionView : Grid
     {
         _screensSwapped = !_screensSwapped;
         AuroraTactileFeedbackService.Instance.PlayTabWhoosh();
-        RefreshRenderedBitmaps();
+        PresentCachedFrameWithoutHistoryMutation();
     }
 
     private void ToggleDetachScreen()
@@ -935,18 +1215,25 @@ public class DualScreenSessionView : Grid
                         StormDsUiState.Instance.AppConfig.ScreenLayoutMode = ScreenLayoutMode.VerticalClassic;
                     }
                     RefreshDisplayConfig();
+                    PresentCachedFrameWithoutHistoryMutation();
                 },
                 onTouchInput: (tx, ty, down) =>
                 {
-                    _isTouchDown = down;
-                    _lastTouchX = tx;
-                    _lastTouchY = ty;
+                    lock (_inputLock)
+                    {
+                        _isTouchDown = down;
+                        _lastTouchX = tx;
+                        _lastTouchY = ty;
+                    }
                     PushCombinedInput();
                 },
-                canAcceptTouch: () => true);
+                canAcceptTouch: () => !StormDsUiState.Instance.IsPaused);
+            _detachedWindow.ScreenImage.Source = _bottomBitmap;
+            _detachedWindow.ScreenImage.InvalidateVisual();
             _detachedWindow.Show();
             StormDsUiState.Instance.IsDetachedScreenActive = true;
             RefreshDisplayConfig();
+            PresentCachedFrameWithoutHistoryMutation();
         }
         else
         {
@@ -956,8 +1243,10 @@ public class DualScreenSessionView : Grid
 
     private void ResumeFromPause()
     {
-        _pauseOverlay.IsVisible = false;
-        StormDsUiState.Instance.TogglePause();
+        if (StormDsUiState.Instance.IsPaused)
+        {
+            StormDsUiState.Instance.TogglePause();
+        }
         Focus();
     }
 
@@ -979,6 +1268,7 @@ public class DualScreenSessionView : Grid
         AuroraTactileFeedbackService.Instance.PlayClick();
         if (ok)
         {
+            ResetPostProcessBuffers();
             RefreshRenderedBitmaps();
             StormDsUiState.Instance.NotifyStatus($"Состояние загружено из слота {slot + 1}");
         }
@@ -997,6 +1287,7 @@ public class DualScreenSessionView : Grid
         }
         if (StormDsUiState.Instance.EngineService.PopRewind())
         {
+            ResetPostProcessBuffers();
             RefreshRenderedBitmaps();
             StormDsUiState.Instance.NotifyStatus("Выполнена перемотка назад");
         }
@@ -1065,9 +1356,12 @@ public class DualScreenSessionView : Grid
 
     private void HandleTouchRelease()
     {
-        _isTouchDown = false;
-        _lastTouchX = 0;
-        _lastTouchY = 0;
+        lock (_inputLock)
+        {
+            _isTouchDown = false;
+            _lastTouchX = 0;
+            _lastTouchY = 0;
+        }
         PushCombinedInput();
     }
 
@@ -1076,16 +1370,38 @@ public class DualScreenSessionView : Grid
         var b = targetImage.Bounds;
         if (b.Width <= 0 || b.Height <= 0) return;
 
-        _lastTouchX = (ushort)(Math.Clamp(p.X / b.Width, 0.0, 1.0) * 255.0);
-        _lastTouchY = (ushort)(Math.Clamp(p.Y / b.Height, 0.0, 1.0) * 191.0);
+        ushort tx = (ushort)(Math.Clamp(p.X / b.Width, 0.0, 1.0) * 255.0);
+        ushort ty = (ushort)(Math.Clamp(p.Y / b.Height, 0.0, 1.0) * 191.0);
+        lock (_inputLock)
+        {
+            _lastTouchX = tx;
+            _lastTouchY = ty;
+        }
         PushCombinedInput();
     }
 
-    private uint GetMergedButtonsMask() => _keyboardButtonsMask | _touchControls.CurrentButtonsMask | _gamepadButtonsMask;
+    private uint GetMergedButtonsMask()
+    {
+        lock (_inputLock)
+        {
+            return _keyboardButtonsMask | _touchControls.CurrentButtonsMask | _gamepadButtonsMask;
+        }
+    }
 
     private void PushCombinedInput()
     {
-        StormDsUiState.Instance.EngineService.SetInput(GetMergedButtonsMask(), _lastTouchX, _lastTouchY, _isTouchDown);
+        uint buttons;
+        ushort tx;
+        ushort ty;
+        bool touchDown;
+        lock (_inputLock)
+        {
+            buttons = _keyboardButtonsMask | _touchControls.CurrentButtonsMask | _gamepadButtonsMask;
+            tx = _lastTouchX;
+            ty = _lastTouchY;
+            touchDown = _isTouchDown;
+        }
+        StormDsUiState.Instance.EngineService.SetInput(buttons, tx, ty, touchDown);
     }
 
     private static bool MatchesHotkey(Key pressed, string actionName)
@@ -1100,10 +1416,20 @@ public class DualScreenSessionView : Grid
 
     private void HandleKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Escape)
+        if (this.FindAncestorOfType<StormDsMainView>() is { IsModalOpen: true })
+        {
+            return;
+        }
+
+        if (e.Key == Key.Escape || MatchesHotkey(e.Key, "PauseResume"))
         {
             TogglePauseMenu();
             e.Handled = true;
+            return;
+        }
+
+        if (StormDsUiState.Instance.IsPaused)
+        {
             return;
         }
 
@@ -1149,6 +1475,8 @@ public class DualScreenSessionView : Grid
         if (MatchesHotkey(e.Key, "Reset") || e.Key == Key.F9)
         {
             StormDsUiState.Instance.EngineService.Reset();
+            ResetPostProcessBuffers();
+            RefreshRenderedBitmaps();
             StormDsUiState.Instance.NotifyStatus("Консоль перезагружена");
             e.Handled = true;
             return;
@@ -1296,7 +1624,10 @@ public class DualScreenSessionView : Grid
         uint bit = MapKeyToBit(e.Key);
         if (bit != 0)
         {
-            _keyboardButtonsMask |= bit;
+            lock (_inputLock)
+            {
+                _keyboardButtonsMask |= bit;
+            }
             PushCombinedInput();
             e.Handled = true;
         }
@@ -1307,7 +1638,10 @@ public class DualScreenSessionView : Grid
         uint bit = MapKeyToBit(e.Key);
         if (bit != 0)
         {
-            _keyboardButtonsMask &= ~bit;
+            lock (_inputLock)
+            {
+                _keyboardButtonsMask &= ~bit;
+            }
             PushCombinedInput();
             e.Handled = true;
         }

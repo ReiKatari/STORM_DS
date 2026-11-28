@@ -20,12 +20,14 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.LinearProgressIndicator
+import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -36,6 +38,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SystemUpdateAlt
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,6 +48,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -64,6 +68,8 @@ fun StormGamesWorldScreen(
     selectedTab: SgwStoreTab,
     searchQuery: String,
     downloadProgress: SgwDownloadProgress?,
+    isBusy: Boolean = downloadProgress != null,
+    highlightedRomUri: String? = null,
     lastReplaceResult: SgwReplaceResult?,
     onBack: () -> Unit,
     onSelectTab: (SgwStoreTab) -> Unit,
@@ -279,20 +285,39 @@ fun StormGamesWorldScreen(
                     q.isBlank() || it.localRom.name.lowercase().contains(q) || it.remoteEntry.title.lowercase().contains(q)
                 }
                 if (filtered.isEmpty()) {
-                    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = snapshot.errorMessage ?: stringResource(R.string.sgw_no_updates_found),
-                            color = colors.text2,
-                            fontSize = 14.sp,
-                        )
+                    val hasCatalogError = snapshot.updates.isEmpty() && snapshot.errorMessage != null
+                    val message = when {
+                        q.isNotBlank() -> stringResource(R.string.no_roms_found)
+                        hasCatalogError -> snapshot.errorMessage.orEmpty()
+                        else -> stringResource(R.string.sgw_no_updates_found)
                     }
+                    SgwEmptyState(
+                        message = message,
+                        showRetry = q.isBlank() && hasCatalogError,
+                        isLoading = isLoading,
+                        onRetry = onRefresh,
+                    )
                 } else {
+                    val listState = rememberLazyListState()
+                    LaunchedEffect(highlightedRomUri, filtered) {
+                        val targetUri = highlightedRomUri ?: return@LaunchedEffect
+                        val idx = filtered.indexOfFirst { it.localRom.uri.toString() == targetUri }
+                        if (idx >= 0) {
+                            listState.animateScrollToItem(idx)
+                        }
+                    }
                     LazyColumn(
+                        state = listState,
                         contentPadding = PaddingValues(14.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         items(filtered, key = { it.localRom.uri.toString() }) { candidate ->
-                            SgwUpdateCard(candidate = candidate, busy = downloadProgress != null, onUpdate = { onUpdateRom(candidate) })
+                            SgwUpdateCard(
+                                candidate = candidate,
+                                busy = isBusy,
+                                highlighted = highlightedRomUri != null && candidate.localRom.uri.toString() == highlightedRomUri,
+                                onUpdate = { onUpdateRom(candidate) },
+                            )
                         }
                     }
                 }
@@ -306,22 +331,71 @@ fun StormGamesWorldScreen(
                 }
                 val filtered = rawList.filter { q.isBlank() || it.title.lowercase().contains(q) }
                 if (filtered.isEmpty()) {
-                    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = snapshot.errorMessage ?: stringResource(R.string.sgw_empty_catalog),
-                            color = colors.text2,
-                            fontSize = 14.sp,
-                        )
+                    val isSearchEmpty = rawList.isNotEmpty() && q.isNotBlank()
+                    val hasCatalogError = rawList.isEmpty() && snapshot.errorMessage != null
+                    val message = when {
+                        isSearchEmpty -> stringResource(R.string.no_roms_found)
+                        hasCatalogError -> snapshot.errorMessage.orEmpty()
+                        q.isNotBlank() -> stringResource(R.string.no_roms_found)
+                        else -> stringResource(R.string.sgw_empty_catalog)
                     }
+                    SgwEmptyState(
+                        message = message,
+                        showRetry = rawList.isEmpty(),
+                        isLoading = isLoading,
+                        onRetry = onRefresh,
+                    )
                 } else {
                     LazyColumn(
                         contentPadding = PaddingValues(14.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         items(filtered, key = { "${it.sourceKind}_${it.platform.platformId}_${it.id}" }) { entry ->
-                            SgwCatalogCard(entry = entry, busy = downloadProgress != null, onDownload = { onDownloadEntry(entry) })
+                            SgwCatalogCard(entry = entry, busy = isBusy, onDownload = { onDownloadEntry(entry) })
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SgwEmptyState(
+    message: String,
+    showRetry: Boolean,
+    isLoading: Boolean,
+    onRetry: () -> Unit,
+) {
+    val colors = watermelon
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = message,
+                color = colors.text2,
+                fontSize = 14.sp,
+                textAlign = TextAlign.Center,
+            )
+            if (showRetry) {
+                Spacer(Modifier.height(14.dp))
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isLoading) colors.surface3 else colors.red)
+                        .clickable(enabled = !isLoading, onClick = onRetry)
+                        .padding(horizontal = 18.dp, vertical = 9.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.retry),
+                        color = androidx.compose.ui.graphics.Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                    )
                 }
             }
         }
@@ -392,6 +466,7 @@ private fun SgwCatalogCard(
 private fun SgwUpdateCard(
     candidate: SgwUpdateCandidate,
     busy: Boolean,
+    highlighted: Boolean = false,
     onUpdate: () -> Unit,
 ) {
     val colors = watermelon
@@ -404,8 +479,8 @@ private fun SgwUpdateCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(colors.surface)
-            .border(1.dp, colors.green, RoundedCornerShape(12.dp))
+            .background(if (highlighted) colors.greenDim else colors.surface)
+            .border(if (highlighted) 2.dp else 1.dp, colors.green, RoundedCornerShape(12.dp))
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -414,7 +489,8 @@ private fun SgwUpdateCard(
         Column(modifier = Modifier.weight(1f)) {
             Text(candidate.localRom.name, color = colors.text, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(reasonText, color = colors.green, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
-            val verText = "${candidate.localVersion ?: "1.0"} -> ${candidate.remoteEntry.version} (${candidate.remoteEntry.platform.label})"
+            val remoteVer = candidate.remoteEntry.version.ifBlank { "1.0" }
+            val verText = "${candidate.localVersion ?: "1.0"} -> $remoteVer (${candidate.remoteEntry.platform.label})"
             Text(verText, color = colors.text2, fontSize = 11.sp)
         }
         Spacer(Modifier.width(8.dp))
@@ -427,7 +503,7 @@ private fun SgwUpdateCard(
         ) {
             Text(
                 text = stringResource(R.string.sgw_update_replace_action),
-                color = androidx.compose.ui.graphics.Color.Black,
+                color = MaterialTheme.colors.onPrimary,
                 fontWeight = FontWeight.Bold,
                 fontSize = 12.sp,
             )

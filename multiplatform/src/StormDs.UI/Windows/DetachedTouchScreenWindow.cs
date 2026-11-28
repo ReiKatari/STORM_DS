@@ -154,20 +154,7 @@ public class DetachedTouchScreenWindow : Window
         };
         ApplyVisualOptions();
 
-        _screenImage.PointerPressed += (s, e) =>
-        {
-            if (_canAcceptTouch != null && !_canAcceptTouch()) return;
-            _isTouchDown = true;
-            SendTouch(e.GetPosition(_screenImage));
-        };
-        _screenImage.PointerMoved += (s, e) =>
-        {
-            if (_isTouchDown && (_canAcceptTouch == null || _canAcceptTouch()))
-            {
-                SendTouch(e.GetPosition(_screenImage));
-            }
-        };
-        _screenImage.PointerReleased += (s, e) =>
+        void ReleaseTouch()
         {
             if (!_isTouchDown) return;
             _isTouchDown = false;
@@ -179,7 +166,29 @@ public class DetachedTouchScreenWindow : Window
             {
                 StormDsUiState.Instance.EngineService.SetInput(0, 0, 0, false);
             }
+        }
+
+        _screenImage.PointerPressed += (s, e) =>
+        {
+            if (_canAcceptTouch != null && !_canAcceptTouch()) return;
+            if (!e.GetCurrentPoint(_screenImage).Properties.IsLeftButtonPressed) return;
+            _isTouchDown = true;
+            e.Pointer.Capture(_screenImage);
+            SendTouch(e.GetPosition(_screenImage));
         };
+        _screenImage.PointerMoved += (s, e) =>
+        {
+            if (_isTouchDown && (_canAcceptTouch == null || _canAcceptTouch()))
+            {
+                SendTouch(e.GetPosition(_screenImage));
+            }
+        };
+        _screenImage.PointerReleased += (s, e) =>
+        {
+            if (e.Pointer.Captured == _screenImage) e.Pointer.Capture(null);
+            ReleaseTouch();
+        };
+        _screenImage.PointerCaptureLost += (s, e) => ReleaseTouch();
 
         _screenContainer.Child = _screenImage;
         _canvas.Children.Add(_screenContainer);
@@ -200,6 +209,7 @@ public class DetachedTouchScreenWindow : Window
         Content = rootGrid;
         Closing += (_, _) =>
         {
+            ReleaseTouch();
             StormDsUiState.Instance.DisplayConfigChanged -= ApplyVisualOptionsAndLayout;
             StormDsUiState.Instance.IsDetachedScreenActive = false;
             if (!_reattachInvoked)

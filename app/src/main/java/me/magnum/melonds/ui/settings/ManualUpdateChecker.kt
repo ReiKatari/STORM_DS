@@ -31,6 +31,7 @@ import me.magnum.melonds.domain.model.DownloadProgress
 import me.magnum.melonds.domain.model.Version
 import me.magnum.melonds.domain.model.appupdate.AppUpdate
 import me.magnum.melonds.domain.model.appupdate.UpdateSourceOption
+import me.magnum.melonds.domain.repositories.UpdatesRepository
 import me.magnum.melonds.domain.services.UpdateInstallManager
 import me.magnum.melonds.github.GitHubReleaseCandidate
 import me.magnum.melonds.github.GitHubReleaseSelector
@@ -52,17 +53,41 @@ object ManualUpdateChecker {
     interface UpdateEntryPoint {
         fun updateInstallManager(): UpdateInstallManager
         fun markwon(): Markwon
+        fun updatesRepository(): UpdatesRepository
     }
 
-    private const val FALLBACK_VERSION = "8.9.6"
+    private const val FALLBACK_VERSION = "8.9.7"
 
     private val backgroundScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var activeCheckJob: Job? = null
     private var activeDownloadJob: Job? = null
     private var activeUpdateDialog: Dialog? = null
     private var activeProgressDialog: Dialog? = null
-    private var sessionSkippedVersion: Version? = null
     private val progressFlow = MutableStateFlow<DownloadProgress?>(null)
+
+    private fun resolveUpdatesRepository(appContext: Context): UpdatesRepository? {
+        return runCatching {
+            EntryPointAccessors.fromApplication(appContext, UpdateEntryPoint::class.java).updatesRepository()
+        }.getOrNull()
+    }
+
+    private fun buildAppUpdate(
+        candidate: GitHubReleaseCandidate,
+        mirrorSources: Map<UpdateDownloadSource, UpdateSourceOption>,
+    ): AppUpdate {
+        return AppUpdate(
+            type = AppUpdate.Type.PRODUCTION,
+            id = candidate.asset.id,
+            downloadUri = Uri.parse(candidate.asset.url),
+            newVersion = candidate.version,
+            description = candidate.release.body,
+            binarySize = candidate.asset.size,
+            updateDate = candidate.publishedAt,
+            releaseTag = candidate.release.tagName,
+            sourceReleaseUrl = candidate.release.htmlUrl,
+            mirrorSources = mirrorSources,
+        )
+    }
 
     internal fun unwrapActivity(context: Context?): Activity? {
         var current: Context? = context
@@ -97,6 +122,7 @@ object ManualUpdateChecker {
             .remove("github_updates_last_check")
             .apply()
 
+        resolveUpdatesRepository(appContext)?.clearSkippedVersion()
         runCatching {
             appContext.getSharedPreferences("preferences-github", Context.MODE_PRIVATE)
                 .edit()
@@ -222,12 +248,17 @@ object ManualUpdateChecker {
             onUpdateNow = { selectedSource -> startVerifiedUpdateDownload(activity, owner, candidate, options, selectedSource) },
             onRemindLater = {},
             onSkipVersion = {
-                sessionSkippedVersion = candidate.version
-                runCatching {
-                    activity.applicationContext.getSharedPreferences("preferences-github", Context.MODE_PRIVATE)
-                        .edit()
-                        .putString("github_updates_skip_version", candidate.version.toString())
-                        .apply()
+                val appContext = activity.applicationContext
+                val repo = resolveUpdatesRepository(appContext)
+                if (repo != null) {
+                    repo.skipUpdate(buildAppUpdate(candidate, options))
+                } else {
+                    runCatching {
+                        appContext.getSharedPreferences("preferences-github", Context.MODE_PRIVATE)
+                            .edit()
+                            .putString("github_updates_skip_version", candidate.version.toString())
+                            .apply()
+                    }
                 }
             },
         )
@@ -244,18 +275,7 @@ object ManualUpdateChecker {
         if (activeDownloadJob?.isActive == true) return
         val appContext = activity.applicationContext
 
-        val appUpdate = AppUpdate(
-            type = AppUpdate.Type.PRODUCTION,
-            id = candidate.asset.id,
-            downloadUri = Uri.parse(candidate.asset.url),
-            newVersion = candidate.version,
-            description = candidate.release.body,
-            binarySize = candidate.asset.size,
-            updateDate = candidate.publishedAt,
-            releaseTag = candidate.release.tagName,
-            sourceReleaseUrl = candidate.release.htmlUrl,
-            mirrorSources = mirrorSources,
-        ).withSelectedSource(selectedSource)
+        val appUpdate = buildAppUpdate(candidate, mirrorSources).withSelectedSource(selectedSource)
 
         val installManager = runCatching {
             EntryPointAccessors.fromApplication(appContext, UpdateEntryPoint::class.java).updateInstallManager()
@@ -263,7 +283,7 @@ object ManualUpdateChecker {
             GitHubUpdateInstallManager(appContext)
         }
 
-        progressFlow.value = DownloadProgress.DownloadUpdate(candidate.asset.size.coerceAtLeast(0L), 0L)
+        progressFlow.value = DownloadProgress.DownloadUpdate(appUpdate.binarySize.coerceAtLeast(0L), 0L)
         activeProgressDialog?.dismiss()
         activeProgressDialog = showStormUpdateProgressDialog(
             context = activity,

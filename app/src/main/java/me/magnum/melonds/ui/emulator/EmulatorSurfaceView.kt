@@ -66,22 +66,33 @@ class EmulatorSurfaceView(context: Context, attrs: AttributeSet? = null) : Surfa
         }
     }
 
-    override fun surfaceCreated(holder: SurfaceHolder) {
+    fun updatePreferredFrameRate(frameGenEnabled: Boolean) {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
             try {
+                val targetSurface = holder.surface ?: return
+                if (!targetSurface.isValid) return
                 val compatibility = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
                     Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE
                 } else {
                     Surface.FRAME_RATE_COMPATIBILITY_DEFAULT
                 }
-                holder.surface.setFrameRate(
-                    60f,
+                targetSurface.setFrameRate(
+                    if (frameGenEnabled) 120f else 60f,
                     compatibility,
                     Surface.CHANGE_FRAME_RATE_ALWAYS
                 )
             } catch (_: Throwable) {
             }
         }
+    }
+
+    override fun surfaceCreated(holder: SurfaceHolder) {
+        val frameGenEnabled = try {
+            me.magnum.melonds.MelonEmulator.isVulkanFrameGenEnabled()
+        } catch (_: Throwable) {
+            false
+        }
+        updatePreferredFrameRate(frameGenEnabled)
         val listener: SurfaceLifecycleListener?
         val currentSurface: Surface?
         synchronized(surfaceLock) {

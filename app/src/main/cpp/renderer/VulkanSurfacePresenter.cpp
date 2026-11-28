@@ -1180,6 +1180,8 @@ bool VulkanSurfacePresenter::configureSurface(int surfaceId, const VulkanSurface
     if (waitForSurfaceIdle(surfaceState) != VK_SUCCESS)
         return false;
 
+    fsrPipeline.waitIdle(surfaceState.fsr);
+
     const bool retroArchConfigChanged =
         surfaceState.configured && !retroArchConfigEqual(surfaceState.config, config);
     if (retroArchConfigChanged)
@@ -1188,7 +1190,10 @@ bool VulkanSurfacePresenter::configureSurface(int surfaceId, const VulkanSurface
     if (config.retroShaderClearHistory)
         surfaceState.retroArch.pendingClearHistory = true;
     if (surfaceState.configured && surfaceState.config.filtering != config.filtering)
+    {
         fsrPipeline.resetFsrHistory(surfaceState.fsr);
+        fsrPipeline.resetFrameGenHistory(surfaceState.fsr);
+    }
 
     surfaceState.config = config;
     surfaceState.configured = true;
@@ -1701,6 +1706,18 @@ VulkanPresentationResult VulkanSurfacePresenter::presentFrame(
             return vkCreateSemaphore(device, &semInfo, nullptr, &st.retroArch.filterFinishedSemaphore) == VK_SUCCESS;
         };
 
+        bool fsrSurfaceIdle = false;
+        auto ensureFsrSurfaceIdle = [&]() -> bool {
+            if (fsrSurfaceIdle)
+                return true;
+            if (waitForSurfaceIdle(surfaceState, 50'000'000ULL) == VK_SUCCESS)
+            {
+                fsrSurfaceIdle = true;
+                return true;
+            }
+            return false;
+        };
+
         if (surfaceState.config.filtering == VulkanFilterMode::RetroArch && !directPresent)
         {
             VkImage retroImage = VK_NULL_HANDLE;
@@ -1730,7 +1747,8 @@ VulkanPresentationResult VulkanSurfacePresenter::presentFrame(
         else if ((surfaceState.config.filtering == VulkanFilterMode::Fsr1
                     || surfaceState.config.filtering == VulkanFilterMode::Fsr3)
                 && !directPresent
-                && ensureFilterSignalSemaphore(surfaceState))
+                && ensureFilterSignalSemaphore(surfaceState)
+                && ensureFsrSurfaceIdle())
         {
             VkImage fsrImage = VK_NULL_HANDLE;
             VkImageView fsrImageView = VK_NULL_HANDLE;
@@ -1766,11 +1784,20 @@ VulkanPresentationResult VulkanSurfacePresenter::presentFrame(
                 effectiveFiltering = VulkanFilterMode::Nearest;
             }
         }
+        else if ((surfaceState.config.filtering == VulkanFilterMode::Fsr1
+                    || surfaceState.config.filtering == VulkanFilterMode::Fsr3)
+                && !directPresent)
+        {
+            sampledImage = frameImage;
+            sampledImageView = frameImageView;
+            effectiveFiltering = VulkanFilterMode::Nearest;
+        }
 
         if (!directPresent
             && !fastForwardActive
             && VulkanRuntime::GetFrameGenEnabled()
-            && ensureFilterSignalSemaphore(surfaceState))
+            && ensureFilterSignalSemaphore(surfaceState)
+            && ensureFsrSurfaceIdle())
         {
             const VkSemaphore waitSem = surfaceState.retroArch.filterSignalPending
                 ? surfaceState.retroArch.filterFinishedSemaphore
@@ -1791,7 +1818,7 @@ VulkanPresentationResult VulkanSurfacePresenter::presentFrame(
         }
 
         const u64 descriptorStartNs = PerfNowNs();
-        if (!updateDescriptorSets(surfaceState, slotIndex, sampledImageView, inputs, effectiveFiltering, directPresent))
+        if (!updateDescriptorSets(surfaceState, slotIndex, sampledImageView, inputs, effectiveFiltering, directPresent, retroArchApplied))
         {
             descriptorUpdateFailures++;
             recordDeferredResult(VulkanPresentationResult::FatalError);
@@ -1998,7 +2025,8 @@ VulkanPresentationResult VulkanSurfacePresenter::presentFrame(
             && bottomClass4CompatibleDrawCount == 1u
             && countDrawMode(kDrawModeDirectOverlay2DBottom) == 1u;
         const u64 recordStartNs = PerfNowNs();
-        if (!recordSurfaceCommands(
+        if (imageIndex >= surfaceState.framebuffers.size()
+            || !recordSurfaceCommands(
                 surfaceState,
                 slotIndex,
                 surfaceState.framebuffers[imageIndex],
@@ -2013,7 +2041,9 @@ VulkanPresentationResult VulkanSurfacePresenter::presentFrame(
                 bottomClass4OneShotOverlayReplay,
                 bottomClass4OneShotOverlayMerge,
                 bottomClass4OneShotCarryWriter,
-                bottomClass4OneShotCarryConsumer))
+                bottomClass4OneShotCarryConsumer,
+                retroArchApplied,
+                false))
         {
             recordFailures++;
             recordDeferredResult(
@@ -2278,7 +2308,7 @@ VulkanPresentationResult VulkanSurfacePresenter::presentFrame(
     return deferredResult;
 }
 
-VulkanPresentationResult VulkanSurfacePresenter::presentInterpolatedFrame()
+VulkanPresentationResult VulkanSurfacePresenter::presentInterpolatedFrame(float blendFactor)
 {
     if (!initialized || !VulkanRuntime::GetFrameGenEnabled() || isFastForwardActive())
         return VulkanPresentationResult::NoProduct;
@@ -2286,13 +2316,30 @@ VulkanPresentationResult VulkanSurfacePresenter::presentInterpolatedFrame()
     if (useMinimalPresenterLayout)
         return VulkanPresentationResult::NoProduct;
 
+    const auto isFrameGenCompatibleFilter = [](VulkanFilterMode mode) {
+        switch (mode)
+        {
+            case VulkanFilterMode::Nearest:
+            case VulkanFilterMode::Linear:
+            case VulkanFilterMode::Quilez:
+            case VulkanFilterMode::Fsr1:
+            case VulkanFilterMode::Fsr3:
+            case VulkanFilterMode::RetroArch:
+                return true;
+            default:
+                return false;
+        }
+    };
+
     bool presentedAny = false;
     u64 presentCpuNs = 0;
 
     for (auto& [surfaceId, surfaceState] : surfaces)
     {
         (void)surfaceId;
-        if (!surfaceState.configured || !surfaceState.fsr.canInterpolate())
+        if (!surfaceState.configured
+            || !isFrameGenCompatibleFilter(surfaceState.config.filtering)
+            || !surfaceState.fsr.canInterpolate())
             continue;
         if (surfaceState.retroArch.filterSignalPending
             || surfaceState.retroArch.filterFinishedSemaphore == VK_NULL_HANDLE)
@@ -2302,53 +2349,10 @@ VulkanPresentationResult VulkanSurfacePresenter::presentInterpolatedFrame()
 
         const u32 slotIndex = surfaceState.currentFrameSlot % kSurfaceFramesInFlight;
         SurfaceState::FrameSlot& slot = surfaceState.frameSlots[slotIndex];
-        if (waitForSurfaceSlotIdle(surfaceState, slotIndex, 0) != VK_SUCCESS)
-            continue;
-
-        VkImage interpImage = VK_NULL_HANDLE;
-        VkImageView interpImageView = VK_NULL_HANDLE;
-        if (!fsrPipeline.runFrameGen(
-                surfaceState.fsr,
-                surfaceState.retroArch.filterFinishedSemaphore,
-                interpImage,
-                interpImageView))
-        {
-            continue;
-        }
-        surfaceState.retroArch.filterSignalPending = true;
-
         if (slot.screenDescriptorSet == VK_NULL_HANDLE)
             continue;
-
-        VkDescriptorImageInfo screenImageInfo{};
-        screenImageInfo.sampler = linearSampler;
-        screenImageInfo.imageView = interpImageView;
-        screenImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-        VkWriteDescriptorSet screenWrite{};
-        screenWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        screenWrite.dstSet = slot.screenDescriptorSet;
-        screenWrite.dstBinding = 0;
-        screenWrite.descriptorCount = 1;
-        screenWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        screenWrite.pImageInfo = &screenImageInfo;
-        vkUpdateDescriptorSets(device, 1, &screenWrite, 0, nullptr);
-        slot.screenDescriptorCache.ready = false;
-
-        VulkanCompositionInputs emptyInputs{};
-        std::vector<DrawCall> drawCalls;
-        if (!updateVertexBuffer(
-                surfaceState,
-                slotIndex,
-                surfaceState.config,
-                surfaceState.background.imageView != VK_NULL_HANDLE ? &surfaceState.background : nullptr,
-                emptyInputs,
-                false,
-                true,
-                drawCalls))
-        {
+        if (waitForSurfaceIdle(surfaceState, 16'000'000ULL) != VK_SUCCESS)
             continue;
-        }
 
         u32 imageIndex = 0;
         const VkResult acquireResult = vkAcquireNextImageKHR(
@@ -2368,7 +2372,62 @@ VulkanPresentationResult VulkanSurfacePresenter::presentInterpolatedFrame()
             continue;
         }
         if (imageIndex >= surfaceState.framebuffers.size())
+        {
+            recoverSwapchain(surfaceState, "presentInterpolatedFrame.imageIndex");
             continue;
+        }
+
+        VkImage interpImage = VK_NULL_HANDLE;
+        VkImageView interpImageView = VK_NULL_HANDLE;
+        if (!fsrPipeline.runFrameGen(
+                surfaceState.fsr,
+                surfaceState.retroArch.filterFinishedSemaphore,
+                interpImage,
+                interpImageView,
+                blendFactor))
+        {
+            recoverSwapchain(surfaceState, "presentInterpolatedFrame.runFrameGen");
+            continue;
+        }
+        surfaceState.retroArch.filterSignalPending = true;
+
+        VkDescriptorImageInfo screenImageInfo{};
+        screenImageInfo.sampler = linearSampler;
+        screenImageInfo.imageView = interpImageView;
+        screenImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+        VkWriteDescriptorSet screenWrite{};
+        screenWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        screenWrite.dstSet = slot.screenDescriptorSet;
+        screenWrite.dstBinding = 0;
+        screenWrite.descriptorCount = 1;
+        screenWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        screenWrite.pImageInfo = &screenImageInfo;
+        vkUpdateDescriptorSets(device, 1, &screenWrite, 0, nullptr);
+        slot.screenDescriptorCache.ready = false;
+
+        VulkanCompositionInputs emptyInputs{};
+        if (slot.backgroundDescriptorDirty
+            && surfaceState.background.imageView != VK_NULL_HANDLE
+            && slot.backgroundDescriptorSet != VK_NULL_HANDLE)
+        {
+            updateBackgroundDescriptorSet(surfaceState, slot, emptyInputs);
+        }
+
+        std::vector<DrawCall> drawCalls;
+        if (!updateVertexBuffer(
+                surfaceState,
+                slotIndex,
+                surfaceState.config,
+                surfaceState.background.imageView != VK_NULL_HANDLE ? &surfaceState.background : nullptr,
+                emptyInputs,
+                false,
+                true,
+                drawCalls))
+        {
+            recoverSwapchain(surfaceState, "presentInterpolatedFrame.updateVertexBuffer");
+            continue;
+        }
 
         if (!recordSurfaceCommands(
                 surfaceState,
@@ -2385,8 +2444,11 @@ VulkanPresentationResult VulkanSurfacePresenter::presentInterpolatedFrame()
                 false,
                 false,
                 false,
-                false))
+                false,
+                true,
+                true))
         {
+            recoverSwapchain(surfaceState, "presentInterpolatedFrame.record");
             continue;
         }
 
@@ -2412,9 +2474,23 @@ VulkanPresentationResult VulkanSurfacePresenter::presentInterpolatedFrame()
         {
             surfaceState.currentFrameSlot = (slotIndex + 1u) % kSurfaceFramesInFlight;
         }
+        else
+        {
+            recoverSwapchain(surfaceState, "presentInterpolatedFrame.submit");
+        }
     }
 
     return presentedAny ? VulkanPresentationResult::Presented : VulkanPresentationResult::NoProduct;
+}
+
+void VulkanSurfacePresenter::resetPostProcessHistory()
+{
+    for (auto& [surfaceId, surfaceState] : surfaces)
+    {
+        (void)surfaceId;
+        fsrPipeline.resetFsrHistory(surfaceState.fsr);
+        fsrPipeline.resetFrameGenHistory(surfaceState.fsr);
+    }
 }
 
 bool VulkanSurfacePresenter::submitPresentFenceMarker(
@@ -3726,6 +3802,18 @@ void VulkanSurfacePresenter::recoverSwapchain(SurfaceState& surfaceState, const 
         kComposedCarryWriterPhaseNone;
     destroySwapchain(surfaceState);
     surfaceState.swapchainDirty = true;
+
+    for (SurfaceState::FrameSlot& slot : surfaceState.frameSlots)
+    {
+        if (slot.imageAvailableSemaphore != VK_NULL_HANDLE)
+        {
+            vkDestroySemaphore(device, slot.imageAvailableSemaphore, nullptr);
+            slot.imageAvailableSemaphore = VK_NULL_HANDLE;
+        }
+        VkSemaphoreCreateInfo semaphoreInfo{};
+        semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+        (void)vkCreateSemaphore(device, &semaphoreInfo, nullptr, &slot.imageAvailableSemaphore);
+    }
 }
 
 void VulkanSurfacePresenter::ensureSurfacePipelineCache()
@@ -3874,7 +3962,8 @@ bool VulkanSurfacePresenter::canUseFastCompositePipeline(
     const SurfaceState& surfaceState,
     VulkanFilterMode effectiveFiltering,
     u32 packedFiltering,
-    bool directPresent)
+    bool directPresent,
+    bool retroArchApplied)
 {
     if (directPresent
         || surfaceState.usingFallbackShader
@@ -3884,6 +3973,8 @@ bool VulkanSurfacePresenter::canUseFastCompositePipeline(
     }
     if (((packedFiltering >> 8u) & 0x7u) != 0u)
         return false;
+    if (retroArchApplied)
+        return true;
 
     switch (effectiveFiltering)
     {
@@ -4417,6 +4508,7 @@ bool VulkanSurfacePresenter::ensureRetroArchResources(
 
 void VulkanSurfacePresenter::destroyRetroArchResources(SurfaceState& surfaceState)
 {
+    fsrPipeline.waitIdle(surfaceState.fsr);
     RetroArchResources& retro = surfaceState.retroArch;
     if (retro.fence != VK_NULL_HANDLE)
         (void)vkWaitForFences(device, 1, &retro.fence, VK_TRUE, kRetroArchFenceTimeoutNs);
@@ -4991,13 +5083,155 @@ bool VulkanSurfacePresenter::createTextureFromPixels(BackgroundResource& resourc
     return true;
 }
 
+void VulkanSurfacePresenter::updateBackgroundDescriptorSet(
+    SurfaceState& surfaceState,
+    SurfaceState::FrameSlot& slot,
+    const VulkanCompositionInputs& inputs)
+{
+    if (surfaceState.background.imageView == VK_NULL_HANDLE
+        || slot.backgroundDescriptorSet == VK_NULL_HANDLE)
+    {
+        return;
+    }
+
+    const bool hasInputs = (inputs.sourceImageView != VK_NULL_HANDLE);
+    DescriptorSetCacheState& backgroundCache = slot.backgroundDescriptorCache;
+    if (!(!backgroundCache.ready
+            || slot.backgroundDescriptorDirty
+            || backgroundCache.sampledImageView != surfaceState.background.imageView
+            || backgroundCache.sampledImageLayout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+            || backgroundCache.sampledSampler != linearSampler
+            || (hasInputs && !useMinimalPresenterLayout
+                && (backgroundCache.rendererImageView != inputs.sourceImageView
+                    || backgroundCache.previousTopRendererImageView != inputs.previousTopSourceImageView
+                    || backgroundCache.previousBottomRendererImageView != inputs.previousBottomSourceImageView
+                    || backgroundCache.topPackedBuffer != inputs.topPackedBuffer
+                    || backgroundCache.bottomPackedBuffer != inputs.bottomPackedBuffer
+                    || backgroundCache.capture3dBuffer != inputs.capture3dBuffer))))
+    {
+        return;
+    }
+
+    VkDescriptorImageInfo backgroundImageInfo{};
+    backgroundImageInfo.sampler = linearSampler;
+    backgroundImageInfo.imageView = surfaceState.background.imageView;
+    backgroundImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+    std::array<VkWriteDescriptorSet, 7> backgroundWrites{};
+    u32 backgroundWriteCount = 0;
+    auto appendBackgroundImageWrite = [&](u32 binding, const VkDescriptorImageInfo* info, VkDescriptorType descriptorType) {
+        VkWriteDescriptorSet& write = backgroundWrites[backgroundWriteCount++];
+        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        write.dstSet = slot.backgroundDescriptorSet;
+        write.dstBinding = binding;
+        write.descriptorCount = 1;
+        write.descriptorType = descriptorType;
+        write.pImageInfo = info;
+    };
+    auto appendBackgroundBufferWrite = [&](u32 binding, const VkDescriptorBufferInfo* info) {
+        VkWriteDescriptorSet& write = backgroundWrites[backgroundWriteCount++];
+        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        write.dstSet = slot.backgroundDescriptorSet;
+        write.dstBinding = binding;
+        write.descriptorCount = 1;
+        write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        write.pBufferInfo = info;
+    };
+
+    if (!backgroundCache.ready
+        || slot.backgroundDescriptorDirty
+        || backgroundCache.sampledImageView != surfaceState.background.imageView
+        || backgroundCache.sampledImageLayout != backgroundImageInfo.imageLayout
+        || backgroundCache.sampledSampler != backgroundImageInfo.sampler)
+    {
+        appendBackgroundImageWrite(0, &backgroundImageInfo, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+    }
+
+    VkDescriptorImageInfo rendererImageInfo{};
+    VkDescriptorImageInfo previousTopRendererImageInfo{};
+    VkDescriptorImageInfo previousBottomRendererImageInfo{};
+    VkDescriptorBufferInfo topPackedBufferInfo{};
+    VkDescriptorBufferInfo bottomPackedBufferInfo{};
+    VkDescriptorBufferInfo capture3dBufferInfo{};
+    if (hasInputs && !useMinimalPresenterLayout && placeholderBuffer != VK_NULL_HANDLE)
+    {
+        rendererImageInfo.imageView = inputs.sourceImageView;
+        rendererImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+        previousTopRendererImageInfo.imageView = inputs.previousTopSourceImageView != VK_NULL_HANDLE
+            ? inputs.previousTopSourceImageView
+            : inputs.sourceImageView;
+        previousTopRendererImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+        previousBottomRendererImageInfo.imageView = inputs.previousBottomSourceImageView != VK_NULL_HANDLE
+            ? inputs.previousBottomSourceImageView
+            : inputs.sourceImageView;
+        previousBottomRendererImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+        topPackedBufferInfo.buffer = inputs.topPackedBuffer != VK_NULL_HANDLE
+            ? inputs.topPackedBuffer : placeholderBuffer;
+        topPackedBufferInfo.offset = 0;
+        topPackedBufferInfo.range = inputs.topPackedBuffer != VK_NULL_HANDLE
+            ? inputs.packedBufferSize : VK_WHOLE_SIZE;
+
+        bottomPackedBufferInfo.buffer = inputs.bottomPackedBuffer != VK_NULL_HANDLE
+            ? inputs.bottomPackedBuffer : placeholderBuffer;
+        bottomPackedBufferInfo.offset = 0;
+        bottomPackedBufferInfo.range = inputs.bottomPackedBuffer != VK_NULL_HANDLE
+            ? inputs.packedBufferSize : VK_WHOLE_SIZE;
+
+        capture3dBufferInfo.buffer = inputs.capture3dBuffer != VK_NULL_HANDLE
+            ? inputs.capture3dBuffer : placeholderBuffer;
+        capture3dBufferInfo.offset = 0;
+        capture3dBufferInfo.range = inputs.capture3dBuffer != VK_NULL_HANDLE
+            ? inputs.capture3dBufferSize : VK_WHOLE_SIZE;
+
+        if (!backgroundCache.ready || slot.backgroundDescriptorDirty || backgroundCache.rendererImageView != inputs.sourceImageView)
+            appendBackgroundImageWrite(1, &rendererImageInfo, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+        if (!backgroundCache.ready || slot.backgroundDescriptorDirty || backgroundCache.previousTopRendererImageView != inputs.previousTopSourceImageView)
+            appendBackgroundImageWrite(4, &previousTopRendererImageInfo, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+        if (!backgroundCache.ready || slot.backgroundDescriptorDirty || backgroundCache.previousBottomRendererImageView != inputs.previousBottomSourceImageView)
+            appendBackgroundImageWrite(6, &previousBottomRendererImageInfo, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+        if (!backgroundCache.ready || slot.backgroundDescriptorDirty || backgroundCache.topPackedBuffer != inputs.topPackedBuffer)
+            appendBackgroundBufferWrite(2, &topPackedBufferInfo);
+        if (!backgroundCache.ready || slot.backgroundDescriptorDirty || backgroundCache.bottomPackedBuffer != inputs.bottomPackedBuffer)
+            appendBackgroundBufferWrite(3, &bottomPackedBufferInfo);
+        if (!backgroundCache.ready || slot.backgroundDescriptorDirty || backgroundCache.capture3dBuffer != inputs.capture3dBuffer)
+            appendBackgroundBufferWrite(5, &capture3dBufferInfo);
+    }
+
+    if (backgroundWriteCount > 0)
+        vkUpdateDescriptorSets(device, backgroundWriteCount, backgroundWrites.data(), 0, nullptr);
+
+    backgroundCache.sampledImageView = surfaceState.background.imageView;
+    backgroundCache.sampledImageLayout = backgroundImageInfo.imageLayout;
+    backgroundCache.sampledSampler = backgroundImageInfo.sampler;
+    if (hasInputs)
+    {
+        backgroundCache.ready = true;
+        backgroundCache.rendererImageView = inputs.sourceImageView;
+        backgroundCache.exactObjSourceImageView = inputs.exactObjSourceImageView;
+        backgroundCache.previousTopRendererImageView = inputs.previousTopSourceImageView;
+        backgroundCache.previousBottomRendererImageView = inputs.previousBottomSourceImageView;
+        backgroundCache.topComposedCarryImageView = surfaceState.topComposedCarry.imageView != VK_NULL_HANDLE
+            ? surfaceState.topComposedCarry.imageView : inputs.sourceImageView;
+        backgroundCache.bottomComposedCarryImageView = surfaceState.bottomComposedCarry.imageView != VK_NULL_HANDLE
+            ? surfaceState.bottomComposedCarry.imageView : inputs.sourceImageView;
+        backgroundCache.bottomComp2OneShotCarryImageView = surfaceState.bottomComp2OneShotCarry.imageView != VK_NULL_HANDLE
+            ? surfaceState.bottomComp2OneShotCarry.imageView : inputs.sourceImageView;
+        backgroundCache.topPackedBuffer = inputs.topPackedBuffer;
+        backgroundCache.bottomPackedBuffer = inputs.bottomPackedBuffer;
+        backgroundCache.capture3dBuffer = inputs.capture3dBuffer;
+    }
+    slot.backgroundDescriptorDirty = false;
+}
+
 bool VulkanSurfacePresenter::updateDescriptorSets(
     SurfaceState& surfaceState,
     u32 slotIndex,
     VkImageView frameImageView,
     const VulkanCompositionInputs& inputs,
     VulkanFilterMode filtering,
-    bool directPresent)
+    bool directPresent,
+    bool retroArchApplied)
 {
     (void)directPresent;
 
@@ -5005,7 +5239,11 @@ bool VulkanSurfacePresenter::updateDescriptorSets(
     SurfaceState::FrameSlot& slot = surfaceState.frameSlots[boundedSlotIndex];
     DescriptorSetCacheState& screenCache = slot.screenDescriptorCache;
     VkDescriptorImageInfo screenImageInfo{};
-    screenImageInfo.sampler = (filtering == VulkanFilterMode::Linear || filtering == VulkanFilterMode::Quilez)
+    screenImageInfo.sampler = (retroArchApplied
+        || filtering == VulkanFilterMode::Linear
+        || filtering == VulkanFilterMode::Quilez
+        || filtering == VulkanFilterMode::Fsr1
+        || filtering == VulkanFilterMode::Fsr3)
         ? linearSampler
         : nearestSampler;
     screenImageInfo.imageView = frameImageView;
@@ -5198,107 +5436,7 @@ bool VulkanSurfacePresenter::updateDescriptorSets(
         screenCache.rendererHeight = inputs.rendererHeight;
     }
 
-    DescriptorSetCacheState& backgroundCache = slot.backgroundDescriptorCache;
-    if (surfaceState.background.imageView != VK_NULL_HANDLE
-        && (!backgroundCache.ready
-            || slot.backgroundDescriptorDirty
-            || backgroundCache.sampledImageView != surfaceState.background.imageView
-            || backgroundCache.sampledImageLayout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-            || backgroundCache.sampledSampler != linearSampler
-            || (!useMinimalPresenterLayout
-                && (backgroundCache.rendererImageView != inputs.sourceImageView
-                    || backgroundCache.previousTopRendererImageView != inputs.previousTopSourceImageView
-                    || backgroundCache.previousBottomRendererImageView != inputs.previousBottomSourceImageView
-                    || backgroundCache.topPackedBuffer != inputs.topPackedBuffer
-                    || backgroundCache.bottomPackedBuffer != inputs.bottomPackedBuffer
-                    || backgroundCache.capture3dBuffer != inputs.capture3dBuffer))))
-    {
-        VkDescriptorImageInfo backgroundImageInfo{};
-        backgroundImageInfo.sampler = linearSampler;
-        backgroundImageInfo.imageView = surfaceState.background.imageView;
-        backgroundImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        std::array<VkWriteDescriptorSet, 7> backgroundWrites{};
-        u32 backgroundWriteCount = 0;
-        auto appendBackgroundImageWrite = [&](u32 binding, const VkDescriptorImageInfo* info, VkDescriptorType descriptorType) {
-            VkWriteDescriptorSet& write = backgroundWrites[backgroundWriteCount++];
-            write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            write.dstSet = slot.backgroundDescriptorSet;
-            write.dstBinding = binding;
-            write.descriptorCount = 1;
-            write.descriptorType = descriptorType;
-            write.pImageInfo = info;
-        };
-        auto appendBackgroundBufferWrite = [&](u32 binding, const VkDescriptorBufferInfo* info) {
-            VkWriteDescriptorSet& write = backgroundWrites[backgroundWriteCount++];
-            write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            write.dstSet = slot.backgroundDescriptorSet;
-            write.dstBinding = binding;
-            write.descriptorCount = 1;
-            write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            write.pBufferInfo = info;
-        };
-
-        if (!backgroundCache.ready
-            || slot.backgroundDescriptorDirty
-            || backgroundCache.sampledImageView != surfaceState.background.imageView
-            || backgroundCache.sampledImageLayout != backgroundImageInfo.imageLayout
-            || backgroundCache.sampledSampler != backgroundImageInfo.sampler)
-        {
-            appendBackgroundImageWrite(0, &backgroundImageInfo, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-        }
-        if (!useMinimalPresenterLayout)
-        {
-            if (!backgroundCache.ready || slot.backgroundDescriptorDirty || backgroundCache.rendererImageView != inputs.sourceImageView)
-            {
-                appendBackgroundImageWrite(1, &rendererImageInfo, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-            }
-            if (!backgroundCache.ready
-                || slot.backgroundDescriptorDirty
-                || backgroundCache.previousTopRendererImageView != inputs.previousTopSourceImageView)
-            {
-                appendBackgroundImageWrite(4, &previousTopRendererImageInfo, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-            }
-            if (!backgroundCache.ready
-                || slot.backgroundDescriptorDirty
-                || backgroundCache.previousBottomRendererImageView != inputs.previousBottomSourceImageView)
-            {
-                appendBackgroundImageWrite(6, &previousBottomRendererImageInfo, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-            }
-            if (!backgroundCache.ready || slot.backgroundDescriptorDirty || backgroundCache.topPackedBuffer != inputs.topPackedBuffer)
-            {
-                appendBackgroundBufferWrite(2, &topPackedBufferInfo);
-            }
-            if (!backgroundCache.ready || slot.backgroundDescriptorDirty || backgroundCache.bottomPackedBuffer != inputs.bottomPackedBuffer)
-            {
-                appendBackgroundBufferWrite(3, &bottomPackedBufferInfo);
-            }
-            if (!backgroundCache.ready || slot.backgroundDescriptorDirty || backgroundCache.capture3dBuffer != inputs.capture3dBuffer)
-            {
-                appendBackgroundBufferWrite(5, &capture3dBufferInfo);
-            }
-        }
-
-        if (backgroundWriteCount > 0)
-            vkUpdateDescriptorSets(device, backgroundWriteCount, backgroundWrites.data(), 0, nullptr);
-
-        backgroundCache.ready = true;
-        backgroundCache.sampledImageView = surfaceState.background.imageView;
-        backgroundCache.sampledImageLayout = backgroundImageInfo.imageLayout;
-        backgroundCache.sampledSampler = backgroundImageInfo.sampler;
-        backgroundCache.rendererImageView = inputs.sourceImageView;
-        backgroundCache.exactObjSourceImageView = inputs.exactObjSourceImageView;
-        backgroundCache.previousTopRendererImageView = inputs.previousTopSourceImageView;
-        backgroundCache.previousBottomRendererImageView = inputs.previousBottomSourceImageView;
-        backgroundCache.topComposedCarryImageView = topComposedCarryImageInfo.imageView;
-        backgroundCache.bottomComposedCarryImageView = bottomComposedCarryImageInfo.imageView;
-        backgroundCache.bottomComp2OneShotCarryImageView =
-            bottomComp2OneShotCarryImageInfo.imageView;
-        backgroundCache.topPackedBuffer = inputs.topPackedBuffer;
-        backgroundCache.bottomPackedBuffer = inputs.bottomPackedBuffer;
-        backgroundCache.capture3dBuffer = inputs.capture3dBuffer;
-        slot.backgroundDescriptorDirty = false;
-    }
+    updateBackgroundDescriptorSet(surfaceState, slot, inputs);
 
     return true;
 }
@@ -5782,7 +5920,9 @@ bool VulkanSurfacePresenter::recordSurfaceCommands(
     bool bottomClass4OneShotOverlayBridge,
     bool bottomClass4OneShotOverlayMerge,
     bool bottomClass4OneShotCarryWriter,
-    bool bottomClass4OneShotCarryConsumer)
+    bool bottomClass4OneShotCarryConsumer,
+    bool retroArchApplied,
+    bool suppressDepth3D)
 {
     const u32 boundedSlotIndex = slotIndex % kSurfaceFramesInFlight;
     SurfaceState::FrameSlot& slot = surfaceState.frameSlots[boundedSlotIndex];
@@ -5990,10 +6130,12 @@ bool VulkanSurfacePresenter::recordSurfaceCommands(
 
     vkCmdBeginRenderPass(slot.commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-    const u32 packedFiltering = MelonDSAndroid::VulkanRuntime::PackPresenterFilteringWord(
+    u32 packedFiltering = MelonDSAndroid::VulkanRuntime::PackPresenterFilteringWord(
         static_cast<u32>(effectiveFiltering));
+    if (suppressDepth3D)
+        packedFiltering &= ~(0x7u << 8u);
     const VkPipeline activePipeline =
-        canUseFastCompositePipeline(surfaceState, effectiveFiltering, packedFiltering, directPresent)
+        canUseFastCompositePipeline(surfaceState, effectiveFiltering, packedFiltering, directPresent, retroArchApplied)
             ? surfaceState.fastCompositePipeline
             : surfaceState.composedPipeline;
     vkCmdBindPipeline(

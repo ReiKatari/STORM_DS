@@ -56,6 +56,14 @@ class VulkanFrameRenderCoordinator(
     private val pendingConfigs = mutableMapOf<EmulatorSurfaceView, PendingSurfaceConfig>()
     private val frameRenderThread = FrameRenderThread()
     @Volatile private var stopped = false
+    @Volatile private var paused = false
+
+    fun setPaused(isPaused: Boolean) {
+        paused = isPaused
+        if (isPaused) {
+            frameRenderThread.cancelPendingInterpolatedRender()
+        }
+    }
 
     init {
         frameRenderThread.start()
@@ -143,10 +151,14 @@ class VulkanFrameRenderCoordinator(
     }
 
     override fun renderInterpolatedFrame(frameDeadlineNanos: Long?) {
-        if (stopped) {
+        renderInterpolatedFrame(frameDeadlineNanos, 0.5f)
+    }
+
+    fun renderInterpolatedFrame(frameDeadlineNanos: Long?, blendFactor: Float) {
+        if (stopped || paused) {
             return
         }
-        frameRenderThread.requestInterpolatedFrameRender()
+        frameRenderThread.requestInterpolatedFrameRender(blendFactor.coerceIn(0.1f, 0.9f))
     }
 
     override fun cancelPendingFrameRender() {
@@ -339,7 +351,7 @@ class VulkanFrameRenderCoordinator(
                         )
                         MSG_DETACH_SURFACE -> detachSurface(msg.arg1)
                         MSG_RENDER_FRAME -> pumpPresentation()
-                        MSG_RENDER_INTERPOLATED_FRAME -> pumpInterpolatedPresentation()
+                        MSG_RENDER_INTERPOLATED_FRAME -> pumpInterpolatedPresentation(Float.fromBits(msg.arg1))
                         MSG_STOP -> stopThread()
                     }
                 }
@@ -604,13 +616,17 @@ class VulkanFrameRenderCoordinator(
             }
         }
 
-        fun requestInterpolatedFrameRender() {
-            if (!running) {
+        fun cancelPendingInterpolatedRender() {
+            getActiveHandler()?.removeMessages(MSG_RENDER_INTERPOLATED_FRAME)
+        }
+
+        fun requestInterpolatedFrameRender(blendFactor: Float) {
+            if (!running || paused) {
                 return
             }
             val currentHandler = getActiveHandler() ?: return
             val shouldQueue = synchronized(pacingLock) {
-                running && pacingTransitionCount == 0 && !renderMessageQueued && pendingPacingPermit == null
+                running && !paused && pacingTransitionCount == 0 && !renderMessageQueued && pendingPacingPermit == null
             }
             if (!shouldQueue) {
                 return
@@ -619,7 +635,8 @@ class VulkanFrameRenderCoordinator(
                 return
             }
             try {
-                currentHandler.sendEmptyMessage(MSG_RENDER_INTERPOLATED_FRAME)
+                val msg = currentHandler.obtainMessage(MSG_RENDER_INTERPOLATED_FRAME, blendFactor.toRawBits(), 0)
+                currentHandler.sendMessage(msg)
             } catch (_: IllegalStateException) {
                 if (handler === currentHandler) {
                     currentHandler.removeCallbacksAndMessages(null)
@@ -628,8 +645,8 @@ class VulkanFrameRenderCoordinator(
             }
         }
 
-        private fun pumpInterpolatedPresentation() {
-            if (!running) {
+        private fun pumpInterpolatedPresentation(blendFactor: Float) {
+            if (!running || paused) {
                 return
             }
             val busy = synchronized(pacingLock) {
@@ -638,7 +655,7 @@ class VulkanFrameRenderCoordinator(
             if (busy) {
                 return
             }
-            MelonEmulator.presentVulkanInterpolatedFrame()
+            MelonEmulator.presentVulkanInterpolatedFrame(blendFactor)
         }
 
         fun requestStop() {

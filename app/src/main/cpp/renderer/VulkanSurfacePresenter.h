@@ -180,7 +180,8 @@ public:
         u64 timeoutNs,
         const VulkanCausalWaitRunner& waitRunner,
         const VulkanSurfaceSubmitRunner& submitRunner);
-    VulkanPresentationResult presentInterpolatedFrame();
+    VulkanPresentationResult presentInterpolatedFrame(float blendFactor = 0.5f);
+    void resetPostProcessHistory();
     bool waitForFrameConsumption(Frame* frame, u64 timeoutNs = UINT64_MAX,
         void (*hostService)(void*) = nullptr, void* hostContext = nullptr);
     bool getFrameConsumptionDependency(const Frame* frame, VkSemaphore& semaphore, u64& value);
@@ -445,7 +446,8 @@ private:
         const SurfaceState& surfaceState,
         VulkanFilterMode effectiveFiltering,
         u32 packedFiltering,
-        bool directPresent);
+        bool directPresent,
+        bool retroArchApplied = false);
     VkResult waitForSurfaceSlotIdle(SurfaceState& surfaceState, u32 slotIndex, u64 timeoutNs = UINT64_MAX);
     VkResult waitForSurfaceIdle(SurfaceState& surfaceState, u64 timeoutNs = UINT64_MAX);
     bool resetSurfaceInFlightFence(SurfaceState::FrameSlot& slot);
@@ -458,13 +460,18 @@ private:
     void destroyBackgroundTexture(SurfaceState& surfaceState);
     bool createTextureFromPixels(BackgroundResource& resource, const VulkanBackgroundImage& backgroundImage);
 
+    void updateBackgroundDescriptorSet(
+        SurfaceState& surfaceState,
+        SurfaceState::FrameSlot& slot,
+        const VulkanCompositionInputs& inputs);
     bool updateDescriptorSets(
         SurfaceState& surfaceState,
         u32 slotIndex,
         VkImageView frameImageView,
         const VulkanCompositionInputs& inputs,
         VulkanFilterMode filtering,
-        bool directPresent
+        bool directPresent,
+        bool retroArchApplied = false
     );
     bool updateVertexBuffer(
         SurfaceState& surfaceState,
@@ -491,7 +498,9 @@ private:
         bool bottomClass4OneShotOverlayBridge,
         bool bottomClass4OneShotOverlayMerge,
         bool bottomClass4OneShotCarryWriter,
-        bool bottomClass4OneShotCarryConsumer
+        bool bottomClass4OneShotCarryConsumer,
+        bool retroArchApplied = false,
+        bool suppressDepth3D = false
     );
     bool submitSurfaceCommands(
         SurfaceState& surfaceState,

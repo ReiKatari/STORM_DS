@@ -100,6 +100,8 @@ class RomListFragment : Fragment() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val isShortcutPickerMode = arguments?.getBoolean(KEY_SHORTCUT_PICKER_MODE, false) ?: false
+        romListViewModel.setShortcutPickerMode(isShortcutPickerMode)
         if (savedInstanceState != null) {
             pendingCoverRom = androidx.core.os.BundleCompat.getParcelable(
                 savedInstanceState,
@@ -136,6 +138,7 @@ class RomListFragment : Fragment() {
                     val raCoverByHash by romListViewModel.raCoverByHash.collectAsState()
                     val boxArtByUri by romListViewModel.boxArtByUri.collectAsState()
                     val searchQuery by romListViewModel.searchQuery.collectAsState()
+                    val sgwUpdatesByUri by romListViewModel.sgwUpdatesByUri.collectAsState()
                     var contextRomUri by remember { mutableStateOf<String?>(null) }
 
                     val currentContextRom: Rom? = remember(contextRomUri, state.entries, state.continuePlaying) {
@@ -166,7 +169,7 @@ class RomListFragment : Fragment() {
                         coverByHash = raCoverByHash,
                         boxArtByUri = boxArtByUri,
                         searchQuery = searchQuery,
-                        sgwUpdatesByUri = romListViewModel.sgwUpdatesByUri.collectAsState().value,
+                        sgwUpdatesByUri = if (isShortcutPickerMode) emptyMap() else sgwUpdatesByUri,
                         onOpenSgwStore = { openUpdatesTab ->
                             val intent = android.content.Intent(requireContext(), me.magnum.melonds.ui.sgw.StormGamesWorldActivity::class.java)
                             if (openUpdatesTab) {

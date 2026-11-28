@@ -76,7 +76,7 @@ object StormDeviceSystemInfoReporter {
 
         val versionName = runCatching {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName
-        }.getOrNull() ?: "8.9.6"
+        }.getOrNull() ?: "8.9.7"
 
         val versionCode = runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {

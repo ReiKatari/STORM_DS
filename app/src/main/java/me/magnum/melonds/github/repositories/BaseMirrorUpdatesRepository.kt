@@ -124,9 +124,8 @@ open class BaseMirrorUpdatesRepository(
     }
 
     override suspend fun checkNewUpdateManually(): Result<AppUpdate?> {
-        sessionSkippedVersion = null
+        clearSkippedVersion()
         statePreferences.edit {
-            remove(KEY_SKIP_VERSION)
             remove(KEY_LAST_UPDATE_CHECK)
         }
         return checkNewUpdate(ignorePreferences = true)
@@ -136,6 +135,13 @@ open class BaseMirrorUpdatesRepository(
         sessionSkippedVersion = update.newVersion
         statePreferences.edit {
             putString(KEY_SKIP_VERSION, update.newVersion.toString())
+        }
+    }
+
+    override fun clearSkippedVersion() {
+        sessionSkippedVersion = null
+        statePreferences.edit {
+            remove(KEY_SKIP_VERSION)
         }
     }
 

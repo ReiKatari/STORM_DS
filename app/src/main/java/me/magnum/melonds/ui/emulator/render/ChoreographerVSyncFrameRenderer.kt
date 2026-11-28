@@ -7,10 +7,18 @@ import androidx.annotation.RequiresApi
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 class ChoreographerVSyncFrameRenderer(
     private val frameRenderCoordinator: FrameRenderCoordinator,
+    private val isEmulationPaused: () -> Boolean = { false },
 ) : ChoreographerFrameRenderer, Choreographer.VsyncCallback {
 
+    @Volatile
+    var emulationPaused: Boolean = false
     private var isRendering = false
     private var nextRenderTimeNanos = 0L
+    private var lastRealFrameTimeNanos = 0L
+
+    fun setPaused(paused: Boolean) {
+        emulationPaused = paused
+    }
 
     override fun startRendering() {
         if (isRendering) {
@@ -19,12 +27,14 @@ class ChoreographerVSyncFrameRenderer(
 
         isRendering = true
         nextRenderTimeNanos = 0L
+        lastRealFrameTimeNanos = 0L
         Choreographer.getInstance().postVsyncCallback(this)
     }
 
     override fun stopRendering() {
         isRendering = false
         nextRenderTimeNanos = 0L
+        lastRealFrameTimeNanos = 0L
         Choreographer.getInstance().removeVsyncCallback(this)
     }
 
@@ -34,18 +44,17 @@ class ChoreographerVSyncFrameRenderer(
         }
 
         val rawDeadline = data.preferredFrameTimeline.deadlineNanos
-        val frameDelta = rawDeadline - data.frameTimeNanos
+        val frameTimeNanos = data.frameTimeNanos
+        val frameDelta = rawDeadline - frameTimeNanos
         val isHighRefresh = frameDelta <= ChoreographerFrameRenderer.DEADLINE_FRAME_TIME_THRESHOLD
-        val frameDeadline = if (isHighRefresh) null else rawDeadline
         val shouldRender = if (isHighRefresh) {
-            val frameTimeNanos = data.frameTimeNanos
-            if (nextRenderTimeNanos == 0L || frameTimeNanos + TARGET_DS_FRAME_INTERVAL_NS < nextRenderTimeNanos) {
-                nextRenderTimeNanos = frameTimeNanos + TARGET_DS_FRAME_INTERVAL_NS
+            if (nextRenderTimeNanos == 0L || frameTimeNanos + DS_FRAME_INTERVAL_NANOS < nextRenderTimeNanos) {
+                nextRenderTimeNanos = frameTimeNanos + DS_FRAME_INTERVAL_NANOS
                 true
             } else if (frameTimeNanos + VSYNC_JITTER_TOLERANCE_NS >= nextRenderTimeNanos) {
-                nextRenderTimeNanos += TARGET_DS_FRAME_INTERVAL_NS
-                if (frameTimeNanos - nextRenderTimeNanos > TARGET_DS_FRAME_INTERVAL_NS) {
-                    nextRenderTimeNanos = frameTimeNanos + TARGET_DS_FRAME_INTERVAL_NS
+                nextRenderTimeNanos += DS_FRAME_INTERVAL_NANOS
+                if (frameTimeNanos - nextRenderTimeNanos > DS_FRAME_INTERVAL_NANOS) {
+                    nextRenderTimeNanos = frameTimeNanos + DS_FRAME_INTERVAL_NANOS
                 }
                 true
             } else {
@@ -56,10 +65,23 @@ class ChoreographerVSyncFrameRenderer(
             true
         }
 
+        val paused = emulationPaused || isEmulationPaused()
         if (shouldRender) {
-            frameRenderCoordinator.renderFrame(frameDeadline)
-        } else if (isHighRefresh && me.magnum.melonds.MelonEmulator.isVulkanFrameGenEnabled()) {
-            frameRenderCoordinator.renderInterpolatedFrame(rawDeadline)
+            lastRealFrameTimeNanos = frameTimeNanos
+            frameRenderCoordinator.renderFrame(rawDeadline)
+        } else if (isHighRefresh && !paused && me.magnum.melonds.MelonEmulator.isVulkanFrameGenEnabled()) {
+            val blendFactor = if (lastRealFrameTimeNanos > 0L) {
+                ((frameTimeNanos - lastRealFrameTimeNanos).toDouble() / DS_FRAME_INTERVAL_NANOS)
+                    .toFloat()
+                    .coerceIn(0.15f, 0.85f)
+            } else {
+                0.5f
+            }
+            if (frameRenderCoordinator is VulkanFrameRenderCoordinator) {
+                frameRenderCoordinator.renderInterpolatedFrame(rawDeadline, blendFactor)
+            } else {
+                frameRenderCoordinator.renderInterpolatedFrame(rawDeadline)
+            }
         }
         if (isRendering) {
             Choreographer.getInstance().postVsyncCallback(this)
@@ -67,7 +89,7 @@ class ChoreographerVSyncFrameRenderer(
     }
 
     private companion object {
-        const val TARGET_DS_FRAME_INTERVAL_NS = 16_666_667L
+        const val DS_FRAME_INTERVAL_NANOS = 16_666_667L
         const val VSYNC_JITTER_TOLERANCE_NS = 500_000L
     }
 }

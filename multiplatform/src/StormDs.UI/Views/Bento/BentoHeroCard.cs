@@ -9,6 +9,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using Storm.AuroraFluid.Kit.Controls;
 using Storm.AuroraFluid.Kit.Icons;
 using Storm.AuroraFluid.Kit.Services;
@@ -297,6 +298,12 @@ public class BentoHeroCard : AuroraGlassCard
 
     private void UpdateWithRom(RomMetadataRecord? rom)
     {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => UpdateWithRom(rom));
+            return;
+        }
+
         _currentRom = rom;
         if (rom == null)
         {

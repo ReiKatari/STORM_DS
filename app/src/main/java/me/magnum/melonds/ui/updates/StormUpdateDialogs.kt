@@ -12,6 +12,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -456,6 +457,8 @@ fun showStormUpdateAvailableDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 18.dp, vertical = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
@@ -531,7 +534,7 @@ fun showStormUpdateAvailableDialog(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 120.dp, max = 260.dp)
+                        .heightIn(min = 100.dp, max = 220.dp)
                         .clip(RoundedCornerShape(14.dp))
                         .background(colors.bg)
                         .border(1.dp, colors.line, RoundedCornerShape(14.dp))
@@ -832,6 +835,8 @@ fun showStormUpdateProgressDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState())
                     .padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
@@ -982,6 +987,8 @@ fun showStormUpdateInfoDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState())
                     .padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
@@ -1071,7 +1078,7 @@ fun showStormUpdateInfoDialog(
 private fun UpdateDialogCardShell(
     colors: WatermelonColors,
     onDismissBackdrop: () -> Unit,
-    content: @Composable () -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
 ) {
     Box(
         modifier = Modifier

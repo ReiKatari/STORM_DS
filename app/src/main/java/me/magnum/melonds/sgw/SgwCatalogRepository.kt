@@ -6,6 +6,8 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import me.magnum.melonds.domain.model.rom.Rom
 import javax.inject.Inject
@@ -22,77 +24,91 @@ class SgwCatalogRepository @Inject constructor(
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
+    private val refreshMutex = Mutex()
+
     suspend fun refreshCatalog(localRoms: List<Rom>, forceRefresh: Boolean = false): SgwCatalogSnapshot {
-        val current = _snapshot.value
-        val now = System.currentTimeMillis()
-        if (!forceRefresh && current.fetchedAtEpochMs > 0L && now - current.fetchedAtEpochMs < 15 * 60_000L) {
-            val updated = current.copy(
-                updates = SgwVersionMatcher.findUpdates(
-                    localRoms,
-                    current.ndsGames + current.dsiGames,
-                    current.translations,
-                )
-            )
-            _snapshot.value = updated
-            return updated
-        }
-
-        _isLoading.value = true
-        return try {
-            val fetched = withContext(Dispatchers.IO) {
-                coroutineScope {
-                    val ndsDeferred = async { apiClient.fetchGames(SgwPlatform.NDS) }
-                    val dsiDeferred = async { apiClient.fetchGames(SgwPlatform.DSI) }
-                    val ndsTransDeferred = async { apiClient.fetchTranslatedGames(SgwPlatform.NDS) }
-                    val dsiTransDeferred = async { apiClient.fetchTranslatedGames(SgwPlatform.DSI) }
-
-                    val ndsRes = ndsDeferred.await()
-                    val dsiRes = dsiDeferred.await()
-                    val ndsTransRes = ndsTransDeferred.await()
-                    val dsiTransRes = dsiTransDeferred.await()
-
-                    val nds = ndsRes.getOrDefault(emptyList())
-                    val dsi = dsiRes.getOrDefault(emptyList())
-                    val translations = (ndsTransRes.getOrDefault(emptyList()) + dsiTransRes.getOrDefault(emptyList()))
-                        .distinctBy { "${it.platform.platformId}_${it.id}" }
-
-                    val err = listOfNotNull(
-                        ndsRes.exceptionOrNull()?.message,
-                        dsiRes.exceptionOrNull()?.message,
-                        ndsTransRes.exceptionOrNull()?.message,
-                        dsiTransRes.exceptionOrNull()?.message,
-                    ).takeIf { nds.isEmpty() && dsi.isEmpty() && translations.isEmpty() }?.firstOrNull()
-
-                    val updates = SgwVersionMatcher.findUpdates(localRoms, nds + dsi, translations)
-                    SgwCatalogSnapshot(
-                        ndsGames = nds,
-                        dsiGames = dsi,
-                        translations = translations,
-                        updates = updates,
-                        fetchedAtEpochMs = if (err == null) System.currentTimeMillis() else 0L,
-                        errorMessage = err,
+        return refreshMutex.withLock {
+            val current = _snapshot.value
+            val now = System.currentTimeMillis()
+            val hasCachedCatalog = current.ndsGames.isNotEmpty() ||
+                current.dsiGames.isNotEmpty() ||
+                current.translations.isNotEmpty()
+            if (!forceRefresh && current.fetchedAtEpochMs > 0L && hasCachedCatalog && now - current.fetchedAtEpochMs < 15 * 60_000L) {
+                val updates = withContext(Dispatchers.Default) {
+                    SgwVersionMatcher.findUpdates(
+                        localRoms,
+                        current.ndsGames + current.dsiGames,
+                        current.translations,
                     )
                 }
+                val updated = current.copy(updates = updates)
+                _snapshot.value = updated
+                return@withLock updated
             }
-            _snapshot.value = fetched
-            fetched
-        } finally {
-            _isLoading.value = false
+
+            _isLoading.value = true
+            try {
+                val fetched = withContext(Dispatchers.IO) {
+                    coroutineScope {
+                        val ndsDeferred = async { apiClient.fetchGames(SgwPlatform.NDS) }
+                        val dsiDeferred = async { apiClient.fetchGames(SgwPlatform.DSI) }
+                        val ndsTransDeferred = async { apiClient.fetchTranslatedGames(SgwPlatform.NDS) }
+                        val dsiTransDeferred = async { apiClient.fetchTranslatedGames(SgwPlatform.DSI) }
+
+                        val ndsRes = ndsDeferred.await()
+                        val dsiRes = dsiDeferred.await()
+                        val ndsTransRes = ndsTransDeferred.await()
+                        val dsiTransRes = dsiTransDeferred.await()
+
+                        val nds = ndsRes.getOrDefault(emptyList())
+                            .distinctBy { it.platform to it.id }
+                        val dsi = dsiRes.getOrDefault(emptyList())
+                            .distinctBy { it.platform to it.id }
+                        val translations = (ndsTransRes.getOrDefault(emptyList()) + dsiTransRes.getOrDefault(emptyList()))
+                            .distinctBy { it.platform to it.id }
+
+                        val errors = listOfNotNull(
+                            ndsRes.exceptionOrNull()?.message,
+                            dsiRes.exceptionOrNull()?.message,
+                            ndsTransRes.exceptionOrNull()?.message,
+                            dsiTransRes.exceptionOrNull()?.message,
+                        )
+                        val err = errors.takeIf { nds.isEmpty() && dsi.isEmpty() && translations.isEmpty() }?.firstOrNull()
+
+                        val updates = withContext(Dispatchers.Default) {
+                            SgwVersionMatcher.findUpdates(localRoms, nds + dsi, translations)
+                        }
+                        SgwCatalogSnapshot(
+                            ndsGames = nds,
+                            dsiGames = dsi,
+                            translations = translations,
+                            updates = updates,
+                            fetchedAtEpochMs = if (errors.isEmpty()) System.currentTimeMillis() else 0L,
+                            errorMessage = err,
+                        )
+                    }
+                }
+                _snapshot.value = fetched
+                fetched
+            } finally {
+                _isLoading.value = false
+            }
         }
     }
 
-    fun recomputeUpdates(localRoms: List<Rom>) {
+    suspend fun recomputeUpdates(localRoms: List<Rom>) {
         val current = _snapshot.value
         if (current.ndsGames.isEmpty() && current.dsiGames.isEmpty() && current.translations.isEmpty()) {
             return
         }
-        _snapshot.value = current.copy(
-            updates = SgwVersionMatcher.findUpdates(
+        val updates = withContext(Dispatchers.Default) {
+            SgwVersionMatcher.findUpdates(
                 localRoms,
                 current.ndsGames + current.dsiGames,
                 current.translations,
             )
-        )
+        }
+        _snapshot.value = current.copy(updates = updates)
     }
 
     suspend fun downloadEntry(

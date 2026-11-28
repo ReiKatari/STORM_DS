@@ -69,6 +69,7 @@ public:
     bool init(VkPhysicalDevice physicalDevice, VkDevice device, VkQueue queue, u32 queueFamilyIndex, VkPipelineCache pipelineCache);
     void destroy();
     void destroySurfaceResources(SurfaceResources& res);
+    void waitIdle(SurfaceResources& res);
     void resetFsrHistory(SurfaceResources& res);
     void resetFrameGenHistory(SurfaceResources& res);
 
@@ -102,9 +103,11 @@ public:
         SurfaceResources& res,
         VkSemaphore signalSemaphore,
         VkImage& outImage,
-        VkImageView& outImageView);
+        VkImageView& outImageView,
+        float blendFactor = 0.5f);
 
 private:
+    void recreateSignaledFence(SurfaceResources& res);
     struct PushConstantsData
     {
         float vec0[4];

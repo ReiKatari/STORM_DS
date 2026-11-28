@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 import me.magnum.melonds.database.entities.PlaySessionEntity
 import me.magnum.melonds.database.entities.PlayStatsEntity
@@ -44,9 +45,38 @@ interface PlayStatsDao {
     @Query("SELECT DISTINCT dayKey FROM play_sessions ORDER BY startedAtMs DESC")
     suspend fun getDistinctDays(): List<String>
 
+    @Query("DELETE FROM play_stats WHERE romUri = :romUri")
+    suspend fun deletePlayStatsForRom(romUri: String)
+
     @Query("UPDATE OR REPLACE play_stats SET romUri = :newUri, romName = :newName WHERE romUri = :oldUri")
     suspend fun migrateRomUri(oldUri: String, newUri: String, newName: String)
 
     @Query("UPDATE play_sessions SET romUri = :newUri, romName = :newName WHERE romUri = :oldUri")
     suspend fun migrateSessionsRomUri(oldUri: String, newUri: String, newName: String)
+
+    @Transaction
+    suspend fun migrateRomStats(oldUri: String, newUri: String, newName: String) {
+        val oldStats = getPlayStatsForRom(oldUri)
+        val existingNew = getPlayStatsForRom(newUri)
+        if (oldStats != null) {
+            val merged = if (existingNew != null) {
+                PlayStatsEntity(
+                    romUri = newUri,
+                    romName = newName.ifBlank { oldStats.romName },
+                    gameCode = oldStats.gameCode.ifBlank { existingNew.gameCode },
+                    launchCount = oldStats.launchCount + existingNew.launchCount,
+                    totalPlayTimeMs = oldStats.totalPlayTimeMs + existingNew.totalPlayTimeMs,
+                    lastPlayedEpochMs = maxOf(oldStats.lastPlayedEpochMs, existingNew.lastPlayedEpochMs),
+                )
+            } else {
+                oldStats.copy(
+                    romUri = newUri,
+                    romName = newName.ifBlank { oldStats.romName },
+                )
+            }
+            deletePlayStatsForRom(oldUri)
+            upsertPlayStats(merged)
+        }
+        migrateSessionsRomUri(oldUri, newUri, newName)
+    }
 }

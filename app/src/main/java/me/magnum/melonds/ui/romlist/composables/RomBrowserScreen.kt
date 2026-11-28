@@ -77,6 +77,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
@@ -170,6 +171,7 @@ fun RomBrowserScreen(
     onDpadDownGateChanged: ((() -> Boolean)?) -> Unit = {},
 ) {
     val colors = watermelon
+    val effectiveSgwUpdatesByUri = if (isShortcutPickerMode) emptyMap() else sgwUpdatesByUri
     val screenContext = androidx.compose.ui.platform.LocalContext.current
     val openMultiplayerAction: () -> Unit = onOpenMultiplayer ?: {
         val activity = screenContext as? RomListActivity
@@ -498,11 +500,11 @@ fun RomBrowserScreen(
                         onOpenSettings = onOpenSettings,
                         onOpenPlayerStats = onOpenPlayerStats,
                         onReportProblem = onReportProblem,
-                        sgwUpdateCount = sgwUpdatesByUri.size,
+                        sgwUpdateCount = effectiveSgwUpdatesByUri.size,
                         onOpenSgwStore = onOpenSgwStore,
                     )
-                    if (!state.isSearchActive && sgwUpdatesByUri.isNotEmpty() && !isShortcutPickerMode) {
-                        var bannerDismissed by remember(sgwUpdatesByUri.size) { mutableStateOf(false) }
+                    if (!state.isSearchActive && effectiveSgwUpdatesByUri.isNotEmpty() && !isShortcutPickerMode) {
+                        var bannerDismissed by rememberSaveable(effectiveSgwUpdatesByUri.size) { mutableStateOf(false) }
                         if (!bannerDismissed) {
                             Row(
                                 modifier = Modifier
@@ -512,11 +514,11 @@ fun RomBrowserScreen(
                                     .background(colors.greenDim)
                                     .border(1.dp, colors.green, RoundedCornerShape(10.dp))
                                     .clickable { onOpenSgwStore(true) }
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    .padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(
-                                    text = stringResource(R.string.sgw_banner_updates_available, sgwUpdatesByUri.size),
+                                    text = stringResource(R.string.sgw_banner_updates_available, effectiveSgwUpdatesByUri.size),
                                     color = colors.text,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold,
@@ -527,14 +529,19 @@ fun RomBrowserScreen(
                                     color = colors.green,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 8.dp),
+                                    modifier = Modifier.padding(horizontal = 4.dp),
                                 )
-                                Icon(
-                                    imageVector = Icons.Filled.Close,
-                                    contentDescription = null,
-                                    tint = colors.text2,
-                                    modifier = Modifier.size(16.dp).clickable { bannerDismissed = true },
-                                )
+                                IconButton(
+                                    onClick = { bannerDismissed = true },
+                                    modifier = Modifier.size(40.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Close,
+                                        contentDescription = stringResource(R.string.close),
+                                        tint = colors.text2,
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                }
                             }
                         }
                     }
@@ -686,7 +693,7 @@ fun RomBrowserScreen(
                                                     boxArtByUri = boxArtByUri,
                                                     confirmedAchievementHashes = confirmedAchievementHashes,
                                                     isRaAuthenticated = isRaAuthenticated,
-                                                    sgwUpdatesByUri = sgwUpdatesByUri,
+                                                    sgwUpdatesByUri = effectiveSgwUpdatesByUri,
                                                     onSgwUpdateClick = { onOpenSgwStore(true) },
                                                     showAlphabetBar = showAlphabetBar,
                                                     showContinueShelf = false,
@@ -714,7 +721,7 @@ fun RomBrowserScreen(
                                                     allowConfiguration = allowConfiguration,
                                                     confirmedAchievementHashes = confirmedAchievementHashes,
                                                     isRaAuthenticated = isRaAuthenticated,
-                                                    sgwUpdatesByUri = sgwUpdatesByUri,
+                                                    sgwUpdatesByUri = effectiveSgwUpdatesByUri,
                                                     onSgwUpdateClick = { onOpenSgwStore(true) },
                                                     showAlphabetBar = showAlphabetBar,
                                                     showContinueShelf = false,
@@ -825,7 +832,7 @@ fun RomBrowserScreen(
                                             boxArtByUri = boxArtByUri,
                                             confirmedAchievementHashes = confirmedAchievementHashes,
                                             isRaAuthenticated = isRaAuthenticated,
-                                            sgwUpdatesByUri = sgwUpdatesByUri,
+                                            sgwUpdatesByUri = effectiveSgwUpdatesByUri,
                                             onSgwUpdateClick = { onOpenSgwStore(true) },
                                             showAlphabetBar = showAlphabetBar,
                                             showContinueShelf = false,
@@ -853,7 +860,7 @@ fun RomBrowserScreen(
                                             allowConfiguration = allowConfiguration,
                                             confirmedAchievementHashes = confirmedAchievementHashes,
                                             isRaAuthenticated = isRaAuthenticated,
-                                            sgwUpdatesByUri = sgwUpdatesByUri,
+                                            sgwUpdatesByUri = effectiveSgwUpdatesByUri,
                                             onSgwUpdateClick = { onOpenSgwStore(true) },
                                             showAlphabetBar = showAlphabetBar,
                                             showContinueShelf = false,

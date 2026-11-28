@@ -67,7 +67,9 @@ class PreferenceFragmentHelper(
                         preference.entries?.getOrNull(index) ?: preference.context.getString(R.string.not_set)
                     else
                         preference.context.getString(R.string.not_set)
-                    preference.setSummary(summary)
+                    if (preference.summaryProvider == null) {
+                        preference.setSummary(summary)
+                    }
                 }
                 is StoragePickerPreference -> {
                     if (value == null || value !is Set<*> || value.isEmpty())

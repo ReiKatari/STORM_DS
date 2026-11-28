@@ -8,6 +8,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Threading;
 using Storm.AuroraFluid.Kit.Controls;
 using Storm.AuroraFluid.Kit.Icons;
 using Storm.AuroraFluid.Kit.Services;
@@ -54,7 +55,10 @@ public class AchievementsView : ScrollViewer
         {
             _flushResultText.Text = "Выполняется отправка отложенных достижений...";
             int sent = await StormDsUiState.Instance.RetroAchievementsService.FlushOfflineQueueAsync();
-            _flushResultText.Text = $"Отправлено достижений из очереди: {sent}";
+            Dispatcher.UIThread.Post(() =>
+            {
+                _flushResultText.Text = $"Отправлено достижений из очереди: {sent}";
+            });
         });
         var settingsBtn = CreateBtn(AuroraIconKind.SettingsCore, "Настройки аккаунта", () =>
         {
@@ -96,6 +100,12 @@ public class AchievementsView : ScrollViewer
 
     public void RefreshData()
     {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(RefreshData);
+            return;
+        }
+
         var ra = StormDsUiState.Instance.RetroAchievementsService;
         _accountStatusText.Text = ra.IsLoggedIn
             ? $"Профиль активен: {ra.Username}"

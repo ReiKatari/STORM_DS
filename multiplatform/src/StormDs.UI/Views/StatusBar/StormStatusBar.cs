@@ -130,7 +130,8 @@ public class StormStatusBar : Border
         StormDsUiState.Instance.EmulationStopped += RefreshLiveIndicators;
         StormDsUiState.Instance.StatusNotification += msg =>
         {
-            if (!string.IsNullOrWhiteSpace(msg))
+            if (string.IsNullOrWhiteSpace(msg)) return;
+            PostUi(() =>
             {
                 _hasTransientNotification = true;
                 _wfcText.Text = msg;
@@ -139,7 +140,7 @@ public class StormStatusBar : Border
                     _hasTransientNotification = false;
                     _wfcText.Text = FormatLiveStatusText();
                 }, TimeSpan.FromSeconds(4));
-            }
+            });
         };
         StormThemeBrushes.BindTheme(this, () =>
         {
@@ -174,20 +175,32 @@ public class StormStatusBar : Border
         return StormDsUiState.Instance.AppConfig.LanDiscoveryEnabled ? "Готов (WFC + LAN)" : "Готов";
     }
 
+    private void PostUi(Action action)
+    {
+        if (Dispatcher.UIThread.CheckAccess()) action();
+        else Dispatcher.UIThread.Post(action);
+    }
+
     private void RefreshLiveIndicators()
     {
-        _gpuTierText.Text = StormDsUiState.Instance.VulkanTierBadge;
-        _latencyText.Text = FormatLatencyText();
-        if (!_hasTransientNotification)
+        PostUi(() =>
         {
-            _wfcText.Text = FormatLiveStatusText();
-        }
+            _gpuTierText.Text = StormDsUiState.Instance.VulkanTierBadge;
+            _latencyText.Text = FormatLatencyText();
+            if (!_hasTransientNotification)
+            {
+                _wfcText.Text = FormatLiveStatusText();
+            }
+        });
     }
 
     private void UpdateCount()
     {
-        int count = StormDsUiState.Instance.GetFilteredRoms().Count;
-        string plural = AuroraLocalizationService.GetRussianPlural(count, "игра", "игры", "игр");
-        _countText.Text = $"{count} {plural}";
+        PostUi(() =>
+        {
+            int count = StormDsUiState.Instance.GetFilteredRoms().Count;
+            string plural = AuroraLocalizationService.GetRussianPlural(count, "игра", "игры", "игр");
+            _countText.Text = $"{count} {plural}";
+        });
     }
 }

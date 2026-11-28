@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
+import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.EmojiEvents
@@ -275,7 +276,7 @@ fun RomListRow(
             ) {
                 Text(
                     text = badgeText,
-                    color = Color.Black,
+                    color = MaterialTheme.colors.onPrimary,
                     fontWeight = FontWeight.Bold,
                     fontSize = 10.sp,
                 )

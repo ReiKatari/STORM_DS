@@ -553,7 +553,6 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             if (fsrQualPref.value.isNullOrBlank()) {
                 fsrQualPref.value = "ultra_quality"
             }
-            helper.bindPreferenceSummaryToValue(fsrQualPref)
         }
         findPreference<androidx.preference.SeekBarPreference>("video_fsr_sharpness")?.let { sharpPref ->
             sharpPref.summary = getString(R.string.video_fsr_sharpness_summary, sharpPref.value)
@@ -1500,7 +1499,9 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         if (!currentFiltering.isSupportedByRenderer(renderer)) {
             videoFilteringPreference.value = VideoFiltering.NONE.name.lowercase()
         }
-        videoFilteringPreference.summary = "%s"
+        if (videoFilteringPreference.summaryProvider == null) {
+            videoFilteringPreference.summary = "%s"
+        }
 
         // Lock / Unlock 3D Internal Resolution on Software renderer
         findPreference<ListPreference>("video_internal_resolution")?.let { internalResPref ->
@@ -2264,6 +2265,9 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
         syncSwitchPreferenceFromPrefs("video_widescreen_3d", false)
         syncSwitchPreferenceFromPrefs("video_60fps_patch", false)
         syncSwitchPreferenceFromPrefs("video_conservative_coverage_enabled", false)
+        syncListPreferenceFromPrefs("video_fsr_quality_mode", "ultra_quality")
+        val fsrSharpnessPref = syncSeekBarPreferenceFromPrefs("video_fsr_sharpness", 50)
+        syncSwitchPreferenceFromPrefs("video_frame_gen_enabled", false)
 
         val launchedInGame = isLaunchedInGame()
         val lockVideoFiltering = launchedInGame &&
@@ -2365,6 +2369,11 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             }
             internalResPref?.takeIf { effectiveRenderer != VideoRenderer.SOFTWARE }?.let {
                 updateInternalResolutionSummary(it)
+            }
+            fsrSharpnessPref?.let {
+                if (it.summaryProvider == null) {
+                    it.summary = getString(R.string.video_fsr_sharpness_summary, it.value)
+                }
             }
             if (launchedInGame) {
                 findPreference<Preference>("video_quick_profile")?.apply {
@@ -2749,7 +2758,11 @@ class VideoPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
     }
 
     private fun updateListPreferenceSummary(pref: ListPreference) {
-        pref.summaryProvider = ListPreference.SimpleSummaryProvider.getInstance()
+        if (pref.onPreferenceChangeListener == null && pref.summaryProvider == null) {
+            pref.summaryProvider = ListPreference.SimpleSummaryProvider.getInstance()
+        } else if (pref.summaryProvider == null) {
+            pref.summary = pref.entry ?: pref.value
+        }
     }
 
     private fun updateAiUpscaleSummary() {

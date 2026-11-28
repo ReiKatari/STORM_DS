@@ -12,6 +12,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -235,16 +236,45 @@ fun RomGridCard(
             }
         }
 
-        if (rom.isFavorite) {
-            Icon(
-                imageVector = Icons.Filled.Star,
-                contentDescription = null,
-                tint = WatermelonColors.favoriteStar,
+        if (rom.isFavorite || sgwUpdateReason != null) {
+            Row(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(top = 6.dp, end = 7.dp)
-                    .size(13.dp),
-            )
+                    .padding(7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                if (sgwUpdateReason != null) {
+                    val badgeText = androidx.compose.ui.res.stringResource(
+                        if (sgwUpdateReason == me.magnum.melonds.sgw.SgwUpdateReason.RUSSIAN_TRANSLATION_AVAILABLE)
+                            me.magnum.melonds.R.string.sgw_badge_rus
+                        else
+                            me.magnum.melonds.R.string.sgw_badge_update
+                    )
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(5.dp))
+                            .background(colors.green)
+                            .clickable(enabled = onSgwUpdateClick != null) { onSgwUpdateClick?.invoke() }
+                            .padding(horizontal = 5.dp, vertical = 2.dp),
+                    ) {
+                        Text(
+                            text = badgeText,
+                            color = MaterialTheme.colors.onPrimary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 9.sp,
+                        )
+                    }
+                }
+                if (rom.isFavorite) {
+                    Icon(
+                        imageVector = Icons.Filled.Star,
+                        contentDescription = null,
+                        tint = WatermelonColors.favoriteStar,
+                        modifier = Modifier.size(13.dp),
+                    )
+                }
+            }
         }
 
         if (!artLoaded) {
@@ -282,31 +312,6 @@ fun RomGridCard(
                 raCoverUrl = coverUrl,
                 modifier = Modifier.align(Alignment.BottomStart).padding(7.dp),
             )
-        }
-
-        if (sgwUpdateReason != null) {
-            val badgeText = androidx.compose.ui.res.stringResource(
-                if (sgwUpdateReason == me.magnum.melonds.sgw.SgwUpdateReason.RUSSIAN_TRANSLATION_AVAILABLE)
-                    me.magnum.melonds.R.string.sgw_badge_rus
-                else
-                    me.magnum.melonds.R.string.sgw_badge_update
-            )
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(7.dp)
-                    .clip(RoundedCornerShape(5.dp))
-                    .background(colors.green)
-                    .clickable(enabled = onSgwUpdateClick != null) { onSgwUpdateClick?.invoke() }
-                    .padding(horizontal = 5.dp, vertical = 2.dp),
-            ) {
-                Text(
-                    text = badgeText,
-                    color = Color.Black,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 9.sp,
-                )
-            }
         }
 
         if (isFocused) {

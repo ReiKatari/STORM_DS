@@ -379,7 +379,12 @@ class SettingsSearchIndex(private val context: Context) {
             hidden.add("video_console_skin_type")
             hidden.add("video_console_skin_brightness")
         }
-        if (prefs.getString("video_filtering", "quilez") != "retroarch") {
+        val filtering = prefs.getString("video_filtering", "quilez")?.lowercase(Locale.ROOT) ?: "quilez"
+        if (filtering != "fsr1" && filtering != "fsr3") {
+            hidden.add("video_fsr_quality_mode")
+            hidden.add("video_fsr_sharpness")
+        }
+        if (filtering != "retroarch") {
             hidden.addAll(
                 listOf(
                     "video_retroarch_shader_source",

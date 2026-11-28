@@ -208,7 +208,7 @@ public sealed class AuroraDualMirrorUpdater
 
     static AuroraDualMirrorUpdater()
     {
-        s_httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("STORM-AuroraFluid-Updater/8.9.6 (Windows; Android; Linux)");
+        s_httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("STORM-AuroraFluid-Updater/8.9.7 (Windows; Android; Linux)");
     }
 
     public static bool TryParseSemanticVersion(string? raw, out Version version)
@@ -230,6 +230,37 @@ public sealed class AuroraDualMirrorUpdater
         return Version.TryParse(clean, out version!);
     }
 
+    private static bool IsNonWindowsAssetName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return true;
+        string lower = name.Trim().ToLowerInvariant();
+        if (!(lower.EndsWith(".exe", StringComparison.Ordinal) ||
+              lower.EndsWith(".msi", StringComparison.Ordinal) ||
+              lower.EndsWith(".zip", StringComparison.Ordinal)))
+        {
+            return true;
+        }
+
+        if (lower.EndsWith(".zip", StringComparison.Ordinal))
+        {
+            string[] nonWinMarkers =
+            [
+                "android", "linux", "macos", "osx", "darwin", "ubuntu",
+                "debian", "fedora", "appimage", "arm64-v8a", "armeabi",
+                "ios", "flatpak", "snap", "source", "src"
+            ];
+            foreach (var marker in nonWinMarkers)
+            {
+                if (lower.Contains(marker, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     public static GitHubAssetInfo? SelectBestWindowsAsset(IReadOnlyList<GitHubAssetInfo>? assets)
     {
         if (assets == null || assets.Count == 0) return null;
@@ -237,7 +268,7 @@ public sealed class AuroraDualMirrorUpdater
         var windowsAssets = assets
             .Where(a => !string.IsNullOrWhiteSpace(a.Name) &&
                         !string.IsNullOrWhiteSpace(a.DownloadUrl) &&
-                        !a.Name.EndsWith(".apk", StringComparison.OrdinalIgnoreCase))
+                        !IsNonWindowsAssetName(a.Name))
             .ToList();
 
         if (windowsAssets.Count == 0) return null;
@@ -272,6 +303,28 @@ public sealed class AuroraDualMirrorUpdater
 
         bool anySucceeded = ghOk || mirrorOk;
 
+        AuroraUpdateSourceOption? ghOpt = ghBest == null
+            ? null
+            : new AuroraUpdateSourceOption(
+                AuroraUpdateDownloadSource.GitHub,
+                "GitHub",
+                ghBest.DownloadUrl,
+                ghBest.ReleasePageUrl,
+                ghBest.AssetName,
+                ghBest.AssetSizeBytes,
+                ghBest.ExpectedSha256);
+
+        AuroraUpdateSourceOption? sgwOpt = mirrorBest == null
+            ? null
+            : new AuroraUpdateSourceOption(
+                AuroraUpdateDownloadSource.StormGamesWorld,
+                "STORM GAMES WORLD",
+                mirrorBest.DownloadUrl,
+                mirrorBest.ReleasePageUrl,
+                mirrorBest.AssetName,
+                mirrorBest.AssetSizeBytes,
+                mirrorBest.ExpectedSha256);
+
         AuroraUpdateCheckResult? bestCandidate = null;
         if (ghBest != null && mirrorBest != null)
         {
@@ -285,65 +338,25 @@ public sealed class AuroraDualMirrorUpdater
             }
             else
             {
-                var ghOpt = new AuroraUpdateSourceOption(
-                    AuroraUpdateDownloadSource.GitHub,
-                    "GitHub",
-                    ghBest.DownloadUrl,
-                    ghBest.ReleasePageUrl,
-                    ghBest.AssetName,
-                    ghBest.AssetSizeBytes,
-                    ghBest.ExpectedSha256);
-                var sgwOpt = new AuroraUpdateSourceOption(
-                    AuroraUpdateDownloadSource.StormGamesWorld,
-                    "STORM GAMES WORLD",
-                    mirrorBest.DownloadUrl,
-                    mirrorBest.ReleasePageUrl,
-                    mirrorBest.AssetName,
-                    mirrorBest.AssetSizeBytes,
-                    mirrorBest.ExpectedSha256);
-                var primary = preferredSource == AuroraUpdateDownloadSource.StormGamesWorld ? mirrorBest : ghBest;
-                bestCandidate = primary with
-                {
-                    GitHubSource = ghOpt,
-                    StormMirrorSource = sgwOpt,
-                    Changelog = !string.IsNullOrWhiteSpace(ghBest.Changelog) ? ghBest.Changelog : mirrorBest.Changelog
-                };
+                bestCandidate = preferredSource == AuroraUpdateDownloadSource.StormGamesWorld ? mirrorBest : ghBest;
             }
-        }
-        else
-        {
-            bestCandidate = ghBest ?? mirrorBest;
-            if (bestCandidate != null)
+
+            bestCandidate = bestCandidate with
             {
-                if (ghBest != null)
-                {
-                    bestCandidate = bestCandidate with
-                    {
-                        GitHubSource = new AuroraUpdateSourceOption(
-                            AuroraUpdateDownloadSource.GitHub,
-                            "GitHub",
-                            bestCandidate.DownloadUrl,
-                            bestCandidate.ReleasePageUrl,
-                            bestCandidate.AssetName,
-                            bestCandidate.AssetSizeBytes,
-                            bestCandidate.ExpectedSha256)
-                    };
-                }
-                else
-                {
-                    bestCandidate = bestCandidate with
-                    {
-                        StormMirrorSource = new AuroraUpdateSourceOption(
-                            AuroraUpdateDownloadSource.StormGamesWorld,
-                            "STORM GAMES WORLD",
-                            bestCandidate.DownloadUrl,
-                            bestCandidate.ReleasePageUrl,
-                            bestCandidate.AssetName,
-                            bestCandidate.AssetSizeBytes,
-                            bestCandidate.ExpectedSha256)
-                    };
-                }
-            }
+                GitHubSource = ghOpt,
+                StormMirrorSource = sgwOpt,
+                Changelog = !string.IsNullOrWhiteSpace(bestCandidate.Changelog)
+                    ? bestCandidate.Changelog
+                    : (!string.IsNullOrWhiteSpace(ghBest.Changelog) ? ghBest.Changelog : mirrorBest.Changelog)
+            };
+        }
+        else if (ghBest != null || mirrorBest != null)
+        {
+            bestCandidate = (ghBest ?? mirrorBest)! with
+            {
+                GitHubSource = ghOpt,
+                StormMirrorSource = sgwOpt
+            };
         }
 
         if (bestCandidate != null && bestCandidate.LatestVersion > currentVersion)
@@ -366,7 +379,9 @@ public sealed class AuroraDualMirrorUpdater
             );
         }
 
-        string sourceLabel = ghOk ? "GitHub" : "STORM GAMES WORLD";
+        string sourceLabel = preferredSource == AuroraUpdateDownloadSource.StormGamesWorld
+            ? (mirrorOk ? "STORM GAMES WORLD" : "GitHub")
+            : (ghOk ? "GitHub" : "STORM GAMES WORLD");
         return new AuroraUpdateCheckResult(
             IsUpdateAvailable: false,
             CurrentVersion: currentVersion,
@@ -541,6 +556,10 @@ public sealed class AuroraDualMirrorUpdater
                         var asset = SelectBestWindowsAsset(mappedAssets);
                         if (asset == null)
                         {
+                            if (mappedAssets.Count > 0)
+                            {
+                                continue;
+                            }
                             string verStr = remoteVer.ToString();
                             string setupName = $"{githubRepo}_{verStr}_Setup.exe";
                             asset = new GitHubAssetInfo
@@ -576,7 +595,8 @@ public sealed class AuroraDualMirrorUpdater
                 else if (TryParseSemanticVersion(data.Version, out var singleVer) && singleVer > currentVersion && !string.IsNullOrWhiteSpace(data.DownloadUrl))
                 {
                     string normUrl = NormalizeMirrorDownloadUrl(data.DownloadUrl, Path.GetFileName(data.DownloadUrl), host, githubRepo);
-                    if (!normUrl.EndsWith(".apk", StringComparison.OrdinalIgnoreCase))
+                    string singleFileName = Path.GetFileName(normUrl);
+                    if (!IsNonWindowsAssetName(singleFileName))
                     {
                         candidates.Add(new AuroraUpdateCheckResult(
                             IsUpdateAvailable: true,
@@ -587,7 +607,7 @@ public sealed class AuroraDualMirrorUpdater
                             ExpectedSha256: string.IsNullOrWhiteSpace(data.Sha256) ? null : data.Sha256,
                             SourceMirror: "STORM GAMES WORLD",
                             ReleasePageUrl: $"{host}/programs?repo={githubRepo}",
-                            AssetName: Path.GetFileName(normUrl),
+                            AssetName: singleFileName,
                             AssetSizeBytes: 0,
                             PublishedAtUtc: null,
                             CheckSucceeded: true
@@ -595,7 +615,8 @@ public sealed class AuroraDualMirrorUpdater
                     }
                 }
 
-                if (candidates.Count > 0) break;
+                bool validPrimaryPayload = (list != null && list.Count > 0) || TryParseSemanticVersion(data.Version, out _);
+                if (candidates.Count > 0 || validPrimaryPayload) break;
             }
             catch (OperationCanceledException)
             {

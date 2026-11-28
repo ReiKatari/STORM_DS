@@ -45,6 +45,7 @@ object LiteModePreferenceSnapshotManager {
         "video_widescreen_3d" to false,
         "video_60fps_patch" to false,
         "video_conservative_coverage_enabled" to false,
+        "video_frame_gen_enabled" to false,
         // Audio
         "audio_interpolation" to "none",
         "audio_bitrate" to "bit10",

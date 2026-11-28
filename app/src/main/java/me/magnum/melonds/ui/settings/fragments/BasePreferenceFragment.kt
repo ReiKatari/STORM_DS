@@ -186,6 +186,10 @@ abstract class BasePreferenceFragment : PreferenceFragmentCompat() {
 
     override fun onPreferenceTreeClick(preference: Preference): Boolean {
         lastActivatedKey = preference.key
+        if (preference is SeekBarPreference) {
+            showStyledSeekBarPreferenceDialog(preference)
+            return true
+        }
         return super.onPreferenceTreeClick(preference)
     }
 

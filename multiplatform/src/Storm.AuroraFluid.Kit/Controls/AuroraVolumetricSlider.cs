@@ -42,6 +42,7 @@ public class AuroraVolumetricSlider : Control
     }
 
     public event EventHandler<double>? ValueChanged;
+    public event Action<double>? DragCompleted;
 
     private bool _isDragging;
     private int _lastTickValue = -1;
@@ -95,9 +96,12 @@ public class AuroraVolumetricSlider : Control
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e);
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
         _isDragging = true;
+        e.Pointer.Capture(this);
         UpdateValueFromPoint(e.GetPosition(this));
         InvalidateVisual();
+        e.Handled = true;
     }
 
     protected override void OnPointerMoved(PointerEventArgs e)
@@ -113,8 +117,28 @@ public class AuroraVolumetricSlider : Control
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
-        _isDragging = false;
-        InvalidateVisual();
+        if (_isDragging)
+        {
+            _isDragging = false;
+            if (e.Pointer.Captured == this)
+            {
+                e.Pointer.Capture(null);
+            }
+            InvalidateVisual();
+            DragCompleted?.Invoke(Value);
+            e.Handled = true;
+        }
+    }
+
+    protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
+    {
+        base.OnPointerCaptureLost(e);
+        if (_isDragging)
+        {
+            _isDragging = false;
+            InvalidateVisual();
+            DragCompleted?.Invoke(Value);
+        }
     }
 
     public override void Render(DrawingContext context)

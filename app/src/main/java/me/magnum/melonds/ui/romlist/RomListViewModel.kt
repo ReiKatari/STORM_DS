@@ -64,10 +64,16 @@ class RomListViewModel @Inject constructor(
     private val sgwCatalogRepository: me.magnum.melonds.sgw.SgwCatalogRepository,
 ) : ViewModel() {
 
+    private val _isShortcutPickerMode = MutableStateFlow(false)
+
     val sgwUpdatesByUri: StateFlow<Map<String, me.magnum.melonds.sgw.SgwUpdateCandidate>> =
         sgwCatalogRepository.snapshot
             .map { snap -> snap.updates.associateBy { it.localRom.uri.toString() } }
             .stateIn(viewModelScope, SharingStarted.Lazily, emptyMap())
+
+    fun setShortcutPickerMode(enabled: Boolean) {
+        _isShortcutPickerMode.value = enabled
+    }
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
@@ -317,12 +323,28 @@ class RomListViewModel @Inject constructor(
                     }
                 }
                 romsWithParents.value = romsWithDocIds
-                if (romList.isNotEmpty()) {
-                    viewModelScope.launch(Dispatchers.IO) {
-                        sgwCatalogRepository.refreshCatalog(romList, forceRefresh = false)
+            }
+        }
+
+        viewModelScope.launch {
+            @OptIn(FlowPreview::class)
+            combine(
+                romsRepository.getRoms()
+                    .distinctUntilChanged { old, new ->
+                        old.size == new.size && old.map { it.uri.toString() } == new.map { it.uri.toString() }
+                    },
+                _isShortcutPickerMode,
+            ) { romList, isShortcutPicker ->
+                romList to isShortcutPicker
+            }
+                .debounce(1500L)
+                .collectLatest { (romList, isShortcutPicker) ->
+                    if (!isShortcutPicker && romList.isNotEmpty()) {
+                        withContext(Dispatchers.IO) {
+                            sgwCatalogRepository.refreshCatalog(romList, forceRefresh = false)
+                        }
                     }
                 }
-            }
         }
 
         viewModelScope.launch(Dispatchers.IO) {

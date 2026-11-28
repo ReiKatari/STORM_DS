@@ -8,6 +8,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
@@ -33,22 +34,28 @@ public class SettingsView : Grid
     private readonly AuroraSearchBox _searchBox;
     private readonly StackPanel _tabsRail;
     private readonly ContentControl _contentPresenter;
+    private readonly ScrollViewer _contentScrollViewer;
     private readonly TextBlock _savedFeedbackText;
     private readonly List<(int Index, AuroraIconKind Icon, string Title, Border Button)> _tabButtons = [];
     private int _activeTabIndex;
+    private bool _hasLoadedAnyTab;
     private string _filterQuery = string.Empty;
     private string? _listeningBindTarget;
     private bool _listeningIsHotkey;
     private Button? _listeningButton;
+    private Dictionary<string, string>? _listeningTargetDict;
+    private string? _listeningOriginalText;
 
     public void FocusSearchBox() => _searchBox.Focus();
     public void SelectTab(int index) => LoadTab(Math.Clamp(index, 0, Math.Max(0, _tabButtons.Count - 1)));
 
     public SettingsView()
     {
+        Focusable = true;
         Margin = new Thickness(16, 8, 16, 12);
         RowDefinitions = new RowDefinitions("Auto,*");
         ColumnDefinitions = new ColumnDefinitions("268,*");
+        AddHandler(KeyDownEvent, OnSettingsTunnelKeyDown, RoutingStrategies.Tunnel, handledEventsToo: true);
 
         // 1. Full-Width Top Bar: Stretched Search Box + Save Configuration Pill
         var topBar = new Grid
@@ -158,6 +165,12 @@ public class SettingsView : Grid
         };
 
         _contentPresenter = new ContentControl();
+        _contentScrollViewer = new ScrollViewer
+        {
+            Padding = new Thickness(18, 16, 26, 16),
+            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled
+        };
+        _contentPresenter.Content = _contentScrollViewer;
         glassCard.Content = _contentPresenter;
 
         Children.Add(glassCard);
@@ -226,7 +239,11 @@ public class SettingsView : Grid
 
     private void LoadTab(int index)
     {
+        CancelListeningKeyBind();
+        bool sameTab = _hasLoadedAnyTab && _activeTabIndex == index;
+        Vector savedOffset = sameTab ? _contentScrollViewer.Offset : default;
         _activeTabIndex = index;
+        _hasLoadedAnyTab = true;
 
         var primaryColor = StormThemeBrushes.AccentPrimaryColor;
 
@@ -241,12 +258,6 @@ public class SettingsView : Grid
                 tb.Foreground = isSel ? StormThemeBrushes.PrimaryText : StormThemeBrushes.SecondaryText;
             }
         }
-
-        var scroll = new ScrollViewer
-        {
-            Padding = new Thickness(18, 16, 26, 16),
-            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled
-        };
 
         var container = new StackPanel { Spacing = 14 };
         string q = _filterQuery.Trim();
@@ -298,8 +309,18 @@ public class SettingsView : Grid
             }
         }
 
-        scroll.Content = container;
-        _contentPresenter.Content = scroll;
+        _contentScrollViewer.Content = container;
+        _contentScrollViewer.Offset = savedOffset;
+        if (sameTab)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (_activeTabIndex == index)
+                {
+                    _contentScrollViewer.Offset = savedOffset;
+                }
+            }, DispatcherPriority.Render);
+        }
     }
 
     private static bool ControlContainsText(Control control, string query)
@@ -332,6 +353,7 @@ public class SettingsView : Grid
         compatCheck.IsCheckedChanged += (s, chk) =>
         {
             cfg.VulkanCompatibilityTier = chk ? VulkanCompatibilityTier.Vulkan10_11LegacyCompat : VulkanCompatibilityTier.Auto;
+            CommitSave();
         };
         p.Children.Add(compatCheck);
 
@@ -343,7 +365,7 @@ public class SettingsView : Grid
 
         p.Children.Add(CreateSliderRow("Масштаб внутреннего разрешения 3D:", 1, 8, cfg.InternalResolutionScale, "x Native (1x-8x)", (v) =>
         {
-            cfg.InternalResolutionScale = (int)v;
+            cfg.InternalResolutionScale = (int)Math.Round(v);
         }));
 
         p.Children.Add(CreateCheckBoxRow("Динамическое масштабирование разрешения (DRS 60 FPS)", cfg.DynamicResolutionScaling, (v) => cfg.DynamicResolutionScaling = v));
@@ -388,7 +410,7 @@ public class SettingsView : Grid
 
         p.Children.Add(CreateSliderRow("Резкость FSR RCAS (0-100%):", 0, 100, cfg.FsrRcasSharpness, "%", (v) =>
         {
-            cfg.FsrRcasSharpness = Math.Clamp((int)v, 0, 100);
+            cfg.FsrRcasSharpness = Math.Clamp((int)Math.Round(v), 0, 100);
             StormDsUiState.Instance.NotifyDisplayConfigChanged();
         }));
 
@@ -412,7 +434,7 @@ public class SettingsView : Grid
 
         p.Children.Add(CreateSliderRow("Аппаратная задержка аудио:", 10, 100, cfg.AudioLatency, "мс", (v) =>
         {
-            cfg.AudioLatency = (int)v;
+            cfg.AudioLatency = (int)Math.Round(v);
         }));
 
         p.Children.Add(CreateComboBoxRow(
@@ -429,7 +451,6 @@ public class SettingsView : Grid
         {
             cfg.UiTactileAudioEnabled = v;
             AuroraTactileFeedbackService.Instance.Enabled = v;
-            CommitSave();
         }));
         p.Children.Add(CreateSliderRow("Громкость тактильных звуков интерфейса:", 0.0, 1.0, cfg.UiTactileVolume, "%", (v) => cfg.UiTactileVolume = (float)v, displayScale: 100.0));
 
@@ -528,6 +549,56 @@ public class SettingsView : Grid
         p.Children.Add(CreateCheckBoxRow("Инвертировать гироскоп по оси Y", cfg.GyroInvertY, (v) => cfg.GyroInvertY = v));
     }
 
+    private void CancelListeningKeyBind()
+    {
+        if (_listeningButton != null)
+        {
+            _listeningButton.BorderBrush = StormThemeBrushes.StrongBorder;
+            if (_listeningButton.Content is TextBlock tb)
+            {
+                tb.Text = _listeningOriginalText ?? "-";
+                tb.Foreground = StormThemeBrushes.PrimaryText;
+            }
+        }
+        _listeningBindTarget = null;
+        _listeningButton = null;
+        _listeningTargetDict = null;
+        _listeningOriginalText = null;
+    }
+
+    private void OnSettingsTunnelKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (_listeningBindTarget == null || _listeningButton == null || _listeningTargetDict == null)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        if (e.Key == Key.Escape)
+        {
+            CancelListeningKeyBind();
+            return;
+        }
+
+        string keyName = e.Key.ToString();
+        _listeningTargetDict[_listeningBindTarget] = keyName;
+        var btn = _listeningButton;
+        _listeningBindTarget = null;
+        _listeningButton = null;
+        _listeningTargetDict = null;
+        _listeningOriginalText = null;
+
+        btn.BorderBrush = StormThemeBrushes.StrongBorder;
+        if (btn.Content is TextBlock tb)
+        {
+            tb.Text = keyName;
+            tb.Foreground = StormThemeBrushes.PrimaryText;
+        }
+
+        AuroraTactileFeedbackService.Instance.PlayAchievementChime();
+        CommitSave();
+    }
+
     private Border CreateKeyBindRow(string label, string actionId, bool isHotkey, Dictionary<string, string> targetDict)
     {
         string curKey = targetDict.TryGetValue(actionId, out var val) ? val : "-";
@@ -570,12 +641,14 @@ public class SettingsView : Grid
         keyBtn.Click += (_, _) =>
         {
             AuroraTactileFeedbackService.Instance.PlayClick();
-            if (_listeningButton != null && _listeningButton != keyBtn)
+            if (_listeningButton != null && !ReferenceEquals(_listeningButton, keyBtn))
             {
-                LoadTab(_activeTabIndex);
+                CancelListeningKeyBind();
             }
             _listeningBindTarget = actionId;
             _listeningIsHotkey = isHotkey;
+            _listeningTargetDict = targetDict;
+            _listeningOriginalText = targetDict.TryGetValue(actionId, out var currentVal) ? currentVal : "-";
             _listeningButton = keyBtn;
             keyBtn.BorderBrush = StormThemeBrushes.Accent;
             if (keyBtn.Content is TextBlock tb)
@@ -586,25 +659,12 @@ public class SettingsView : Grid
             keyBtn.Focus();
         };
 
-        keyBtn.KeyDown += (_, e) =>
+        keyBtn.LostFocus += (_, _) =>
         {
-            if (_listeningBindTarget != actionId || _listeningIsHotkey != isHotkey) return;
-            e.Handled = true;
-            if (e.Key == Key.Escape)
+            if (ReferenceEquals(_listeningButton, keyBtn))
             {
-                _listeningBindTarget = null;
-                _listeningButton = null;
-                LoadTab(_activeTabIndex);
-                return;
+                CancelListeningKeyBind();
             }
-
-            string keyName = e.Key.ToString();
-            targetDict[actionId] = keyName;
-            _listeningBindTarget = null;
-            _listeningButton = null;
-            AuroraTactileFeedbackService.Instance.PlayAchievementChime();
-            CommitSave();
-            LoadTab(_activeTabIndex);
         };
 
         row.Children.Add(keyBtn);
@@ -650,7 +710,6 @@ public class SettingsView : Grid
             (idx) =>
             {
                 cfg.UiScaleFactor = scaleValues[Math.Clamp(idx, 0, scaleValues.Length - 1)];
-                StormDsUiState.Instance.SaveConfig();
                 StormDsUiState.Instance.NotifyUiScaleChanged();
             }));
 
@@ -661,7 +720,6 @@ public class SettingsView : Grid
             (idx) =>
             {
                 cfg.ScreenLayoutMode = (ScreenLayoutMode)idx;
-                StormDsUiState.Instance.SaveConfig();
                 StormDsUiState.Instance.NotifyDisplayConfigChanged();
             }));
 
@@ -672,7 +730,6 @@ public class SettingsView : Grid
             (idx) =>
             {
                 cfg.ScreenScaleMode = (ScreenScaleMode)idx;
-                StormDsUiState.Instance.SaveConfig();
                 StormDsUiState.Instance.NotifyDisplayConfigChanged();
             }));
 
@@ -691,7 +748,6 @@ public class SettingsView : Grid
             (idx) =>
             {
                 cfg.ScreenFilter = (ScreenFilter)idx;
-                StormDsUiState.Instance.SaveConfig();
                 StormDsUiState.Instance.NotifyDisplayConfigChanged();
             }));
 
@@ -703,14 +759,13 @@ public class SettingsView : Grid
 
         p.Children.Add(CreateSliderRow("Разрыв между экранами (Gap):", 0, 64, cfg.ScreenGap, "пикселей", (v) =>
         {
-            cfg.ScreenGap = (int)v;
+            cfg.ScreenGap = (int)Math.Round(v);
             StormDsUiState.Instance.NotifyDisplayConfigChanged();
         }));
 
         p.Children.Add(CreateCheckBoxRow("Показывать сенсорные кнопки на ПК", cfg.ShowTouchOverlayOnDesktop, (v) =>
         {
             cfg.ShowTouchOverlayOnDesktop = v;
-            StormDsUiState.Instance.SaveConfig();
             StormDsUiState.Instance.NotifyDisplayConfigChanged();
         }));
     }
@@ -729,8 +784,8 @@ public class SettingsView : Grid
 
         p.Children.Add(CreateCheckBoxRow("Прямой запуск игр (Direct Boot без стартового меню)", cfg.DirectBoot, (v) => cfg.DirectBoot = v));
         p.Children.Add(CreateCheckBoxRow("Включить JIT компилятор ARM для максимальной скорости", cfg.JitEnable, (v) => cfg.JitEnable = v));
-        p.Children.Add(CreateCheckBoxRow("Разрешить читы ActionReplay глобально", cfg.CheatsEnabled, (v) => { cfg.CheatsEnabled = v; StormDsUiState.Instance.ApplyLiveCheats(); CommitSave(); }));
-        p.Children.Add(CreateCheckBoxRow("Использовать внешние дампы BIOS и Firmware", cfg.UseExternalBios, (v) => { cfg.UseExternalBios = v; CommitSave(); }));
+        p.Children.Add(CreateCheckBoxRow("Разрешить читы ActionReplay глобально", cfg.CheatsEnabled, (v) => { cfg.CheatsEnabled = v; StormDsUiState.Instance.ApplyLiveCheats(); }));
+        p.Children.Add(CreateCheckBoxRow("Использовать внешние дампы BIOS и Firmware", cfg.UseExternalBios, (v) => cfg.UseExternalBios = v));
         p.Children.Add(CreatePathSettingRow("Путь BIOS ARM9 (bios9.bin):", cfg.Bios9Path, new[] { "*.bin" }, t => { cfg.Bios9Path = t; CommitSave(); }));
         p.Children.Add(CreatePathSettingRow("Путь BIOS ARM7 (bios7.bin):", cfg.Bios7Path, new[] { "*.bin" }, t => { cfg.Bios7Path = t; CommitSave(); }));
         p.Children.Add(CreatePathSettingRow("Путь Firmware (firmware.bin):", cfg.FirmwarePath, new[] { "*.bin" }, t => { cfg.FirmwarePath = t; CommitSave(); }));
@@ -754,7 +809,7 @@ public class SettingsView : Grid
 
         p.Children.Add(CreatePathSettingRow("Образ картриджа GBA Slot-2 (.gba):", cfg.GbaRomPath, new[] { "*.gba" }, t => { cfg.GbaRomPath = t; CommitSave(); }));
         p.Children.Add(CreatePathSettingRow("Сохранение GBA Slot-2 (.sav):", cfg.GbaSavePath, new[] { "*.sav" }, t => { cfg.GbaSavePath = t; CommitSave(); }));
-        p.Children.Add(CreateSliderRow("Уровень солнечного света Boktai (Lux):", 0, 10, cfg.SolarLuxLevel, "/10", (v) => cfg.SolarLuxLevel = (int)v));
+        p.Children.Add(CreateSliderRow("Уровень солнечного света Boktai (Lux):", 0, 10, cfg.SolarLuxLevel, "/10", (v) => cfg.SolarLuxLevel = (int)Math.Round(v)));
     }
 
     // --- Tab 6: Netplay & RetroAchievements ---
@@ -929,17 +984,11 @@ public class SettingsView : Grid
         }
         p.Children.Add(fontsGrid);
 
-        p.Children.Add(CreateSectionTitle("11 Системных языков интерфейса"));
-        var langs = new[]
-        {
-            ("ru", "Русский"), ("en", "English"), ("de", "Deutsch"), ("fr", "Français"),
-            ("zh", "中文"), ("ko", "한국어"), ("ja", "日本語"), ("es", "Español"),
-            ("it", "Italiano"), ("pt", "Português"), ("hi", "हिन्दी")
-        };
+        p.Children.Add(CreateSectionTitle($"{StormDsLoc.SupportedLanguages.Count} Системных языков интерфейса"));
         var langGrid = new UniformGrid { Columns = 4 };
-        foreach (var l in langs)
+        foreach (var l in StormDsLoc.SupportedLanguages)
         {
-            bool activeLang = string.Equals(StormDsLoc.CurrentLanguage, l.Item1, StringComparison.OrdinalIgnoreCase);
+            bool activeLang = string.Equals(StormDsLoc.CurrentLanguage, l.Code, StringComparison.OrdinalIgnoreCase);
             var btn = new Button
             {
                 Margin = new Thickness(3),
@@ -950,12 +999,12 @@ public class SettingsView : Grid
                 CornerRadius = new CornerRadius(6),
                 Cursor = new Cursor(StandardCursorType.Hand)
             };
-            btn.Content = new TextBlock { Text = l.Item2, FontSize = 11, HorizontalAlignment = HorizontalAlignment.Center, Foreground = StormThemeBrushes.PrimaryText };
+            btn.Content = new TextBlock { Text = l.NativeName, FontSize = 11, HorizontalAlignment = HorizontalAlignment.Center, Foreground = StormThemeBrushes.PrimaryText };
             btn.Click += (sender, e) =>
             {
                 AuroraTactileFeedbackService.Instance.PlayClick();
-                StormDsLoc.CurrentLanguage = l.Item1;
-                StormDsUiState.Instance.AppConfig.Language = l.Item1;
+                StormDsLoc.CurrentLanguage = l.Code;
+                StormDsUiState.Instance.AppConfig.Language = l.Code;
                 CommitSave();
                 LoadTab(_activeTabIndex);
             };
@@ -985,30 +1034,18 @@ public class SettingsView : Grid
         uStack.Children.Add(CreateCheckBoxRow(
             "Автоматически проверять обновления при запуске",
             StormDsUiState.Instance.AppConfig.AutoCheckUpdates,
-            v =>
-            {
-                StormDsUiState.Instance.AppConfig.AutoCheckUpdates = v;
-                CommitSave();
-            }));
+            v => StormDsUiState.Instance.AppConfig.AutoCheckUpdates = v));
 
         uStack.Children.Add(CreateComboBoxRow(
             "Источник загрузки обновлений:",
             new[] { "Спрашивать каждый раз", "GitHub", "STORM GAMES WORLD" },
             Math.Clamp(StormDsUiState.Instance.AppConfig.UpdateDownloadSource, 0, 2),
-            idx =>
-            {
-                StormDsUiState.Instance.AppConfig.UpdateDownloadSource = Math.Clamp(idx, 0, 2);
-                CommitSave();
-            }));
+            idx => StormDsUiState.Instance.AppConfig.UpdateDownloadSource = Math.Clamp(idx, 0, 2)));
 
         uStack.Children.Add(CreateCheckBoxRow(
             "Сворачивать в системный трей вместо выхода при нажатии закрытия окна",
             StormDsUiState.Instance.AppConfig.MinimizeToTrayOnClose,
-            v =>
-            {
-                StormDsUiState.Instance.AppConfig.MinimizeToTrayOnClose = v;
-                CommitSave();
-            }));
+            v => StormDsUiState.Instance.AppConfig.MinimizeToTrayOnClose = v));
 
         var checkBtn = new AuroraVolumetricButton
         {
@@ -1083,6 +1120,11 @@ public class SettingsView : Grid
             Height = 24
         };
         slider.ValueChanged += (s, val) =>
+        {
+            labelText.Text = FormatVal(val);
+            onChange(val);
+        };
+        slider.DragCompleted += val =>
         {
             labelText.Text = FormatVal(val);
             onChange(val);

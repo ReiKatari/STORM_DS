@@ -143,6 +143,12 @@ public class StormDsMainWindow : Window
             cfg.WindowHeight = Math.Round(Bounds.Height);
         }
         StormDsUiState.Instance.SaveConfig();
+
+        bool minimizingToTray = cfg.MinimizeToTrayOnClose && !AuroraTrayManager.Instance.IsExitRequestedFromTray;
+        if (!minimizingToTray && StormDsUiState.Instance.IsEmulationActive)
+        {
+            StormDsUiState.Instance.StopEmulation();
+        }
     }
 
     private void ApplyUiScale()

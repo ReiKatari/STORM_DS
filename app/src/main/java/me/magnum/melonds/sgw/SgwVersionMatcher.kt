@@ -4,13 +4,18 @@ import me.magnum.melonds.domain.model.rom.Rom
 
 object SgwVersionMatcher {
     private val PAREN_OR_BRACKET = Regex("""\([^)]*\)|\[[^\]]*]""")
-    private val VERSION_REGEX = Regex("""(?i)(?:\b(?:v|ver|rev|rus)?[\s._-]*)(\d+(?:\.\d+){1,3}|\d+)""")
-    private val TRANSLATION_TAG_REGEX = Regex("""(?i)(\[rus]|rus|russian|перевод|русификатор|storm\s*team)""")
+    private val EXPLICIT_VERSION_REGEX = Regex("""(?i)(?:^|[\s._\-\[\(])(?:v|ver|rev|build)[\s._-]*\d+(?:\.\d+)*""")
+    private val EXTRACT_EXPLICIT_VERSION_REGEX = Regex("""(?i)(?:^|[\s._\-\[\(])(?:v|ver|rev)[\s._-]*(\d+(?:\.\d+)*)""")
+    private val EXTRACT_DOTTED_VERSION_REGEX = Regex("""(?:^|[\s._\-\[\(])(\d+\.\d+(?:\.\d+)*)(?:$|[\s._\-\]\)])""")
+    private val TRANSLATION_TAG_REGEX = Regex(
+        """(?i)(?:^|[\s._\-\[\(\{+,/])(?:rus|ru|russian|rusub|перевод|русификатор|storm[\s._-]*team)(?:$|[\s._\-\]\)\}+,/])"""
+    )
+    private val CYRILLIC_REGEX = Regex("""[\u0400-\u04FF]""")
 
     fun normalizeTitle(rawTitle: String): String {
         val withoutExt = rawTitle.replace(Regex("""(?i)\.(nds|dsi|srl|zip|7z|rar)$"""), "")
         val strippedMeta = PAREN_OR_BRACKET.replace(withoutExt, " ")
-        val withoutVer = VERSION_REGEX.replace(strippedMeta, " ")
+        val withoutVer = EXPLICIT_VERSION_REGEX.replace(strippedMeta, " ")
         return withoutVer
             .lowercase()
             .replace(Regex("""[^\p{L}\p{N}]+"""), " ")
@@ -18,12 +23,14 @@ object SgwVersionMatcher {
     }
 
     fun extractVersion(rawNameOrTitle: String): String? {
-        val m = Regex("""(?i)\b(?:v|ver|rev|r)[\s._-]*(\d+(?:\.\d+){0,3})""").find(rawNameOrTitle)
-            ?: Regex("""\b(\d+\.\d+(?:\.\d+)?)\b""").find(rawNameOrTitle)
+        val m = EXTRACT_EXPLICIT_VERSION_REGEX.find(rawNameOrTitle)
+            ?: EXTRACT_DOTTED_VERSION_REGEX.find(rawNameOrTitle)
         return m?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
     }
 
-    fun hasTranslationMarker(rawName: String): Boolean = TRANSLATION_TAG_REGEX.containsMatchIn(rawName)
+    fun hasTranslationMarker(rawName: String): Boolean {
+        return TRANSLATION_TAG_REGEX.containsMatchIn(rawName) || CYRILLIC_REGEX.containsMatchIn(rawName)
+    }
 
     fun compareVersions(a: String?, b: String?): Int {
         val aParts = parseVersionParts(a)
@@ -42,6 +49,10 @@ object SgwVersionMatcher {
     }
 
     fun isRemoteNewer(localVer: String?, remoteVer: String?): Boolean {
+        if (parseVersionParts(remoteVer).isEmpty()) return false
+        if (localVer.isNullOrBlank()) {
+            return compareVersions("1.0", remoteVer) < 0
+        }
         return compareVersions(localVer, remoteVer) < 0
     }
 
@@ -57,6 +68,7 @@ object SgwVersionMatcher {
         val fileName: String,
         val customName: String? = null,
         val isShortcut: Boolean = false,
+        val platform: SgwPlatform = SgwPlatform.NDS,
     )
 
     fun findUpdates(
@@ -69,12 +81,18 @@ object SgwVersionMatcher {
         val descriptors = localRoms.mapIndexed { idx, rom ->
             val keyId = "$idx:${rom.fileName}"
             romById[keyId] = rom
+            val localPlatform = if (rom.isDsiWareTitle || rom.fileName.endsWith(".dsi", ignoreCase = true)) {
+                SgwPlatform.DSI
+            } else {
+                SgwPlatform.NDS
+            }
             LocalRomDescriptor(
                 id = keyId,
                 name = rom.name,
                 fileName = rom.fileName,
                 customName = rom.config.customName,
                 isShortcut = rom.isInstalledDsiWareShortcut,
+                platform = localPlatform,
             )
         }
         return findUpdatesForDescriptors(descriptors, mainEntries, translationEntries)
@@ -98,8 +116,8 @@ object SgwVersionMatcher {
     ): List<DescriptorUpdateMatch> {
         if (descriptors.isEmpty()) return emptyList()
 
-        val mainByTitle = mainEntries.groupBy { it.normalizedTitle }
-        val transByTitle = translationEntries.groupBy { it.normalizedTitle }
+        val mainByPlatformTitle = mainEntries.groupBy { it.platform to it.normalizedTitle }
+        val transByPlatformTitle = translationEntries.groupBy { it.platform to it.normalizedTitle }
         val updates = ArrayList<DescriptorUpdateMatch>()
 
         for (desc in descriptors) {
@@ -111,8 +129,9 @@ object SgwVersionMatcher {
             val localVer = extractVersion(desc.fileName) ?: extractVersion(desc.name)
             val localTranslated = hasTranslationMarker(desc.fileName) || hasTranslationMarker(desc.name)
 
-            val transMatch = transByTitle[key]?.maxWithOrNull { a, b -> compareVersions(a.version, b.version) }
-            val mainMatch = mainByTitle[key]?.maxWithOrNull { a, b -> compareVersions(a.version, b.version) }
+            val lookupKey = desc.platform to key
+            val transMatch = transByPlatformTitle[lookupKey]?.maxWithOrNull { a, b -> compareVersions(a.version, b.version) }
+            val mainMatch = mainByPlatformTitle[lookupKey]?.maxWithOrNull { a, b -> compareVersions(a.version, b.version) }
 
             val candidate = selectBestCandidate(desc, localVer, localTranslated, mainMatch, transMatch)
             if (candidate != null) {

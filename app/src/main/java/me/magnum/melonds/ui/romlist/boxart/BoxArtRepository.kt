@@ -116,6 +116,7 @@ class BoxArtRepository @Inject constructor(
             loadMatches()
             val oldKey = oldRom.uri.toString()
             val newKey = newUri.toString()
+            val previousUrl = if (oldKey != newKey) memoryCache.remove(oldKey) else memoryCache[oldKey]
             val oldCover = getCustomCoverFile(oldRom)
             if (oldCover != null && oldCover.isFile && oldCover.length() > 0) {
                 val newSanitized = newFileName.substringBeforeLast('.').ifBlank { oldRom.name }
@@ -127,11 +128,12 @@ class BoxArtRepository @Inject constructor(
                     memoryCache[newKey] = "file://${dest.absolutePath}?t=${dest.lastModified()}"
                     _coverUpdates.emit(newKey to memoryCache[newKey])
                 }
-            } else {
-                memoryCache[oldKey]?.let { existingUrl ->
-                    memoryCache[newKey] = existingUrl
-                    _coverUpdates.emit(newKey to existingUrl)
-                }
+            } else if (previousUrl != null && previousUrl != NO_MATCH) {
+                memoryCache[newKey] = previousUrl
+                _coverUpdates.emit(newKey to previousUrl)
+            }
+            if (oldKey != newKey) {
+                _coverUpdates.emit(oldKey to null)
             }
             schedulePersistMatches()
         }

@@ -972,12 +972,19 @@ namespace MelonDSAndroid
             expectedWaitEpoch);
     }
 
-    VulkanPresentationResult presentVulkanInterpolatedFrame()
+    VulkanPresentationResult presentVulkanInterpolatedFrame(float blendFactor)
     {
         auto currentInstance = GetInstanceSnapshot();
         if (!currentInstance)
             return VulkanPresentationResult::Stopped;
-        return currentInstance->presentVulkanInterpolatedFrame();
+        return currentInstance->presentVulkanInterpolatedFrame(blendFactor);
+    }
+
+    void resetVulkanPostProcessHistory()
+    {
+        auto currentInstance = GetInstanceSnapshot();
+        if (currentInstance)
+            currentInstance->resetVulkanPostProcessHistory();
     }
 
     u64 captureVulkanPresentationWaitEpoch()

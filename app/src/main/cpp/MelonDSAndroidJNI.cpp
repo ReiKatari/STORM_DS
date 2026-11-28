@@ -89,6 +89,7 @@ bool emulatorResourcesActive = false;
 
 std::atomic_bool started{false};
 std::atomic_bool stop{false};
+std::atomic_bool pausedAtomic{false};
 bool paused;
 
 int debugFrameStepsRemaining = 0;
@@ -1070,6 +1071,7 @@ Java_me_magnum_melonds_MelonEmulator_setupEmulatorInternal(JNIEnv* env, jobject 
     MelonDSAndroid::setup(androidCameraHandler, std::move(androidEventMessenger), screenshotBufferPointer, 0);
     pthread_mutex_lock(&emuThreadMutex);
     paused = false;
+    pausedAtomic.store(false, std::memory_order_release);
     pthread_mutex_unlock(&emuThreadMutex);
     emulatorResourcesActive = true;
 }
@@ -1642,6 +1644,7 @@ Java_me_magnum_melonds_MelonEmulator_startEmulation(JNIEnv* env, jobject thiz, j
     isFastForwardEnabled.store(false, std::memory_order_release);
     MelonDSAndroid::setFastForwardActive(false);
     paused = startPaused == JNI_TRUE;
+    pausedAtomic.store(paused, std::memory_order_release);
 
     started = true;
     const int createResult = pthread_create(&emuThread, NULL, emulate, NULL);
@@ -2025,9 +2028,15 @@ Java_me_magnum_melonds_MelonEmulator_presentVulkanFrameNative(
 }
 
 JNIEXPORT jint JNICALL
-Java_me_magnum_melonds_MelonEmulator_presentVulkanInterpolatedFrameNative(JNIEnv*, jobject)
+Java_me_magnum_melonds_MelonEmulator_presentVulkanInterpolatedFrameNative(JNIEnv*, jobject, jfloat blendFactor)
 {
-    return static_cast<jint>(MelonDSAndroid::presentVulkanInterpolatedFrame());
+    if (!started.load(std::memory_order_acquire)
+        || stop.load(std::memory_order_acquire)
+        || pausedAtomic.load(std::memory_order_acquire))
+    {
+        return static_cast<jint>(MelonDSAndroid::VulkanPresentationResult::NoProduct);
+    }
+    return static_cast<jint>(MelonDSAndroid::presentVulkanInterpolatedFrame(static_cast<float>(blendFactor)));
 }
 
 JNIEXPORT jboolean JNICALL
@@ -2608,6 +2617,7 @@ Java_me_magnum_melonds_MelonEmulator_pauseEmulation(JNIEnv* env, jobject thiz)
         && !stop.load(std::memory_order_acquire)) {
         debugFrameStepsRemaining = 0;
         paused = true;
+        pausedAtomic.store(true, std::memory_order_release);
 
         MelonDSAndroid::pause();
     }
@@ -2622,6 +2632,7 @@ Java_me_magnum_melonds_MelonEmulator_resumeEmulation(JNIEnv* env, jobject thiz)
         && !stop.load(std::memory_order_acquire)) {
         debugFrameStepsRemaining = 0;
         paused = false;
+        pausedAtomic.store(false, std::memory_order_release);
         MelonDSAndroid::resume();
         pthread_cond_broadcast(&emuThreadCond);
     }
@@ -2655,6 +2666,7 @@ static jboolean requestExactDebugFrames(jint frames, bool allowReleaseDiagnostic
     }
     debugFrameStepsRemaining = 0;
     paused = true;
+    pausedAtomic.store(true, std::memory_order_release);
     MelonDSAndroid::pause();
     pthread_mutex_unlock(&emuThreadMutex);
 
@@ -2671,6 +2683,7 @@ static jboolean requestExactDebugFrames(jint frames, bool allowReleaseDiagnostic
             MelonDSAndroid::resumeFramePublication();
         debugFrameStepsRemaining = frames;
         paused = false;
+        pausedAtomic.store(false, std::memory_order_release);
         pthread_cond_broadcast(&emuThreadCond);
     }
     pthread_mutex_unlock(&emuThreadMutex);
@@ -2874,6 +2887,7 @@ Java_me_magnum_melonds_MelonEmulator_stopEmulation(JNIEnv* env, jobject thiz)
     {
         stop = true;
         paused = false;
+        pausedAtomic.store(false, std::memory_order_release);
         debugFrameStepsRemaining = 0;
         started = false;
         pthread_cond_broadcast(&emuThreadCond);
@@ -3573,7 +3587,12 @@ Java_me_magnum_melonds_MelonEmulator_setVulkanFsrConfig(JNIEnv*, jclass, jint qu
 JNIEXPORT void JNICALL
 Java_me_magnum_melonds_MelonEmulator_setVulkanFrameGenEnabled(JNIEnv*, jclass, jboolean enabled)
 {
-    MelonDSAndroid::VulkanRuntime::SetFrameGenEnabled(enabled == JNI_TRUE);
+    const bool enable = (enabled == JNI_TRUE);
+    MelonDSAndroid::VulkanRuntime::SetFrameGenEnabled(enable);
+    if (!enable)
+    {
+        MelonDSAndroid::resetVulkanPostProcessHistory();
+    }
 }
 
 JNIEXPORT jboolean JNICALL
@@ -3675,7 +3694,10 @@ public:
 
         wasPaused = paused;
         if (!wasPaused)
+        {
             paused = true;
+            pausedAtomic.store(true, std::memory_order_release);
+        }
 
         while (started.load(std::memory_order_acquire)
             && !stop.load(std::memory_order_acquire)
@@ -3696,6 +3718,7 @@ public:
             if (!wasPaused && started.load(std::memory_order_acquire) && !stop.load(std::memory_order_acquire))
             {
                 paused = false;
+                pausedAtomic.store(false, std::memory_order_release);
                 pthread_cond_broadcast(&emuThreadCond);
             }
             pthread_mutex_unlock(&emuThreadMutex);
@@ -4236,7 +4259,10 @@ void* emulate(void*)
         {
             pthread_mutex_lock(&emuThreadMutex);
             if (!stop)
+            {
                 paused = true;
+                pausedAtomic.store(true, std::memory_order_release);
+            }
             pthread_mutex_unlock(&emuThreadMutex);
             MelonDSAndroid::pauseAfterCurrentFramePublication();
         }

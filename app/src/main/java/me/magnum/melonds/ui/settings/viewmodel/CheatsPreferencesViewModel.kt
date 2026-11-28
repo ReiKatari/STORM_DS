@@ -202,7 +202,7 @@ class CheatsPreferencesViewModel @Inject constructor(
             try {
                 val request = Request.Builder()
                     .url(url)
-                    .header("User-Agent", "STORM-DS/8.9.6")
+                    .header("User-Agent", "STORM-DS/8.9.7")
                     .build()
                 client.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) return@use

@@ -154,7 +154,8 @@ public:
         std::optional<std::chrono::time_point<std::chrono::steady_clock>> deadline,
         std::optional<std::chrono::time_point<std::chrono::steady_clock>> budgetDeadline,
         u64 expectedWaitEpoch);
-    VulkanPresentationResult presentVulkanInterpolatedFrame();
+    VulkanPresentationResult presentVulkanInterpolatedFrame(float blendFactor = 0.5f);
+    void resetVulkanPostProcessHistory();
     u64 captureVulkanPresentationWaitEpoch() const noexcept;
     VulkanPresentationWaitResult waitForVulkanPresentationProduct(
         u64 expectedWaitEpoch,
@@ -499,6 +500,8 @@ private:
     bool vulkanRegularCaptureTransitionResyncPending = false;
     bool vulkanCaptureVramSeedPending = false;
     std::atomic_bool vulkanRestored3dPrimePending = false;
+    std::atomic_bool emulationPaused{false};
+    std::atomic_bool emulationStopped{false};
     int vulkanStructuredCaptureGateFrames = 0;
     int vulkanTemporal3dHistoryDebugLogsRemaining = 0;
     bool lastVulkanFastForwardPresentationState = false;

@@ -838,7 +838,7 @@ object PlayStatsStore {
         val sessions = dao.getAllSessions()
         val appVersion = runCatching {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName
-        }.getOrNull() ?: "8.9.6"
+        }.getOrNull() ?: "8.9.7"
 
         val rootObj = JSONObject().apply {
             put("app", "STORM DS")
@@ -925,7 +925,7 @@ object PlayStatsStore {
         val sessions = dao.getAllSessions()
         val appVersion = runCatching {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName
-        }.getOrNull() ?: "8.9.6"
+        }.getOrNull() ?: "8.9.7"
 
         val exportDir = File(android.os.Environment.getExternalStorageDirectory(), "STORM DS/exports").apply { mkdirs() }
         val targetDir = if (exportDir.exists() && exportDir.canWrite()) exportDir else File(context.filesDir, "exports").apply { mkdirs() }

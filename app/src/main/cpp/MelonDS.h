@@ -186,7 +186,8 @@ namespace MelonDSAndroid {
         std::optional<std::chrono::time_point<std::chrono::steady_clock>> deadline,
         std::optional<std::chrono::time_point<std::chrono::steady_clock>> budgetDeadline,
         u64 expectedWaitEpoch);
-    extern VulkanPresentationResult presentVulkanInterpolatedFrame();
+    extern VulkanPresentationResult presentVulkanInterpolatedFrame(float blendFactor = 0.5f);
+    extern void resetVulkanPostProcessHistory();
     extern u64 captureVulkanPresentationWaitEpoch();
     extern VulkanPresentationWaitResult waitForVulkanPresentationProduct(
         u64 expectedWaitEpoch,

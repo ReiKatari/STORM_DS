@@ -4197,6 +4197,7 @@ void MelonInstance::handleVulkanRuntimeFailure(const char* reason)
 
 void MelonInstance::stop()
 {
+    emulationStopped.store(true, std::memory_order_release);
     abortExactLiveGuide(
         static_cast<std::uint32_t>(ExactLiveGuide::AbortReason::Stop));
 
@@ -4249,18 +4250,22 @@ void MelonInstance::cancelPendingFramePublication()
 
 void MelonInstance::suspendFramePublication()
 {
+    emulationPaused.store(true, std::memory_order_release);
     frameQueue.suspendPublications();
+    resetVulkanPostProcessHistory();
 }
 
 void MelonInstance::finishCurrentFramePublicationThenSuspend()
 {
-
+    emulationPaused.store(true, std::memory_order_release);
     joinPendingFrameTail();
     frameQueue.suspendPublications();
+    resetVulkanPostProcessHistory();
 }
 
 void MelonInstance::resumeFramePublication()
 {
+    emulationPaused.store(false, std::memory_order_release);
     frameQueue.resumePublications();
 }
 
@@ -5169,17 +5174,47 @@ VulkanPresentationResult MelonInstance::presentVulkanFrame(
     return lastResult;
 }
 
-VulkanPresentationResult MelonInstance::presentVulkanInterpolatedFrame()
+VulkanPresentationResult MelonInstance::presentVulkanInterpolatedFrame(float blendFactor)
 {
-    auto presentationOperationLock = acquireVulkanPresentationOperation();
-    if (currentRenderer != Renderer::Vulkan
+    if (emulationPaused.load(std::memory_order_acquire)
+        || emulationStopped.load(std::memory_order_acquire)
+        || currentRenderer != Renderer::Vulkan
         || !vulkanSurfacePresenter
         || !VulkanRuntime::GetFrameGenEnabled()
         || isFastForwardActive())
     {
         return VulkanPresentationResult::NoProduct;
     }
-    return vulkanSurfacePresenter->presentInterpolatedFrame();
+
+    std::unique_lock<std::mutex> presentationOperationLock(
+        vulkanPresentationOperationMutex, std::try_to_lock);
+    if (!presentationOperationLock.owns_lock()
+        || vulkanPresentationUnlockedWaitActive
+        || vulkanPresentationConcurrentTokenWaits != 0)
+    {
+        return VulkanPresentationResult::NoProduct;
+    }
+
+    if (emulationPaused.load(std::memory_order_acquire)
+        || emulationStopped.load(std::memory_order_acquire)
+        || currentRenderer != Renderer::Vulkan
+        || !vulkanSurfacePresenter
+        || !VulkanRuntime::GetFrameGenEnabled()
+        || isFastForwardActive())
+    {
+        return VulkanPresentationResult::NoProduct;
+    }
+
+    return vulkanSurfacePresenter->presentInterpolatedFrame(blendFactor);
+}
+
+void MelonInstance::resetVulkanPostProcessHistory()
+{
+    if (currentRenderer != Renderer::Vulkan || !vulkanSurfacePresenter)
+        return;
+    auto presentationOperationLock = acquireVulkanPresentationOperation();
+    if (currentRenderer == Renderer::Vulkan && vulkanSurfacePresenter)
+        vulkanSurfacePresenter->resetPostProcessHistory();
 }
 
 u64 MelonInstance::captureVulkanPresentationWaitEpoch() const noexcept
@@ -5413,7 +5448,10 @@ void MelonInstance::performVulkanPresentationResyncLocked()
     if (vulkanOutput)
         vulkanOutput->invalidateTemporalHistory();
     if (vulkanSurfacePresenter)
+    {
         vulkanSurfacePresenter->invalidateDescriptorCaches();
+        vulkanSurfacePresenter->resetPostProcessHistory();
+    }
     auto& renderer3D = static_cast<VulkanRenderer3D&>(nds->GPU.GetRenderer3D());
     renderer3D.requestPostFastForwardDrain();
     renderer3D.InvalidatePresentationState(true);
@@ -5466,6 +5504,8 @@ void MelonInstance::performVulkanFastForwardPresentationTransitionLocked(
     }
     if (!stateChanged && !rendererSettingsChanged)
         return;
+    if (vulkanSurfacePresenter)
+        vulkanSurfacePresenter->resetPostProcessHistory();
     auto& renderer3D = static_cast<VulkanRenderer3D&>(nds->GPU.GetRenderer3D());
     renderer3D.requestPostFastForwardDrain();
     renderer3D.InvalidatePresentationState(false);

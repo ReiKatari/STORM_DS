@@ -8,9 +8,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>STORM DS</AssemblyName>
     <RootNamespace>StormDs.Desktop</RootNamespace>
-    <Version>8.9.6</Version>
-    <AssemblyVersion>8.9.6.0</AssemblyVersion>
-    <FileVersion>8.9.6.0</FileVersion>
+    <Version>8.9.7</Version>
+    <AssemblyVersion>8.9.7.0</AssemblyVersion>
+    <FileVersion>8.9.7.0</FileVersion>
     <Company>STORM TEAM</Company>
     <Product>STORM DS</Product>
     <ApplicationIcon>..\..\assets\AppIcon.ico</ApplicationIcon>

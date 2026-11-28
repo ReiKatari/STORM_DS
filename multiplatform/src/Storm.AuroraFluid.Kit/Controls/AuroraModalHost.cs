@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using Storm.AuroraFluid.Kit.Services;
 
 namespace Storm.AuroraFluid.Kit.Controls;
@@ -45,6 +46,7 @@ public class AuroraModalHost : ContentControl
     static AuroraModalHost()
     {
         AffectsRender<AuroraModalHost>(IsOpenProperty);
+        IsOpenProperty.Changed.AddClassHandler<AuroraModalHost>((h, _) => h.SyncOpenState());
     }
 
     public AuroraModalHost()
@@ -52,6 +54,20 @@ public class AuroraModalHost : ContentControl
         HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch;
         VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch;
         Focusable = true;
+        IsVisible = false;
+        IsHitTestVisible = false;
+        ZIndex = 1000;
+    }
+
+    private void SyncOpenState()
+    {
+        IsVisible = IsOpen;
+        IsHitTestVisible = IsOpen;
+        Background = IsOpen ? Brushes.Transparent : null;
+        if (!IsOpen)
+        {
+            Content = null;
+        }
     }
 
     protected override void OnKeyDown(KeyEventArgs e)
@@ -69,19 +85,32 @@ public class AuroraModalHost : ContentControl
         base.OnPointerPressed(e);
         if (!IsOpen || !CloseOnClickOutside) return;
 
-        // Check if clicked outside presenter
-        var hitControl = e.Source as Visual;
-        if (hitControl == this)
+        var contentVisual = Content as Visual;
+        var current = e.Source as Visual;
+        while (current != null)
         {
-            Dismiss();
-            e.Handled = true;
+            if (ReferenceEquals(current, contentVisual))
+            {
+                return;
+            }
+            if (ReferenceEquals(current, this))
+            {
+                break;
+            }
+            current = current.GetVisualParent();
         }
+
+        Dismiss();
+        e.Handled = true;
     }
 
     public void Dismiss()
     {
         if (!IsOpen) return;
         IsOpen = false;
+        Content = null;
+        IsVisible = false;
+        IsHitTestVisible = false;
         AuroraTactileFeedbackService.Instance.PlayClick();
         Closed?.Invoke(this, EventArgs.Empty);
     }

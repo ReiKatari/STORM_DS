@@ -53,6 +53,7 @@ public partial class StormUpdateModal : AuroraGlassCard
     private readonly Action? _onRetryCallback;
 
     private AuroraUpdateCheckResult? _currentResult;
+    private AuroraUpdateDownloadSource? _selectedSource;
     private CancellationTokenSource? _downloadCts;
     private bool _isDownloading;
 
@@ -154,7 +155,11 @@ public partial class StormUpdateModal : AuroraGlassCard
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center
         };
-        closeBtn.PointerPressed += (s, e) => RequestSafeClose();
+        closeBtn.PointerPressed += (s, e) =>
+        {
+            e.Handled = true;
+            RequestSafeClose();
+        };
         headerGrid.Children.Add(closeBtn);
         Grid.SetColumn(closeBtn, 2);
 
@@ -176,20 +181,33 @@ public partial class StormUpdateModal : AuroraGlassCard
         _rootStack.Children.Add(_bodyHost);
 
         Content = _rootStack;
+        DetachedFromVisualTree += (_, _) => CancelInFlightDownload();
         RenderState(mode, result);
     }
 
     public void UpdateState(UpdateModalMode mode, AuroraUpdateCheckResult? result = null)
     {
         _currentResult = result;
+        _selectedSource = null;
         RenderState(mode, result);
+    }
+
+    public void CancelInFlightDownload()
+    {
+        try
+        {
+            _downloadCts?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
     }
 
     public void RequestSafeClose()
     {
         if (_isDownloading)
         {
-            _downloadCts?.Cancel();
+            CancelInFlightDownload();
             return;
         }
         CloseRequested?.Invoke();
@@ -284,13 +302,10 @@ public partial class StormUpdateModal : AuroraGlassCard
             var metaRow = new WrapPanel { Orientation = Orientation.Horizontal };
             var sourceChip = BuildMetaChip(AuroraIconKind.WifiGlobe, activeResult.SourceMirror, theme, true);
             metaRow.Children.Add(sourceChip);
-            Border? sizeChip = null;
-            if (activeResult.AssetSizeBytes > 0)
-            {
-                double mb = activeResult.AssetSizeBytes / (1024.0 * 1024.0);
-                sizeChip = BuildMetaChip(AuroraIconKind.MemoryRam, $"{mb.ToString("F1", CultureInfo.InvariantCulture)} {StormDsLoc.T("UpdateModalUnitMb")}", theme, false);
-                metaRow.Children.Add(sizeChip);
-            }
+            double initMb = activeResult.AssetSizeBytes / (1024.0 * 1024.0);
+            var sizeChip = BuildMetaChip(AuroraIconKind.MemoryRam, $"{initMb.ToString("F1", CultureInfo.InvariantCulture)} {StormDsLoc.T("UpdateModalUnitMb")}", theme, false);
+            sizeChip.IsVisible = activeResult.AssetSizeBytes > 0;
+            metaRow.Children.Add(sizeChip);
             if (activeResult.PublishedAtUtc.HasValue)
             {
                 metaRow.Children.Add(BuildMetaChip(AuroraIconKind.RecentClock, activeResult.PublishedAtUtc.Value.LocalDateTime.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture), theme, false));
@@ -380,7 +395,7 @@ public partial class StormUpdateModal : AuroraGlassCard
             Grid.SetColumn(_progressPercentText, 2);
             progStack.Children.Add(progStats);
 
-            var cancelDlBtn = CreateSecondaryButton(StormDsLoc.T("ActionCancel"), theme, () => _downloadCts?.Cancel());
+            var cancelDlBtn = CreateSecondaryButton(StormDsLoc.T("ActionCancel"), theme, () => CancelInFlightDownload());
             progStack.Children.Add(cancelDlBtn);
 
             _progressCard.Child = progStack;
@@ -389,8 +404,10 @@ public partial class StormUpdateModal : AuroraGlassCard
             // 6. Action Buttons + Source Picker
             _actionsPanel = new StackPanel { Spacing = 8 };
 
-            bool ghAvail = result.GitHubSource != null || !result.DownloadUrl.Contains("stormgamesworld", StringComparison.OrdinalIgnoreCase);
-            bool sgwAvail = result.StormMirrorSource != null || result.DownloadUrl.Contains("stormgamesworld", StringComparison.OrdinalIgnoreCase) || result.DownloadUrl.Contains("storm-games.world", StringComparison.OrdinalIgnoreCase);
+            bool isSgwUrl = result.DownloadUrl.Contains("stormgamesworld", StringComparison.OrdinalIgnoreCase)
+                            || result.DownloadUrl.Contains("storm-games.world", StringComparison.OrdinalIgnoreCase);
+            bool ghAvail = result.GitHubSource != null || (!isSgwUrl && !string.IsNullOrWhiteSpace(result.DownloadUrl));
+            bool sgwAvail = result.StormMirrorSource != null || isSgwUrl;
 
             var sourceLabel = new TextBlock
             {
@@ -407,42 +424,75 @@ public partial class StormUpdateModal : AuroraGlassCard
                 ColumnDefinitions = new ColumnDefinitions("*,*"),
                 ColumnSpacing = 8
             };
-            var ghBtn = CreateSecondaryButton("GitHub", theme, () => { });
-            var sgwBtn = CreateSecondaryButton("STORM GAMES WORLD", theme, () => { });
+            var ghBtn = CreateSecondaryButton("GitHub", theme, () => { }, manageHover: false);
+            var sgwBtn = CreateSecondaryButton("STORM GAMES WORLD", theme, () => { }, manageHover: false);
             ghBtn.Opacity = ghAvail ? 1.0 : 0.45;
             sgwBtn.Opacity = sgwAvail ? 1.0 : 0.45;
             if (!ghAvail) ghBtn.Cursor = new Cursor(StandardCursorType.Arrow);
             if (!sgwAvail) sgwBtn.Cursor = new Cursor(StandardCursorType.Arrow);
 
-            void ApplySourceSelection(AuroraUpdateDownloadSource next)
+            var sourceHoverBg = new SolidColorBrush(Color.FromArgb(60, accent.R, accent.G, accent.B));
+            void ApplySourceButtonVisuals()
             {
-                selectedSource = next;
-                activeResult = result.WithSelectedSource(next);
                 var activeBg = new SolidColorBrush(Color.FromArgb(44, accent.R, accent.G, accent.B));
                 var activeBorder = new SolidColorBrush(accent);
                 var inactiveBg = new SolidColorBrush(theme.HeaderColor);
-                ghBtn.Background = next == AuroraUpdateDownloadSource.GitHub ? activeBg : inactiveBg;
-                ghBtn.BorderBrush = next == AuroraUpdateDownloadSource.GitHub ? activeBorder : theme.BorderBrush;
-                sgwBtn.Background = next == AuroraUpdateDownloadSource.StormGamesWorld ? activeBg : inactiveBg;
-                sgwBtn.BorderBrush = next == AuroraUpdateDownloadSource.StormGamesWorld ? activeBorder : theme.BorderBrush;
+                ghBtn.Background = selectedSource == AuroraUpdateDownloadSource.GitHub ? activeBg : inactiveBg;
+                ghBtn.BorderBrush = selectedSource == AuroraUpdateDownloadSource.GitHub ? activeBorder : theme.BorderBrush;
+                sgwBtn.Background = selectedSource == AuroraUpdateDownloadSource.StormGamesWorld ? activeBg : inactiveBg;
+                sgwBtn.BorderBrush = selectedSource == AuroraUpdateDownloadSource.StormGamesWorld ? activeBorder : theme.BorderBrush;
+            }
+
+            void ApplySourceSelection(AuroraUpdateDownloadSource next)
+            {
+                selectedSource = next;
+                _selectedSource = next;
+                activeResult = result.WithSelectedSource(next);
+                ApplySourceButtonVisuals();
                 if (sourceChip.Child is StackPanel sp && sp.Children.LastOrDefault() is TextBlock st)
                 {
                     st.Text = activeResult.SourceMirror;
                 }
-                if (sizeChip != null && activeResult.AssetSizeBytes > 0 && sizeChip.Child is StackPanel szSp && szSp.Children.LastOrDefault() is TextBlock szT)
+                if (activeResult.AssetSizeBytes > 0)
                 {
-                    double mb = activeResult.AssetSizeBytes / (1024.0 * 1024.0);
-                    szT.Text = $"{mb.ToString("F1", CultureInfo.InvariantCulture)} {StormDsLoc.T("UpdateModalUnitMb")}";
+                    if (sizeChip.Child is StackPanel szSp && szSp.Children.LastOrDefault() is TextBlock szT)
+                    {
+                        double mb = activeResult.AssetSizeBytes / (1024.0 * 1024.0);
+                        szT.Text = $"{mb.ToString("F1", CultureInfo.InvariantCulture)} {StormDsLoc.T("UpdateModalUnitMb")}";
+                    }
+                    sizeChip.IsVisible = true;
+                }
+                else
+                {
+                    sizeChip.IsVisible = false;
                 }
             }
 
             if (ghAvail)
             {
-                ghBtn.PointerPressed += (s, e) => ApplySourceSelection(AuroraUpdateDownloadSource.GitHub);
+                ghBtn.PointerEntered += (_, _) =>
+                {
+                    if (selectedSource != AuroraUpdateDownloadSource.GitHub) ghBtn.Background = sourceHoverBg;
+                };
+                ghBtn.PointerExited += (_, _) => ApplySourceButtonVisuals();
+                ghBtn.PointerPressed += (s, e) =>
+                {
+                    e.Handled = true;
+                    ApplySourceSelection(AuroraUpdateDownloadSource.GitHub);
+                };
             }
             if (sgwAvail)
             {
-                sgwBtn.PointerPressed += (s, e) => ApplySourceSelection(AuroraUpdateDownloadSource.StormGamesWorld);
+                sgwBtn.PointerEntered += (_, _) =>
+                {
+                    if (selectedSource != AuroraUpdateDownloadSource.StormGamesWorld) sgwBtn.Background = sourceHoverBg;
+                };
+                sgwBtn.PointerExited += (_, _) => ApplySourceButtonVisuals();
+                sgwBtn.PointerPressed += (s, e) =>
+                {
+                    e.Handled = true;
+                    ApplySourceSelection(AuroraUpdateDownloadSource.StormGamesWorld);
+                };
             }
             ApplySourceSelection(selectedSource);
 
@@ -502,7 +552,11 @@ public partial class StormUpdateModal : AuroraGlassCard
                     Margin = new Thickness(0, 4, 0, 0),
                     Cursor = new Cursor(StandardCursorType.Hand)
                 };
-                linkText.PointerPressed += (s, e) => OpenExternalUrl(activeResult.ReleasePageUrl);
+                linkText.PointerPressed += (s, e) =>
+                {
+                    e.Handled = true;
+                    OpenExternalUrl(activeResult.ReleasePageUrl);
+                };
                 _actionsPanel.Children.Add(linkText);
             }
 
@@ -594,7 +648,8 @@ public partial class StormUpdateModal : AuroraGlassCard
         if (_isDownloading || string.IsNullOrWhiteSpace(result.DownloadUrl)) return;
 
         _isDownloading = true;
-        _downloadCts = new CancellationTokenSource();
+        using var cts = new CancellationTokenSource();
+        _downloadCts = cts;
         if (_actionsPanel != null) _actionsPanel.IsVisible = false;
         if (_progressCard != null) _progressCard.IsVisible = true;
 
@@ -645,7 +700,7 @@ public partial class StormUpdateModal : AuroraGlassCard
                 destPath,
                 result.ExpectedSha256,
                 progress,
-                _downloadCts.Token,
+                cts.Token,
                 "STORM_DS");
 
             _isDownloading = false;
@@ -674,7 +729,10 @@ public partial class StormUpdateModal : AuroraGlassCard
         catch (OperationCanceledException)
         {
             _isDownloading = false;
-            RenderState(UpdateModalMode.UpdateAvailable, result);
+            if (VisualRoot != null)
+            {
+                RenderState(UpdateModalMode.UpdateAvailable, _currentResult ?? result);
+            }
         }
         catch (Exception ex)
         {
@@ -683,6 +741,13 @@ public partial class StormUpdateModal : AuroraGlassCard
             {
                 ErrorMessage = string.Format(StormDsLoc.T("UpdateModalDownloadErrorFormat"), ex.Message)
             });
+        }
+        finally
+        {
+            if (ReferenceEquals(_downloadCts, cts))
+            {
+                _downloadCts = null;
+            }
         }
     }
 
@@ -693,8 +758,13 @@ public partial class StormUpdateModal : AuroraGlassCard
         _iconBox.BorderBrush = new SolidColorBrush(Color.FromArgb(115, c.R, c.G, c.B));
     }
 
-    private static AuroraUpdateDownloadSource ResolveInitialSource(AuroraUpdateCheckResult result)
+    private AuroraUpdateDownloadSource ResolveInitialSource(AuroraUpdateCheckResult result)
     {
+        if (_selectedSource == AuroraUpdateDownloadSource.StormGamesWorld && result.StormMirrorSource != null)
+            return AuroraUpdateDownloadSource.StormGamesWorld;
+        if (_selectedSource == AuroraUpdateDownloadSource.GitHub && result.GitHubSource != null)
+            return AuroraUpdateDownloadSource.GitHub;
+
         var pref = (AuroraUpdateDownloadSource)Math.Clamp(StormDsUiState.Instance.AppConfig.UpdateDownloadSource, 0, 2);
         if (pref == AuroraUpdateDownloadSource.StormGamesWorld && result.StormMirrorSource != null)
             return AuroraUpdateDownloadSource.StormGamesWorld;
@@ -781,7 +851,7 @@ public partial class StormUpdateModal : AuroraGlassCard
         return chip;
     }
 
-    private static Border CreateSecondaryButton(string text, AuroraThemeDefinition theme, Action onClick)
+    private static Border CreateSecondaryButton(string text, AuroraThemeDefinition theme, Action onClick, bool manageHover = true)
     {
         var baseBg = new SolidColorBrush(theme.HeaderColor);
         var hoverBg = new SolidColorBrush(Color.FromArgb(60, theme.DefaultAccentColor.R, theme.DefaultAccentColor.G, theme.DefaultAccentColor.B));
@@ -806,10 +876,14 @@ public partial class StormUpdateModal : AuroraGlassCard
             VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis
         };
-        btn.PointerEntered += (s, e) => btn.Background = hoverBg;
-        btn.PointerExited += (s, e) => btn.Background = baseBg;
+        if (manageHover)
+        {
+            btn.PointerEntered += (s, e) => btn.Background = hoverBg;
+            btn.PointerExited += (s, e) => btn.Background = baseBg;
+        }
         btn.PointerPressed += (s, e) =>
         {
+            e.Handled = true;
             AuroraTactileFeedbackService.Instance.PlayClick();
             onClick();
         };

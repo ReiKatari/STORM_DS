@@ -9,6 +9,7 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using Storm.AuroraFluid.Kit.Controls;
 using Storm.AuroraFluid.Kit.Icons;
 using Storm.AuroraFluid.Kit.Services;
@@ -360,6 +361,12 @@ public class BentoWorkspaceView : Grid
 
     private void RefreshGrid()
     {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(RefreshGrid);
+            return;
+        }
+
         UpdateChipStyles();
         UpdateViewModeVisual();
 

@@ -8,6 +8,7 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Threading;
 using Storm.AuroraFluid.Kit.Controls;
 using Storm.AuroraFluid.Kit.Icons;
 using Storm.AuroraFluid.Kit.Services;
@@ -196,7 +197,16 @@ public class BentoRomCard : AuroraGlassCard
         UpdateFavoriteVisual();
         UpdateSelectionVisual();
 
-        StormDsUiState.Instance.RomSelected += (r) => UpdateSelectionVisual();
+        AttachedToVisualTree += (_, _) =>
+        {
+            StormDsUiState.Instance.RomSelected -= OnRomSelected;
+            StormDsUiState.Instance.RomSelected += OnRomSelected;
+            UpdateSelectionVisual();
+        };
+        DetachedFromVisualTree += (_, _) =>
+        {
+            StormDsUiState.Instance.RomSelected -= OnRomSelected;
+        };
         StormThemeBrushes.BindTheme(this, () =>
         {
             iconContainer.Background = StormThemeBrushes.CardSurface;
@@ -209,6 +219,12 @@ public class BentoRomCard : AuroraGlassCard
             UpdateFavoriteVisual();
             UpdateSelectionVisual();
         });
+    }
+
+    private void OnRomSelected(RomMetadataRecord? _)
+    {
+        if (Dispatcher.UIThread.CheckAccess()) UpdateSelectionVisual();
+        else Dispatcher.UIThread.Post(UpdateSelectionVisual);
     }
 
     private void UpdateFavoriteVisual()

@@ -11,6 +11,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using Storm.AuroraFluid.Kit.Controls;
 using Storm.AuroraFluid.Kit.Icons;
 using Storm.AuroraFluid.Kit.Services;
@@ -270,6 +271,12 @@ public class RomInspectorPane : Border
 
     private void ApplyThemeAndLocalization()
     {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(ApplyThemeAndLocalization);
+            return;
+        }
+
         Background = StormThemeBrushes.GlassPanel;
         BorderBrush = StormThemeBrushes.SubtleBorder;
         _headerLabel.Foreground = StormThemeBrushes.Accent;
@@ -476,6 +483,12 @@ public class RomInspectorPane : Border
 
     private void UpdatePane(RomMetadataRecord? rom)
     {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => UpdatePane(rom));
+            return;
+        }
+
         _currentRom = rom;
         var cfg = StormDsUiState.Instance.AppConfig;
         var profile = rom != null ? StormDsUiState.Instance.LoadRomProfile(rom.GameCode) : null;

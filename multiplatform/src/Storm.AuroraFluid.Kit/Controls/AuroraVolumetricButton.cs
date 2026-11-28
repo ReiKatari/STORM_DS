@@ -77,7 +77,16 @@ public class AuroraVolumetricButton : Button
             }
             InvalidateVisual();
         };
-        DetachedFromVisualTree += (_, _) => AuroraThemeManager.Instance.ThemeChanged -= OnThemeChanged;
+        DetachedFromVisualTree += (_, _) =>
+        {
+            AuroraThemeManager.Instance.ThemeChanged -= OnThemeChanged;
+            _rippleTimer?.Stop();
+            _rippleTimer = null;
+            _rippleOpacity = 0;
+            _isPressed = false;
+            _isPointerOver = false;
+            UpdateTransform();
+        };
     }
 
     private void UpdateTransform()
@@ -147,6 +156,17 @@ public class AuroraVolumetricButton : Button
         _isPressed = false;
         UpdateTransform();
         InvalidateVisual();
+    }
+
+    protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
+    {
+        base.OnPointerCaptureLost(e);
+        if (_isPressed)
+        {
+            _isPressed = false;
+            UpdateTransform();
+            InvalidateVisual();
+        }
     }
 
     private void StartRipple()

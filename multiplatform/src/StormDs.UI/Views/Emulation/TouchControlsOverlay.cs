@@ -2,6 +2,8 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
+using System.Collections.Generic;
+using System.Threading;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -23,8 +25,9 @@ namespace StormDs.UI.Views.Emulation;
 public class TouchControlsOverlay : Grid
 {
     private readonly List<(Border Box, TextBlock Label, Color Accent)> _padButtons = [];
+    private readonly Dictionary<Border, IBrush> _idleBackgrounds = [];
     private uint _buttonsMask;
-    public uint CurrentButtonsMask => _buttonsMask;
+    public uint CurrentButtonsMask => Volatile.Read(ref _buttonsMask);
 
     public event Action<uint>? InputChanged;
 
@@ -169,22 +172,25 @@ public class TouchControlsOverlay : Grid
                     box.BorderThickness = new Thickness(1.5);
                     break;
             }
+            _idleBackgrounds[box] = box.Background;
         }
     }
 
     private Border CreateNeonPadButton(string label, uint maskBit, double w, double h, double fontSize = 12, string? accentHex = null)
     {
         var resolvedAccent = accentHex != null ? Color.Parse(accentHex) : Colors.White;
+        var defaultBg = new SolidColorBrush(Color.FromArgb(90, 20, 24, 38));
         var border = new Border
         {
             Width = w,
             Height = h,
             CornerRadius = new CornerRadius(Math.Min(w, h) / 2.0),
-            Background = new SolidColorBrush(Color.FromArgb(90, 20, 24, 38)),
+            Background = defaultBg,
             BorderBrush = new SolidColorBrush(accentHex != null ? resolvedAccent : Color.FromArgb(120, 255, 255, 255)),
             BorderThickness = new Thickness(1.5),
             Cursor = new Cursor(StandardCursorType.Hand)
         };
+        _idleBackgrounds[border] = defaultBg;
 
         var tb = new TextBlock
         {
@@ -198,22 +204,41 @@ public class TouchControlsOverlay : Grid
         border.Child = tb;
         _padButtons.Add((border, tb, resolvedAccent));
 
+        void ClearButton()
+        {
+            uint prev = Volatile.Read(ref _buttonsMask);
+            uint next = prev & ~maskBit;
+            Volatile.Write(ref _buttonsMask, next);
+            border.Background = _idleBackgrounds.TryGetValue(border, out var idleBg)
+                ? idleBg
+                : new SolidColorBrush(Color.FromArgb(90, 20, 24, 38));
+            if (prev != next)
+            {
+                InputChanged?.Invoke(next);
+            }
+        }
+
         border.PointerPressed += (s, e) =>
         {
-            _buttonsMask |= maskBit;
+            if (!e.GetCurrentPoint(border).Properties.IsLeftButtonPressed) return;
+            e.Pointer.Capture(border);
+            uint next = Volatile.Read(ref _buttonsMask) | maskBit;
+            Volatile.Write(ref _buttonsMask, next);
             border.Background = new SolidColorBrush(accentHex != null ? Color.FromArgb(150, resolvedAccent.R, resolvedAccent.G, resolvedAccent.B) : Color.FromArgb(140, 255, 255, 255));
             AuroraTactileFeedbackService.Instance.PlayClick();
-            InputChanged?.Invoke(_buttonsMask);
+            InputChanged?.Invoke(next);
             e.Handled = true;
         };
 
         border.PointerReleased += (s, e) =>
         {
-            _buttonsMask &= ~maskBit;
-            border.Background = new SolidColorBrush(Color.FromArgb(90, 20, 24, 38));
-            InputChanged?.Invoke(_buttonsMask);
+            if (e.Pointer.Captured == border) e.Pointer.Capture(null);
+            ClearButton();
             e.Handled = true;
         };
+
+        border.PointerCaptureLost += (s, e) => ClearButton();
+        border.PointerExited += (s, e) => ClearButton();
 
         return border;
     }

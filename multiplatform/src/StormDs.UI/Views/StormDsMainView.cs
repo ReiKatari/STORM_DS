@@ -4,6 +4,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -58,7 +59,9 @@ public class StormDsMainView : Grid
     private readonly DropImportOverlay _dropOverlay;
     private readonly AuroraModalHost _modalHost;
     private readonly Grid _centerContentGrid;
+    private CancellationTokenSource? _updateCheckCts;
 
+    public bool IsModalOpen => _modalHost.IsOpen;
     public void SelectSettingsTab(int index) => _settingsView.SelectTab(index);
 
     private Button? _fileMenuBtn;
@@ -160,6 +163,14 @@ public class StormDsMainView : Grid
 
         // 7. Modal Host for ESC dismissal (Law 16)
         _modalHost = new AuroraModalHost { IsOpen = false };
+        _modalHost.Closed += (_, _) =>
+        {
+            CancelUpdateCheck();
+            if (_emulationView.IsVisible && StormDsUiState.Instance.IsEmulationActive)
+            {
+                _emulationView.Focus();
+            }
+        };
         Children.Add(_modalHost);
         Grid.SetRowSpan(_modalHost, totalRows);
 
@@ -402,12 +413,19 @@ public class StormDsMainView : Grid
             }));
         flyout.Items.Add(CreateMenuItem(StormDsLoc.T("LaunchBios"), () => StormDsUiState.Instance.StartEmulation(bootBios: true)));
         flyout.Items.Add(new Separator());
-        flyout.Items.Add(CreateMenuItem(StormDsLoc.T("MenuReset"), () => StormDsUiState.Instance.EngineService.Reset(), active));
+        flyout.Items.Add(CreateMenuItem(StormDsLoc.T("MenuReset"), () =>
+        {
+            StormDsUiState.Instance.EngineService.Reset();
+            _emulationView.ResetPostProcessBuffers();
+        }, active));
         flyout.Items.Add(CreateMenuItem(StormDsLoc.T("MenuQuickSave"), () => StormDsUiState.Instance.EngineService.SaveState(0), active));
         flyout.Items.Add(CreateMenuItem(StormDsLoc.T("MenuQuickLoad"), () =>
         {
-            if (StormDsUiState.Instance.RetroAchievementsService.IsFeatureAllowedInCurrentMode("loadstate"))
-                StormDsUiState.Instance.EngineService.LoadState(0);
+            if (StormDsUiState.Instance.RetroAchievementsService.IsFeatureAllowedInCurrentMode("loadstate") &&
+                StormDsUiState.Instance.EngineService.LoadState(0))
+            {
+                _emulationView.ResetPostProcessBuffers();
+            }
         }, active));
         flyout.ShowAt(anchor, true);
     }
@@ -536,8 +554,24 @@ public class StormDsMainView : Grid
         }
     }
 
+    private void CancelUpdateCheck()
+    {
+        var cts = _updateCheckCts;
+        _updateCheckCts = null;
+        if (cts != null)
+        {
+            try { cts.Cancel(); } catch (ObjectDisposedException) { }
+            cts.Dispose();
+        }
+    }
+
     private async Task CheckAndShowUpdateModalAsync(bool manual)
     {
+        CancelUpdateCheck();
+        var cts = new CancellationTokenSource();
+        _updateCheckCts = cts;
+        var ct = cts.Token;
+
         StormUpdateModal? modal = null;
         if (manual)
         {
@@ -560,10 +594,15 @@ public class StormDsMainView : Grid
                 "ReiKatari",
                 "STORM_DS",
                 curVer,
+                cancellationToken: ct,
                 preferredSource: (AuroraUpdateDownloadSource)Math.Clamp(StormDsUiState.Instance.AppConfig.UpdateDownloadSource, 0, 2));
+
+            if (ct.IsCancellationRequested) return;
 
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
+                if (ct.IsCancellationRequested) return;
+
                 if (res.IsUpdateAvailable)
                 {
                     string cleanNew = res.LatestVersion.ToString().TrimStart('v', 'V');
@@ -583,12 +622,12 @@ public class StormDsMainView : Grid
                         _modalHost.Content = modal;
                         _modalHost.IsOpen = true;
                     }
-                    else
+                    else if (_modalHost.IsOpen && ReferenceEquals(_modalHost.Content, modal))
                     {
                         modal.UpdateState(StormUpdateModal.UpdateModalMode.UpdateAvailable, res);
                     }
                 }
-                else if (manual && modal != null)
+                else if (manual && modal != null && _modalHost.IsOpen && ReferenceEquals(_modalHost.Content, modal))
                 {
                     var mode = res.CheckSucceeded
                         ? StormUpdateModal.UpdateModalMode.UpToDate
@@ -597,8 +636,13 @@ public class StormDsMainView : Grid
                 }
             });
         }
+        catch (OperationCanceledException)
+        {
+            // Cancelled when modal closed or superseded by a newer check
+        }
         catch (Exception ex)
         {
+            if (ct.IsCancellationRequested) return;
             if (manual && modal != null)
             {
                 var curVer = AuroraDualMirrorUpdater.TryParseSemanticVersion(StormDsLoc.AppVersion, out var parsed)
@@ -617,9 +661,20 @@ public class StormDsMainView : Grid
 
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
-                    modal.UpdateState(StormUpdateModal.UpdateModalMode.Error, errRes);
+                    if (!ct.IsCancellationRequested && _modalHost.IsOpen && ReferenceEquals(_modalHost.Content, modal))
+                    {
+                        modal.UpdateState(StormUpdateModal.UpdateModalMode.Error, errRes);
+                    }
                 });
             }
+        }
+        finally
+        {
+            if (ReferenceEquals(_updateCheckCts, cts))
+            {
+                _updateCheckCts = null;
+            }
+            cts.Dispose();
         }
     }
 

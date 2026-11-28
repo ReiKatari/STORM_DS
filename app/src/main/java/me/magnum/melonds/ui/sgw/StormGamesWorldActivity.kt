@@ -17,6 +17,7 @@ class StormGamesWorldActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_INITIAL_TAB = "sgw_initial_tab"
+        const val EXTRA_HIGHLIGHT_ROM_URI = "sgw_highlight_rom_uri"
     }
 
     private val viewModel by viewModels<StormGamesWorldViewModel>()
@@ -27,8 +28,13 @@ class StormGamesWorldActivity : AppCompatActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         super.onCreate(savedInstanceState)
 
-        intent?.getStringExtra(EXTRA_INITIAL_TAB)?.let { tabName ->
-            runCatching { SgwStoreTab.valueOf(tabName) }.getOrNull()?.let(viewModel::selectTab)
+        if (savedInstanceState == null) {
+            intent?.getStringExtra(EXTRA_INITIAL_TAB)?.let { tabName ->
+                runCatching { SgwStoreTab.valueOf(tabName) }.getOrNull()?.let(viewModel::selectTab)
+            }
+            intent?.getStringExtra(EXTRA_HIGHLIGHT_ROM_URI)?.takeIf { it.isNotBlank() }?.let { uri ->
+                viewModel.setHighlightedRomUri(uri)
+            }
         }
 
         setContent {
@@ -38,6 +44,8 @@ class StormGamesWorldActivity : AppCompatActivity() {
                 val selectedTab by viewModel.selectedTab.collectAsState()
                 val searchQuery by viewModel.searchQuery.collectAsState()
                 val downloadProgress by viewModel.downloadProgress.collectAsState()
+                val isBusy by viewModel.isBusy.collectAsState()
+                val highlightedRomUri by viewModel.highlightedRomUri.collectAsState()
                 val lastReplaceResult by viewModel.lastReplaceResult.collectAsState()
 
                 BackHandler { finish() }
@@ -48,6 +56,8 @@ class StormGamesWorldActivity : AppCompatActivity() {
                     selectedTab = selectedTab,
                     searchQuery = searchQuery,
                     downloadProgress = downloadProgress,
+                    isBusy = isBusy,
+                    highlightedRomUri = highlightedRomUri,
                     lastReplaceResult = lastReplaceResult,
                     onBack = { finish() },
                     onSelectTab = viewModel::selectTab,

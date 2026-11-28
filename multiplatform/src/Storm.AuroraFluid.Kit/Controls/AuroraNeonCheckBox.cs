@@ -70,15 +70,17 @@ public class AuroraNeonCheckBox : Control
     {
         base.OnPointerExited(e);
         _isPointerOver = false;
-        _isPressed = false;
         InvalidateVisual();
     }
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e);
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
         _isPressed = true;
+        e.Pointer.Capture(this);
         InvalidateVisual();
+        e.Handled = true;
     }
 
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
@@ -87,26 +89,63 @@ public class AuroraNeonCheckBox : Control
         if (_isPressed)
         {
             _isPressed = false;
-            IsChecked = !IsChecked;
-            AuroraTactileFeedbackService.Instance.PlayClick();
-            IsCheckedChanged?.Invoke(this, IsChecked);
+            if (e.Pointer.Captured == this)
+            {
+                e.Pointer.Capture(null);
+            }
+            if (new Rect(0, 0, Bounds.Width, Bounds.Height).Contains(e.GetPosition(this)))
+            {
+                IsChecked = !IsChecked;
+                AuroraTactileFeedbackService.Instance.PlayClick();
+                IsCheckedChanged?.Invoke(this, IsChecked);
+            }
+            InvalidateVisual();
+            e.Handled = true;
+        }
+    }
+
+    protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
+    {
+        base.OnPointerCaptureLost(e);
+        if (_isPressed)
+        {
+            _isPressed = false;
             InvalidateVisual();
         }
     }
 
     protected override Size MeasureOverride(Size availableSize)
     {
-        double boxSize = 20.0;
-        double textWidth = 0;
-        if (!string.IsNullOrEmpty(Label))
+        const double boxSize = 18.0;
+        const double gap = 10.0;
+        if (string.IsNullOrEmpty(Label))
         {
-            textWidth = Label.Length * 8.5 + 10.0;
+            return new Size(boxSize + 2.0, 24.0);
         }
-        return new Size(boxSize + textWidth, Math.Max(boxSize, 24.0));
+
+        var ft = new FormattedText(
+            Label,
+            System.Globalization.CultureInfo.CurrentUICulture,
+            FlowDirection.LeftToRight,
+            new Typeface(AuroraThemeManager.ResolveFontFamily(AuroraThemeManager.Instance.CurrentTypography)),
+            13.0,
+            Brushes.White);
+
+        if (!double.IsInfinity(availableSize.Width) && availableSize.Width > boxSize + gap)
+        {
+            ft.MaxTextWidth = Math.Max(40.0, availableSize.Width - (boxSize + gap));
+        }
+
+        return new Size(boxSize + gap + ft.Width, Math.Max(24.0, ft.Height + 4.0));
     }
 
     public override void Render(DrawingContext context)
     {
+        if (Bounds.Width > 0 && Bounds.Height > 0)
+        {
+            context.DrawRectangle(Brushes.Transparent, null, new Rect(0, 0, Bounds.Width, Bounds.Height));
+        }
+
         var theme = AuroraThemeManager.Instance.CurrentTheme;
         var (accentPrimary, accentSec) = AuroraThemeManager.ResolveAccentColors(theme, AuroraThemeManager.Instance.CurrentAccentOverride);
 
@@ -163,7 +202,12 @@ public class AuroraNeonCheckBox : Control
                 theme.TextPrimaryBrush
             );
 
-            double textY = (Bounds.Height - formattedText.Height) / 2.0;
+            if (Bounds.Width > boxSize + 10.0)
+            {
+                formattedText.MaxTextWidth = Math.Max(40.0, Bounds.Width - (boxSize + 10.0));
+            }
+
+            double textY = Math.Max(0.0, (Bounds.Height - formattedText.Height) / 2.0);
             context.DrawText(formattedText, new Point(boxSize + 10.0, textY));
         }
     }

@@ -20,6 +20,8 @@ namespace
 {
 
 constexpr VkFormat kOffscreenFormat = VK_FORMAT_R8G8B8A8_UNORM;
+constexpr u64 kDestroyWaitTimeoutNs = 50'000'000ULL;
+constexpr u64 kRenderWaitTimeoutNs = 200'000'000ULL;
 
 // 16-phase Halton (2, 3) sequence centered in [-0.5, 0.5]
 constexpr float kHaltonX[16] = {
@@ -257,13 +259,35 @@ void VulkanFsrPipeline::destroy()
     pipelineCache = VK_NULL_HANDLE;
 }
 
+void VulkanFsrPipeline::waitIdle(SurfaceResources& res)
+{
+    if (device != VK_NULL_HANDLE && res.fence != VK_NULL_HANDLE)
+        (void)vkWaitForFences(device, 1, &res.fence, VK_TRUE, kDestroyWaitTimeoutNs);
+}
+
+void VulkanFsrPipeline::recreateSignaledFence(SurfaceResources& res)
+{
+    if (device == VK_NULL_HANDLE)
+        return;
+    if (res.fence != VK_NULL_HANDLE)
+    {
+        vkDestroyFence(device, res.fence, nullptr);
+        res.fence = VK_NULL_HANDLE;
+    }
+    VkFenceCreateInfo fenceInfo{};
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+    if (vkCreateFence(device, &fenceInfo, nullptr, &res.fence) != VK_SUCCESS)
+        res.initialized = false;
+}
+
 void VulkanFsrPipeline::destroySurfaceResources(SurfaceResources& res)
 {
     if (device != VK_NULL_HANDLE)
     {
         if (res.fence != VK_NULL_HANDLE)
         {
-            (void)vkWaitForFences(device, 1, &res.fence, VK_TRUE, UINT64_MAX);
+            (void)vkWaitForFences(device, 1, &res.fence, VK_TRUE, kDestroyWaitTimeoutNs);
             vkDestroyFence(device, res.fence, nullptr);
             res.fence = VK_NULL_HANDLE;
         }
@@ -737,7 +761,7 @@ bool VulkanFsrPipeline::runFsr(
     if (!ensureSurfaceSyncAndPool(res))
         return false;
 
-    if (vkWaitForFences(device, 1, &res.fence, VK_TRUE, UINT64_MAX) != VK_SUCCESS)
+    if (vkWaitForFences(device, 1, &res.fence, VK_TRUE, kRenderWaitTimeoutNs) != VK_SUCCESS)
         return false;
 
     u32 dstW = 0;
@@ -798,8 +822,7 @@ bool VulkanFsrPipeline::runFsr(
     }
     updateSingleInputDescriptor(res.rcasDescriptorSet, nearestSampler, pass1Target->imageView);
 
-    if (vkResetFences(device, 1, &res.fence) != VK_SUCCESS
-        || vkResetCommandBuffer(res.commandBuffer, 0) != VK_SUCCESS)
+    if (vkResetCommandBuffer(res.commandBuffer, 0) != VK_SUCCESS)
     {
         return false;
     }
@@ -870,10 +893,6 @@ bool VulkanFsrPipeline::runFsr(
         vkCmdBindPipeline(res.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, temporalPipeline);
         vkCmdBindDescriptorSets(res.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, dualInputPipelineLayout, 0, 1, &res.temporalDescriptorSets[writeIdx], 0, nullptr);
         vkCmdPushConstants(res.commandBuffer, dualInputPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push1), &push1);
-
-        res.fsr3HistoryValid = true;
-        res.fsr3HistoryIndex = prevIdx;
-        res.fsr3JitterPhase = (res.fsr3JitterPhase + 1u) % 16u;
     }
     vkCmdDraw(res.commandBuffer, 3, 1, 0, 0);
     vkCmdEndRenderPass(res.commandBuffer);
@@ -943,10 +962,23 @@ bool VulkanFsrPipeline::runFsr(
         submitInfo.pSignalSemaphores = &signalSemaphore;
     }
 
+    if (vkResetFences(device, 1, &res.fence) != VK_SUCCESS)
+        return false;
+
     {
         std::scoped_lock queueLock(melonDS::VulkanContext::Get().GetPresentQueueLock());
         if (vkQueueSubmit(queue, 1, &submitInfo, res.fence) != VK_SUCCESS)
+        {
+            recreateSignaledFence(res);
             return false;
+        }
+    }
+
+    if (mode == VulkanFilterMode::Fsr3)
+    {
+        res.fsr3HistoryValid = true;
+        res.fsr3HistoryIndex = prevIdx;
+        res.fsr3JitterPhase = (res.fsr3JitterPhase + 1u) % 16u;
     }
 
     outImage = res.rcasOutput.image;
@@ -975,7 +1007,7 @@ bool VulkanFsrPipeline::captureFrameGenHistory(
     if (!ensureSurfaceSyncAndPool(res))
         return false;
 
-    if (vkWaitForFences(device, 1, &res.fence, VK_TRUE, UINT64_MAX) != VK_SUCCESS)
+    if (vkWaitForFences(device, 1, &res.fence, VK_TRUE, kRenderWaitTimeoutNs) != VK_SUCCESS)
         return false;
 
     const bool dimsChanged =
@@ -995,8 +1027,7 @@ bool VulkanFsrPipeline::captureFrameGenHistory(
     const u32 slot = res.frameGenWriteIndex & 1u;
     ImageResource& dst = res.frameGenHistory[slot];
 
-    if (vkResetFences(device, 1, &res.fence) != VK_SUCCESS
-        || vkResetCommandBuffer(res.commandBuffer, 0) != VK_SUCCESS)
+    if (vkResetCommandBuffer(res.commandBuffer, 0) != VK_SUCCESS)
     {
         return false;
     }
@@ -1081,10 +1112,16 @@ bool VulkanFsrPipeline::captureFrameGenHistory(
         submitInfo.pSignalSemaphores = &signalSemaphore;
     }
 
+    if (vkResetFences(device, 1, &res.fence) != VK_SUCCESS)
+        return false;
+
     {
         std::scoped_lock queueLock(melonDS::VulkanContext::Get().GetPresentQueueLock());
         if (vkQueueSubmit(queue, 1, &submitInfo, res.fence) != VK_SUCCESS)
+        {
+            recreateSignaledFence(res);
             return false;
+        }
     }
 
     res.frameGenHistoryIsBgr[slot] = sourceIsBgr;
@@ -1098,14 +1135,15 @@ bool VulkanFsrPipeline::runFrameGen(
     SurfaceResources& res,
     VkSemaphore signalSemaphore,
     VkImage& outImage,
-    VkImageView& outImageView)
+    VkImageView& outImageView,
+    float blendFactor)
 {
     outImage = VK_NULL_HANDLE;
     outImageView = VK_NULL_HANDLE;
     if (!initialized || !res.canInterpolate())
         return false;
 
-    if (vkWaitForFences(device, 1, &res.fence, VK_TRUE, UINT64_MAX) != VK_SUCCESS)
+    if (vkWaitForFences(device, 1, &res.fence, VK_TRUE, kRenderWaitTimeoutNs) != VK_SUCCESS)
         return false;
 
     // frameGenWriteIndex points to oldest (prev = N-1), other slot is newest (curr = N)
@@ -1126,8 +1164,7 @@ bool VulkanFsrPipeline::runFrameGen(
         linearSampler,
         res.frameGenHistory[currIdx].imageView);
 
-    if (vkResetFences(device, 1, &res.fence) != VK_SUCCESS
-        || vkResetCommandBuffer(res.commandBuffer, 0) != VK_SUCCESS)
+    if (vkResetCommandBuffer(res.commandBuffer, 0) != VK_SUCCESS)
     {
         return false;
     }
@@ -1157,7 +1194,7 @@ bool VulkanFsrPipeline::runFrameGen(
     push.vec0[1] = static_cast<float>(h);
     push.vec0[2] = 1.0f / static_cast<float>(w);
     push.vec0[3] = 1.0f / static_cast<float>(h);
-    push.vec1[0] = 0.5f;
+    push.vec1[0] = std::clamp(blendFactor, 0.1f, 0.9f);
     push.vec1[1] = res.frameGenHistoryIsBgr[prevIdx] ? 1.0f : 0.0f;
     push.vec1[2] = 6.0f;
     push.vec1[3] = res.frameGenHistoryIsBgr[currIdx] ? 1.0f : 0.0f;
@@ -1189,10 +1226,16 @@ bool VulkanFsrPipeline::runFrameGen(
         submitInfo.pSignalSemaphores = &signalSemaphore;
     }
 
+    if (vkResetFences(device, 1, &res.fence) != VK_SUCCESS)
+        return false;
+
     {
         std::scoped_lock queueLock(melonDS::VulkanContext::Get().GetPresentQueueLock());
         if (vkQueueSubmit(queue, 1, &submitInfo, res.fence) != VK_SUCCESS)
+        {
+            recreateSignaledFence(res);
             return false;
+        }
     }
 
     outImage = res.frameGenOutput.image;

@@ -9,6 +9,7 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Threading;
 using Storm.AuroraFluid.Kit.Controls;
 using Storm.AuroraFluid.Kit.Icons;
 using Storm.AuroraFluid.Kit.Services;
@@ -109,6 +110,12 @@ public class CollectorTableView : Border
 
     public void RefreshRows()
     {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(RefreshRows);
+            return;
+        }
+
         _rowsStack.Children.Clear();
         var roms = StormDsUiState.Instance.GetFilteredRoms();
         string lang = StormDsUiState.Instance.AppConfig.Language;

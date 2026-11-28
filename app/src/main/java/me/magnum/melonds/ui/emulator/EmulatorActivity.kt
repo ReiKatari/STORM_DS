@@ -801,6 +801,7 @@ open class EmulatorActivity : AppCompatActivity() {
             disableScreenTimeOut()
             presentation?.setPauseOverlayVisibility(false)
             updateJoystickUnbufferedDispatch()
+            setFrameRendererPaused(false)
             if (::choreographerFrameRenderer.isInitialized &&
                 !isClosingEmulator &&
                 lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
@@ -812,11 +813,22 @@ open class EmulatorActivity : AppCompatActivity() {
             enableScreenTimeOut()
             presentation?.setPauseOverlayVisibility(true)
             updateJoystickUnbufferedDispatch()
+            setFrameRendererPaused(true)
             if (::nativeInputListener.isInitialized) {
                 (nativeInputListener as? InputProcessor)?.resetHeldInputs()
             }
         }
     )
+
+    private fun setFrameRendererPaused(paused: Boolean) {
+        if (!::choreographerFrameRenderer.isInitialized) {
+            return
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            (choreographerFrameRenderer as? me.magnum.melonds.ui.emulator.render.ChoreographerVSyncFrameRenderer)
+                ?.setPaused(paused)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -957,6 +969,7 @@ open class EmulatorActivity : AppCompatActivity() {
         currentPresentationBackend = viewModel.getConfiguredVideoRenderer().toPresentationBackend()
         frameRenderCoordinator = createFrameRenderCoordinator(currentPresentationBackend)
         choreographerFrameRenderer = ChoreographerFrameRendererFactory.createFrameRenderer(frameRenderCoordinator)
+        setFrameRendererPaused(activeOverlays.hasActiveOverlays())
         melonTouchHandler = MelonTouchHandler(
             onLidStateChanged = { isClosed ->
                 isLidClosedState.value = isClosed
@@ -2728,7 +2741,10 @@ open class EmulatorActivity : AppCompatActivity() {
             (nativeInputListener as? InputProcessor)?.refreshPreferences()
         }
         if (!activeOverlays.hasActiveOverlays()) {
+            setFrameRendererPaused(false)
             choreographerFrameRenderer.startRendering()
+        } else {
+            setFrameRendererPaused(true)
         }
         startShaderDiagnosticsPolling()
         translatorManager.syncOverlaySettings()
@@ -3744,6 +3760,7 @@ open class EmulatorActivity : AppCompatActivity() {
         prewarmedOpenGlRetroArchFilterKey = null
         isFrameRenderCoordinatorStopped = false
         choreographerFrameRenderer = ChoreographerFrameRendererFactory.createFrameRenderer(frameRenderCoordinator)
+        setFrameRendererPaused(activeOverlays.hasActiveOverlays())
 
         if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
             frameRenderCoordinator.addSurface(binding.surfaceMain)
@@ -4261,16 +4278,20 @@ open class EmulatorActivity : AppCompatActivity() {
                 showRomMicSourceDialog(rom.config.runtimeMicSource)
             })
             if (renderer == VideoRenderer.VULKAN) {
-                add(romSettingsMenuLabel(getString(R.string.video_fsr_quality_mode_title), vulkanFsrQualityLabel(settingsRepository.getVulkanFsrQualityMode())) to {
-                    showVulkanFsrQualityChoiceOverlay()
-                })
-                add(romSettingsMenuLabel(getString(R.string.video_fsr_sharpness_title), "${settingsRepository.getVulkanFsrSharpness()}%") to {
-                    showVulkanFsrSharpnessChoiceOverlay()
-                })
+                val effectiveFiltering = settingsRepository.getEffectiveVideoFiltering(rom.config)
+                if (effectiveFiltering == VideoFiltering.FSR1 || effectiveFiltering == VideoFiltering.FSR3) {
+                    add(romSettingsMenuLabel(getString(R.string.video_fsr_quality_mode_title), vulkanFsrQualityLabel(settingsRepository.getVulkanFsrQualityMode())) to {
+                        showVulkanFsrQualityChoiceOverlay()
+                    })
+                    add(romSettingsMenuLabel(getString(R.string.video_fsr_sharpness_title), "${settingsRepository.getVulkanFsrSharpness()}%") to {
+                        showVulkanFsrSharpnessChoiceOverlay()
+                    })
+                }
                 val fgEnabled = settingsRepository.isVulkanFrameGenEnabled()
                 add(romSettingsMenuLabel(getString(R.string.video_frame_gen_enabled_title), if (fgEnabled) getString(R.string.on) else getString(R.string.off)) to {
                     if (fgEnabled) {
                         settingsRepository.setVulkanFrameGenEnabled(false)
+                        binding.surfaceMain.updatePreferredFrameRate(false)
                         handler.post { refreshRomSettingsMenuIfOpen() }
                     } else {
                         androidx.appcompat.app.AlertDialog.Builder(this@EmulatorActivity)
@@ -4278,6 +4299,7 @@ open class EmulatorActivity : AppCompatActivity() {
                             .setMessage(R.string.video_frame_gen_warning_message)
                             .setPositiveButton(R.string.video_frame_gen_enable_confirm) { _, _ ->
                                 settingsRepository.setVulkanFrameGenEnabled(true)
+                                binding.surfaceMain.updatePreferredFrameRate(true)
                                 handler.post { refreshRomSettingsMenuIfOpen() }
                             }
                             .setNegativeButton(R.string.cancel, null)
