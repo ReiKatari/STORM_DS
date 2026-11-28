@@ -172,6 +172,7 @@ class MotionSensorManager(
             MelonEmulator.onScreenRelease()
             isTouchingScreen = false
         }
+        resetDirectionalTilt()
     }
 
     private fun resetDirectionalTilt() {
@@ -317,6 +318,14 @@ class MotionSensorManager(
             gyroBiasX += (gx - gyroBiasX) * 0.02f
             gyroBiasY += (gy - gyroBiasY) * 0.02f
             gyroBiasZ += (gz - gyroBiasZ) * 0.02f
+            filteredGyroX = 0f
+            filteredGyroY = 0f
+            filteredGyroZ = 0f
+            if (gyroMode == GyroMode.TOUCH_AIM && isTouchingScreen) {
+                MelonEmulator.onScreenRelease()
+                isTouchingScreen = false
+            }
+            resetDirectionalTilt()
             if (stationarySamples > maxStationarySamples) stationarySamples = maxStationarySamples
             return // Ignore output while stationary to prevent microscopic drift
         }
@@ -342,6 +351,7 @@ class MotionSensorManager(
                 MelonEmulator.onScreenRelease()
                 isTouchingScreen = false
             }
+            resetDirectionalTilt()
             return
         }
 

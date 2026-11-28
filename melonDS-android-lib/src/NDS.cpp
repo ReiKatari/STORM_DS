@@ -1649,11 +1649,11 @@ void NDS::SetKeyMask(u32 mask)
     u32 key_hi = (mask >> 10) & 0x3;
 
     u32 oldkey = KeyInput;
-    KeyInput &= 0xFFFCFC00;
-    KeyInput |= key_lo | (key_hi << 16);
+    u32 newkey = (oldkey & 0xFFFCFC00u) | key_lo | (key_hi << 16);
+    KeyInput = newkey;
 
-    CheckKeyIRQ(0, oldkey, KeyInput);
-    CheckKeyIRQ(1, oldkey, KeyInput);
+    CheckKeyIRQ(0, oldkey, newkey);
+    CheckKeyIRQ(1, oldkey, newkey);
 }
 
 bool NDS::IsLidClosed() const

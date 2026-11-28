@@ -77,7 +77,7 @@ public sealed class VolumetricButton : Button
 public sealed class InstallerForm : Form
 {
     private const string AppDisplayName = "STORM DS";
-    private static readonly string AppVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "8.9.4";
+    private static readonly string AppVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "8.9.5";
     private const string AppFolderName = "STORM DS";
     private const string ExeName = "STORM DS.exe";
     private const string IcoName = "app.ico";

@@ -17,7 +17,7 @@ fun buildStormDsRetroAchievementsUserAgent(context: Context): String {
     val rawVersion = runCatching {
         context.packageManager.getPackageInfo(context.packageName, 0).versionName
     }.getOrNull().orEmpty().removePrefix("v").removePrefix("V").trim()
-    val safeVersion = rawVersion.takeIf { it.isNotBlank() } ?: "8.9.4"
+    val safeVersion = rawVersion.takeIf { it.isNotBlank() } ?: "8.9.5"
     val osVersion = android.os.Build.VERSION.RELEASE.orEmpty().trim().ifBlank { "14" }
     return "STORM_DS/$safeVersion (Android $osVersion) $CORE_VERSION_SEGMENT"
 }

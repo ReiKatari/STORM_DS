@@ -75,7 +75,9 @@ class HybridScreenTouchscreenInputHandler(inputListener: IInputListener) : BaseI
             MotionEvent.ACTION_POINTER_UP -> {
                 val actionIndex = event.actionIndex
                 val releasedPointerId = event.getPointerId(actionIndex)
-                if (activePointerId == releasedPointerId) {
+                if (event.pointerCount <= 1) {
+                    endTouch()
+                } else if (activePointerId == releasedPointerId) {
                     val remainingPointerIndex = findRemainingBestPointerIndex(event, actionIndex, bottomScreenTop)
                     if (remainingPointerIndex != -1) {
                         activePointerId = event.getPointerId(remainingPointerIndex)
@@ -93,6 +95,10 @@ class HybridScreenTouchscreenInputHandler(inputListener: IInputListener) : BaseI
         }
 
         return true
+    }
+
+    fun release() {
+        endTouch()
     }
 
     private fun endTouch() {

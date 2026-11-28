@@ -17,9 +17,9 @@
     <RootNamespace>StormDs.Installer</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>8.9.4</Version>
-    <AssemblyVersion>8.9.4.0</AssemblyVersion>
-    <FileVersion>8.9.4.0</FileVersion>
+    <Version>8.9.5</Version>
+    <AssemblyVersion>8.9.5.0</AssemblyVersion>
+    <FileVersion>8.9.5.0</FileVersion>
     <Product>STORM DS</Product>
     <Company>STORM TEAM</Company>
     <Copyright>Copyright © 2026 STORM TEAM. All rights reserved.</Copyright>

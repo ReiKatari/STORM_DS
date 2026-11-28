@@ -560,6 +560,8 @@ open class EmulatorActivity : AppCompatActivity() {
         )
     }
 
+    private var hybridOverrideTouchHandler: me.magnum.melonds.ui.emulator.input.TouchscreenInputHandler? = null
+
     private val screenCaptureLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         translatorManager.onMediaProjectionResult(result.resultCode, result.data)
     }
@@ -3662,19 +3664,30 @@ open class EmulatorActivity : AppCompatActivity() {
             if (isExplicitScreenLayoutMode) {
                 if (topView == null && bottomView == null) {
                     val activeTouchRect = bottomRect?.takeIf { it.width > 0 && it.height > 0 && bottomAlpha > 0f }
+                    binding.viewLayoutControls.releaseScreenInputs()
+                    hybridOverrideTouchHandler?.release()
+                    hybridOverrideTouchHandler = null
                     binding.viewLayoutControls.updateComponentRect(LayoutComponent.HYBRID_SCREEN, activeTouchRect)
                     hybridView.view.setOnTouchListener(
                         if (activeTouchRect != null) {
-                            me.magnum.melonds.ui.emulator.input.TouchscreenInputHandler(melonTouchHandler)
+                            me.magnum.melonds.ui.emulator.input.TouchscreenInputHandler(melonTouchHandler).also {
+                                hybridOverrideTouchHandler = it
+                            }
                         } else {
                             null
                         }
                     )
                     hybridTouchOverrideApplied = true
                 } else {
+                    binding.viewLayoutControls.releaseScreenInputs()
+                    hybridOverrideTouchHandler?.release()
+                    hybridOverrideTouchHandler = null
                     binding.viewLayoutControls.updateComponentRect(LayoutComponent.HYBRID_SCREEN, null)
                 }
             } else if (hybridTouchOverrideApplied) {
+                binding.viewLayoutControls.releaseScreenInputs()
+                hybridOverrideTouchHandler?.release()
+                hybridOverrideTouchHandler = null
                 binding.viewLayoutControls.updateComponentRect(LayoutComponent.HYBRID_SCREEN, hybridView.initialRect ?: hybridView.getRect())
                 hybridView.view.setOnTouchListener(
                     me.magnum.melonds.ui.emulator.input.HybridScreenTouchscreenInputHandler(melonTouchHandler)
@@ -6907,6 +6920,8 @@ private fun refreshRomSettingsMenuIfOpen(): Boolean {
 
     private fun releaseVirtualButtonInputs() {
         if (!::binding.isInitialized) return
+        binding.viewLayoutControls.releaseVirtualButtonInputs()
+        hybridOverrideTouchHandler?.release()
         if (::nativeInputListener.isInitialized) {
             nativeInputListener.releaseChordInputs()
         }

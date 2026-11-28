@@ -49,7 +49,11 @@ class RuntimeLayoutView(context: Context, attrs: AttributeSet? = null) : LayoutV
     private var connectedControllersState: ConnectedControllersState = ConnectedControllersState.NoControllers
     private var slot2AnalogInput: Slot2AnalogInput? = null
     private var slot2AnalogHandler: Slot2AnalogInputHandler? = null
+    private var dpadHandler: DpadInputHandler? = null
+    private var buttonsHandler: ButtonsInputHandler? = null
     private val virtualButtonInputs = mutableMapOf<LayoutComponent, SingleButtonInputHandler>()
+    private val screenTouchHandlers = mutableListOf<TouchscreenInputHandler>()
+    private var hybridTouchHandler: HybridScreenTouchscreenInputHandler? = null
 
     init {
         isMotionEventSplittingEnabled = true
@@ -109,6 +113,8 @@ class RuntimeLayoutView(context: Context, attrs: AttributeSet? = null) : LayoutV
         releaseVirtualButtonInputs()
         virtualButtonInputs.clear()
         slot2AnalogHandler = null
+        dpadHandler = null
+        buttonsHandler = null
         val currentRuntimeLayout = currentRuntimeLayout
         if (currentRuntimeLayout == null) {
             isGone = true
@@ -128,19 +134,30 @@ class RuntimeLayoutView(context: Context, attrs: AttributeSet? = null) : LayoutV
         }
         val enableHapticFeedback = currentRuntimeLayout.isHapticFeedbackEnabled
         systemInputHandler?.let {
-            getLayoutComponentView(LayoutComponent.DPAD)?.view?.setOnTouchListener(DpadInputHandler(it, enableHapticFeedback, touchVibrator))
-            getLayoutComponentView(LayoutComponent.BUTTONS)?.view?.setOnTouchListener(ButtonsInputHandler(it, enableHapticFeedback, touchVibrator))
+            getLayoutComponentView(LayoutComponent.DPAD)?.view?.let { view ->
+                DpadInputHandler(it, enableHapticFeedback, touchVibrator).also { handler ->
+                    dpadHandler = handler
+                    view.setOnTouchListener(handler)
+                }
+            }
+            getLayoutComponentView(LayoutComponent.BUTTONS)?.view?.let { view ->
+                ButtonsInputHandler(it, enableHapticFeedback, touchVibrator).also { handler ->
+                    buttonsHandler = handler
+                    view.setOnTouchListener(handler)
+                }
+            }
             for (component in listOf(LayoutComponent.BUTTON_A, LayoutComponent.BUTTON_B, LayoutComponent.BUTTON_X, LayoutComponent.BUTTON_Y)) {
                 val componentView = getLayoutComponentView(component) ?: continue
                 val handler = SingleButtonInputHandler(it, component.matchingInputs.single(), enableHapticFeedback, touchVibrator, mode = componentView.buttonMode)
                 virtualButtonInputs[component] = handler
                 componentView.view.setOnTouchListener(handler)
             }
-            getLayoutComponentView(LayoutComponent.BUTTON_L)?.view?.setOnTouchListener(SingleButtonInputHandler(it, Input.L, enableHapticFeedback, touchVibrator))
-            getLayoutComponentView(LayoutComponent.BUTTON_R)?.view?.setOnTouchListener(SingleButtonInputHandler(it, Input.R, enableHapticFeedback, touchVibrator))
-            getLayoutComponentView(LayoutComponent.BUTTON_SELECT)?.view?.setOnTouchListener(SingleButtonInputHandler(it, Input.SELECT, enableHapticFeedback, touchVibrator))
-            getLayoutComponentView(LayoutComponent.BUTTON_START)?.view?.setOnTouchListener(SingleButtonInputHandler(it, Input.START, enableHapticFeedback, touchVibrator))
-            getLayoutComponentView(LayoutComponent.BUTTON_HINGE)?.view?.setOnTouchListener(SingleButtonInputHandler(it, Input.HINGE, enableHapticFeedback, touchVibrator))
+            for (component in listOf(LayoutComponent.BUTTON_L, LayoutComponent.BUTTON_R, LayoutComponent.BUTTON_SELECT, LayoutComponent.BUTTON_START, LayoutComponent.BUTTON_HINGE)) {
+                val componentView = getLayoutComponentView(component) ?: continue
+                val handler = SingleButtonInputHandler(it, component.matchingInputs.single(), enableHapticFeedback, touchVibrator)
+                virtualButtonInputs[component] = handler
+                componentView.view.setOnTouchListener(handler)
+            }
         }
         frontendInputHandler?.let {
             getLayoutComponentView(LayoutComponent.BUTTON_RESET)?.view?.setOnTouchListener(SingleButtonInputHandler(it, Input.RESET, enableHapticFeedback, touchVibrator))
@@ -172,15 +189,27 @@ class RuntimeLayoutView(context: Context, attrs: AttributeSet? = null) : LayoutV
 
     private var areExtraButtonsVisible = true
 
+    fun releaseScreenInputs() {
+        screenTouchHandlers.forEach { it.release() }
+        hybridTouchHandler?.release()
+    }
+
     fun releaseVirtualButtonInputs() {
         slot2AnalogHandler?.release()
+        dpadHandler?.release()
+        buttonsHandler?.release()
         virtualButtonInputs.values.forEach { it.release() }
+        releaseScreenInputs()
     }
 
     override fun destroyLayout() {
         releaseVirtualButtonInputs()
         virtualButtonInputs.clear()
         slot2AnalogHandler = null
+        dpadHandler = null
+        buttonsHandler = null
+        screenTouchHandlers.clear()
+        hybridTouchHandler = null
         super.destroyLayout()
     }
 
@@ -196,6 +225,9 @@ class RuntimeLayoutView(context: Context, attrs: AttributeSet? = null) : LayoutV
     }
 
     private fun updateScreenInputs() {
+        releaseScreenInputs()
+        screenTouchHandlers.clear()
+        hybridTouchHandler = null
         val (touchScreenComponent, nonTouchScreenComponent) = if (areScreensSwapped) {
             LayoutComponent.TOP_SCREEN to LayoutComponent.BOTTOM_SCREEN
         } else {
@@ -204,12 +236,25 @@ class RuntimeLayoutView(context: Context, attrs: AttributeSet? = null) : LayoutV
         systemInputHandler?.let { handler ->
             val touchView = getLayoutComponentView(touchScreenComponent)?.view
             if (touchView != null) {
-                touchView.setOnTouchListener(TouchscreenInputHandler(handler))
+                TouchscreenInputHandler(handler).also {
+                    screenTouchHandlers.add(it)
+                    touchView.setOnTouchListener(it)
+                }
             } else {
                 // Fallback for single-screen layouts where only one screen is rendered on this display
-                getLayoutComponentView(nonTouchScreenComponent)?.view?.setOnTouchListener(TouchscreenInputHandler(handler))
+                getLayoutComponentView(nonTouchScreenComponent)?.view?.let { fallbackView ->
+                    TouchscreenInputHandler(handler).also {
+                        screenTouchHandlers.add(it)
+                        fallbackView.setOnTouchListener(it)
+                    }
+                }
             }
-            getLayoutComponentView(LayoutComponent.HYBRID_SCREEN)?.view?.setOnTouchListener(HybridScreenTouchscreenInputHandler(handler))
+            getLayoutComponentView(LayoutComponent.HYBRID_SCREEN)?.view?.let { hybridView ->
+                HybridScreenTouchscreenInputHandler(handler).also {
+                    hybridTouchHandler = it
+                    hybridView.setOnTouchListener(it)
+                }
+            }
         }
         if (getLayoutComponentView(touchScreenComponent)?.view != null) {
             getLayoutComponentView(nonTouchScreenComponent)?.view?.setOnTouchListener(null)
@@ -286,6 +331,8 @@ class RuntimeLayoutView(context: Context, attrs: AttributeSet? = null) : LayoutV
         hiddenComponents.forEach { component ->
             if (!component.isScreen()) {
                 if (component == LayoutComponent.SLOT2_ANALOG) slot2AnalogHandler?.release()
+                if (component == LayoutComponent.DPAD) dpadHandler?.release()
+                if (component == LayoutComponent.BUTTONS) buttonsHandler?.release()
                 virtualButtonInputs[component]?.release()
                 getLayoutComponentView(component)?.view?.isVisible = false
             }

@@ -28,21 +28,21 @@ class GitHubUpdatePolicyAndSelectorTest {
 
     @Test
     fun selector_respectsSkippedVersionUntilCleared() {
-        val candidateVersion = Version(Version.ReleaseType.FINAL, 8, 9, 4)
-        val installedVersion = Version(Version.ReleaseType.FINAL, 8, 9, 3)
+        val candidateVersion = Version(Version.ReleaseType.FINAL, 8, 9, 5)
+        val installedVersion = Version(Version.ReleaseType.FINAL, 8, 9, 4)
         val release = ReleaseDto(
-            tagName = "8.9.4",
-            name = "STORM DS 8.9.4",
+            tagName = "8.9.5",
+            name = "STORM DS 8.9.5",
             body = "Release notes",
             prerelease = false,
             createdAt = "2026-11-25T10:00:00Z",
             publishedAt = "2026-11-25T10:00:00Z",
-            htmlUrl = "https://github.com/ReiKatari/STORM_DS/releases/tag/8.9.4",
+            htmlUrl = "https://github.com/ReiKatari/STORM_DS/releases/tag/8.9.5",
             assets = listOf(
                 AssetDto(
                     id = 1L,
-                    url = "https://github.com/ReiKatari/STORM_DS/releases/download/8.9.4/STORM_DS_8.9.4.apk",
-                    name = "STORM_DS_8.9.4.apk",
+                    url = "https://github.com/ReiKatari/STORM_DS/releases/download/8.9.5/STORM_DS_8.9.5.apk",
+                    name = "STORM_DS_8.9.5.apk",
                     contentType = "application/vnd.android.package-archive",
                     size = 75_000_000L,
                 ),

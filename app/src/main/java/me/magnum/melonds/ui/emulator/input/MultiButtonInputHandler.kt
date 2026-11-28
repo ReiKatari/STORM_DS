@@ -22,10 +22,12 @@ abstract class MultiButtonInputHandler(
     private val pressedInputs = mutableListOf<Input>()
     private val newPressedInputs = mutableListOf<Input>()
     private val tempInputList = mutableListOf<Input>()
+    private var activeView: View? = null
 
     open val isRadialDpad: Boolean = false
 
     override fun onTouch(v: View, event: MotionEvent): Boolean {
+        activeView = v
         if (!areDimensionsInitialized || viewWidth != v.width || viewHeight != v.height) {
             viewWidth = v.width
             viewHeight = v.height
@@ -37,6 +39,7 @@ abstract class MultiButtonInputHandler(
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE, MotionEvent.ACTION_POINTER_DOWN -> {
+                v.parent?.requestDisallowInterceptTouchEvent(true)
                 val pointerCount = event.pointerCount
                 for (i in 0 until pointerCount) {
                     val px = event.getX(i)
@@ -52,20 +55,23 @@ abstract class MultiButtonInputHandler(
             MotionEvent.ACTION_POINTER_UP -> {
                 val actionIndex = event.actionIndex
                 val pointerCount = event.pointerCount
-                for (i in 0 until pointerCount) {
-                    if (i == actionIndex) continue
-                    val px = event.getX(i)
-                    val py = event.getY(i)
+                if (pointerCount > 1) {
+                    for (i in 0 until pointerCount) {
+                        if (i == actionIndex) continue
+                        val px = event.getX(i)
+                        val py = event.getY(i)
 
-                    if (isRadialDpad) {
-                        processRadialDpad(px, py, newPressedInputs)
-                    } else {
-                        processAccurateButtons(px, py, newPressedInputs)
+                        if (isRadialDpad) {
+                            processRadialDpad(px, py, newPressedInputs)
+                        } else {
+                            processAccurateButtons(px, py, newPressedInputs)
+                        }
                     }
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 newPressedInputs.clear()
+                activeView = null
             }
         }
 
@@ -99,6 +105,18 @@ abstract class MultiButtonInputHandler(
         (v as? me.magnum.melonds.ui.common.views.IAnimatedInputView)?.updatePressedInputs(newPressedInputs.toSet())
 
         return true
+    }
+
+    fun release() {
+        if (pressedInputs.isNotEmpty()) {
+            pressedInputs.forEach {
+                inputListener.onKeyReleased(it)
+            }
+            pressedInputs.clear()
+        }
+        newPressedInputs.clear()
+        (activeView as? me.magnum.melonds.ui.common.views.IAnimatedInputView)?.updatePressedInputs(emptySet())
+        activeView = null
     }
 
     private fun processAccurateButtons(px: Float, py: Float, outInputs: MutableList<Input>) {

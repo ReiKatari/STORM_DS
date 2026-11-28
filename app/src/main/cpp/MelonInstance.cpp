@@ -1603,6 +1603,7 @@ MelonInstance::MelonInstance(int instanceId, std::shared_ptr<EmulatorConfigurati
     retroAchievementsManager = std::make_shared<RetroAchievements::RetroAchievementsManager>(nds);
 
     nds->Reset();
+    resetPendingInputs();
     nds->SetARM9OverclockMultiplier(configuration->arm9OverclockMultiplier);
     setBatteryLevels();
     setDateTime();
@@ -1977,6 +1978,7 @@ void MelonInstance::reset()
     }
 
     nds->Reset();
+    resetPendingInputs();
     setBatteryLevels();
     setDateTime();
 
@@ -3900,6 +3902,7 @@ u32 MelonInstance::runFrame(bool frameskipSolicitado, u64 wmFrameDeadline)
         if (deferredRenderer != nullptr)
             (void)deferredRenderer->SetFrameSubmissionDeferred(false);
     });
+    applyPendingInputsOnEmuThread();
     processExactLiveGuideBeforeRunFrame();
     nds->TraceWMFrameBoundary(MelonDSAndroid::internalFilesDir);
     nds->GPU.SetLiteSkip2DRender(liteFrameskipEsteFotograma);
@@ -4265,14 +4268,20 @@ void MelonInstance::touchScreen(u16 x, u16 y)
 {
     abortExactLiveGuide(
         static_cast<std::uint32_t>(ExactLiveGuide::AbortReason::ExternalTouch));
-    nds->TouchScreen(x, y);
+    std::lock_guard<std::mutex> lock(inputStateMutex);
+    pendingTouchX = x;
+    pendingTouchY = y;
+    pendingTouchActive = true;
+    pendingTouchDirty = true;
 }
 
 void MelonInstance::releaseScreen()
 {
     abortExactLiveGuide(
         static_cast<std::uint32_t>(ExactLiveGuide::AbortReason::ExternalTouch));
-    nds->ReleaseScreen();
+    std::lock_guard<std::mutex> lock(inputStateMutex);
+    pendingTouchActive = false;
+    pendingTouchDirty = true;
 }
 
 ExactLiveGuide::Telemetry MelonInstance::captureExactLiveGuideTelemetry() const noexcept
@@ -4515,31 +4524,98 @@ std::string MelonInstance::getExactLiveGuideStatusJson() const
     return json.str();
 }
 
+void MelonInstance::resetPendingInputs()
+{
+    std::lock_guard<std::mutex> lock(inputStateMutex);
+    inputMask = 0xFFF;
+    pendingInputMask = 0xFFF;
+    pendingKeyDirty = true;
+    pendingTouchActive = false;
+    pendingTouchDirty = true;
+    pendingTouchX = 0;
+    pendingTouchY = 0;
+    pendingLidClosed = false;
+    pendingLidDirty = false;
+}
+
 void MelonInstance::pressKey(u32 key)
 {
-    // Special handling for Lid input
+    std::lock_guard<std::mutex> lock(inputStateMutex);
     if (key == 16 + 7)
     {
-        nds->SetLidClosed(true);
+        pendingLidClosed = true;
+        pendingLidDirty = true;
     }
-    else
+    else if (key < 12)
     {
-        inputMask &= ~(1 << key);
-        nds->SetKeyMask(inputMask);
+        pendingInputMask &= ~(1u << key);
+        pendingKeyDirty = true;
     }
 }
 
 void MelonInstance::releaseKey(u32 key)
 {
-    // Special handling for Lid input
+    std::lock_guard<std::mutex> lock(inputStateMutex);
     if (key == 16 + 7)
     {
-        nds->SetLidClosed(false);
+        pendingLidClosed = false;
+        pendingLidDirty = true;
     }
-    else
+    else if (key < 12)
     {
-        inputMask |= (1 << key);
-        nds->SetKeyMask(inputMask);
+        pendingInputMask |= (1u << key);
+        pendingKeyDirty = true;
+    }
+}
+
+void MelonInstance::applyPendingInputsOnEmuThread()
+{
+    bool applyKeys = false;
+    u32 maskToApply = 0xFFF;
+    bool applyLid = false;
+    bool lidClosed = false;
+    bool applyTouch = false;
+    bool touchActive = false;
+    u16 touchX = 0;
+    u16 touchY = 0;
+
+    {
+        std::lock_guard<std::mutex> lock(inputStateMutex);
+        if (pendingKeyDirty)
+        {
+            pendingKeyDirty = false;
+            inputMask = pendingInputMask;
+            maskToApply = pendingInputMask;
+            applyKeys = true;
+        }
+        if (pendingLidDirty)
+        {
+            pendingLidDirty = false;
+            lidClosed = pendingLidClosed;
+            applyLid = true;
+        }
+        if (pendingTouchDirty)
+        {
+            pendingTouchDirty = false;
+            touchActive = pendingTouchActive;
+            touchX = pendingTouchX;
+            touchY = pendingTouchY;
+            applyTouch = true;
+        }
+    }
+
+    if (nds == nullptr)
+        return;
+    if (applyKeys)
+        nds->SetKeyMask(maskToApply);
+    if (applyLid)
+        nds->SetLidClosed(lidClosed);
+    if (applyTouch)
+    {
+        if (touchActive)
+            nds->TouchScreen(touchX, touchY);
+        else
+            nds->ReleaseScreen();
     }
 }
 

@@ -168,7 +168,7 @@ public sealed class AuroraDualMirrorUpdater
 
     static AuroraDualMirrorUpdater()
     {
-        s_httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("STORM-AuroraFluid-Updater/8.9.4 (Windows; Android; Linux)");
+        s_httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("STORM-AuroraFluid-Updater/8.9.5 (Windows; Android; Linux)");
     }
 
     public static bool TryParseSemanticVersion(string? raw, out Version version)

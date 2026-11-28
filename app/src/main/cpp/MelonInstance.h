@@ -123,6 +123,8 @@ public:
     void abortExactLiveGuide(std::uint32_t reason);
     void pressKey(u32 key);
     void releaseKey(u32 key);
+    void applyPendingInputsOnEmuThread();
+    void resetPendingInputs();
     void updateMotionData(float ax, float ay, float az, float rx, float ry, float rz);
     float getMotionData(Platform::MotionQueryType type) const;
     void setSlot2AnalogInput(float x, float y);
@@ -434,7 +436,16 @@ private:
     std::unique_ptr<SaveManager> ndsSave;
     std::unique_ptr<SaveManager> gbaSave;
     std::unique_ptr<SaveManager> firmwareSave;
+    std::mutex inputStateMutex;
     u32 inputMask;
+    u32 pendingInputMask = 0xFFF;
+    bool pendingKeyDirty = false;
+    bool pendingTouchActive = false;
+    bool pendingTouchDirty = false;
+    u16 pendingTouchX = 0;
+    u16 pendingTouchY = 0;
+    bool pendingLidDirty = false;
+    bool pendingLidClosed = false;
     std::array<std::atomic<float>, Platform::MotionRotationZ + 1> motionData{0.0f, 0.0f, 9.80665f, 0.0f, 0.0f, 0.0f};
     std::atomic<float> slot2AnalogX = 0.0f;
     std::atomic<float> slot2AnalogY = 0.0f;

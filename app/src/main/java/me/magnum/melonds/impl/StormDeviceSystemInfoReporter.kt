@@ -76,7 +76,7 @@ object StormDeviceSystemInfoReporter {
 
         val versionName = runCatching {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName
-        }.getOrNull() ?: "8.9.4"
+        }.getOrNull() ?: "8.9.5"
 
         val versionCode = runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -85,7 +85,7 @@ object StormDeviceSystemInfoReporter {
                 @Suppress("DEPRECATION")
                 context.packageManager.getPackageInfo(context.packageName, 0).versionCode.toLong()
             }
-        }.getOrNull() ?: 894L
+        }.getOrNull() ?: 895L
 
         val report = buildString {
             appendLine("================================================================================")

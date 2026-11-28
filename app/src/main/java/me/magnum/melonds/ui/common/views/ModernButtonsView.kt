@@ -534,4 +534,11 @@ class ModernButtonsView @JvmOverloads constructor(
             canvas.restore()
         }
     }
+
+    override fun onDetachedFromWindow() {
+        holdTimerRunnables.values.forEach { mainHandler.removeCallbacks(it) }
+        holdTimerRunnables.clear()
+        stickyLockedInputs.clear()
+        super.onDetachedFromWindow()
+    }
 }

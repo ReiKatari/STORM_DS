@@ -1612,13 +1612,18 @@ vec2 clampDepth3dUv(vec2 uv, bool topScreen)
     return clamp(uv, vec2(0.001), vec2(0.999));
 }
 
-float sampleSingleDepthPoint(vec2 uv, bool topScreen, bool screenOwns3D)
+vec2 sampleDepthAndHud(vec2 uv, bool topScreen, bool screenOwns3D)
 {
     vec2 localUv = resolveDepthScreenLocalUv(uv, topScreen);
     int sx = int(clamp(localUv.x * 256.0, 0.0, 255.0));
     int sy = int(clamp(localUv.y * 192.0, 0.0, 191.0));
     Rgba6 v1 = unpackColor6(topScreen ? readTopPacked(sy, sx) : readBottomPacked(sy, sx));
     Rgba6 v3 = unpackColor6(topScreen ? readTopPacked(sy, 512 + sx) : readBottomPacked(sy, 512 + sx));
+
+    if (hasStructured2DAbovePlane(v3) && isStructured2DVisible(v1))
+    {
+        return vec2(0.0, 1.0);
+    }
 
     int rW = int(max(pushConstants.rendererWidth, 1u));
     int rH = int(max(pushConstants.rendererHeight, 1u));
@@ -1630,42 +1635,67 @@ float sampleSingleDepthPoint(vec2 uv, bool topScreen, bool screenOwns3D)
             ? imageLoad(u3dPreviousTopImage, ivec2(scaledX, scaledY))
             : imageLoad(u3dPreviousBottomImage, ivec2(scaledX, scaledY)));
 
-    if (hasStructured2DAbovePlane(v3) && isStructured2DVisible(v1))
-    {
-        return 0.85;
-    }
     if (raw3D.a > 0.01)
     {
+        float persp = clamp(1.0 - localUv.y, 0.0, 1.0);
         float rawLuma = dot(raw3D.rgb, vec3(0.299, 0.587, 0.114));
-        float maxC = max(raw3D.r, max(raw3D.g, raw3D.b));
-        float minC = min(raw3D.r, min(raw3D.g, raw3D.b));
-        float chroma = maxC - minC;
-        float persp = clamp((1.0 - localUv.y) * 0.58 + rawLuma * 0.27 + chroma * 0.22, 0.0, 1.0);
-        return mix(-0.32, 0.68, persp);
+        float depth = mix(-0.22, 0.52, clamp(persp * 0.94 + rawLuma * 0.06, 0.0, 1.0));
+        return vec2(depth, 0.0);
     }
-    float luma = clamp((float(v1.r) * 0.299 + float(v1.g) * 0.587 + float(v1.b) * 0.114) * (1.0 / 63.0), 0.0, 1.0);
-    return mix(-0.78, -0.22, luma);
+    return vec2(-0.34, 0.0);
 }
 
 float estimateSceneDepthFactor(vec2 uv)
 {
     bool topScreen = resolvePresenterTopScreen(uv);
     bool screenOwns3D = topScreen ? ((pushConstants.screenSwap & 1u) != 0u) : ((pushConstants.screenSwap & 1u) == 0u);
+    return sampleDepthAndHud(uv, topScreen, screenOwns3D).x;
+}
 
-    vec2 stepUv = vec2(2.0 / 256.0, 2.0 / 192.0);
-    if (isCompositeAtlasDrawMode())
+vec3 resolveParallaxUv(vec2 srcUv, vec2 shiftVec, bool topScreen, bool screenOwns3D)
+{
+    vec2 orig = sampleDepthAndHud(srcUv, topScreen, screenOwns3D);
+    if (orig.y > 0.5)
     {
-        vec4 bounds = screenUvBounds(topScreen);
-        stepUv.y *= max(bounds.w - bounds.y, 0.0001);
+        return vec3(srcUv, 0.0);
     }
-    float dc = sampleSingleDepthPoint(uv, topScreen, screenOwns3D);
-    if (dc > 0.80)
-        return dc;
-    float dl = sampleSingleDepthPoint(clampDepth3dUv(uv - vec2(stepUv.x, 0.0), topScreen), topScreen, screenOwns3D);
-    float dr = sampleSingleDepthPoint(clampDepth3dUv(uv + vec2(stepUv.x, 0.0), topScreen), topScreen, screenOwns3D);
-    float du = sampleSingleDepthPoint(clampDepth3dUv(uv - vec2(0.0, stepUv.y), topScreen), topScreen, screenOwns3D);
-    float dd = sampleSingleDepthPoint(clampDepth3dUv(uv + vec2(0.0, stepUv.y), topScreen), topScreen, screenOwns3D);
-    return dc * 0.48 + (dl + dr + du + dd) * 0.13;
+
+    vec2 uvNear = clampDepth3dUv(srcUv + shiftVec * 0.45, topScreen);
+    vec2 pNear = sampleDepthAndHud(uvNear, topScreen, screenOwns3D);
+    if (pNear.y < 0.5 && pNear.x > orig.x + 0.14)
+    {
+        vec2 candUv = clampDepth3dUv(srcUv + shiftVec * pNear.x, topScreen);
+        vec2 cand = sampleDepthAndHud(candUv, topScreen, screenOwns3D);
+        if (cand.y < 0.5 && cand.x > orig.x + 0.10)
+            return vec3(candUv, cand.x);
+    }
+
+    vec2 uvMid = clampDepth3dUv(srcUv + shiftVec * 0.22, topScreen);
+    vec2 pMid = sampleDepthAndHud(uvMid, topScreen, screenOwns3D);
+    if (pMid.y < 0.5 && pMid.x > orig.x + 0.14)
+    {
+        vec2 candUv = clampDepth3dUv(srcUv + shiftVec * pMid.x, topScreen);
+        vec2 cand = sampleDepthAndHud(candUv, topScreen, screenOwns3D);
+        if (cand.y < 0.5 && cand.x > orig.x + 0.10)
+            return vec3(candUv, cand.x);
+    }
+
+    vec2 targetUv = clampDepth3dUv(srcUv + shiftVec * orig.x, topScreen);
+    vec2 dest = sampleDepthAndHud(targetUv, topScreen, screenOwns3D);
+    if (orig.x > 0.0)
+    {
+        if (dest.y > 0.5)
+            return vec3(srcUv, orig.x);
+        return vec3(targetUv, dest.x);
+    }
+
+    if (dest.y > 0.5 || dest.x > orig.x + 0.14)
+    {
+        vec2 bgUv = clampDepth3dUv(srcUv - shiftVec * max(abs(orig.x), 0.18), topScreen);
+        vec2 bg = sampleDepthAndHud(bgUv, topScreen, screenOwns3D);
+        return (bg.y < 0.5 && bg.x <= orig.x + 0.14) ? vec3(bgUv, orig.x) : vec3(srcUv, orig.x);
+    }
+    return vec3(targetUv, orig.x);
 }
 
 vec3 applyConsoleColorProfile(vec3 rgb, uint profile)
@@ -1743,23 +1773,22 @@ void main()
     float sheen = 0.0;
     float sbsDivider = 1.0;
     bool depthTopScreen = resolvePresenterTopScreen(inFragUv);
+    bool depthOwns3D = depthTopScreen ? ((pushConstants.screenSwap & 1u) != 0u) : ((pushConstants.screenSwap & 1u) == 0u);
     if (pushConstants.drawMode != 0u && depthMode != 0u)
     {
         if (depthMode == 1u)
         {
             float tiltX = float(bitfieldExtract(int(pushConstants.screenSwap), 8, 8)) * 0.01;
             float tiltY = float(bitfieldExtract(int(pushConstants.screenSwap), 16, 8)) * 0.01;
-            vec2 parallaxVec = vec2(tiltX, -tiltY) * (0.010 + 0.030 * strengthNorm);
+            vec2 parallaxVec = vec2(tiltX, -tiltY) * (0.006 + 0.020 * strengthNorm);
             if (isCompositeAtlasDrawMode())
             {
                 vec4 bounds = screenUvBounds(depthTopScreen);
                 parallaxVec.y *= max(bounds.w - bounds.y, 0.0001);
             }
-            float d1 = estimateSceneDepthFactor(inFragUv);
-            vec2 uv1 = clampDepth3dUv(inFragUv + parallaxVec * d1, depthTopScreen);
-            float d2 = estimateSceneDepthFactor(uv1);
-            depthFactor = mix(d1, d2, 0.45);
-            baseUv = clampDepth3dUv(inFragUv + parallaxVec * depthFactor, depthTopScreen);
+            vec3 parallaxResolved = resolveParallaxUv(inFragUv, parallaxVec, depthTopScreen, depthOwns3D);
+            baseUv = parallaxResolved.xy;
+            depthFactor = parallaxResolved.z;
             gridUv = baseUv;
             sheen = clamp((tiltX * (inFragUv.x - 0.5) + tiltY * (inFragUv.y - 0.5)) * 0.11 * strengthNorm, -0.055, 0.055) * max(depthFactor, 0.0);
         }
@@ -1773,11 +1802,9 @@ void main()
             float eyeSign = rightEye ? 1.0 : -1.0;
             vec2 sbsUv = vec2(rightEye ? ((inFragUv.x - 0.5) * 2.0) : (inFragUv.x * 2.0), inFragUv.y);
             float dispScale = eyeSign * (0.004 + 0.018 * strengthNorm);
-            float d1 = estimateSceneDepthFactor(sbsUv);
-            vec2 uv1 = clampDepth3dUv(vec2(sbsUv.x + dispScale * d1, sbsUv.y), depthTopScreen);
-            float d2 = estimateSceneDepthFactor(uv1);
-            depthFactor = mix(d1, d2, 0.45);
-            baseUv = clampDepth3dUv(vec2(sbsUv.x + dispScale * depthFactor, sbsUv.y), depthTopScreen);
+            vec3 parallaxResolved = resolveParallaxUv(sbsUv, vec2(dispScale, 0.0), depthTopScreen, depthOwns3D);
+            baseUv = parallaxResolved.xy;
+            depthFactor = parallaxResolved.z;
             gridUv = baseUv;
             if (abs(inFragUv.x - 0.5) < 0.0018)
                 sbsDivider = 0.0;

@@ -22,6 +22,7 @@ class SingleButtonInputHandler(
     private var touchDown = false
     private var isLongPressed = false
     private var activeView: View? = null
+    private var activePointerId = MotionEvent.INVALID_POINTER_ID
     private val handler = Handler(Looper.getMainLooper())
     private var longPressRunnable: Runnable? = null
     private val turboPulse = object : Runnable {
@@ -36,9 +37,11 @@ class SingleButtonInputHandler(
     override fun onTouch(v: View, event: MotionEvent): Boolean {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                v.parent?.requestDisallowInterceptTouchEvent(true)
                 if (touchDown) return true
                 touchDown = true
                 activeView = v
+                activePointerId = event.getPointerId(event.actionIndex)
                 isLongPressed = false
                 if (onLongPress != null) {
                     pressed = true
@@ -60,34 +63,49 @@ class SingleButtonInputHandler(
                     performHapticFeedback(v, HapticFeedbackType.KEY_PRESS)
                 }
             }
-            MotionEvent.ACTION_UP -> {
-                touchDown = false
-                if (onLongPress != null) {
-                    longPressRunnable?.let { handler.removeCallbacks(it) }
-                    longPressRunnable = null
-                    if (pressed) {
-                        pressed = false
-                        v.isPressed = false
-                        if (!isLongPressed) {
-                            inputListener.onKeyPress(input)
-                            performHapticFeedback(v, HapticFeedbackType.KEY_PRESS)
-                            inputListener.onKeyReleased(input)
-                        }
-                        (v as? IAnimatedInputView)?.updatePressedInputs(emptySet())
-                    }
-                    activeView = null
-                } else {
-                    if (mode != VirtualButtonMode.TOGGLE) release()
-                    performHapticFeedback(v, HapticFeedbackType.KEY_RELEASE)
+            MotionEvent.ACTION_MOVE -> {
+                v.parent?.requestDisallowInterceptTouchEvent(true)
+            }
+            MotionEvent.ACTION_POINTER_UP -> {
+                val pointerId = event.getPointerId(event.actionIndex)
+                if (pointerId == activePointerId || event.pointerCount <= 1) {
+                    handlePointerUp(v)
                 }
+            }
+            MotionEvent.ACTION_UP -> {
+                handlePointerUp(v)
             }
             MotionEvent.ACTION_CANCEL -> release()
         }
         return true
     }
 
+    private fun handlePointerUp(v: View) {
+        touchDown = false
+        activePointerId = MotionEvent.INVALID_POINTER_ID
+        if (onLongPress != null) {
+            longPressRunnable?.let { handler.removeCallbacks(it) }
+            longPressRunnable = null
+            if (pressed) {
+                pressed = false
+                v.isPressed = false
+                if (!isLongPressed) {
+                    inputListener.onKeyPress(input)
+                    performHapticFeedback(v, HapticFeedbackType.KEY_PRESS)
+                    inputListener.onKeyReleased(input)
+                }
+                (v as? IAnimatedInputView)?.updatePressedInputs(emptySet())
+            }
+            activeView = null
+        } else {
+            if (mode != VirtualButtonMode.TOGGLE) release()
+            performHapticFeedback(v, HapticFeedbackType.KEY_RELEASE)
+        }
+    }
+
     fun release() {
         touchDown = false
+        activePointerId = MotionEvent.INVALID_POINTER_ID
         longPressRunnable?.let { handler.removeCallbacks(it) }
         longPressRunnable = null
         activeView?.let {

@@ -456,6 +456,9 @@ class ModernDpadView @JvmOverloads constructor(
     }
 
     override fun onDetachedFromWindow() {
+        holdTimerRunnables.values.forEach { mainHandler.removeCallbacks(it) }
+        holdTimerRunnables.clear()
+        stickyLockedInputs.clear()
         super.onDetachedFromWindow()
         androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
             .unregisterOnSharedPreferenceChangeListener(prefListener)
